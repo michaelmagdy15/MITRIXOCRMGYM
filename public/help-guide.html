@@ -1,0 +1,2956 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mitrixogymcrm CRM — Sales Guide v2.1</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #e63946;
+      --primary-dark: #c1121f;
+      --dark: #1a1a2e;
+      --dark2: #16213e;
+      --accent: #f4a261;
+      --blue-light: #457b9d;
+      --gray: #6c757d;
+      --border: #dee2e6;
+      --text: #212529;
+      --shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: #f0f2f5; color: var(--text); line-height: 1.9; font-size: 15px; }
+
+    /* Language switcher bar */
+    .lang-bar {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--dark);
+      display: flex; align-items: center; justify-content: center;
+      gap: 0; padding: 0;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    .lang-bar .brand {
+      position: absolute; left: 24px;
+      color: white; font-size: 13px; opacity: 0.7;
+      font-family: 'Inter', sans-serif; font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .lang-btn {
+      padding: 14px 36px;
+      border: none; cursor: pointer;
+      font-size: 15px; font-weight: 700;
+      transition: all 0.2s;
+      background: transparent; color: rgba(255,255,255,0.55);
+    }
+    .lang-btn:hover { color: white; }
+    .lang-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+    .lang-btn#btn-ar { font-family: 'Cairo', sans-serif; }
+    .lang-btn#btn-en { font-family: 'Inter', sans-serif; }
+
+    /* Language sections */
+    #section-ar { display: block; }
+    #section-en { display: none;  }
+
+    /* Cover */
+    .cover {
+      background: linear-gradient(135deg, var(--dark) 0%, var(--dark2) 50%, #0f3460 100%);
+      color: white; min-height: 92vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 60px 40px;
+    }
+    .cover .logo-circle {
+      width: 110px; height: 110px; background: var(--primary);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      font-size: 50px; margin: 0 auto 26px;
+      box-shadow: 0 8px 32px rgba(230,57,70,0.5);
+    }
+    .cover h1 {
+      font-size: 40px; font-weight: 900; color: white;
+      background: none; padding: 0; margin: 0 0 8px; border-radius: 0;
+    }
+    .cover .subtitle { font-size: 18px; color: #a8b2d8; margin-bottom: 6px; }
+    .cover .version-badge {
+      display: inline-block; background: var(--primary); color: white;
+      padding: 6px 22px; border-radius: 20px; font-size: 13px; font-weight: 700; margin: 16px 0;
+    }
+    .cover-stats { display: flex; gap: 40px; justify-content: center; margin: 24px 0; flex-wrap: wrap; }
+    .stat-num { font-size: 36px; font-weight: 900; color: var(--accent); }
+    .stat-label { font-size: 13px; color: #a8b2d8; }
+    .cover-meta { margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.15); color: #8892b0; font-size: 13px; }
+
+    /* Container */
+    .container { max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
+
+    /* Section card */
+    .section { background: white; border-radius: 16px; padding: 40px 44px; margin-bottom: 32px; box-shadow: var(--shadow); }
+
+    /* Arabic section styles */
+    #section-ar .section, #section-ar .cover { direction: rtl; font-family: 'Cairo', sans-serif; }
+    #section-ar h1, #section-ar h2, #section-ar h3, #section-ar h4, #section-ar p,
+    #section-ar li, #section-ar td, #section-ar th, #section-ar blockquote { font-family: 'Cairo', sans-serif; }
+
+    /* English section styles */
+    #section-en .section, #section-en .cover { direction: ltr; font-family: 'Inter', sans-serif; }
+    #section-en h1, #section-en h2, #section-en h3, #section-en h4, #section-en p,
+    #section-en li, #section-en td, #section-en th, #section-en blockquote { font-family: 'Inter', sans-serif; }
+    #section-en table { text-align: left; }
+    #section-en th, #section-en td { text-align: left; }
+
+    /* Headings */
+    h1 {
+      font-size: 27px; font-weight: 900; color: white;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      margin: -40px -44px 30px; padding: 24px 44px; border-radius: 16px 16px 0 0;
+    }
+    h2 {
+      font-size: 20px; font-weight: 700; color: var(--dark);
+      margin: 30px 0 13px; padding-bottom: 8px; border-bottom: 2px solid var(--primary);
+      display: flex; align-items: center; gap: 8px;
+    }
+    h2::before { content: ''; display: inline-block; width: 5px; height: 20px; background: var(--primary); border-radius: 3px; flex-shrink: 0; }
+    h3 { font-size: 17px; font-weight: 700; color: var(--blue-light); margin: 20px 0 10px; padding-right: 12px; border-right: 3px solid var(--blue-light); }
+    #section-en h3 { padding-right: 0; padding-left: 12px; border-right: none; border-left: 3px solid var(--blue-light); }
+    h4 { font-size: 15px; font-weight: 700; color: var(--gray); margin: 14px 0 7px; }
+    p { margin: 10px 0 14px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    thead { background: var(--dark); color: white; }
+    th { padding: 12px 16px; font-weight: 600; font-size: 13px; }
+    td { padding: 10px 16px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+    tr:nth-child(even) { background: #fafbfc; }
+    tr:hover { background: #f0f4ff; }
+
+    /* Code / Flowcharts */
+    pre {
+      background: #1e1e2e; color: #cdd6f4;
+      padding: 22px 26px; border-radius: 12px; margin: 18px 0;
+      overflow-x: auto;
+      font-family: 'Courier New', 'Lucida Console', monospace;
+      font-size: 13px; line-height: 1.7;
+      direction: ltr; text-align: left;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      border-right: 4px solid var(--primary);
+    }
+    #section-en pre { border-right: none; border-left: 4px solid var(--primary); }
+    code { background: #f0f2f5; color: var(--primary-dark); padding: 2px 7px; border-radius: 5px; font-family: 'Courier New', monospace; font-size: 13px; }
+    pre code { background: none; color: inherit; padding: 0; }
+
+    /* Blockquotes */
+    blockquote { background: linear-gradient(135deg,#fff8e1,#fff3cd); border-right: 5px solid var(--accent); padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 14px 0; color: #5a4a00; }
+    #section-en blockquote { border-right: none; border-left: 5px solid var(--accent); border-radius: 10px 0 0 10px; }
+
+    /* Lists */
+    ul, ol { margin: 10px 0 14px 0; padding-right: 24px; }
+    #section-en ul, #section-en ol { padding-right: 0; padding-left: 24px; }
+    li { margin: 5px 0; }
+    ul li::marker { color: var(--primary); font-size: 18px; }
+    ol li::marker { color: var(--primary); font-weight: 700; }
+
+    hr { border: none; border-top: 2px solid var(--border); margin: 28px 0; }
+    strong { color: var(--primary-dark); font-weight: 700; }
+    a { color: var(--primary); text-decoration: none; font-weight: 500; }
+    a:hover { text-decoration: underline; }
+
+    /* Back to top */
+    .back-top {
+      position: fixed; bottom: 28px; left: 28px;
+      background: var(--primary); color: white;
+      width: 44px; height: 44px; border-radius: 50%;
+      font-size: 20px; box-shadow: var(--shadow);
+      display: flex; align-items: center; justify-content: center;
+      text-decoration: none; transition: transform 0.2s; z-index: 99;
+    }
+    .back-top:hover { transform: scale(1.1); text-decoration: none; }
+
+    /* Footer */
+    .page-footer { text-align: center; padding: 36px 20px; color: var(--gray); font-size: 13px; border-top: 2px solid var(--border); margin-top: 50px; }
+    .page-footer strong { color: var(--primary); }
+
+    @media print {
+      .lang-bar { display: none; }
+      body { background: white; font-size: 12px; }
+      .section { box-shadow: none; border: 1px solid #eee; page-break-inside: avoid; }
+      pre { font-size: 11px; }
+      .back-top { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Language Switcher -->
+<div class="lang-bar" id="top">
+  <span class="brand">🥊 mitrixogymcrm CRM v2.1</span>
+  <button class="lang-btn active" id="btn-ar" onclick="switchLang('ar')">العربية</button>
+  <button class="lang-btn" id="btn-en" onclick="switchLang('en')">English</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--                  ARABIC SECTION                 -->
+<!-- ═══════════════════════════════════════════════ -->
+<div id="section-ar">
+  <div class="cover" id="ar-top">
+    <div class="logo-circle">🥊</div>
+    <h1>دليل فريق المبيعات</h1>
+    <div class="subtitle">mitrixogymcrm CRM — الدليل الشامل لكل الميزات</div>
+    <div class="version-badge">الإصدار 2.1 | أبريل 2026</div>
+    <div class="cover-stats">
+      <div class="stat"><div class="stat-num">18</div><div class="stat-label">قسم رئيسي</div></div>
+      <div class="stat"><div class="stat-num">12</div><div class="stat-label">مخطط تدفق</div></div>
+      <div class="stat"><div class="stat-num">7</div><div class="stat-label">سيناريوهات عملية</div></div>
+      <div class="stat"><div class="stat-num">40+</div><div class="stat-label">ميزة موثّقة</div></div>
+    </div>
+    <div class="cover-meta">يشرح هذا الدليل كل ميزة: <strong style="color:white">أين · كيف · لماذا · متى</strong><br>مع مخططات تدفق وسيناريوهات عملية وخارطة طريق المستقبل</div>
+  </div>
+  <div class="container">
+    <div class="section">
+      <h1 id="ar-دليل-فريق-المبيعات-الشامل-—-mitrixogymcrm-boxing-crm">دليل فريق المبيعات الشامل — mitrixogymcrm CRM</h1>
+<h1 id="ar-النسخة-21-|-أبريل-2026">النسخة 2.1 | أبريل 2026</h1>
+<hr>
+<blockquote><strong>هذا الدليل يشرح كل ميزة في النظام بالتفصيل الكامل:</strong></blockquote>
+<blockquote>- <strong>أين</strong> تجدها في النظام</blockquote>
+<blockquote>- <strong>كيف</strong> تستخدمها خطوة بخطوة</blockquote>
+<blockquote>- <strong>لماذا</strong> موجودة وما هدفها</blockquote>
+<blockquote>- <strong>متى</strong> تستخدمها بالضبط</blockquote>
+<blockquote>- مخططات تدفق (Flowcharts) لكل العمليات الرئيسية</blockquote>
+<hr>
+<h2 id="ar-جدول-المحتويات">جدول المحتويات</h2>
+<table><thead><tr><th>#</th><th>القسم</th></tr></thead><tbody><tr><td>1</td><td><a href="#ar-1-هيكل-النظام-والأدوار">هيكل النظام والأدوار</a></td></tr><tr><td>2</td><td><a href="#ar-2-الدخول-والتنقل">الدخول والتنقل</a></td></tr><tr><td>3</td><td><a href="#ar-3-لوحة-التحكم">لوحة التحكم Dashboard</a></td></tr><tr><td>4</td><td><a href="#ar-4-إدارة-الليدز">إدارة الليدز Leads</a></td></tr><tr><td>5</td><td><a href="#ar-5-إدارة-الأعضاء">إدارة الأعضاء Members</a></td></tr><tr><td>6</td><td><a href="#ar-6-المدفوعات">المدفوعات Payments</a></td></tr><tr><td>7</td><td><a href="#ar-7-الحضور">الحضور Attendance</a></td></tr><tr><td>8</td><td><a href="#ar-8-الجلسات-الخاصة">الجلسات الخاصة PT Sessions</a></td></tr><tr><td>9</td><td><a href="#ar-9-المهام">المهام Tasks</a></td></tr><tr><td>10</td><td><a href="#ar-10-التقارير">التقارير Reports</a></td></tr><tr><td>11</td><td><a href="#ar-11-سجل-الأنشطة">سجل الأنشطة History</a></td></tr><tr><td>12</td><td><a href="#ar-12-الإعدادات">الإعدادات Settings</a></td></tr><tr><td>13</td><td><a href="#ar-13-الكيوسك-والحضور-الذاتي">الكيوسك والحضور الذاتي</a></td></tr><tr><td>14</td><td><a href="#ar-14-الاستيراد-والتصدير">الاستيراد والتصدير</a></td></tr><tr><td>15</td><td><a href="#ar-15-الإشعارات-والتنبيهات">الإشعارات والتنبيهات</a></td></tr><tr><td>16</td><td><a href="#ar-16-سيناريوهات-عملية-كاملة">سيناريوهات عملية كاملة</a></td></tr><tr><td>17</td><td><a href="#ar-17-جدول-مرجعي-سريع">جدول مرجعي سريع</a></td></tr><tr><td>18</td><td><a href="#ar-18-خارطة-طريق-المستقبل">خارطة طريق المستقبل</a></td></tr></tbody></table>
+<hr>
+<h1 id="ar-1-هيكل-النظام-والأدوار">1. هيكل النظام والأدوار</h1>
+<h2 id="ar-لماذا-يوجد-نظام-أدوار؟">لماذا يوجد نظام أدوار؟</h2>
+<p>كل موظف في الجيم له دور مختلف ومسؤوليات مختلفة. النظام مصمم بحيث كل شخص يرى فقط ما يحتاجه لعمله، ولا يستطيع تغيير أو حذف بيانات لا تخصه. هذا يحمي البيانات ويمنع الأخطاء.</p>
+<h2 id="ar-الأدوار-المتاحة-في-النظام">الأدوار المتاحة في النظام:</h2>
+<p><pre><code>┌─────────────────────────────────────────────────────────────┐
+│                    هرم الصلاحيات                            │
+│                                                             │
+│              ┌─────────────────┐                            │
+│              │   CRM Admin     │  ← أعلى صلاحية (أتف)      │
+│              └────────┬────────┘                            │
+│                       │                                     │
+│              ┌────────▼────────┐                            │
+│              │   Super Admin   │  ← صلاحية كاملة            │
+│              └────────┬────────┘                            │
+│                       │                                     │
+│              ┌────────▼────────┐                            │
+│              │     Admin       │  ← إدارة الإعدادات          │
+│              └────────┬────────┘                            │
+│                       │                                     │
+│              ┌────────▼────────┐                            │
+│              │    Manager      │  ← مدير الفريق              │
+│              └────────┬────────┘                            │
+│                       │                                     │
+│              ┌────────▼────────┐                            │
+│              │      Rep        │  ← مندوب المبيعات           │
+│              └─────────────────┘                            │
+└─────────────────────────────────────────────────────────────┘</code></pre></p>
+<h2 id="ar-جدول-الصلاحيات-التفصيلي">جدول الصلاحيات التفصيلي:</h2>
+<table><thead><tr><th>الوظيفة</th><th>Rep</th><th>Manager</th><th>Admin</th><th>Super Admin</th><th>CRM Admin</th></tr></thead><tbody><tr><td>عرض Dashboard الشخصي</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>عرض Dashboard الشامل</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>إدارة الليدز</td><td>✅*</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>إدارة الأعضاء</td><td>✅*</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>تسجيل مدفوعات</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>حذف مدفوعات</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>عرض التقارير</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>الوصول للإعدادات</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>سجل الأنشطة</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>دعوة مستخدمين</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>تغيير أدوار المستخدمين</td><td>❌</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>حذف مستخدمين</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>مسح النظام</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td></tr><tr><td>نسخ احتياطي واستعادة</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td></tr></tbody></table>
+<blockquote><strong>ملاحظة:</strong> ✅* = يرى فقط ما هو معيّن له شخصياً</blockquote>
+<hr>
+<h1 id="ar-2-الدخول-والتنقل">2. الدخول والتنقل</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+الصفحة الرئيسية عند فتح الرابط.
+<h2 id="ar-كيف-تدخل-النظام؟">كيف تدخل النظام؟</h2>
+<p><pre><code>┌────────────────────────────────────────┐
+│           شاشة الدخول                  │
+│                                        │
+│   1. افتح رابط النظام                   │
+│   2. اضغط "Sign in with Google"         │
+│   3. اختر حسابك على جوجل               │
+│   4. ✅ دخلت النظام تلقائياً            │
+└────────────────────────────────────────┘</code></pre></p>
+<blockquote><strong>ملاحظة:</strong> أول دخول يُعطيك دور "Rep" تلقائياً. المدير يغيّر دورك من الإعدادات.</blockquote>
+<hr>
+<h2 id="ar-التنقل-بين-الصفحات">التنقل بين الصفحات</h2>
+<h3 id="ar-على-الكمبيوتر">على الكمبيوتر (Desktop):</h3>
+شريط علوي يحتوي على التبويبات حسب دورك:
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│  [Logo]  Dashboard | Leads | Members | Tasks | Payments |        │
+│          Attendance | Reports | History | Settings    [🔔] [أتف] │
+└──────────────────────────────────────────────────────────────────┘</code></pre></p>
+<h3 id="ar-على-الموبايل">على الموبايل:</h3>
+شريط سفلي + قائمة "المزيد":
+<p><pre><code>┌────────────────────────────────────┐
+│         المحتوى الرئيسي            │
+├────────┬────────┬────────┬─────────┤
+│  Home  │ Leads  │Members │  Scan  │
+│   🏠   │   👤   │  👥    │  📷    │
+└────────┴────────┴────────┴─────────┘</code></pre></p>
+<p>اضغط <strong>"المزيد"</strong> لرؤية: Tasks / Payments / Reports / History / Settings / Logout</p>
+<hr>
+<h2 id="ar-البحث-العالمي">البحث العالمي (Global Search)</h2>
+<p><strong>أين:</strong> في رأس الصفحة، مربع البحث<br><strong>لماذا:</strong> للوصول السريع لأي عضو أو ليد بدون الدخول لأي قسم<br><strong>متى تستخدمه:</strong> عندما تريد إيجاد شخص بسرعة بالاسم أو الرقم</p>
+<p><strong>كيف:</strong><br><ol><li>اضغط على مربع البحث في الأعلى</li><li>اكتب اسم العميل أو رقم هاتفه أو رقم عضويته</li><li>النتائج تظهر فوراً</li></ol><br><hr></p>
+<h2 id="ar-الإشعارات">الإشعارات (🔔)</h2>
+<p><strong>أين:</strong> أيقونة الجرس في رأس الصفحة<br><strong>لماذا:</strong> تنبيهك بأشياء تحتاج اهتمام فوري<br><strong>متى تستخدمه:</strong> عند رؤية رقم أحمر على الجرس</p>
+<p>تنبيهات تلقائية:<br><ul><li>ليد لم تتواصل معه منذ 7 أيام ⚠️</li><li>عيد ميلاد عضو اليوم 🎂</li><li>اشتراك ينتهي خلال 3 أيام ⏰</li><li>مهمة متأخرة عن موعدها 📋</li></ul><br><hr></p>
+<h1 id="ar-3-لوحة-التحكم">3. لوحة التحكم</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+أول تبويب بعد الدخول — <strong>Dashboard</strong>
+<h2 id="ar-لماذا-موجودة؟">لماذا موجودة؟</h2>
+لوحة التحكم هي "نبضة الجيم" — تعطيك صورة كاملة عن الوضع الحالي بدون ما تدخل لأي صفحة تانية.
+<h2 id="ar-متى-تستخدمها؟">متى تستخدمها؟</h2>
+<ul><li>أول الصبح لمعرفة الوضع العام</li><li>قبل اجتماعات الفريق</li><li>لمتابعة أدائك الشهري</li></ul>
+<hr>
+<h2 id="ar-ما-يراه-مندوب-المبيعات">ما يراه مندوب المبيعات (Rep View):</h2>
+<p><pre><code>┌─────────────────────────────────────────────────────────────────┐
+│                    لوحة التحكم — Rep View                       │
+├──────────┬───────────────┬──────────────┬───────────────────────┤
+│  Leads   │ Nearly Expired│   Expired    │   Upcoming Birthdays  │
+│   النشطة │  ينتهون قريب  │  منتهي        │   عيد الميلاد قريب    │
+│   [12]   │     [5]       │    [23]      │        [2]            │
+├──────────┴───────────────┴──────────────┴───────────────────────┤
+│  🎯 تارجت الشهر: 50,000 LE                                       │
+│  ████████████░░░░░░░  جمعت: 32,000 LE (64%)                     │
+├─────────────────────────────┬───────────────────────────────────┤
+│  ⚠️ Action Required          │  🔔 Urgent Reminders               │
+│  • 3 جلسات سالبة             │  • ليد: أحمد — لم يُتابَع 8 أيام  │
+│  • 5 بدون حضور               │  • عضو: مريم — ينتهي بكره         │
+│  • 8 منتهيين يحتاجون تجديد   │  • مهمة: مكالمة متأخرة يومين      │
+└─────────────────────────────┴───────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-ما-يراه-المدير-إضافةً-للأرقام">ما يراه المدير إضافةً للأرقام:</h2>
+<p><pre><code>┌─────────────────────────────────────────────────────────────────┐
+│  رسم بياني: إيرادات 6 أشهر (Area Chart)                        │
+│  يناير → فبراير → مارس → أبريل → مايو → يونيو                  │
+│  ████  █████  ███  ██████  ████  ███████                        │
+├─────────────────────────────────────────────────────────────────┤
+│  رسم: أداء المندوبين (Bar Chart)                                 │
+│  أحمد: ██████ 85%  |  سارة: ████ 60%  |  كريم: █████████ 120%  │
+├─────────────────────────────────────────────────────────────────┤
+│  رسم: طرق الدفع (Stacked Bar)                                   │
+│  كاش ████ | Instapay ██ | Visa ██████                           │
+├─────────────────────────────────────────────────────────────────┤
+│  جدول أداء المندوبين (Leaderboard)                               │
+│  # | الاسم  | الإيراد  | التارجت% | الليدز المحوّلة | التحويل%  │
+│  1 | كريم   | 48,000  | 120%     | 12             | 40%       │
+│  2 | أحمد   | 34,000  | 85%      | 9              | 30%       │
+│  3 | سارة   | 24,000  | 60%      | 6              | 20%       │
+└─────────────────────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-كيف-تضبط-التارجت-الشهري؟">كيف تضبط التارجت الشهري؟</h2>
+<p><strong>لماذا:</strong> لتحديد الهدف الشهري للمبيعات لكل مندوب<br><strong>متى:</strong> بداية كل شهر</p>
+<p><pre><code>الخطوات:
+1. في لوحة التحكم → اضغط زر "Edit Target" بجانب شريط التارجت
+2. أدخل مبلغ الهدف (بالجنيه)
+3. حدد المندوب (إذا كنت مديراً)
+4. اضغط حفظ ✅</code></pre></p>
+<hr>
+<h2 id="ar-قسم-"online-users"">قسم "Online Users" (المستخدمون المتصلون):</h2>
+<p><strong>لماذا:</strong> لمعرفة من من الفريق متصل الآن بالنظام<br><strong>كيف تقرأه:</strong> يُظهر اسم كل مستخدم ومتى كان آخر نشاط له (منذ X دقائق)</p>
+<hr>
+<h1 id="ar-4-إدارة-الليدز">4. إدارة الليدز</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب <strong>"Leads"</strong> في شريط التنقل العلوي
+<h2 id="ar-لماذا-موجود-قسم-الليدز؟">لماذا موجود قسم الليدز؟</h2>
+الليد هو أي شخص محتمل يريد الاشتراك ولم يدفع بعد. النظام يساعدك على:
+<ul><li>تتبع كل محادثة معه</li><li>معرفة أين هو في رحلة الشراء</li><li>عدم نسيان أحد</li><li>قياس كفاءة مصادر الليدز</li></ul>
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+<ul><li>عند وصول استفسار جديد من أي مصدر</li><li>لمتابعة الليدز اليومية</li><li>لمراجعة من لم يُتابَع</li></ul>
+<hr>
+<h2 id="ar-مخطط-رحلة-الليد-الكاملة">مخطط رحلة الليد الكاملة:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                    رحلة الليد من البداية للنهاية                  │
+└──────────────────────────────────────────────────────────────────┘
+
+جاء استفسار جديد
+        │
+        ▼
+┌───────────────┐
+│  أضف ليد جديد │
+│  (New Stage)  │
+└───────┬───────┘
+        │
+        ▼
+ تواصل معه ← سجّل Interaction
+        │
+        ├─── لم يرد ──────────────────► Follow Up (متابعة)
+        │                                      │
+        │                              حاول مرة ثانية
+        │                                      │
+        │                         ┌────────────┤
+        │                         │            │
+        │                      اهتم        لم يهتم
+        │                         │            │
+        │                         ▼            ▼
+        │                     Trial Stage   Lost ❌
+        │
+        ├─── مهتم ────────────────► حدد موعد تجربة
+        │                              │
+        │                    جاء للتجربة؟
+        │                    ┌─────────┴─────────┐
+        │                    │                   │
+        │                   نعم                  لا
+        │                    │                   │
+        │                    ▼                   ▼
+        │             هل قرر الاشتراك؟       Follow Up
+        │             ┌─────┴─────┐
+        │             │           │
+        │            نعم          لا
+        │             │           │
+        │             ▼           ▼
+        │      Convert to Member  Lost / Follow Up
+        │             │
+        │             ▼
+        │       سجّل الدفعة ✅
+        │       عضو نشط 🎉
+        │
+        └─── رفض ─────────────────► Lost ❌</code></pre></p>
+<hr>
+<h2 id="ar-التبويبات-في-صفحة-leads">التبويبات في صفحة Leads:</h2>
+<p><pre><code>┌──────┬─────────┬───────────┬─────────┬──────────┬─────────────┐
+│ All  │Unassigned│ Instagram │WhatsApp │ Walk-in  │   Trials    │
+│ كل  │  بدون   │ إنستجرام  │واتساب  │  زيارة  │   تجارب     │
+│ الليدز│  مندوب │           │         │          │             │
+└──────┴─────────┴───────────┴─────────┴──────────┴─────────────┘</code></pre></p>
+<p><strong>لماذا كل تبويب:</strong><br><ul><li><strong>All:</strong> نظرة عامة كاملة</li><li><strong>Unassigned:</strong> ليدز لم يُعيَّن لهم مندوب — يجب توزيعهم سريعاً</li><li><strong>Instagram/WhatsApp/Walk-in:</strong> لمعرفة أي مصدر يعطي أفضل نتائج</li><li><strong>Trials:</strong> كل من لديه موعد تجربة — لمتابعتهم بعد التجربة</li><li><strong>Follow Up:</strong> كل من يحتاج متابعة الآن</li></ul><br><hr></p>
+<h2 id="ar-فلاتر-البحث-وكيفية-استخدامها">فلاتر البحث وكيفية استخدامها:</h2>
+<table><thead><tr><th>الفلتر</th><th>لماذا تستخدمه</th><th>مثال</th></tr></thead><tbody><tr><td><strong>بحث بالاسم/هاتف</strong></td><td>إيجاد ليد بسرعة</td><td>"أحمد" أو "01012..."</td></tr><tr><td><strong>Branch</strong></td><td>عرض ليدز فرع معيّن</td><td>COMPLEX فقط</td></tr><tr><td><strong>Stage</strong></td><td>ليدز في مرحلة معيّنة</td><td>Trial فقط</td></tr><tr><td><strong>Interest</strong></td><td>حسب مستوى الاهتمام</td><td>Interested فقط</td></tr><tr><td><strong>Assigned To</strong></td><td>ليدز مندوب معيّن</td><td>"كريم" فقط</td></tr><tr><td><strong>Sort by Score</strong></td><td>ترتيب حسب الأولوية</td><td>الأعلى احتمالاً أولاً</td></tr></tbody></table>
+<hr>
+<h2 id="ar-حساب-lead-score">حساب Lead Score (درجة الليد):</h2>
+<p><pre><code>┌─────────────────────────────────────────┐
+│          كيف يُحسب Lead Score؟           │
+├─────────────────────────────────────────┤
+│ المصدر (Source):                         │
+│   Walk-in     → +10 نقطة               │
+│   Instagram   → +7 نقطة                │
+│   WhatsApp    → +6 نقطة                │
+│   TikTok      → +5 نقطة                │
+│   Other       → +3 نقطة                │
+│                                         │
+│ الاهتمام (Interest):                     │
+│   Interested  → +15 نقطة               │
+│   Pending     → +5 نقطة                │
+│   Not Interested → +0                   │
+│                                         │
+│ المرحلة (Stage):                         │
+│   Trial       → +10 نقطة               │
+│   Follow Up   → +5 نقطة                │
+│   New         → +0                      │
+│                                         │
+│ أيام بدون تواصل → حتى -20 نقطة          │
+└─────────────────────────────────────────┘</code></pre></p>
+<p><strong>متى تستخدم Sort by Score:</strong> عندما عندك وقت محدود وتريد التركيز على الأكثر احتمالاً للشراء أولاً.</p>
+<hr>
+<h2 id="ar-إضافة-ليد-جديد-—-خطوة-بخطوة">إضافة ليد جديد — خطوة بخطوة:</h2>
+<p><strong>لماذا:</strong> لحفظ بيانات أي مهتم جديد فوراً قبل نسيانه<br><strong>متى:</strong> فور وصول أي استفسار (واتساب / إنستجرام / زيارة / مكالمة)</p>
+<p><pre><code>1. اضغط "+ Add Lead" (الزر الأزرق في أعلى الصفحة)
+2. أدخل:
+   ┌─────────────────────────────────────┐
+   │ الاسم*         │ محمد أحمد           │
+   │ الهاتف*        │ 01012345678         │
+   │ المصدر*        │ [Instagram ▼]       │
+   │ الفرع*         │ [COMPLEX ▼]         │
+   │ المندوب        │ [معيّن لك تلقائياً] │
+   └─────────────────────────────────────┘
+3. اضغط "Save" ✅</code></pre></p>
+<hr>
+<h2 id="ar-تسجيل-تفاعل-مع-ليد">تسجيل تفاعل مع ليد (Log Interaction):</h2>
+<p><strong>لماذا:</strong> هذا الأهم في إدارة الليدز. كل تواصل تسجّله يبني تاريخ كامل للمحادثات.<br><strong>متى:</strong> بعد كل مكالمة أو رسالة أو زيارة</p>
+<p><pre><code>مخطط تسجيل التفاعل:
+
+افتح صفحة الليد
+        │
+        ▼
+اضغط "Log Interaction"
+        │
+        ▼
+┌───────────────────────────────────────┐
+│ نوع التفاعل:                           │
+│  📞 Call  💬 WhatsApp  📧 Email  🚶 Visit│
+└───────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────┐
+│ النتيجة (Outcome):                              │
+│  ✅ Interested    → غيّر Stage إلى Trial        │
+│  📵 Not Answered  → حدد تاريخ متابعة           │
+│  📅 Scheduled Trial → أدخل Trial Date          │
+│  ❌ Rejected      → غيّر Stage إلى Lost         │
+│  📝 Other        → أضف ملاحظة                  │
+└───────────────────────────────────────────────┘
+        │
+        ▼
+حدد تاريخ المتابعة القادمة
+        │
+        ▼
+أضف ملاحظات (اختياري)
+        │
+        ▼
+اضغط "Add" ✅</code></pre></p>
+<hr>
+<h2 id="ar-العمليات-الجماعية">العمليات الجماعية (Bulk Actions):</h2>
+<p><strong>لماذا:</strong> توفير الوقت عند التعامل مع عدة ليدز دفعة واحدة<br><strong>متى:</strong> عند إعادة توزيع الليدز بين المندوبين أو تحديث مرحلة مجموعة</p>
+<p><pre><code>الخطوات:
+1. حدد الليدز المطلوبين بالـ Checkbox
+2. في الشريط الذي يظهر في الأعلى، اختر:
+   ┌────────────────────────────────────────┐
+   │  تغيير المرحلة: [Stage ▼] [Apply]      │
+   │  إعادة التعيين: [Rep ▼] [Apply]        │
+   │  حذف المحدد: [Delete] ← بتأكيد         │
+   └────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-تحويل-ليد-إلى-عضو">تحويل ليد إلى عضو (Convert to Member):</h2>
+<p><strong>لماذا:</strong> عندما يوافق الليد على الاشتراك، يتحول لعضو نشط تلقائياً<br><strong>متى:</strong> فور موافقة الليد ودفعه</p>
+<p><pre><code>مخطط التحويل:
+
+الليد وافق على الاشتراك
+        │
+        ▼
+افتح صفحة الليد
+        │
+        ▼
+اضغط "Convert to Member"
+        │
+        ▼
+تحوّل تلقائياً إلى عضو ✅
+        │
+        ▼
+اذهب إلى Payments
+        │
+        ▼
+سجّل الدفعة باسمه
+        │
+        ▼
+اكتمل الاشتراك ✅</code></pre></p>
+<hr>
+<h2 id="ar-qr-code-للليد">QR Code للليد:</h2>
+<p><strong>لماذا:</strong> يمكن إرسال QR Code للليد لتسهيل التواصل أو تسجيل الحضور في التجربة<br><strong>متى:</strong> عند تحديد موعد تجربة</p>
+<p><pre><code>الخطوات:
+1. افتح صفحة الليد
+2. في قسم QR Code، اضغط:
+   • "Download" → يحفظ صورة PNG
+   • "Copy" → تنسخه للصقه في رسالة</code></pre></p>
+<hr>
+<h1 id="ar-5-إدارة-الأعضاء">5. إدارة الأعضاء</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب <strong>"Members"</strong> في شريط التنقل
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+لإدارة كل الأعضاء الحاليين: متابعة اشتراكاتهم، جلساتهم، تجديداتهم، والتواصل معهم.
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+<ul><li>لتسجيل عضو جديد</li><li>لمتابعة الاشتراكات القريبة الانتهاء</li><li>للبحث عن عضو محدد</li><li>لمراجعة سجل عضو</li></ul>
+<hr>
+<h2 id="ar-حالات-العضو-وما-تعنيها">حالات العضو وما تعنيها:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                    دورة حياة العضو                               │
+│                                                                  │
+│  Lead ──► Active ──► Nearly Expired ──► Expired                  │
+│   👤      ✅ نشط    ⚠️ ينتهي &lt; 30 يوم   ❌ منتهي                  │
+│                                                                  │
+│  أو: Active ──► Hold (متوقف مؤقتاً)                              │
+└──────────────────────────────────────────────────────────────────┘</code></pre></p>
+<table><thead><tr><th>الحالة</th><th>المعنى</th><th>الإجراء المطلوب</th></tr></thead><tbody><tr><td><strong>Active</strong> ✅</td><td>اشتراك نشط وجلسات متبقية</td><td>لا شيء</td></tr><tr><td><strong>Nearly Expired</strong> ⚠️</td><td>ينتهي خلال 30 يوم</td><td>تواصل لتجديد</td></tr><tr><td><strong>Expired</strong> ❌</td><td>انتهى الاشتراك</td><td>تواصل عاجل للتجديد</td></tr><tr><td><strong>Hold</strong> ⏸️</td><td>متوقف مؤقتاً</td><td>انتظر قراره</td></tr><tr><td><strong>Lead</strong> 👤</td><td>لم يشترك بعد</td><td>تابع لتحويله</td></tr></tbody></table>
+<hr>
+<h2 id="ar-فلاتر-الأعضاء">فلاتر الأعضاء:</h2>
+<p><pre><code>┌─────────┬──────────┬──────────┐
+│ Active  │   Hold   │ Expired  │
+│ النشطون │ المتوقفون│ المنتهون  │
+└─────────┴──────────┴──────────┘</code></pre></p>
+<p><strong>الفلاتر الإضافية:</strong><br><ul><li>بحث بالاسم / هاتف / Member ID</li><li>فلتر بالفرع</li><li>فلتر بالمندوب المعيّن</li><li>ترتيب: الأحدث / رقم عضوية تصاعدي أو تنازلي</li></ul><br><hr></p>
+<h2 id="ar-إضافة-عضو-جديد-—-خطوة-بخطوة">إضافة عضو جديد — خطوة بخطوة:</h2>
+<p><strong>لماذا:</strong> لتسجيل عضو جديد في النظام وإعطائه رقم عضوية<br><strong>متى:</strong> عند انضمام عضو جديد للجيم</p>
+<p><pre><code>1. اضغط "+ Add Member"
+2. أدخل:
+   ┌──────────────────────────────────────────┐
+   │ الاسم الكامل*    │ مريم محمد علي          │
+   │ رقم الهاتف*     │ 01198765432             │
+   │ الفرع*           │ [MIVIDA ▼]             │
+   │ المندوب المعيّن  │ [أحمد ▼]               │
+   └──────────────────────────────────────────┘
+3. اضغط "Save" ✅
+4. يُولَّد رقم عضوية تلقائياً (مثلاً: #0042)</code></pre></p>
+<hr>
+<h2 id="ar-بيانات-العضو-الكاملة">بيانات العضو الكاملة:</h2>
+<p>عند فتح صفحة أي عضو، ستجد:</p>
+<p><pre><code>┌────────────────────────────────────────────────────────────────┐
+│  مريم محمد علي                         [Active ✅]              │
+│  Member ID: #0042  |  Branch: MIVIDA  |  Rep: أحمد             │
+├────────────────────────────────────────────────────────────────┤
+│  الباكدج: 10 Sessions Private Adult                             │
+│  الجلسات المتبقية: 7                                            │
+│  بداية الاشتراك: 1 أبريل 2026                                  │
+│  انتهاء الاشتراك: 30 أبريل 2026                                │
+│  تاريخ الميلاد: 15 مايو 1995                                   │
+│  النقاط: 120 pts                                               │
+├────────────────────────────────────────────────────────────────┤
+│  [QR Code]  |  [Log Interaction]  |  [Add Comment]             │
+├────────────────────────────────────────────────────────────────┤
+│  آخر الحضور:                                                    │
+│  • 20 أبريل — MIVIDA                                           │
+│  • 18 أبريل — MIVIDA                                           │
+│  • 15 أبريل — MIVIDA                                           │
+├────────────────────────────────────────────────────────────────┤
+│  التعليقات والتفاعلات (مرتبة بالتاريخ)                         │
+└────────────────────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-renewal-pipeline">Renewal Pipeline (خط أنابيب التجديد):</h2>
+<p><strong>أين:</strong> زر "Renewal Pipeline" في أعلى صفحة Members<br><strong>لماذا:</strong> أداة ذكية تجمع كل من يحتاج تجديد في مكان واحد مرتبين حسب الأولوية<br><strong>متى:</strong> كل يوم — خاصةً في بداية ومنتصف الشهر</p>
+<p><pre><code>مخطط Renewal Pipeline:
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      Renewal Pipeline                           │
+├──────────────────┬─────────────────┬──────────────────────────┤
+│  🔴 Expired       │  🟡 Urgent       │  🔵 Upcoming              │
+│  انتهى الاشتراك  │  ≤ 7 أيام       │  8-30 يوم                 │
+│                  │                 │                            │
+│  [كريم]          │  [سارة]          │  [أحمد]                   │
+│  انتهى منذ 5 أيام│  ينتهي بعد 3    │  ينتهي بعد 20 يوم         │
+│  [Mark Contacted]│  [Mark Contacted]│  [Mark Contacted]         │
+│  [Record Renewal]│  [Record Renewal]│  [Record Renewal]         │
+│                  │                 │                            │
+│  [علي]           │  [هند]           │  [نور]                    │
+│  انتهى منذ يومين│  ينتهي بعد 5    │  ينتهي بعد 15 يوم         │
+└──────────────────┴─────────────────┴──────────────────────────┘</code></pre></p>
+<p><strong>"Mark Contacted":</strong> يسجّل أنك تواصلت مع العضو (يرفع تاريخ آخر تواصل)<br><strong>"Record Renewal":</strong> يفتح نافذة تسجيل دفعة تجديد مباشرة</p>
+<hr>
+<h2 id="ar-مخطط-عملية-التجديد">مخطط عملية التجديد:</h2>
+<p><pre><code>عضو على وشك الانتهاء
+        │
+        ▼
+ظهر في Renewal Pipeline (Upcoming/Urgent)
+        │
+        ▼
+اتصل بالعضو / أرسل واتساب
+        │
+        ├── وافق على التجديد ──────────────────────────────────┐
+        │                                                       │
+        ├── يحتاج تفكير → اضغط "Mark Contacted"                 │
+        │                 حدد تاريخ متابعة                       │
+        │                                                       │
+        └── رفض → سجّل Interaction (Rejected)                    │
+                  غيّر الحالة لـ Hold أو دعه ينتهي              │
+                                                               ▼
+                                               اضغط "Record Renewal"
+                                                               │
+                                                               ▼
+                                               أدخل المبلغ + الباكدج
+                                               + طريقة الدفع + تاريخ البداية
+                                                               │
+                                                               ▼
+                                               اضغط حفظ ✅
+                                                               │
+                                                               ▼
+                                               الاشتراك تجدد تلقائياً</code></pre></p>
+<hr>
+<h2 id="ar-دمج-الأعضاء-المكررين">دمج الأعضاء المكررين (Merge Duplicates):</h2>
+<p><strong>لماذا:</strong> أحياناً يُضاف نفس العضو مرتين بخطأ — هذه الأداة تدمجهم<br><strong>متى:</strong> عند اكتشاف عضو مسجّل مرتين</p>
+<p><pre><code>الخطوات:
+1. اضغط "Merge Duplicates" في أعلى صفحة Members
+2. ابحث عن الاسم المكرر
+3. حدد السجل الرئيسي (الأصلي) والسجل المكرر
+4. اضغط "Merge" ✅
+5. تُحفظ جميع البيانات في سجل واحد</code></pre></p>
+<hr>
+<h2 id="ar-تصدير-بيانات-الأعضاء">تصدير بيانات الأعضاء (Export CSV):</h2>
+<p><strong>لماذا:</strong> للعمل على البيانات خارج النظام (Excel) أو إرسالها للإدارة<br><strong>متى:</strong> للتقارير أو المراجعات الشهرية</p>
+<p><pre><code>الخطوات:
+1. في صفحة Members، طبّق الفلاتر التي تريدها
+2. اضغط "Export CSV"
+3. يُحمَّل ملف Excel يحتوي:
+   Member ID | الاسم | الهاتف | الفرع | الباكدج | الجلسات | الحالة | الانتهاء | إجمالي المدفوع | المندوب</code></pre></p>
+<hr>
+<h1 id="ar-6-المدفوعات">6. المدفوعات</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب <strong>"Payments"</strong> في شريط التنقل
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+لتسجيل كل عملية دفع وربطها بالعضو والمندوب والباكدج. هذا أساس حساب الإيراد والعمولات.
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+<ul><li>فور استلام أي دفعة (اشتراك جديد أو تجديد)</li><li>للبحث عن دفعة سابقة</li><li>لطباعة فاتورة</li></ul>
+<hr>
+<h2 id="ar-مخطط-تسجيل-دفعة-كاملة">مخطط تسجيل دفعة كاملة:</h2>
+<p><pre><code>┌─────────────────────────────────────────────────────────────────┐
+│                    تسجيل دفعة جديدة                             │
+└─────────────────────────────────────────────────────────────────┘
+
+اضغط "+ New Payment"
+        │
+        ▼
+ابحث عن العميل في حقل "Client"
+        │
+        ▼ (يملأ الاسم والمندوب تلقائياً)
+        │
+        ▼
+أدخل المبلغ بالجنيه
+        │
+        ▼
+اختر طريقة الدفع:
+┌─────────────────────────────────────────────────────────────────┐
+│  💵 Cash        → أدخل المبلغ فقط                               │
+│  💳 Credit Card → أدخل المبلغ فقط                               │
+│  🏦 Bank Transfer → أدخل المبلغ فقط                             │
+│  📱 Instapay    → أدخل المبلغ + رقم مرجعي (12 رقم إجباري)      │
+│  📦 Other       → أدخل المبلغ فقط                               │
+└─────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+اختر الباكدج:
+  • اختر من القائمة (السعر يُملأ تلقائياً)
+  • أو اختر "Custom" وأدخل اسم مخصص
+        │
+        ▼
+هل الباكدج Private Training؟
+   نعم → اختر الكوتش من القائمة (إجباري)
+   لا  → تجاوز هذا الحقل
+        │
+        ▼
+أدخل تاريخ البداية (يحسب تاريخ الانتهاء تلقائياً)
+        │
+        ▼
+أضف ملاحظات (اختياري)
+        │
+        ▼
+تأكد أن "Recorded By" صحيح
+        │
+        ▼
+اضغط "Save Payment" ✅
+        │
+        ▼
+تُحفظ الدفعة وتُضاف للإيرادات تلقائياً</code></pre></p>
+<hr>
+<h2 id="ar-رقم-المرجع-instapay">رقم المرجع Instapay:</h2>
+<p><strong>لماذا:</strong> Instapay يعطي رقم مرجعي 12 خانة لكل تحويل — مطلوب للتحقق والتدقيق<br><strong>متى:</strong> كل ما الدفع عن طريق Instapay</p>
+<p>النظام يرفض الحفظ إذا الرقم أقل أو أكثر من 12 خانة.</p>
+<hr>
+<h2 id="ar-طباعة-الفاتورة">طباعة الفاتورة (Print Invoice):</h2>
+<p><strong>لماذا:</strong> لإعطاء العميل إيصال رسمي بدفعته<br><strong>متى:</strong> بعد أي دفعة يطلب فيها العميل إيصال</p>
+<p><pre><code>الخطوات:
+1. في قائمة الدفعات، ابحث عن الدفعة
+2. اضغط أيقونة "Print" 🖨️
+3. تفتح نافذة طباعة تحتوي:
+   ┌─────────────────────────────────┐
+   │    [Logo] mitrixogymcrm         │
+   │    Payment Receipt #001         │
+   │                                 │
+   │  To: مريم محمد | ID: #0042     │
+   │  Branch: MIVIDA                 │
+   │  Date: 20 Apr 2026             │
+   │  Method: Cash                   │
+   │                                 │
+   │  10 Sessions Private Adult  1x  │
+   │                    Total: 2,500 LE│
+   └─────────────────────────────────┘
+4. اختر الطابعة واطبع</code></pre></p>
+<hr>
+<h2 id="ar-فلاتر-البحث-في-المدفوعات">فلاتر البحث في المدفوعات:</h2>
+<table><thead><tr><th>الفلتر</th><th>متى تستخدمه</th></tr></thead><tbody><tr><td>البحث بالاسم</td><td>إيجاد كل دفعات عميل معيّن</td></tr><tr><td>طريقة الدفع</td><td>مراجعة دفعات Instapay فقط مثلاً</td></tr><tr><td>الفرع</td><td>إيرادات فرع معيّن</td></tr><tr><td>من تاريخ — إلى تاريخ</td><td>إيرادات فترة محددة</td></tr></tbody></table>
+<hr>
+<h2 id="ar-تصدير-المدفوعات">تصدير المدفوعات (Export):</h2>
+<p><strong>لماذا:</strong> للمراجعة المحاسبية أو الإرسال للمحاسب<br><strong>متى:</strong> نهاية كل شهر</p>
+<p>اضغط زر <strong>"Download"</strong> — يُصدّر كل الدفعات المُفلترة حالياً إلى CSV.</p>
+<hr>
+<h1 id="ar-7-الحضور">7. الحضور</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب <strong>"Attendance"</strong> في شريط التنقل (أو "Scan" على الموبايل)
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+لتتبع حضور الأعضاء وخصم الجلسات. يساعد أيضاً في اكتشاف الأعضاء الغائبين.
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+<ul><li>عند دخول أعضاء للجيم (إذا لم يكن الكيوسك متاحاً)</li><li>لمراجعة سجل حضور عضو معيّن</li></ul>
+<hr>
+<h2 id="ar-مخطط-تسجيل-الحضور">مخطط تسجيل الحضور:</h2>
+<p><pre><code>┌─────────────────────────────────────────────────┐
+│             خيارات تسجيل الحضور                  │
+└─────────────────────────────────────────────────┘
+
+          ┌──────────┴──────────┐
+          │                     │
+    QR Scanner              يدوي
+    (كيوسك)               Manual
+          │                     │
+          ▼                     ▼
+   العضو يمرر            ابحث بالاسم
+   الـ QR Code           أو Member ID
+          │                     │
+          ▼                     ▼
+   تظهر بيانات          حدد الفرع
+   العضو على الشاشة
+          │                     │
+          ▼                     ▼
+   اضغط "Confirm"      اضغط "تسجيل"
+          │                     │
+          └──────────┬──────────┘
+                     │
+                     ▼
+          ✅ تم تسجيل الحضور
+          (الجلسة تُخصم تلقائياً)</code></pre></p>
+<hr>
+<h2 id="ar-عرض-سجل-الحضور">عرض سجل الحضور:</h2>
+<p><pre><code>في صفحة Attendance:
+- قائمة بكل سجلات الحضور
+- عمودي: الاسم | التاريخ والوقت | الفرع
+- فلتر بالفرع لعرض حضور فرع معيّن
+- آخر 10 سجلات تظهر تلقائياً</code></pre></p>
+<hr>
+<h1 id="ar-8-الجلسات-الخاصة">8. الجلسات الخاصة (PT Sessions)</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب "PT Sessions" أو من داخل ملف العضو
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+لجدولة ومتابعة كل جلسة Private Training بدقة — مع تسجيل الكوتش والحالة وخصم الجلسات.
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+<ul><li>لجدولة جلسات الـ PT الجديدة</li><li>لتسجيل حضور أو غياب في جلسة PT</li><li>لمراجعة إحصائيات الـ PT</li></ul>
+<hr>
+<h2 id="ar-لوحة-pt-sessions">لوحة PT Sessions:</h2>
+<p><pre><code>┌─────────────────────────────────────────────────────────────────┐
+│  إحصائيات الشهر الحالي (MTD)                                    │
+├──────────────┬──────────────┬──────────────┬────────────────────┤
+│ Packages Logged│   Attended   │  No Shows    │  Attendance Rate   │
+│   الجلسات     │  حضروا       │  لم يحضروا   │  نسبة الحضور       │
+│     [45]      │    [38]      │    [7]       │      [84%]         │
+└──────────────┴──────────────┴──────────────┴────────────────────┘
+│                                                                   │
+│  📅 التقويم                │  جلسات 20 أبريل                     │
+│  ← أبريل 2026 →           ├─────────────────────────────────    │
+│  س أح إث ث خ ج س           │ الوقت | العميل | الكوتش | الحالة   │
+│  ... 20 ...                │ 10:00 | مريم  | كريم   | Attended │
+│  اليوم محدد بالأزرق        │ 12:00 | علي   | سارة   | Scheduled│
+│                            │ 15:00 | هند   | كريم   | No Show  │
+└───────────────────────────┴──────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-مخطط-تسجيل-جلسة-pt-جديدة">مخطط تسجيل جلسة PT جديدة:</h2>
+<p><pre><code>اضغط "Log PT Usage"
+        │
+        ▼
+┌───────────────────────────────────────┐
+│  التاريخ*          │ [20 أبريل]       │
+│  الوقت*            │ [10:30]          │
+│  العميل*           │ [مريم ▼]         │
+│  الكوتش            │ [كريم ▼]         │
+│  الفرع             │ [MIVIDA ▼]       │
+│  الحالة            │ [Scheduled ▼]    │
+└───────────────────────────────────────┘
+        │
+        ▼
+اضغط "Add" ✅</code></pre></p>
+<hr>
+<h2 id="ar-تحديث-حالة-جلسة">تحديث حالة جلسة:</h2>
+<p><pre><code>في جدول الجلسات → في عمود الحالة:
+اختر من [Scheduled ▼] الحالة الجديدة:
+
+  ✅ Attended   → تُخصم جلسة من رصيد العميل
+  ❌ No Show    → تُخصم جلسة (العميل لم يحضر ويخسر الجلسة)
+  🚫 Cancelled  → لا تُخصم جلسة
+  📅 Scheduled  → مجدول (لم يحدث بعد)</code></pre></p>
+<hr>
+<h1 id="ar-9-المهام">9. المهام</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب <strong>"Tasks"</strong> في شريط التنقل
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+لتنظيم المهام اليومية للفريق وتحديد المسؤوليات وتاريخ الاستحقاق.
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+<ul><li>لتعيين مهمة لنفسك أو لزميل</li><li>لمتابعة المهام المتأخرة</li><li>لربط مهمة بعميل معيّن</li></ul>
+<hr>
+<h2 id="ar-أنواع-المهام-الشائعة">أنواع المهام الشائعة:</h2>
+<p><pre><code>أمثلة على مهام تُضاف يومياً:
+┌─────────────────────────────────────────────────────┐
+│  📞 مكالمة متابعة مع كريم (مرتبطة بالعميل: كريم)  │
+│  📅 ترتيب عرض للعروض الشهرية غداً                  │
+│  💳 مراجعة عمولات الشهر الماضي                      │
+│  🎂 تهنئة أحمد بعيد الميلاد اليوم                  │
+│  📊 إرسال تقرير الأداء للمدير                       │
+└─────────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-مخطط-إنشاء-مهمة">مخطط إنشاء مهمة:</h2>
+<p><pre><code>اضغط "+ Add Task"
+        │
+        ▼
+┌──────────────────────────────────────────────────┐
+│ العنوان*            │ متابعة مع مريم              │
+│ الوصف               │ تواصل لمعرفة رأيها بالتجربة│
+│ تاريخ الاستحقاق*   │ [21 أبريل 2026]             │
+│ الأولوية*          │ [High 🔴▼]                   │
+│ الحالة             │ [Pending ▼]                  │
+│ المعيَّن إليه       │ [أحمد ▼]                    │
+│ عميل مرتبط         │ [مريم محمد ▼] (اختياري)     │
+└──────────────────────────────────────────────────┘
+        │
+        ▼
+اضغط "Create Task" ✅</code></pre></p>
+<hr>
+<h2 id="ar-مستويات-الأولوية-وكيف-تختار">مستويات الأولوية وكيف تختار:</h2>
+<p><pre><code>🔴 High  → مهام تؤثر مباشرة على إيراد أو رضا العميل
+            مثال: عضو يريد إلغاء / ليد جاهز للشراء
+
+🟡 Medium → مهام مهمة لكن لها وقت
+            مثال: مراجعة تقرير / ترتيب اجتماع
+
+🟢 Low   → مهام يمكن تأجيلها
+            مثال: تحديث صورة البروفايل / تنظيم قائمة الليدز</code></pre></p>
+<hr>
+<h2 id="ar-صلاحيات-المهام">صلاحيات المهام:</h2>
+<ul><li><strong>المعيَّن إليه</strong> (Assignee): يمكنه تغيير الحالة فقط (Pending/In Progress/Completed)</li><li><strong>المُنشئ أو المدير</strong>: يمكنه تعديل كل شيء أو حذف المهمة</li></ul>
+<hr>
+<h1 id="ar-10-التقارير">10. التقارير</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب <strong>"Reports"</strong> — يظهر للمديرين فقط
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+التقارير تجيب على الأسئلة الاستراتيجية التي لا تظهر في الشاشات العادية.
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+<ul><li>اجتماعات مراجعة الأداء الشهرية</li><li>قرارات الميزانية والتسويق</li><li>اكتشاف المشكلات قبل حدوثها</li></ul>
+<hr>
+<h2 id="ar-التقرير-الأول-lead-source-roi">التقرير الأول: Lead Source ROI</h2>
+<p><strong>لماذا:</strong> لمعرفة أي قناة تسويق تستحق الاستثمار<br><strong>متى:</strong> شهرياً لمراجعة ميزانية التسويق</p>
+<p><pre><code>┌────────────────────────────────────────────────────────────────┐
+│                Lead Source ROI Report                          │
+├────────────┬──────────┬───────────┬──────────┬────────────────┤
+│  المصدر    │ الليدز   │  تحوّلوا  │ نسبة     │  الإيراد       │
+├────────────┼──────────┼───────────┼──────────┼────────────────┤
+│ Instagram  │   120    │    36     │  30%     │  90,000 LE     │
+│ Walk-in    │    45    │    22     │  49%     │  55,000 LE     │
+│ WhatsApp   │    80    │    18     │  23%     │  45,000 LE     │
+│ TikTok     │    30    │     5     │  17%     │  12,500 LE     │
+│ Other      │    25    │     4     │  16%     │  10,000 LE     │
+└────────────┴──────────┴───────────┴──────────┴────────────────┘</code></pre></p>
+<p><strong>كيف تقرأه:</strong><br><ul><li>Walk-in: أعلى نسبة تحويل (49%) — الزيارات المباشرة أجود</li><li>Instagram: أكبر عدد ليدز وأكبر إيراد — يستحق استمرار الاستثمار</li><li>TikTok: نسبة تحويل منخفضة — يحتاج مراجعة استراتيجية</li></ul><br><hr></p>
+<h2 id="ar-التقرير-الثاني-churn-risk">التقرير الثاني: Churn Risk (خطر الفقدان)</h2>
+<p><strong>لماذا:</strong> اكتشاف الأعضاء الذين على وشك الاستغناء عن الجيم<br><strong>متى:</strong> أسبوعياً — قبل ما يتخذوا قرار الإلغاء بأنفسهم</p>
+<p><pre><code>┌────────────────────────────────────────────────────────────────┐
+│                    Churn Risk Report                           │
+│         (الأعضاء النشطون بدون حضور منذ 14 يوم)                │
+├────────────┬──────────────┬─────────────────┬─────────────────┤
+│  الاسم     │  الهاتف      │  آخر حضور       │  أيام غياب      │
+├────────────┼──────────────┼─────────────────┼─────────────────┤
+│ أحمد سمير  │ 01012345678  │  5 أبريل        │   15 يوم        │
+│ سارة محمد  │ 01198765432  │  2 أبريل        │   18 يوم        │
+│ كريم علي   │ 01234567890  │  28 مارس        │   23 يوم        │
+└────────────┴──────────────┴─────────────────┴─────────────────┘</code></pre></p>
+<p><strong>كيف تتصرف:</strong><br><ol><li>صدّر القائمة CSV</li><li>قسّم المهام على المندوبين</li><li>لكل شخص: سجّل Interaction في ملفه بعد التواصل</li></ol><br><hr></p>
+<h2 id="ar-التقرير-الثالث-cohort-retention">التقرير الثالث: Cohort Retention</h2>
+<p><strong>لماذا:</strong> لفهم معدل الاحتفاظ بالأعضاء على المدى الطويل<br><strong>متى:</strong> ربع سنوياً أو نصف سنوياً</p>
+<p><pre><code>┌──────────────────────────────────────────────────────────────┐
+│                  Cohort Retention Report                      │
+├───────────────┬──────────┬──────────┬──────────┬────────────┤
+│  الدفعة       │ الأعضاء  │  جدّدوا  │ تركوا    │ نسبة الاحتفاظ│
+├───────────────┼──────────┼──────────┼──────────┼────────────┤
+│ يناير 2026   │   40     │   28     │   12     │    70%     │
+│ فبراير 2026  │   35     │   24     │   11     │    69%     │
+│ مارس 2026    │   50     │   38     │   12     │    76%     │
+│ أبريل 2026   │   45     │   -      │   -      │    جاري     │
+└───────────────┴──────────┴──────────┴──────────┴────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-التقرير-الرابع-revenue-forecast">التقرير الرابع: Revenue Forecast</h2>
+<p><strong>لماذا:</strong> توقع إيراد التجديدات قبل نهاية الشهر للتخطيط<br><strong>متى:</strong> في العشرة الأوائل من كل شهر</p>
+<p><pre><code>┌──────────────────────────────────────────────────────────────┐
+│                    Revenue Forecast                           │
+├──────────────────────────┬───────────────────────────────────┤
+│  الأعضاء المنتهون هذا الشهر│         48 عضو                  │
+│  القيمة المعرضة للخطر     │       120,000 LE                 │
+│  معدل التجديد (آخر 3 أشهر)│          72%                     │
+│  الإيراد المتوقع          │       86,400 LE                  │
+└──────────────────────────┴───────────────────────────────────┘</code></pre></p>
+<hr>
+<h1 id="ar-11-سجل-الأنشطة">11. سجل الأنشطة</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب <strong>"History"</strong> — للمديرين فقط
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+المحاسبية والشفافية — كل تغيير في النظام مسجّل بالتاريخ والوقت واسم من فعله.
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+<ul><li>عند التحقيق في تغيير بيانات غير متوقع</li><li>لمراجعة من حذف دفعة أو غيّر بيانات عضو</li><li>للتدقيق الشهري</li></ul>
+<hr>
+<h2 id="ar-كيف-تقرأ-السجل">كيف تقرأ السجل:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                       Audit Log                                  │
+├──────────────────────────────────────────────────────────────────┤
+│  [بحث]  [Entity Type ▼]  [Action ▼]  [Branch ▼]                 │
+├────────────┬──────────┬──────────┬─────────────┬────────────────┤
+│  التوقيت  │ المستخدم │ الإجراء  │   التفاصيل  │   الفرع         │
+├────────────┼──────────┼──────────┼─────────────┼────────────────┤
+│ 20 Apr    │  أحمد   │ 🟢CREATE  │ دفعة جديدة  │   COMPLEX      │
+│ 10:32 AM  │         │ Payment  │ 2500 LE كاش │                │
+├────────────┼──────────┼──────────┼─────────────┼────────────────┤
+│ 20 Apr    │  سارة   │ 🔵UPDATE  │ تغيير Stage │   MIVIDA       │
+│ 11:15 AM  │         │  Lead    │ New → Trial │                │
+├────────────┼──────────┼──────────┼─────────────┼────────────────┤
+│ 20 Apr    │  كريم   │ 🔴DELETE  │ حذف دفعة   │   COMPLEX      │
+│ 2:30 PM   │         │ Payment  │ 1000 LE     │                │
+└────────────┴──────────┴──────────┴─────────────┴────────────────┘</code></pre></p>
+<p><strong>اللون الأخضر 🟢 CREATE</strong> = إضافة بيانات جديدة<br><strong>اللون الأزرق 🔵 UPDATE</strong> = تعديل بيانات موجودة<br><strong>اللون الأحمر 🔴 DELETE</strong> = حذف بيانات</p>
+<hr>
+<h1 id="ar-12-الإعدادات">12. الإعدادات</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+تبويب <strong>"Settings"</strong> — للمديرين والأدمن فقط
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+لضبط كل إعدادات النظام: العلامة التجارية، المستخدمين، الباكدجات، الكوتشيز، الفروع، والعمولات.
+<hr>
+<h2 id="ar-التبويبات-داخل-الإعدادات">التبويبات داخل الإعدادات:</h2>
+<p><pre><code>┌─────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│Branding │  Users   │ Branches │ Packages │ Coaches  │Commission│  Backup  │ Danger⚠️ │
+│العلامة  │المستخدمون│ الفروع  │الباكدجات │الكوتشيز  │ العمولات │  نسخ    │ خطر     │
+└─────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘</code></pre></p>
+<hr>
+<h2 id="ar-تبويب-branding">تبويب Branding (العلامة التجارية):</h2>
+<p><strong>لماذا:</strong> لتخصيص شكل النظام بهوية الجيم<br><strong>متى:</strong> عند تغيير اللوجو أو اسم الجيم أو الـ PINs</p>
+<p><pre><code>┌────────────────────────────────────────────────────┐
+│  اسم الشركة*        │ mitrixogymcrm                │
+│  رابط اللوجو        │ https://...logo.png          │
+│                     │ [معاينة اللوجو هنا]          │
+│  PIN الكيوسك        │ ••••••  (6 أرقام)            │
+│  PIN الحضور الذاتي │ ••••••  (6 أرقام)            │
+└────────────────────────────────────────────────────┘
+اضغط "Save" لحفظ التغييرات</code></pre></p>
+<hr>
+<h2 id="ar-تبويب-users">تبويب Users (المستخدمون):</h2>
+<h3 id="ar-دعوة-مستخدم-جديد">دعوة مستخدم جديد:</h3>
+<p><strong>لماذا:</strong> لإضافة موظف جديد للنظام<br><strong>متى:</strong> عند تعيين موظف جديد</p>
+<p><pre><code>مخطط دعوة مستخدم:
+
+اضغط "Invite User"
+        │
+        ▼
+┌────────────────────────────────────────────┐
+│  البريد الإلكتروني* │ ahmed@mitrixogymcrm.com      │
+│  الدور*             │ [Rep ▼]              │
+└────────────────────────────────────────────┘
+        │
+        ▼
+اضغط "Invite" ✅
+        │
+        ▼
+يُرسَل دعوة للموظف
+        │
+        ▼
+الموظف يدخل بحساب جوجل ← دوره مُعيَّن تلقائياً</code></pre></p>
+<h3 id="ar-تعديل-بيانات-مستخدم">تعديل بيانات مستخدم:</h3>
+<p><pre><code>في قائمة المستخدمين → اضغط "Edit" بجانب الموظف
+        │
+        ▼
+┌─────────────────────────────────────────────────────┐
+│  الاسم                │ أحمد محمد                    │
+│  الإيميل              │ ahmed@mitrixogymcrm.com             │
+│  الفرع                │ [COMPLEX ▼]                 │
+│  التارجت الشهري (LE)  │ 40,000                      │
+│  الصلاحيات الإضافية:  │                             │
+│  ☐ حذف مدفوعات       │                             │
+│  ☐ عرض Dashboard كامل│                             │
+│  ☐ الوصول للإعدادات  │                             │
+└─────────────────────────────────────────────────────┘
+        │
+        ▼
+اضغط "Save" ✅</code></pre></p>
+<hr>
+<h2 id="ar-تبويب-branches">تبويب Branches (الفروع):</h2>
+<p><strong>لماذا:</strong> إدارة فروع الجيم وطباعة QR Codes للحضور لكل فرع<br><strong>متى:</strong> عند فتح فرع جديد</p>
+<p><pre><code>الفروع الحالية:
+┌──────────────────────────────────────────────────────┐
+│  COMPLEX      [Print QR] [Remove]                    │
+│  MIVIDA       [Print QR] [Remove]                    │
+│  mitrixogymcrm IMPACT[Print QR] [Remove]                    │
+└──────────────────────────────────────────────────────┘
+
+إضافة فرع جديد:
+[اسم الفرع الجديد]  [Add]</code></pre></p>
+<h3 id="ar-طباعة-qr-code-للفرع">طباعة QR Code للفرع:</h3>
+<p><strong>لماذا:</strong> لوضعه عند مدخل الفرع — الأعضاء يمسحونه للوصول لصفحة الحضور الذاتي<br><strong>متى:</strong> عند إعداد فرع جديد أو تجديد الـ QR Code</p>
+<p><pre><code>اضغط "Print QR" بجانب اسم الفرع
+        │
+        ▼
+تفتح نافذة طباعة تحتوي:
+┌─────────────────────────────────┐
+│    [Logo] mitrixogymcrm         │
+│                                 │
+│         [QR Code كبير]          │
+│                                 │
+│      Scan to Check-in           │
+│     COMPLEX Branch              │
+│                                 │
+│  Please ask the front desk      │
+│  for today's PIN                │
+└─────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-تبويب-packages">تبويب Packages (الباكدجات):</h2>
+<p><strong>لماذا:</strong> لتحديد الاشتراكات المتاحة وأسعارها وعدد الجلسات<br><strong>متى:</strong> عند إضافة اشتراك جديد أو تغيير سعر</p>
+<p><pre><code>إضافة باكدج جديد:
+
+اضغط "+ Add Package"
+        │
+        ▼
+┌──────────────────────────────────────────────────────────┐
+│  الاسم*                │ 10 Sessions Private Adult       │
+│  عدد الجلسات*          │ [10] ← أو ☑ Unlimited          │
+│  السعر (LE)*           │ 2,500                          │
+│  أيام الصلاحية*        │ 30 يوم                          │
+│  الفرع                 │ [ALL ▼] أو فرع محدد            │
+│  النوع*                │ [Private ▼]                    │
+└──────────────────────────────────────────────────────────┘
+        │
+        ▼
+اضغط "Save Package" ✅</code></pre></p>
+<hr>
+<h2 id="ar-تبويب-coaches">تبويب Coaches (الكوتشيز):</h2>
+<p><strong>لماذا:</strong> قائمة الكوتشيز تُستخدم عند تسجيل دفعات الـ PT<br><strong>متى:</strong> عند توظيف كوتش جديد أو إيقاف كوتش</p>
+<p><pre><code>إضافة كوتش:
+┌─────────────────────────────────┐
+│  الاسم*  │ كريم سمير            │
+│  الحالة* │ [Active ▼]           │
+└─────────────────────────────────┘
+اضغط "Save Coach" ✅</code></pre></p>
+<hr>
+<h2 id="ar-تبويب-commission">تبويب Commission (العمولات):</h2>
+<p><strong>لماذا:</strong> لتحديد نسبة عمولة PT وGroup لكل مندوب<br><strong>متى:</strong> شهرياً أو عند تغيير نسب العمولة</p>
+<p><pre><code>┌─────────────────────────────────────────────────────────────────┐
+│  PT Rate:     [15%]      Group Rate: [10%]      [Save Rates]    │
+├─────────────────────────────────────────────────────────────────┤
+│  تقرير عمولات [أبريل 2026 ▼]                                    │
+├────────────┬────────────┬────────────┬────────────┬────────────┤
+│  المندوب   │  PT إيراد  │Group إيراد │ إجمالي     │  العمولة   │
+├────────────┼────────────┼────────────┼────────────┼────────────┤
+│  أحمد      │  15,000   │  20,000   │  35,000   │  5,250 LE  │
+│  سارة      │  8,000    │  16,000   │  24,000   │  2,800 LE  │
+│  كريم      │  12,000   │  22,000   │  34,000   │  3,800 LE  │
+└────────────┴────────────┴────────────┴────────────┴────────────┘
+                                    [Export CSV]</code></pre></p>
+<hr>
+<h2 id="ar-تبويب-backup">تبويب Backup (النسخ الاحتياطي):</h2>
+<p><strong>لماذا:</strong> حماية البيانات — لو حدث أي خطأ تقدر ترجع لنسخة سابقة<br><strong>متى:</strong> أسبوعياً على الأقل، أو قبل أي تغيير كبير</p>
+<p><pre><code>┌──────────────────────────────────────────────────────┐
+│  [Export Database] ← يُحمّل ملف JSON بكل البيانات    │
+│                                                      │
+│  [Restore Database] ← ارفع ملف JSON لاستعادة البيانات│
+└──────────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-تبويب-danger-zone-⚠️">تبويب Danger Zone ⚠️ (للـ CRM Admin فقط):</h2>
+<p><strong>لماذا:</strong> لمسح البيانات كاملاً (مثلاً عند البدء من صفر في موسم جديد)<br><strong>متى:</strong> نادراً جداً — فقط بقرار إدارة عليا</p>
+<p><pre><code>⛔ تحذير شديد:
+مسح النظام لا يمكن التراجع عنه.
+يتطلب كتابة نص تأكيد قبل التنفيذ.
+يُنصح بأخذ نسخة احتياطية أولاً.</code></pre></p>
+<hr>
+<h1 id="ar-13-الكيوسك-والحضور-الذاتي">13. الكيوسك والحضور الذاتي</h1>
+<h2 id="ar-الكيوسك">الكيوسك (Kiosk Mode)</h2>
+<h2 id="ar-أين؟">أين؟</h2>
+عبر الرابط: <code>/kiosk</code>
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+شاشة مخصصة لمدخل الجيم — الأعضاء يسجّلون حضورهم بأنفسهم بالـ QR Code بدون تدخل الموظف.
+<h2 id="ar-متى-تستخدمه؟">متى تستخدمه؟</h2>
+دائماً — يُشغَّل على تابلت أو شاشة عند مدخل كل فرع.
+<hr>
+<h2 id="ar-مخطط-عمل-الكيوسك">مخطط عمل الكيوسك:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                      رحلة الكيوسك                                │
+└──────────────────────────────────────────────────────────────────┘
+
+شاشة إدخال PIN
+        │
+        ▼
+إدخال PIN صحيح؟
+   لا → رسالة خطأ + مسح الحقل
+   نعم →
+        ▼
+شاشة الكيوسك الرئيسية
+  [Logo]  [KIOSK MODE]  [Lock 🔒]
+  اختر الفرع: [COMPLEX ▼]
+        │
+        ▼
+العضو يمرر QR Code أمام الكاميرا
+        │
+        ▼
+يظهر في الشاشة:
+  ✅ Scan Successful
+  الاسم: مريم محمد
+  Member ID: #0042
+  Package: 10 Sessions Private
+  الجلسات المتبقية: 6 (باللون الأخضر)
+        │
+        ▼
+اضغط "Confirm Attendance"
+        │
+        ▼
+✅ تم تسجيل الحضور — الجلسة تُخصم
+        │
+        ▼
+الشاشة تعود لوضع الانتظار</code></pre></p>
+<hr>
+<h2 id="ar-صفحة-الحضور-الذاتي">صفحة الحضور الذاتي (Self Check-in)</h2>
+<h2 id="ar-أين؟">أين؟</h2>
+عبر الرابط: <code>/checkin</code> أو بمسح QR Code الفرع
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+للأعضاء الذين لا يمرون بالكاميرا — يدخلون بياناتهم يدوياً.
+<p><pre><code>مخطط Self Check-in:
+
+العضو يفتح الصفحة (من QR Code الفرع)
+        │
+        ▼
+يختار الفرع (COMPLEX / MIVIDA / mitrixogymcrm IMPACT)
+        │
+        ▼
+يدخل Member ID أو رقم الهاتف
+        │
+        ▼
+يدخل PIN اليوم (المُعطى من عند الريسبشن)
+        │
+        ▼
+يضغط "Check In"
+        │
+        ▼
+✅ Check-in Successful!
+   مرحباً مريم!
+   (يُعاد تلقائياً للبداية بعد ثانيتين)</code></pre></p>
+<hr>
+<h1 id="ar-14-الاستيراد-والتصدير">14. الاستيراد والتصدير</h1>
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+لنقل بيانات كبيرة من Excel أو Google Sheets إلى النظام دفعة واحدة بدلاً من الإدخال اليدوي.
+<hr>
+<h2 id="ar-مخطط-الاستيراد-الكامل">مخطط الاستيراد الكامل:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                     مخطط عملية الاستيراد                         │
+└──────────────────────────────────────────────────────────────────┘
+
+ابدأ في Leads أو Members → اضغط "Import Data"
+        │
+        ▼
+┌────────────────────────────────────────────────┐
+│          الخطوة 1: رفع الملف                   │
+│  ارفع ملف CSV  ─── أو ─── الصق رابط G.Sheets  │
+│             اضغط "Parse"                       │
+└────────────────────────────────────────────────┘
+        │
+        ▼
+┌────────────────────────────────────────────────┐
+│          الخطوة 2: ربط الأعمدة                 │
+│  عمود CSV → حقل النظام                         │
+│  "Full Name" → Name ✅ (تلقائي)               │
+│  "Mobile"   → Phone ✅ (تلقائي)               │
+│  "Start"    → Start Date ⚙️ (يدوي)            │
+│  "Package"  → Package Type ✅ (تلقائي)         │
+│  ...                                           │
+│  اضغط "Continue"                               │
+└────────────────────────────────────────────────┘
+        │
+        ▼
+┌────────────────────────────────────────────────┐
+│          الخطوة 3: جاري الاستيراد              │
+│  ████████████████░░░░ 75%                      │
+│  Imported: 150 | Errors: 3                     │
+│  خطأ صف 23: تاريخ غير صحيح                    │
+│  خطأ صف 87: رقم هاتف مكرر                     │
+└────────────────────────────────────────────────┘
+        │
+        ▼
+┌────────────────────────────────────────────────┐
+│          الخطوة 4: النتيجة                     │
+│  ✅ استُوردت: 197 سجل                          │
+│  ❌ فشلت: 3 صفوف                              │
+│  [عرض الأخطاء]  [Done]                        │
+└────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-التراجع-عن-الاستيراد">التراجع عن الاستيراد (Rollback):</h2>
+<p><strong>لماذا:</strong> لو اكتشفت بعد الاستيراد أن البيانات خطأ<br><strong>متى:</strong> فور اكتشاف المشكلة — الرولباك يحذف كل الدفعة</p>
+<p><pre><code>الخطوات:
+1. اضغط "Import History"
+2. ابحث عن الاستيراد المطلوب
+3. اضغط "Rollback"
+4. أكّد الحذف ✅
+5. تُحذف كل السجلات المستوردة في تلك الدفعة</code></pre></p>
+<hr>
+<h2 id="ar-ماذا-تستورد؟">ماذا تستورد؟</h2>
+<p><pre><code>من Leads: الاسم، الهاتف، المصدر، الفرع، المرحلة، المندوب
+من Members: الاسم، الهاتف، الفرع، الباكدج، الجلسات، تاريخ البداية والانتهاء، المندوب</code></pre></p>
+<hr>
+<h1 id="ar-15-الإشعارات-والتنبيهات">15. الإشعارات والتنبيهات</h1>
+<h2 id="ar-أين؟">أين؟</h2>
+أيقونة 🔔 في رأس الصفحة
+<h2 id="ar-لماذا-موجود؟">لماذا موجود؟</h2>
+حتى لا يفوتك أي شيء مهم — النظام يراقب ويخبرك تلقائياً.
+<h2 id="ar-متى-تراجعه؟">متى تراجعه؟</h2>
+بداية كل يوم عمل.
+<hr>
+<h2 id="ar-أنواع-الإشعارات-التلقائية">أنواع الإشعارات التلقائية:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│  🔔 مركز الإشعارات (3 إشعارات جديدة)                            │
+├──────────────────────────────────────────────────────────────────┤
+│  ⚠️  ليد: محمد أحمد — لم يُتابَع منذ 8 أيام       [X تجاهل]    │
+│  🎂  عيد ميلاد: سارة كريم — اليوم!                 [X تجاهل]    │
+│  ⏰  اشتراك ينتهي: علي محمود — بعد يومين            [X تجاهل]    │
+│  📋  مهمة متأخرة: مكالمة متابعة كريم               [X تجاهل]    │
+├──────────────────────────────────────────────────────────────────┤
+│                        [تجاهل الكل]                              │
+└──────────────────────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h1 id="ar-16-سيناريوهات-عملية-كاملة">16. سيناريوهات عملية كاملة</h1>
+<hr>
+<h2 id="ar-السيناريو-1-يوم-عمل-اعتيادي-لمندوب-المبيعات">السيناريو 1: يوم عمل اعتيادي لمندوب المبيعات</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                 خطة يوم العمل المثالية                           │
+└──────────────────────────────────────────────────────────────────┘
+
+9:00 صباحاً — فتح النظام
+        │
+        ▼
+1. راجع 🔔 الإشعارات
+   • تعامل مع كل إشعار فوراً أو جدول متابعة
+        │
+        ▼
+2. افتح Dashboard
+   • اطلع على بطاقات الأرقام
+   • راجع Action Required و Urgent Reminders
+        │
+        ▼
+3. افتح Leads → My Leads → Sort by Score
+   • ابدأ بالأعلى درجة
+   • سجّل تفاعل مع كل ليد تواصلت معه
+        │
+        ▼
+4. افتح Renewal Pipeline
+   • حدد Expired أولاً ← تواصل عاجل
+   • ثم Urgent ← خطط للتواصل اليوم أو غداً
+        │
+        ▼
+5. راجع المهام (Tasks)
+   • أنجز المتأخرة أولاً
+   • حدّث حالات المهام الجارية
+        │
+        ▼
+طوال اليوم:
+   • أي ليد جديد → أضفه فوراً
+   • أي دفعة → سجّلها فوراً
+   • أي تواصل → سجّل Interaction</code></pre></p>
+<hr>
+<h2 id="ar-السيناريو-2-استفسار-جديد-من-إنستجرام">السيناريو 2: استفسار جديد من إنستجرام</h2>
+<p><pre><code>وصل رسالة إنستجرام: "كام سعر الاشتراك؟"
+        │
+        ▼
+اضغط "+ Add Lead"
+أدخل: الاسم + الهاتف + Source: Instagram + Branch
+        │
+        ▼
+رد عليه وأخبره بالأسعار
+        │
+        ▼
+سجّل Interaction:
+  النوع: WhatsApp
+  النتيجة: Interested (لو مهتم) أو Not Answered
+  المتابعة: غداً
+        │
+        ▼
+إذا اهتم → حدد موعد تجربة
+Stage → Trial | أدخل Trial Date
+        │
+        ▼
+بعد التجربة → Log Interaction
+  نعم أشترك → Convert to Member → سجّل دفعة
+  يحتاج تفكير → Stage: Follow Up | حدد متابعة
+  رفض → Stage: Lost</code></pre></p>
+<hr>
+<h2 id="ar-السيناريو-3-عضو-يريد-تجديد-اشتراكه">السيناريو 3: عضو يريد تجديد اشتراكه</h2>
+<p><pre><code>العضو اتصل وقال إنه يريد تجديد
+        │
+        ▼
+ابحث عنه في Members
+        │
+        ▼
+تأكد من بياناته: الباكدج الحالي، الجلسات المتبقية
+        │
+        ▼
+اذهب لـ Payments → "+ New Payment"
+        │
+        ▼
+اختر العميل → أدخل المبلغ → اختر الباكدج الجديد
+اختر طريقة الدفع → أدخل تاريخ البداية
+        │
+        ▼
+اضغط "Save Payment" ✅
+        │
+        ▼
+الاشتراك يتجدد تلقائياً
+        │
+        ▼
+اطبع Invoice لو طلب إيصال
+        │
+        ▼
+سجّل Interaction على ملفه: "جدّد الاشتراك"</code></pre></p>
+<hr>
+<h2 id="ar-السيناريو-4-إعداد-الكيوسك-في-فرع-جديد">السيناريو 4: إعداد الكيوسك في فرع جديد</h2>
+<p><pre><code>افتح الإعدادات → Branding
+        │
+        ▼
+تأكد من:
+  اسم الشركة ✅
+  اللوجو ✅
+  Kiosk PIN: 6 أرقام — احفظها بأمان
+        │
+        ▼
+اذهب للإعدادات → Branches
+        │
+        ▼
+أضف اسم الفرع الجديد → "Add"
+        │
+        ▼
+اضغط "Print QR" للفرع الجديد
+اطبع الـ QR وضعه عند المدخل
+        │
+        ▼
+افتح رابط /kiosk على التابلت
+        │
+        ▼
+أدخل الـ Kiosk PIN ✅
+        │
+        ▼
+اختر الفرع الجديد من القائمة
+        │
+        ▼
+الكيوسك جاهز للعمل 🎉</code></pre></p>
+<hr>
+<h2 id="ar-السيناريو-5-مراجعة-أداء-الفريق">السيناريو 5: مراجعة أداء الفريق (للمدير)</h2>
+<p><pre><code>اذهب للـ Dashboard
+        │
+        ▼
+في الجزء السفلي: Rep Performance Leaderboard
+        │
+        ▼
+اختر الشهر من أزرار التنقل (← →)
+        │
+        ▼
+اقرأ الجدول:
+  من حقق تارجته؟
+  من يحتاج دعم؟
+  من الأعلى تحويلاً؟
+        │
+        ▼
+اذهب للتقارير → Lead Source ROI
+  أي مصدر أعطانا أفضل نتائج هذا الشهر؟
+        │
+        ▼
+اذهب للتقارير → Churn Risk
+  من الأعضاء المعرضون للمغادرة؟
+  وزّع قائمة التواصل على الفريق
+        │
+        ▼
+الإعدادات → Commission
+  راجع عمولات الشهر
+  صدّر CSV للمحاسبة</code></pre></p>
+<hr>
+<h2 id="ar-السيناريو-6-استيراد-200-ليد-من-google-sheets">السيناريو 6: استيراد 200 ليد من Google Sheets</h2>
+<p><pre><code>حوّل الـ Sheet إلى CSV (File → Download → CSV)
+        │
+        ▼
+اذهب لـ Leads → "Import Data"
+        │
+        ▼
+ارفع الملف CSV
+اضغط "Parse"
+        │
+        ▼
+تأكد من ربط الأعمدة:
+  "Name" → Name ✅
+  "Phone" → Phone ✅
+  "Source" → Source ✅
+  (أي عمود غير مطابق → اختره يدوياً)
+        │
+        ▼
+اضغط "Continue"
+        │
+        ▼
+انتظر انتهاء الاستيراد
+راجع الأخطاء (لو وجدت)
+        │
+        ▼
+"Done" ✅
+200 ليد أُضيفوا في ثوانٍ</code></pre></p>
+<hr>
+<h2 id="ar-السيناريو-7-التحقيق-في-دفعة-مشكوك-فيها">السيناريو 7: التحقيق في دفعة مشكوك فيها</h2>
+<p><pre><code>مدير لاحظ دفعة بمبلغ غير صحيح
+        │
+        ▼
+اذهب لـ History (Audit Log)
+        │
+        ▼
+فلتر بـ: Entity = Payments | Action = CREATE أو DELETE
+        │
+        ▼
+ابحث بالتاريخ التقريبي
+        │
+        ▼
+اجد السجل: من سجّل الدفعة ومتى وبأي مبلغ
+        │
+        ▼
+إذا كانت خاطئة:
+  اذهب لـ Payments → ابحث عن الدفعة
+  اضغط "Delete" (يحتاج صلاحية Can Delete Payments)
+  سجّل دفعة صحيحة جديدة</code></pre></p>
+<hr>
+<h1 id="ar-17-جدول-مرجعي-سريع">17. جدول مرجعي سريع</h1>
+<h2 id="ar-أين-أجد-ماذا؟">أين أجد ماذا؟</h2>
+<table><thead><tr><th>ما أريد فعله</th><th>أين</th><th>الزر المطلوب</th></tr></thead><tbody><tr><td>أضيف ليد جديد</td><td>Leads</td><td>+ Add Lead</td></tr><tr><td>أتابع ليد</td><td>Leads → افتح الليد</td><td>Log Interaction</td></tr><tr><td>أحوّل ليد لعضو</td><td>Leads → افتح الليد</td><td>Convert to Member</td></tr><tr><td>أضيف عضو جديد</td><td>Members</td><td>+ Add Member</td></tr><tr><td>أبحث عن عضو</td><td>أي صفحة</td><td>البحث العالمي في الأعلى</td></tr><tr><td>أسجّل دفعة</td><td>Payments</td><td>+ New Payment</td></tr><tr><td>أطبع فاتورة</td><td>Payments → الدفعة</td><td>أيقونة الطباعة 🖨️</td></tr><tr><td>أتابع التجديدات</td><td>Members</td><td>Renewal Pipeline</td></tr><tr><td>أسجّل حضور يدوي</td><td>Attendance</td><td>Manual Check-in</td></tr><tr><td>أجدول جلسة PT</td><td>PT Sessions</td><td>Log PT Usage</td></tr><tr><td>أضيف مهمة</td><td>Tasks</td><td>+ Add Task</td></tr><tr><td>أرى أداء الفريق</td><td>Dashboard</td><td>Leaderboard (أسفل الصفحة)</td></tr><tr><td>أرى تقرير العمولات</td><td>Settings → Commission</td><td>اختر الشهر</td></tr><tr><td>أستورد بيانات</td><td>Leads أو Members</td><td>Import Data</td></tr><tr><td>أصدّر بيانات</td><td>أي صفحة</td><td>Export CSV</td></tr><tr><td>أضيف كوتش</td><td>Settings → Coaches</td><td>+ Add Coach</td></tr><tr><td>أضيف باكدج</td><td>Settings → Packages</td><td>+ Add Package</td></tr><tr><td>أضيف فرع</td><td>Settings → Branches</td><td>Add Branch</td></tr><tr><td>أدعو موظف جديد</td><td>Settings → Users</td><td>Invite User</td></tr><tr><td>أعدّل صلاحيات موظف</td><td>Settings → Users → Edit</td><td>تعديل الصلاحيات</td></tr><tr><td>أراجع من غيّر بيانات</td><td>History</td><td>فلتر بالـ Entity والإجراء</td></tr><tr><td>أأخذ نسخة احتياطية</td><td>Settings → Backup</td><td>Export Database</td></tr></tbody></table>
+<hr>
+<h2 id="ar-حالات-الطوارئ-—-ماذا-أفعل-لو؟">حالات الطوارئ — ماذا أفعل لو؟</h2>
+<table><thead><tr><th>المشكلة</th><th>الحل</th></tr></thead><tbody><tr><td>عضو يقول "جلساتي غلط"</td><td>Members → افتح ملفه → راجع package history</td></tr><tr><td>دفعة مسجّلة بمبلغ خاطئ</td><td>History → تحقق → Payments → احذف وأعد</td></tr><tr><td>ليد انتقل لمندوب آخر</td><td>Leads → افتح الليد → غيّر Assigned To</td></tr><tr><td>نسيت PIN الكيوسك</td><td>Settings → Branding → راجع Kiosk PIN</td></tr><tr><td>استوردت بيانات خاطئة</td><td>Leads/Members → Import History → Rollback</td></tr><tr><td>موظف استقال وتريد إلغاء وصوله</td><td>Settings → Users → Delete</td></tr><tr><td>عضو يريد تجميد اشتراكه</td><td>Members → افتح العضو → غيّر Status لـ Hold</td></tr></tbody></table>
+<hr>
+<h1 id="ar-18-خارطة-طريق-المستقبل">18. خارطة طريق المستقبل</h1>
+<h2 id="ar-الميزات-القادمة-المقترحة-—-mini-roadmap">الميزات القادمة المقترحة — Mini Roadmap</h2>
+<hr>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│               خارطة طريق mitrixogymcrm CRM                       │
+│                     2026 — 2027                                  │
+└──────────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Q2 2026   (أبريل — يونيو)     أولوية عالية
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────────────────────┐
+  │ 📱 تطبيق موبايل Native (iOS + Android)         │
+  │    • إشعارات Push Notifications                 │
+  │    • مسح QR بكاميرا الموبايل                   │
+  │    • عمل بدون إنترنت (Offline Mode)            │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 💬 تكامل WhatsApp Business API                  │
+  │    • رسائل تلقائية عند انتهاء الاشتراك         │
+  │    • تأكيد مواعيد الـ PT تلقائياً              │
+  │    • حملات تسويقية مجدولة                      │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 📊 لوحة تحكم مالية متقدمة                      │
+  │    • P&amp;L شهري (الربح والخسارة)                  │
+  │    • تتبع مصاريف الفرع                         │
+  │    • صافي الإيراد بعد العمولات                  │
+  └────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Q3 2026   (يوليو — سبتمبر)    أولوية متوسطة
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────────────────────┐
+  │ 🎯 نظام نقاط الولاء المتكامل                   │
+  │    • كسب نقاط بكل حضور                        │
+  │    • استبدال نقاط بخصومات أو هدايا             │
+  │    • صفحة عضو لعرض رصيد النقاط                │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 🤖 AI للتوقعات والاقتراحات                      │
+  │    • توقع من سيغادر الجيم (Churn Prediction)  │
+  │    • اقتراح أفضل وقت للتواصل مع ليد            │
+  │    • تحليل الأنماط لزيادة التحويل              │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 💳 بوابة دفع إلكترونية مدمجة                   │
+  │    • Paymob / Fawry Integration                 │
+  │    • الأعضاء يدفعون أونلاين                    │
+  │    • تسجيل تلقائي في النظام                    │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 📅 نظام جداول الكلاسات (Class Scheduling)      │
+  │    • جدول أسبوعي للكلاسات                      │
+  │    • الأعضاء يحجزون مقاعد أونلاين              │
+  │    • تتبع عدد الحضور لكل كلاس                  │
+  └────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Q4 2026   (أكتوبر — ديسمبر)   رؤية طويلة المدى
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────────────────────┐
+  │ 🏪 بوابة الأعضاء (Member Portal)               │
+  │    • الأعضاء يرون جلساتهم وحضورهم             │
+  │    • يحجزون جلسات PT                           │
+  │    • يجددون اشتراكهم أونلاين                   │
+  │    • يرون نقاط الولاء                          │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 📈 تقارير Business Intelligence متقدمة          │
+  │    • Lifetime Value لكل عضو (LTV)              │
+  │    • تقارير الفصلية والسنوية مع مقارنات        │
+  │    • مؤشرات NPS (رضا الأعضاء)                 │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 🔗 تكاملات خارجية                               │
+  │    • Google Calendar لمواعيد PT                 │
+  │    • Mailchimp لحملات الإيميل                   │
+  │    • Facebook Ads لتتبع الليدز                  │
+  └────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2027     رؤية التوسع
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────────────────────┐
+  │ 🌐 Multi-Gym Platform                           │
+  │    • إدارة عدة جيمات من حساب واحد             │
+  │    • تحويل عضو بين الفروع والأفرع الشقيقة      │
+  │    • لوحة مقارنة أداء بين الجيمات              │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 🎥 شاشات إعلانية ذكية                           │
+  │    • إعلانات تُعرض على الكيوسك بين الزيارات    │
+  │    • عروض مخصصة لكل عضو بناءً على باكدجه      │
+  └────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="ar-ما-يستطيع-النظام-فعله-الآن-—-قائمة-كاملة">ما يستطيع النظام فعله الآن — قائمة كاملة:</h2>
+<p><pre><code>إدارة البيانات:
+✅ إضافة / تعديل / حذف الليدز والأعضاء
+✅ استيراد بيانات من CSV وGoogle Sheets
+✅ تصدير أي بيانات إلى Excel (CSV)
+✅ نسخ احتياطية كاملة للنظام
+✅ دمج سجلات مكررة
+
+إدارة المبيعات:
+✅ تتبع رحلة الليد من الاستفسار للاشتراك
+✅ تسجيل كل تفاعل مع ليد أو عضو
+✅ Lead Scoring تلقائي
+✅ إدارة التجديدات بشكل مرئي (Renewal Pipeline)
+✅ تحديد تارجت لكل مندوب
+✅ Leaderboard لمقارنة أداء المندوبين
+
+إدارة المدفوعات:
+✅ تسجيل مدفوعات بطرق متعددة
+✅ التحقق من رقم Instapay
+✅ طباعة فواتير احترافية
+✅ تصدير سجل المدفوعات
+
+الحضور:
+✅ كيوسك QR Code للحضور التلقائي
+✅ حضور يدوي من النظام
+✅ Self Check-in للأعضاء
+✅ عرض سجل حضور كل عضو
+
+الجلسات الخاصة (PT):
+✅ جدولة جلسات PT بالتاريخ والوقت والكوتش
+✅ تتبع الحضور والغياب والإلغاء
+✅ خصم الجلسات تلقائياً عند الحضور
+✅ إحصائيات PT الشهرية
+
+التقارير والتحليلات:
+✅ تقرير ROI لمصادر الليدز
+✅ تقرير خطر الفقدان (Churn Risk)
+✅ تقرير الاحتفاظ (Cohort Retention)
+✅ توقع إيراد التجديدات (Revenue Forecast)
+✅ رسوم بيانية الإيراد الشهري
+✅ مقارنة طرق الدفع
+✅ تقرير عمولات المندوبين
+
+الإدارة:
+✅ نظام أدوار وصلاحيات كامل (5 أدوار)
+✅ إدارة المستخدمين والدعوات
+✅ إدارة الباكدجات والكوتشيز والفروع
+✅ سجل أنشطة كامل (Audit Log)
+✅ إشعارات تلقائية ذكية
+✅ تخصيص العلامة التجارية
+✅ دعم متعدد الفروع
+✅ واجهة متجاوبة (موبايل + كمبيوتر)
+✅ بحث عالمي سريع</code></pre></p>
+<hr>
+<h2 id="ar-نصيحة-أخيرة">نصيحة أخيرة:</h2>
+<blockquote>النظام بقدر ما تعطيه بيانات، بقدر ما يعطيك رؤى.</blockquote>
+<blockquote>كل تفاعل تسجّله، كل دفعة تدخلها، كل ليد تتابعه</blockquote>
+<blockquote>يُشكّل صورة كاملة تساعدك تبيع أكثر وتخسر أعضاء أقل.</blockquote>
+<hr>
+<p><em>الإصدار 2.1 | mitrixogymcrm CRM | أبريل 2026</em><br><em>لأي دعم تقني: تواصل مع مدير النظام</em></p>
+    </div>
+    <div class="page-footer"><strong>mitrixogymcrm CRM</strong> — دليل فريق المبيعات الشامل v2.1<br>أبريل 2026 | جميع الحقوق محفوظة</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!--                 ENGLISH SECTION                 -->
+<!-- ═══════════════════════════════════════════════ -->
+<div id="section-en">
+  <div class="cover" id="en-top">
+    <div class="logo-circle">🥊</div>
+    <h1>Sales Team Guide</h1>
+    <div class="subtitle">mitrixogymcrm CRM — Complete Feature Walkthrough</div>
+    <div class="version-badge">Version 2.1 | April 2026</div>
+    <div class="cover-stats">
+      <div class="stat"><div class="stat-num">18</div><div class="stat-label">Main Sections</div></div>
+      <div class="stat"><div class="stat-num">12</div><div class="stat-label">Flowcharts</div></div>
+      <div class="stat"><div class="stat-num">7</div><div class="stat-label">Practical Scenarios</div></div>
+      <div class="stat"><div class="stat-num">40+</div><div class="stat-label">Features Documented</div></div>
+    </div>
+    <div class="cover-meta">Every feature explained: <strong style="color:white">Where · How · Why · When</strong><br>With flowcharts, practical scenarios, and a future roadmap</div>
+  </div>
+  <div class="container">
+    <div class="section">
+      <h1 id="en-sales-team-guide-—-mitrixogymcrm-boxing-crm">Sales Team Guide — mitrixogymcrm CRM</h1>
+<h1 id="en-version-21-|-april-2026">Version 2.1 | April 2026</h1>
+<hr>
+<blockquote><strong>This guide explains every feature in full detail:</strong></blockquote>
+<blockquote>- <strong>Where</strong> to find it in the system</blockquote>
+<blockquote>- <strong>How</strong> to use it step by step</blockquote>
+<blockquote>- <strong>Why</strong> it exists and what it's for</blockquote>
+<blockquote>- <strong>When</strong> to use it</blockquote>
+<blockquote>- Flowcharts for all major operations</blockquote>
+<hr>
+<h2 id="en-table-of-contents">Table of Contents</h2>
+<table><thead><tr><th>#</th><th>Section</th></tr></thead><tbody><tr><td>1</td><td><a href="#en-1-system-structure--roles">System Structure & Roles</a></td></tr><tr><td>2</td><td><a href="#en-2-login--navigation">Login & Navigation</a></td></tr><tr><td>3</td><td><a href="#en-3-dashboard">Dashboard</a></td></tr><tr><td>4</td><td><a href="#en-4-leads-management">Leads Management</a></td></tr><tr><td>5</td><td><a href="#en-5-members-management">Members Management</a></td></tr><tr><td>6</td><td><a href="#en-6-payments">Payments</a></td></tr><tr><td>7</td><td><a href="#en-7-attendance">Attendance</a></td></tr><tr><td>8</td><td><a href="#en-8-pt-sessions">PT Sessions</a></td></tr><tr><td>9</td><td><a href="#en-9-tasks">Tasks</a></td></tr><tr><td>10</td><td><a href="#en-10-reports">Reports</a></td></tr><tr><td>11</td><td><a href="#en-11-activity-history">Activity History</a></td></tr><tr><td>12</td><td><a href="#en-12-settings">Settings</a></td></tr><tr><td>13</td><td><a href="#en-13-kiosk--self-check-in">Kiosk & Self Check-in</a></td></tr><tr><td>14</td><td><a href="#en-14-import--export">Import & Export</a></td></tr><tr><td>15</td><td><a href="#en-15-notifications--alerts">Notifications & Alerts</a></td></tr><tr><td>16</td><td><a href="#en-16-full-practical-scenarios">Full Practical Scenarios</a></td></tr><tr><td>17</td><td><a href="#en-17-quick-reference-table">Quick Reference Table</a></td></tr><tr><td>18</td><td><a href="#en-18-future-roadmap">Future Roadmap</a></td></tr></tbody></table>
+<hr>
+<h1 id="en-1-system-structure--roles">1. System Structure & Roles</h1>
+<h2 id="en-why-is-there-a-role-system">Why is there a role system?</h2>
+<p>Every employee has different responsibilities. The system is designed so each person sees only what they need, and cannot modify data that isn't theirs. This protects data integrity and prevents mistakes.</p>
+<h2 id="en-available-roles">Available Roles:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────┐
+│                 Permission Hierarchy                  │
+│                                                      │
+│              ┌────────────────┐                      │
+│              │   CRM Admin    │  ← Highest (Atef)    │
+│              └───────┬────────┘                      │
+│                      │                               │
+│              ┌───────▼────────┐                      │
+│              │  Super Admin   │  ← Full access       │
+│              └───────┬────────┘                      │
+│                      │                               │
+│              ┌───────▼────────┐                      │
+│              │     Admin      │  ← Settings access   │
+│              └───────┬────────┘                      │
+│                      │                               │
+│              ┌───────▼────────┐                      │
+│              │    Manager     │  ← Team manager      │
+│              └───────┬────────┘                      │
+│                      │                               │
+│              ┌───────▼────────┐                      │
+│              │      Rep       │  ← Sales rep         │
+│              └────────────────┘                      │
+└──────────────────────────────────────────────────────┘</code></pre></p>
+<h2 id="en-detailed-permissions-matrix">Detailed Permissions Matrix:</h2>
+<table><thead><tr><th>Feature</th><th>Rep</th><th>Manager</th><th>Admin</th><th>Super Admin</th><th>CRM Admin</th></tr></thead><tbody><tr><td>Personal Dashboard</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Global Dashboard</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Manage Leads</td><td>✅*</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Manage Members</td><td>✅*</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Record Payments</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Delete Payments</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>View Reports</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Access Settings</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Activity Log</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Invite Users</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Change User Roles</td><td>❌</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Delete Users</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>Wipe System</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td></tr><tr><td>Backup / Restore</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td></tr></tbody></table>
+<blockquote><strong>Note:</strong> ✅* = sees only their own assigned records</blockquote>
+<hr>
+<h1 id="en-2-login--navigation">2. Login & Navigation</h1>
+<h2 id="en-where">Where?</h2>
+The main page when you open the system link.
+<h2 id="en-how-to-log-in">How to log in:</h2>
+<p><pre><code>┌────────────────────────────────────────┐
+│             Login Screen               │
+│                                        │
+│  1. Open the system URL                │
+│  2. Click "Sign in with Google"        │
+│  3. Choose your Google account         │
+│  4. ✅ You're in automatically         │
+└────────────────────────────────────────┘</code></pre></p>
+<blockquote><strong>Note:</strong> First login assigns you the "Rep" role. A manager changes your role from Settings.</blockquote>
+<hr>
+<h2 id="en-navigation">Navigation</h2>
+<h3 id="en-desktop">Desktop:</h3>
+Top navigation bar with tabs based on your role:
+<p><pre><code>┌────────────────────────────────────────────────────────────────────┐
+│ [Logo] Dashboard | Leads | Members | Tasks | Payments |            │
+│        Attendance | Reports | History | Settings    [🔔] [Name]    │
+└────────────────────────────────────────────────────────────────────┘</code></pre></p>
+<h3 id="en-mobile">Mobile:</h3>
+Bottom tab bar + "More" menu:
+<p><pre><code>┌────────────────────────────────────┐
+│         Main Content               │
+├────────┬────────┬────────┬─────────┤
+│  Home  │ Leads  │Members │  Scan   │
+│   🏠   │   👤   │  👥    │  📷    │
+└────────┴────────┴────────┴─────────┘</code></pre></p>
+<p>Press <strong>"More"</strong> to access: Tasks / Payments / Reports / History / Settings / Logout</p>
+<hr>
+<h2 id="en-global-search">Global Search</h2>
+<p><strong>Where:</strong> Search box in the header<br><strong>Why:</strong> Quickly find any member or lead without navigating to a specific page<br><strong>When:</strong> Whenever you need to find someone fast by name, phone, or member ID</p>
+<hr>
+<h2 id="en-notifications">Notifications (🔔)</h2>
+<p><strong>Where:</strong> Bell icon in the header<br><strong>Why:</strong> Alerts you to things that need immediate attention<br><strong>When:</strong> Check it at the start of every shift</p>
+<p>Automatic alerts:<br><ul><li>Lead not contacted in 7+ days ⚠️</li><li>Member's birthday is today 🎂</li><li>Membership expiring within 3 days ⏰</li><li>Overdue task 📋</li></ul><br><hr></p>
+<h1 id="en-3-dashboard">3. Dashboard</h1>
+<h2 id="en-where">Where?</h2>
+First tab after login — <strong>Dashboard</strong>
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+The dashboard is the "pulse of the gym" — a full picture of the current situation without navigating anywhere else.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>First thing every morning</li><li>Before team meetings</li><li>To track your monthly performance</li></ul>
+<hr>
+<h2 id="en-what-a-sales-rep-sees">What a Sales Rep sees:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                   Dashboard — Rep View                           │
+├──────────┬──────────────┬──────────────┬────────────────────────┤
+│  Leads   │Nearly Expired│   Expired    │  Upcoming Birthdays    │
+│  Active  │ Expiring Soon│  Ended       │  Next 7 Days           │
+│  [12]    │    [5]       │   [23]       │       [2]              │
+├──────────┴──────────────┴──────────────┴────────────────────────┤
+│  🎯 Monthly Target: 50,000 LE                                    │
+│  ████████████░░░░░░░  Collected: 32,000 LE (64%)                │
+├─────────────────────────────┬───────────────────────────────────┤
+│  ⚠️ Action Required          │  🔔 Urgent Reminders              │
+│  • 3 negative sessions       │  • Lead: Ahmed — 8 days no contact│
+│  • 5 with no attendance      │  • Member: Mary — expires tomorrow │
+│  • 8 expired need renewal    │  • Task: call overdue 2 days       │
+└─────────────────────────────┴───────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="en-what-a-manager-sees-additionally">What a Manager sees additionally:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│  Revenue Trend Chart (Area Chart — 6 months)                     │
+│  Jan → Feb → Mar → Apr → May → Jun                               │
+├──────────────────────────────────────────────────────────────────┤
+│  Rep Performance Bar Chart                                        │
+│  Ahmed: ██████ 85%  |  Sara: ████ 60%  |  Karim: █████████ 120% │
+├──────────────────────────────────────────────────────────────────┤
+│  Payment Methods Breakdown (Stacked Bar)                          │
+│  Cash ████ | Instapay ██ | Visa ██████                           │
+├──────────────────────────────────────────────────────────────────┤
+│  Rep Leaderboard                                                  │
+│  # | Name   | Revenue  | Target % | Leads Conv. | Conv.Rate     │
+│  1 | Karim  | 48,000  | 120%     | 12          | 40%           │
+│  2 | Ahmed  | 34,000  | 85%      | 9           | 30%           │
+│  3 | Sara   | 24,000  | 60%      | 6           | 20%           │
+└──────────────────────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="en-how-to-set-the-monthly-target">How to set the monthly target:</h2>
+<p><strong>Why:</strong> To define the monthly sales goal for each rep<br><strong>When:</strong> Beginning of every month</p>
+<p><pre><code>Steps:
+1. On Dashboard → click "Edit Target" next to the target bar
+2. Enter the goal amount (in LE)
+3. Select the rep (if you're a manager)
+4. Click Save ✅</code></pre></p>
+<hr>
+<h1 id="en-4-leads-management">4. Leads Management</h1>
+<h2 id="en-where">Where?</h2>
+<strong>"Leads"</strong> tab in the top navigation
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+A lead is any potential customer who hasn't paid yet. The system helps you:
+<ul><li>Track every conversation</li><li>Know where they are in the buying journey</li><li>Never forget anyone</li><li>Measure which marketing channels work best</li></ul>
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>When a new inquiry arrives from any source</li><li>For daily lead follow-ups</li><li>To review who hasn't been contacted</li></ul>
+<hr>
+<h2 id="en-lead-journey-flowchart">Lead Journey Flowchart:</h2>
+<p><pre><code>┌────────────────────────────────────────────────────────────────┐
+│                 Full Lead Journey                               │
+└────────────────────────────────────────────────────────────────┘
+
+New inquiry arrives
+        │
+        ▼
+┌──────────────────┐
+│   Add New Lead   │
+│   (New Stage)    │
+└────────┬─────────┘
+         │
+         ▼
+Contact them ← Log Interaction
+         │
+         ├── No answer ────────────────► Follow Up
+         │                                   │
+         │                           Try again later
+         │                                   │
+         │                          ┌────────┤
+         │                          │        │
+         │                      Interested  Not interested
+         │                          │        │
+         │                          ▼        ▼
+         │                      Trial Stage  Lost ❌
+         │
+         ├── Interested ──────────► Set trial appointment
+         │                               │
+         │                     Did they come?
+         │                     ┌──────────┴──────────┐
+         │                     │                      │
+         │                    Yes                     No
+         │                     │                      │
+         │                     ▼                      ▼
+         │             Did they decide to join?    Follow Up
+         │             ┌────────┴────────┐
+         │             │                 │
+         │            Yes                No
+         │             │                 │
+         │             ▼                 ▼
+         │      Convert to Member    Lost / Follow Up
+         │             │
+         │             ▼
+         │      Record Payment ✅
+         │      Active Member 🎉
+         │
+         └── Rejected ──────────────► Lost ❌</code></pre></p>
+<hr>
+<h2 id="en-lead-tabs">Lead Tabs:</h2>
+<p><pre><code>┌──────┬────────────┬───────────┬──────────┬──────────┬───────────┐
+│  All │ Unassigned │ Instagram │ WhatsApp │ Walk-in  │  Trials   │
+│  All │  No rep    │  IG leads │  WA leads│Walk-in  │  Trials   │
+│leads │  assigned  │           │          │  leads   │ scheduled │
+└──────┴────────────┴───────────┴──────────┴──────────┴───────────┘</code></pre></p>
+<p><strong>Why each tab:</strong><br><ul><li><strong>All:</strong> Full overview</li><li><strong>Unassigned:</strong> Leads with no rep — distribute them immediately</li><li><strong>Instagram/WhatsApp/Walk-in:</strong> See which source delivers best results</li><li><strong>Trials:</strong> Everyone with a trial scheduled — follow up after trial</li><li><strong>Follow Up:</strong> Everyone needing follow-up right now</li></ul><br><hr></p>
+<h2 id="en-lead-score-calculation">Lead Score Calculation:</h2>
+<p><pre><code>┌──────────────────────────────────────────────┐
+│         How is Lead Score calculated?         │
+├──────────────────────────────────────────────┤
+│ Source:                                       │
+│   Walk-in     → +10 points                   │
+│   Instagram   → +7 points                    │
+│   WhatsApp    → +6 points                    │
+│   TikTok      → +5 points                    │
+│   Other       → +3 points                    │
+│                                              │
+│ Interest:                                    │
+│   Interested      → +15 points              │
+│   Pending         → +5 points               │
+│   Not Interested  → +0                      │
+│                                              │
+│ Stage:                                       │
+│   Trial       → +10 points                  │
+│   Follow Up   → +5 points                   │
+│   New         → +0                          │
+│                                              │
+│ Days without contact → up to -20 points     │
+└──────────────────────────────────────────────┘</code></pre></p>
+<p><strong>When to use Sort by Score:</strong> When you have limited time and want to focus on the highest-probability leads first.</p>
+<hr>
+<h2 id="en-adding-a-new-lead-—-step-by-step">Adding a new lead — step by step:</h2>
+<p><strong>Why:</strong> To save any new prospect's data immediately before forgetting them<br><strong>When:</strong> The moment any inquiry arrives (WhatsApp / Instagram / walk-in / call)</p>
+<p><pre><code>1. Click "+ Add Lead" (blue button at top of page)
+2. Enter:
+   ┌────────────────────────────────────────┐
+   │ Name*          │ Mohamed Ahmed          │
+   │ Phone*         │ 01012345678            │
+   │ Source*        │ [Instagram ▼]          │
+   │ Branch*        │ [COMPLEX ▼]            │
+   │ Assigned To    │ [auto-filled: you]     │
+   └────────────────────────────────────────┘
+3. Click "Save" ✅</code></pre></p>
+<hr>
+<h2 id="en-logging-an-interaction">Logging an Interaction:</h2>
+<p><strong>Why:</strong> The most important action in lead management. Every contact logged builds a complete conversation history.<br><strong>When:</strong> After every call, message, or visit</p>
+<p><pre><code>Interaction Logging Flowchart:
+
+Open the lead's page
+        │
+        ▼
+Click "Log Interaction"
+        │
+        ▼
+┌──────────────────────────────────────────────┐
+│ Interaction type:                             │
+│  📞 Call  💬 WhatsApp  📧 Email  🚶 Visit    │
+└──────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────┐
+│ Outcome:                                              │
+│  ✅ Interested    → change Stage to Trial             │
+│  📵 Not Answered  → set follow-up date               │
+│  📅 Scheduled Trial → enter Trial Date               │
+│  ❌ Rejected      → change Stage to Lost             │
+│  📝 Other        → add a note                        │
+└──────────────────────────────────────────────────────┘
+        │
+        ▼
+Set next follow-up date
+        │
+        ▼
+Add notes (optional)
+        │
+        ▼
+Click "Add" ✅</code></pre></p>
+<hr>
+<h2 id="en-bulk-actions">Bulk Actions:</h2>
+<p><strong>Why:</strong> Save time when dealing with multiple leads at once<br><strong>When:</strong> Redistributing leads between reps or updating a group's stage</p>
+<p><pre><code>Steps:
+1. Select leads using the Checkbox column
+2. In the bar that appears at the top, choose:
+   ┌──────────────────────────────────────────┐
+   │  Change Stage: [Stage ▼] [Apply]          │
+   │  Reassign:    [Rep ▼] [Apply]            │
+   │  Delete:      [Delete] ← with confirm    │
+   └──────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="en-converting-a-lead-to-a-member">Converting a Lead to a Member:</h2>
+<p><strong>Why:</strong> When a lead agrees to join, they automatically become an active member<br><strong>When:</strong> As soon as the lead agrees and pays</p>
+<p><pre><code>Lead agrees to join
+        │
+        ▼
+Open the lead's page
+        │
+        ▼
+Click "Convert to Member"
+        │
+        ▼
+Automatically becomes a Member ✅
+        │
+        ▼
+Go to Payments
+        │
+        ▼
+Record payment in their name
+        │
+        ▼
+Membership complete ✅</code></pre></p>
+<hr>
+<h1 id="en-5-members-management">5. Members Management</h1>
+<h2 id="en-where">Where?</h2>
+<strong>"Members"</strong> tab in the navigation
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+To manage all current members: track their memberships, sessions, renewals, and communications.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>To register a new member</li><li>To track memberships nearing expiry</li><li>To look up a specific member</li><li>To review a member's history</li></ul>
+<hr>
+<h2 id="en-member-status-lifecycle">Member Status Lifecycle:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────┐
+│                   Member Lifecycle                            │
+│                                                              │
+│  Lead ──► Active ──► Nearly Expired ──► Expired              │
+│   👤      ✅ Active  ⚠️ Expiring &lt; 30d   ❌ Ended             │
+│                                                              │
+│  Or: Active ──► Hold (temporarily paused)                    │
+└──────────────────────────────────────────────────────────────┘</code></pre></p>
+<table><thead><tr><th>Status</th><th>Meaning</th><th>Required Action</th></tr></thead><tbody><tr><td><strong>Active</strong> ✅</td><td>Active membership, sessions remaining</td><td>None</td></tr><tr><td><strong>Nearly Expired</strong> ⚠️</td><td>Expiring within 30 days</td><td>Contact to renew</td></tr><tr><td><strong>Expired</strong> ❌</td><td>Membership ended</td><td>Urgent renewal contact</td></tr><tr><td><strong>Hold</strong> ⏸️</td><td>Temporarily paused</td><td>Wait for their decision</td></tr><tr><td><strong>Lead</strong> 👤</td><td>Has not subscribed yet</td><td>Follow up to convert</td></tr></tbody></table>
+<hr>
+<h2 id="en-renewal-pipeline">Renewal Pipeline:</h2>
+<p><strong>Where:</strong> "Renewal Pipeline" button at the top of the Members page<br><strong>Why:</strong> A smart tool that gathers everyone who needs renewal in one view, sorted by urgency<br><strong>When:</strong> Every day — especially at the start and middle of the month</p>
+<p><pre><code>┌────────────────────────────────────────────────────────────────┐
+│                      Renewal Pipeline                          │
+├──────────────────┬─────────────────┬──────────────────────────┤
+│  🔴 Expired       │  🟡 Urgent       │  🔵 Upcoming              │
+│  Membership ended│  ≤ 7 days left   │  8-30 days left          │
+│                  │                 │                           │
+│  [Karim]         │  [Sara]          │  [Ahmed]                 │
+│  Ended 5 days ago│  Ends in 3 days  │  Ends in 20 days         │
+│  [Mark Contacted]│  [Mark Contacted]│  [Mark Contacted]        │
+│  [Record Renewal]│  [Record Renewal]│  [Record Renewal]        │
+└──────────────────┴─────────────────┴──────────────────────────┘</code></pre></p>
+<p><strong>"Mark Contacted":</strong> Records that you reached out (updates last contact date)<br><strong>"Record Renewal":</strong> Opens a renewal payment dialog directly</p>
+<hr>
+<h2 id="en-renewal-process-flowchart">Renewal Process Flowchart:</h2>
+<p><pre><code>Member is about to expire
+        │
+        ▼
+Appears in Renewal Pipeline (Upcoming/Urgent)
+        │
+        ▼
+Call / WhatsApp the member
+        │
+        ├── Agreed to renew ──────────────────────────────────┐
+        │                                                      │
+        ├── Needs to think → click "Mark Contacted"            │
+        │                    set follow-up date                │
+        │                                                      │
+        └── Refused → log Interaction (Rejected)               │
+                      set status to Hold or let expire         │
+                                                              ▼
+                                          Click "Record Renewal"
+                                                              │
+                                                              ▼
+                                          Enter: Amount + Package
+                                          + Payment method + Start date
+                                                              │
+                                                              ▼
+                                          Click Save ✅
+                                                              │
+                                                              ▼
+                                          Membership renewed automatically</code></pre></p>
+<hr>
+<h1 id="en-6-payments">6. Payments</h1>
+<h2 id="en-where">Where?</h2>
+<strong>"Payments"</strong> tab in the navigation
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+To record every payment and link it to the member, rep, and package. This is the foundation for revenue and commission calculations.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>Immediately after receiving any payment (new or renewal)</li><li>To look up a past payment</li><li>To print an invoice</li></ul>
+<hr>
+<h2 id="en-full-payment-recording-flowchart">Full Payment Recording Flowchart:</h2>
+<p><pre><code>Click "+ New Payment"
+        │
+        ▼
+Search for the client in the "Client" field
+        │
+        ▼ (name and rep auto-filled)
+        │
+        ▼
+Enter amount in LE
+        │
+        ▼
+Choose payment method:
+┌──────────────────────────────────────────────────────────────┐
+│  💵 Cash          → enter amount only                         │
+│  💳 Credit Card   → enter amount only                         │
+│  🏦 Bank Transfer → enter amount only                         │
+│  📱 Instapay      → enter amount + 12-digit reference (req.) │
+│  📦 Other         → enter amount only                         │
+└──────────────────────────────────────────────────────────────┘
+        │
+        ▼
+Choose package:
+  • Select from list (price auto-fills)
+  • Or select "Custom" and enter a custom name
+        │
+        ▼
+Is it a Private Training package?
+   Yes → select coach from dropdown (required)
+   No  → skip
+        │
+        ▼
+Enter start date (end date auto-calculated)
+        │
+        ▼
+Add notes (optional)
+        │
+        ▼
+Verify "Recorded By" is correct
+        │
+        ▼
+Click "Save Payment" ✅
+        │
+        ▼
+Payment saved and added to revenue automatically</code></pre></p>
+<hr>
+<h2 id="en-print-invoice">Print Invoice:</h2>
+<p><strong>Why:</strong> To give the client a formal receipt<br><strong>When:</strong> When any client requests a receipt</p>
+<p><pre><code>Steps:
+1. In the payments list, find the payment
+2. Click the 🖨️ Print icon
+3. A print window opens with:
+   ┌──────────────────────────────────┐
+   │   [Logo] mitrixogymcrm           │
+   │   Payment Receipt #001           │
+   │                                  │
+   │  To: Mary Mohamed | ID: #0042    │
+   │  Branch: MIVIDA                  │
+   │  Date: 20 Apr 2026              │
+   │  Method: Cash                    │
+   │                                  │
+   │  10 Sessions Private Adult  1x  │
+   │                   Total: 2,500 LE│
+   └──────────────────────────────────┘
+4. Select printer and print</code></pre></p>
+<hr>
+<h1 id="en-7-attendance">7. Attendance</h1>
+<h2 id="en-where">Where?</h2>
+<strong>"Attendance"</strong> tab (or "Scan" on mobile)
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+To track member attendance and deduct sessions. Also helps identify absent members at risk of churning.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>When members arrive at the gym (if kiosk isn't available)</li><li>To review a specific member's attendance history</li></ul>
+<hr>
+<h2 id="en-attendance-recording-flowchart">Attendance Recording Flowchart:</h2>
+<p><pre><code>┌───────────────────────────────────────────────┐
+│          Attendance Recording Options          │
+└───────────────────────────────────────────────┘
+
+          ┌──────────┴──────────┐
+          │                     │
+    QR Scanner               Manual
+    (Kiosk)                  Entry
+          │                     │
+          ▼                     ▼
+  Member scans           Search by name
+  their QR Code          or Member ID
+          │                     │
+          ▼                     ▼
+  Member info          Select branch
+  shows on screen
+          │                     │
+          ▼                     ▼
+  Click "Confirm"       Click "Check In"
+          │                     │
+          └──────────┬──────────┘
+                     │
+                     ▼
+          ✅ Attendance recorded
+          (session deducted automatically)</code></pre></p>
+<hr>
+<h1 id="en-8-pt-sessions">8. PT Sessions</h1>
+<h2 id="en-where">Where?</h2>
+"PT Sessions" tab, or from within a member's profile
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+To schedule and track every 1-on-1 Personal Training session precisely — with coach, status, and automatic session deduction.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>To schedule new PT sessions</li><li>To record attendance or no-show for a PT session</li><li>To review PT statistics</li></ul>
+<hr>
+<h2 id="en-pt-sessions-dashboard">PT Sessions Dashboard:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│  Month-to-Date (MTD) Stats                                       │
+├──────────────┬──────────────┬──────────────┬────────────────────┤
+│Packages Logged│  Attended    │  No Shows    │  Attendance Rate   │
+│    [45]       │    [38]      │    [7]       │      [84%]         │
+└──────────────┴──────────────┴──────────────┴────────────────────┘
+
+  📅 Calendar         │  Sessions on April 20
+  ← April 2026 →     │  Time  | Client | Coach  | Status
+  Selected in blue   │  10:00 | Mary   | Karim  | Attended
+                     │  12:00 | Ali    | Sara   | Scheduled
+                     │  15:00 | Hana   | Karim  | No Show</code></pre></p>
+<hr>
+<h2 id="en-session-status-update">Session Status Update:</h2>
+<p><pre><code>In the sessions table → Status column:
+Select from [Scheduled ▼]:
+
+  ✅ Attended   → deducts 1 session from client's balance
+  ❌ No Show    → deducts 1 session (client loses it)
+  🚫 Cancelled  → no session deducted
+  📅 Scheduled  → not yet occurred</code></pre></p>
+<hr>
+<h1 id="en-9-tasks">9. Tasks</h1>
+<h2 id="en-where">Where?</h2>
+<strong>"Tasks"</strong> tab in the navigation
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+To organize daily team tasks, assign responsibilities, and track due dates.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>To assign a task to yourself or a colleague</li><li>To review overdue tasks</li><li>To link a task to a specific client</li></ul>
+<hr>
+<h2 id="en-creating-a-task">Creating a Task:</h2>
+<p><pre><code>Click "+ Add Task"
+        │
+        ▼
+┌────────────────────────────────────────────────────┐
+│ Title*           │ Follow up with Mary              │
+│ Description      │ Check if she liked the trial     │
+│ Due Date*        │ [Apr 21, 2026]                   │
+│ Priority*        │ [High 🔴▼]                       │
+│ Status           │ [Pending ▼]                      │
+│ Assigned To      │ [Ahmed ▼]                        │
+│ Related Client   │ [Mary Mohamed ▼] (optional)      │
+└────────────────────────────────────────────────────┘
+        │
+        ▼
+Click "Create Task" ✅</code></pre></p>
+<hr>
+<h2 id="en-priority-guide">Priority Guide:</h2>
+<p><pre><code>🔴 High   → Directly affects revenue or member satisfaction
+            Example: member wants to cancel / lead ready to buy
+
+🟡 Medium → Important but not urgent
+            Example: review a report / schedule a meeting
+
+🟢 Low    → Can be deferred
+            Example: update a profile photo / tidy lead list</code></pre></p>
+<hr>
+<h2 id="en-task-permissions">Task Permissions:</h2>
+<ul><li><strong>Assignee only:</strong> Can change status only (Pending/In Progress/Completed)</li><li><strong>Creator or Manager:</strong> Can edit everything or delete the task</li></ul>
+<hr>
+<h1 id="en-10-reports">10. Reports</h1>
+<h2 id="en-where">Where?</h2>
+<strong>"Reports"</strong> tab — visible to Managers only
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+Reports answer strategic questions that don't appear in the normal screens.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>Monthly performance review meetings</li><li>Budget and marketing decisions</li><li>Spotting problems before they escalate</li></ul>
+<hr>
+<h2 id="en-report-1-lead-source-roi">Report 1: Lead Source ROI</h2>
+<p><strong>Why:</strong> To know which marketing channel deserves more investment<br><strong>When:</strong> Monthly, to review the marketing budget</p>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                  Lead Source ROI Report                          │
+├─────────────┬──────────┬───────────┬──────────┬─────────────────┤
+│   Source    │  Leads   │ Converted │ Conv.%   │  Revenue        │
+├─────────────┼──────────┼───────────┼──────────┼─────────────────┤
+│ Instagram   │  120     │    36     │  30%     │  90,000 LE      │
+│ Walk-in     │   45     │    22     │  49%     │  55,000 LE      │
+│ WhatsApp    │   80     │    18     │  23%     │  45,000 LE      │
+│ TikTok      │   30     │     5     │  17%     │  12,500 LE      │
+│ Other       │   25     │     4     │  16%     │  10,000 LE      │
+└─────────────┴──────────┴───────────┴──────────┴─────────────────┘</code></pre></p>
+<p><strong>How to read it:</strong><br><ul><li>Walk-in: Highest conversion rate (49%) — direct visits are highest quality</li><li>Instagram: Most leads and most revenue — worth continued investment</li><li>TikTok: Low conversion — strategy needs review</li></ul><br><hr></p>
+<h2 id="en-report-2-churn-risk">Report 2: Churn Risk</h2>
+<p><strong>Why:</strong> Discover members about to leave the gym<br><strong>When:</strong> Weekly — before they decide to quit themselves</p>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                      Churn Risk Report                           │
+│      (Active members with no attendance in 14+ days)             │
+├──────────────┬──────────────┬──────────────────┬─────────────────┤
+│    Name      │   Phone      │  Last Attendance  │  Days Absent   │
+├──────────────┼──────────────┼──────────────────┼─────────────────┤
+│ Ahmed Samir  │ 01012345678  │  April 5          │  15 days        │
+│ Sara Mohamed │ 01198765432  │  April 2          │  18 days        │
+│ Karim Ali    │ 01234567890  │  March 28         │  23 days        │
+└──────────────┴──────────────┴──────────────────┴─────────────────┘</code></pre></p>
+<hr>
+<h2 id="en-report-3-cohort-retention">Report 3: Cohort Retention</h2>
+<p><strong>Why:</strong> To understand long-term member retention rate<br><strong>When:</strong> Quarterly or semi-annually</p>
+<p><pre><code>┌────────────────────────────────────────────────────────────────┐
+│                   Cohort Retention Report                       │
+├──────────────┬──────────┬──────────┬──────────┬───────────────┤
+│   Cohort     │ Members  │ Renewed  │ Churned  │ Retention %   │
+├──────────────┼──────────┼──────────┼──────────┼───────────────┤
+│ Jan 2026     │   40     │   28     │   12     │    70%        │
+│ Feb 2026     │   35     │   24     │   11     │    69%        │
+│ Mar 2026     │   50     │   38     │   12     │    76%        │
+│ Apr 2026     │   45     │   -      │   -      │   ongoing     │
+└──────────────┴──────────┴──────────┴──────────┴───────────────┘</code></pre></p>
+<hr>
+<h2 id="en-report-4-revenue-forecast">Report 4: Revenue Forecast</h2>
+<p><strong>Why:</strong> Predict renewal revenue before month end for planning<br><strong>When:</strong> In the first 10 days of every month</p>
+<p><pre><code>┌────────────────────────────────────────────────────────────────┐
+│                      Revenue Forecast                           │
+├──────────────────────────────┬─────────────────────────────────┤
+│ Members expiring this month  │            48 members           │
+│ Value at risk                │          120,000 LE             │
+│ Renewal rate (last 3 months) │             72%                 │
+│ Projected renewal revenue    │           86,400 LE             │
+└──────────────────────────────┴─────────────────────────────────┘</code></pre></p>
+<hr>
+<h1 id="en-11-activity-history">11. Activity History</h1>
+<h2 id="en-where">Where?</h2>
+<strong>"History"</strong> tab — Managers only
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+Accountability and transparency — every change in the system is recorded with timestamp and the name of who made it.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+<ul><li>Investigating unexpected data changes</li><li>Reviewing who deleted a payment or changed a member's data</li><li>Monthly auditing</li></ul>
+<hr>
+<h2 id="en-reading-the-log">Reading the Log:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│                         Audit Log                                │
+├──────────────────────────────────────────────────────────────────┤
+│  [Search]  [Entity Type ▼]  [Action ▼]  [Branch ▼]              │
+├──────────┬──────────┬──────────┬────────────────┬───────────────┤
+│ Timestamp│   User   │  Action  │    Details     │   Branch      │
+├──────────┼──────────┼──────────┼────────────────┼───────────────┤
+│ 20 Apr   │  Ahmed   │ 🟢CREATE │ New payment    │  COMPLEX      │
+│ 10:32 AM │          │ Payment  │ 2500 LE Cash   │               │
+├──────────┼──────────┼──────────┼────────────────┼───────────────┤
+│ 20 Apr   │  Sara    │ 🔵UPDATE │ Stage changed  │  MIVIDA       │
+│ 11:15 AM │          │   Lead   │ New → Trial    │               │
+├──────────┼──────────┼──────────┼────────────────┼───────────────┤
+│ 20 Apr   │  Karim   │ 🔴DELETE │ Payment deleted│  COMPLEX      │
+│  2:30 PM │          │ Payment  │ 1000 LE        │               │
+└──────────┴──────────┴──────────┴────────────────┴───────────────┘</code></pre></p>
+<p>🟢 <strong>CREATE</strong> = new data added<br>🔵 <strong>UPDATE</strong> = existing data modified<br>🔴 <strong>DELETE</strong> = data removed</p>
+<hr>
+<h1 id="en-12-settings">12. Settings</h1>
+<h2 id="en-where">Where?</h2>
+<strong>"Settings"</strong> tab — Managers and Admins only
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+To configure everything: branding, users, packages, coaches, branches, and commissions.
+<hr>
+<h2 id="en-settings-tabs">Settings Tabs:</h2>
+<p><pre><code>┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ Branding │  Users   │ Branches │ Packages │ Coaches  │Commission│  Backup  │Danger ⚠️ │
+└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘</code></pre></p>
+<hr>
+<h2 id="en-branding-tab">Branding Tab:</h2>
+<p><strong>Why:</strong> Personalize the system with the gym's identity<br><strong>When:</strong> When changing the logo, company name, or PINs</p>
+<p><pre><code>┌────────────────────────────────────────────────────┐
+│  Company Name*     │ mitrixogymcrm                  │
+│  Logo URL          │ https://...logo.png            │
+│                    │ [Logo preview here]            │
+│  Kiosk PIN         │ ••••••  (6 digits)             │
+│  Self Check-in PIN │ ••••••  (6 digits)             │
+└────────────────────────────────────────────────────┘
+Click "Save" to apply changes</code></pre></p>
+<hr>
+<h2 id="en-users-tab">Users Tab:</h2>
+<h3 id="en-inviting-a-new-user">Inviting a new user:</h3>
+<p><pre><code>Click "Invite User"
+        │
+        ▼
+┌───────────────────────────────────────────┐
+│  Email*    │ ahmed@mitrixogymcrm.com              │
+│  Role*     │ [Rep ▼]                      │
+└───────────────────────────────────────────┘
+        │
+        ▼
+Click "Invite" ✅
+        │
+        ▼
+Employee receives invitation
+        │
+        ▼
+Employee logs in with Google ← role assigned automatically</code></pre></p>
+<h3 id="en-editing-a-user">Editing a user:</h3>
+<p><pre><code>In the users list → click "Edit" next to the employee
+        │
+        ▼
+┌────────────────────────────────────────────────────────┐
+│  Name           │ Ahmed Mohamed                        │
+│  Email          │ ahmed@mitrixogymcrm.com                     │
+│  Branch         │ [COMPLEX ▼]                         │
+│  Monthly Target │ 40,000 LE                            │
+│  Extra permissions:                                    │
+│  ☐ Can Delete Payments                                │
+│  ☐ Can View Global Dashboard                          │
+│  ☐ Can Access Settings                               │
+└────────────────────────────────────────────────────────┘
+        │
+        ▼
+Click "Save" ✅</code></pre></p>
+<hr>
+<h2 id="en-branches-tab">Branches Tab:</h2>
+<p><strong>Why:</strong> Manage gym branches and print QR codes for each branch's attendance<br><strong>When:</strong> When opening a new branch</p>
+<p><pre><code>Current branches:
+┌──────────────────────────────────────────────┐
+│  COMPLEX       [Print QR] [Remove]           │
+│  MIVIDA        [Print QR] [Remove]           │
+│  mitrixogymcrm IMPACT [Print QR] [Remove]           │
+└──────────────────────────────────────────────┘
+
+Add new branch:
+[New branch name]  [Add]</code></pre></p>
+<h3 id="en-printing-a-branch-qr-code">Printing a Branch QR Code:</h3>
+<p><strong>Why:</strong> To place at the branch entrance — members scan it to access the self check-in page<br><strong>When:</strong> Setting up a new branch or refreshing the QR code</p>
+<p><pre><code>Click "Print QR" next to the branch name
+        │
+        ▼
+A print window opens with:
+┌──────────────────────────────────┐
+│    [Logo] mitrixogymcrm          │
+│                                  │
+│         [Large QR Code]          │
+│                                  │
+│       Scan to Check-in           │
+│      COMPLEX Branch              │
+│                                  │
+│  Please ask the front desk       │
+│  for today's PIN                 │
+└──────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="en-packages-tab">Packages Tab:</h2>
+<p><strong>Why:</strong> To define available memberships with prices and sessions<br><strong>When:</strong> Adding a new package or changing a price</p>
+<p><pre><code>Click "+ Add Package"
+        │
+        ▼
+┌────────────────────────────────────────────────────────────┐
+│  Name*          │ 10 Sessions Private Adult               │
+│  Sessions*      │ [10] ← or ☑ Unlimited                  │
+│  Price (LE)*    │ 2,500                                   │
+│  Validity (days)│ 30                                      │
+│  Branch         │ [ALL ▼] or a specific branch            │
+│  Type*          │ [Private ▼]                             │
+└────────────────────────────────────────────────────────────┘
+        │
+        ▼
+Click "Save Package" ✅</code></pre></p>
+<hr>
+<h2 id="en-commission-tab">Commission Tab:</h2>
+<p><strong>Why:</strong> To define PT and Group commission rates and review monthly earnings per rep<br><strong>When:</strong> Monthly, or when changing commission rates</p>
+<p><pre><code>┌────────────────────────────────────────────────────────────────┐
+│  PT Rate: [15%]   Group Rate: [10%]   [Save Rates]             │
+├────────────────────────────────────────────────────────────────┤
+│  Commission Report [April 2026 ▼]                              │
+├──────────┬──────────┬──────────┬──────────┬────────────────────┤
+│   Rep    │ PT Rev.  │Group Rev.│  Total   │   Commission       │
+├──────────┼──────────┼──────────┼──────────┼────────────────────┤
+│  Ahmed   │ 15,000  │  20,000  │  35,000  │   5,250 LE        │
+│  Sara    │  8,000  │  16,000  │  24,000  │   2,800 LE        │
+│  Karim   │ 12,000  │  22,000  │  34,000  │   3,800 LE        │
+└──────────┴──────────┴──────────┴──────────┴────────────────────┘
+                                             [Export CSV]</code></pre></p>
+<hr>
+<h1 id="en-13-kiosk--self-check-in">13. Kiosk & Self Check-in</h1>
+<h2 id="en-kiosk-mode">Kiosk Mode</h2>
+<h2 id="en-where">Where?</h2>
+URL: <code>/kiosk</code>
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+A dedicated screen for the gym entrance — members scan their QR code to check in automatically without staff involvement.
+<h2 id="en-when-to-use-it">When to use it?</h2>
+Always — runs on a tablet or screen at every branch entrance.
+<hr>
+<h2 id="en-kiosk-flowchart">Kiosk Flowchart:</h2>
+<p><pre><code>┌───────────────────────────────────────────────────────────────┐
+│                      Kiosk Journey                             │
+└───────────────────────────────────────────────────────────────┘
+
+PIN entry screen
+        │
+        ▼
+Correct PIN?
+   No → Error message + clear field
+   Yes →
+        ▼
+Main kiosk screen
+  [Logo]  [KIOSK MODE]  [Lock 🔒]
+  Select branch: [COMPLEX ▼]
+        │
+        ▼
+Member holds QR code in front of camera
+        │
+        ▼
+Screen shows:
+  ✅ Scan Successful
+  Name: Mary Mohamed
+  Member ID: #0042
+  Package: 10 Sessions Private
+  Sessions Remaining: 6 (green)
+        │
+        ▼
+Click "Confirm Attendance"
+        │
+        ▼
+✅ Attendance recorded — session deducted
+        │
+        ▼
+Screen returns to standby</code></pre></p>
+<hr>
+<h2 id="en-self-check-in-page">Self Check-in Page</h2>
+<h2 id="en-where">Where?</h2>
+URL: <code>/checkin</code> or by scanning the branch QR code
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+For members who don't pass in front of the camera — they enter their details manually.
+<p><pre><code>Member opens the page (from branch QR code)
+        │
+        ▼
+Selects branch (COMPLEX / MIVIDA / mitrixogymcrm IMPACT)
+        │
+        ▼
+Enters Member ID or phone number
+        │
+        ▼
+Enters today's PIN (given by reception)
+        │
+        ▼
+Clicks "Check In"
+        │
+        ▼
+✅ Check-in Successful!
+   Welcome, Mary!
+   (auto-resets after 2 seconds)</code></pre></p>
+<hr>
+<h1 id="en-14-import--export">14. Import & Export</h1>
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+To move large volumes of data from Excel or Google Sheets into the system all at once, instead of manual entry.
+<hr>
+<h2 id="en-full-import-flowchart">Full Import Flowchart:</h2>
+<p><pre><code>┌───────────────────────────────────────────────────────────────┐
+│                     Import Workflow                            │
+└───────────────────────────────────────────────────────────────┘
+
+Go to Leads or Members → click "Import Data"
+        │
+        ▼
+┌───────────────────────────────────────────────┐
+│          Step 1: Upload                        │
+│  Upload CSV ─── or ─── Paste Google Sheets URL│
+│             Click "Parse"                      │
+└───────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────┐
+│          Step 2: Map Columns                   │
+│  CSV Column → System Field                    │
+│  "Full Name" → Name ✅ (auto)                 │
+│  "Mobile"   → Phone ✅ (auto)                 │
+│  "Start"    → Start Date ⚙️ (manual)         │
+│  "Package"  → Package Type ✅ (auto)          │
+│  Click "Continue"                             │
+└───────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────┐
+│          Step 3: Importing                     │
+│  ████████████████░░░░ 75%                     │
+│  Imported: 150 | Errors: 3                    │
+│  Error row 23: invalid date format            │
+│  Error row 87: duplicate phone number         │
+└───────────────────────────────────────────────┘
+        │
+        ▼
+┌───────────────────────────────────────────────┐
+│          Step 4: Result                        │
+│  ✅ Imported: 197 records                     │
+│  ❌ Failed: 3 rows                            │
+│  [View Errors]  [Done]                        │
+└───────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="en-rolling-back-an-import">Rolling Back an Import:</h2>
+<p><strong>Why:</strong> If you discover after importing that data is wrong<br><strong>When:</strong> Immediately after discovering the issue</p>
+<p><pre><code>Steps:
+1. Click "Import History"
+2. Find the import batch
+3. Click "Rollback"
+4. Confirm ✅
+5. All records from that batch are deleted</code></pre></p>
+<hr>
+<h1 id="en-15-notifications--alerts">15. Notifications & Alerts</h1>
+<h2 id="en-where">Where?</h2>
+🔔 bell icon in the header
+<h2 id="en-why-does-it-exist">Why does it exist?</h2>
+So nothing important slips through — the system monitors and alerts you automatically.
+<h2 id="en-when-to-check-it">When to check it?</h2>
+At the start of every working day.
+<hr>
+<h2 id="en-automatic-notification-types">Automatic Notification Types:</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│  🔔 Notification Center (3 new)                                  │
+├──────────────────────────────────────────────────────────────────┤
+│  ⚠️  Lead: Mohamed Ahmed — no contact in 8 days    [X Dismiss]   │
+│  🎂  Birthday: Sara Karim — Today!                 [X Dismiss]   │
+│  ⏰  Expiring: Ali Mahmoud — in 2 days             [X Dismiss]   │
+│  📋  Overdue task: follow-up call for Karim        [X Dismiss]   │
+├──────────────────────────────────────────────────────────────────┤
+│                        [Dismiss All]                              │
+└──────────────────────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h1 id="en-16-full-practical-scenarios">16. Full Practical Scenarios</h1>
+<hr>
+<h2 id="en-scenario-1-a-rep's-ideal-work-day">Scenario 1: A Rep's Ideal Work Day</h2>
+<p><pre><code>9:00 AM — Open the system
+        │
+        ▼
+1. Review 🔔 Notifications
+   • Act on every alert immediately or schedule a follow-up
+        │
+        ▼
+2. Open Dashboard
+   • Check the KPI cards
+   • Review Action Required and Urgent Reminders
+        │
+        ▼
+3. Open Leads → My Leads → Sort by Score
+   • Start with the highest score
+   • Log an interaction for each lead you contact
+        │
+        ▼
+4. Open Renewal Pipeline
+   • Handle Expired first ← urgent contact
+   • Then Urgent ← plan contact today or tomorrow
+        │
+        ▼
+5. Review Tasks
+   • Complete overdue tasks first
+   • Update status of ongoing tasks
+        │
+        ▼
+Throughout the day:
+   • Any new lead → add immediately
+   • Any payment → record immediately
+   • Any contact → log Interaction</code></pre></p>
+<hr>
+<h2 id="en-scenario-2-new-instagram-inquiry">Scenario 2: New Instagram Inquiry</h2>
+<p><pre><code>Received message: "How much is a membership?"
+        │
+        ▼
+Click "+ Add Lead"
+Enter: Name + Phone + Source: Instagram + Branch
+        │
+        ▼
+Reply with pricing info
+        │
+        ▼
+Log Interaction:
+  Type: WhatsApp
+  Outcome: Interested (if interested) or Not Answered
+  Follow-up: tomorrow
+        │
+        ▼
+If interested → set trial date
+Stage → Trial | enter Trial Date
+        │
+        ▼
+After trial → Log Interaction
+  Yes, joining → Convert to Member → record payment
+  Needs time   → Stage: Follow Up | set follow-up
+  Declined     → Stage: Lost</code></pre></p>
+<hr>
+<h2 id="en-scenario-3-member-wants-to-renew">Scenario 3: Member Wants to Renew</h2>
+<p><pre><code>Member calls to renew
+        │
+        ▼
+Search for them in Members
+        │
+        ▼
+Check their details: current package, remaining sessions
+        │
+        ▼
+Go to Payments → "+ New Payment"
+        │
+        ▼
+Select client → enter amount → select new package
+Select payment method → enter start date
+        │
+        ▼
+Click "Save Payment" ✅
+        │
+        ▼
+Membership renews automatically
+        │
+        ▼
+Print Invoice if they want a receipt
+        │
+        ▼
+Log Interaction on their profile: "Renewed membership"</code></pre></p>
+<hr>
+<h2 id="en-scenario-4-setting-up-kiosk-at-a-new-branch">Scenario 4: Setting Up Kiosk at a New Branch</h2>
+<p><pre><code>Open Settings → Branding
+        │
+        ▼
+Confirm:
+  Company Name ✅
+  Logo ✅
+  Kiosk PIN: 6 digits — store it safely
+        │
+        ▼
+Go to Settings → Branches
+        │
+        ▼
+Add the new branch name → click "Add"
+        │
+        ▼
+Click "Print QR" for the new branch
+Print and place it at the entrance
+        │
+        ▼
+Open /kiosk on the tablet
+        │
+        ▼
+Enter the Kiosk PIN ✅
+        │
+        ▼
+Select the new branch from the dropdown
+        │
+        ▼
+Kiosk is ready 🎉</code></pre></p>
+<hr>
+<h2 id="en-scenario-5-reviewing-team-performance">Scenario 5: Reviewing Team Performance (Manager)</h2>
+<p><pre><code>Go to Dashboard
+        │
+        ▼
+Scroll to Rep Performance Leaderboard
+        │
+        ▼
+Select the month using ← → navigation
+        │
+        ▼
+Read the table:
+  Who hit their target?
+  Who needs support?
+  Who has the highest conversion?
+        │
+        ▼
+Go to Reports → Lead Source ROI
+  Which source gave us the best results this month?
+        │
+        ▼
+Go to Reports → Churn Risk
+  Which members are at risk of leaving?
+  Distribute the outreach list to the team
+        │
+        ▼
+Settings → Commission
+  Review monthly commissions
+  Export CSV for accounting</code></pre></p>
+<hr>
+<h2 id="en-scenario-6-import-200-leads-from-google-sheets">Scenario 6: Import 200 Leads from Google Sheets</h2>
+<p><pre><code>Download the Sheet as CSV (File → Download → CSV)
+        │
+        ▼
+Go to Leads → "Import Data"
+        │
+        ▼
+Upload the CSV file
+Click "Parse"
+        │
+        ▼
+Verify column mapping:
+  "Name" → Name ✅
+  "Phone" → Phone ✅
+  "Source" → Source ✅
+  (any unmatched column → map manually)
+        │
+        ▼
+Click "Continue"
+        │
+        ▼
+Wait for import to finish
+Review errors (if any)
+        │
+        ▼
+"Done" ✅
+200 leads added in seconds</code></pre></p>
+<hr>
+<h2 id="en-scenario-7-investigating-a-suspicious-payment">Scenario 7: Investigating a Suspicious Payment</h2>
+<p><pre><code>Manager spots a payment with an incorrect amount
+        │
+        ▼
+Go to History (Audit Log)
+        │
+        ▼
+Filter by: Entity = Payments | Action = CREATE or DELETE
+        │
+        ▼
+Search by approximate date
+        │
+        ▼
+Find the record: who recorded it, when, and for how much
+        │
+        ▼
+If incorrect:
+  Go to Payments → find the payment
+  Click "Delete" (requires Can Delete Payments permission)
+  Record a new correct payment</code></pre></p>
+<hr>
+<h1 id="en-17-quick-reference-table">17. Quick Reference Table</h1>
+<h2 id="en-where-to-find-what">Where to find what:</h2>
+<table><thead><tr><th>What I want to do</th><th>Where</th><th>Button</th></tr></thead><tbody><tr><td>Add a new lead</td><td>Leads</td><td>+ Add Lead</td></tr><tr><td>Follow up on a lead</td><td>Leads → open lead</td><td>Log Interaction</td></tr><tr><td>Convert lead to member</td><td>Leads → open lead</td><td>Convert to Member</td></tr><tr><td>Add a new member</td><td>Members</td><td>+ Add Member</td></tr><tr><td>Search for a member</td><td>Any page</td><td>Global Search (header)</td></tr><tr><td>Record a payment</td><td>Payments</td><td>+ New Payment</td></tr><tr><td>Print an invoice</td><td>Payments → find payment</td><td>🖨️ Print icon</td></tr><tr><td>Track renewals</td><td>Members</td><td>Renewal Pipeline</td></tr><tr><td>Manual attendance</td><td>Attendance</td><td>Manual Check-in</td></tr><tr><td>Schedule a PT session</td><td>PT Sessions</td><td>Log PT Usage</td></tr><tr><td>Add a task</td><td>Tasks</td><td>+ Add Task</td></tr><tr><td>See team performance</td><td>Dashboard</td><td>Leaderboard (bottom)</td></tr><tr><td>View commission report</td><td>Settings → Commission</td><td>Select month</td></tr><tr><td>Import data</td><td>Leads or Members</td><td>Import Data</td></tr><tr><td>Export data</td><td>Any page</td><td>Export CSV</td></tr><tr><td>Add a coach</td><td>Settings → Coaches</td><td>+ Add Coach</td></tr><tr><td>Add a package</td><td>Settings → Packages</td><td>+ Add Package</td></tr><tr><td>Add a branch</td><td>Settings → Branches</td><td>Add Branch</td></tr><tr><td>Invite a new staff member</td><td>Settings → Users</td><td>Invite User</td></tr><tr><td>Edit staff permissions</td><td>Settings → Users → Edit</td><td>Edit dialog</td></tr><tr><td>Review data changes</td><td>History</td><td>Filter by Entity / Action</td></tr><tr><td>Take a backup</td><td>Settings → Backup</td><td>Export Database</td></tr></tbody></table>
+<hr>
+<h2 id="en-emergency-reference-—-what-if">Emergency Reference — What if:</h2>
+<table><thead><tr><th>Problem</th><th>Solution</th></tr></thead><tbody><tr><td>Member says "my sessions count is wrong"</td><td>Members → open their profile → check package history</td></tr><tr><td>Payment recorded with wrong amount</td><td>History → investigate → Payments → delete and re-record</td></tr><tr><td>Lead assigned to the wrong rep</td><td>Leads → open lead → change Assigned To</td></tr><tr><td>Forgot kiosk PIN</td><td>Settings → Branding → check Kiosk PIN field</td></tr><tr><td>Imported wrong data</td><td>Leads/Members → Import History → Rollback</td></tr><tr><td>Staff member left, need to revoke access</td><td>Settings → Users → Delete</td></tr><tr><td>Member wants to freeze membership</td><td>Members → open member → change Status to Hold</td></tr></tbody></table>
+<hr>
+<h1 id="en-18-future-roadmap">18. Future Roadmap</h1>
+<h2 id="en-upcoming-suggested-features-—-mini-roadmap">Upcoming Suggested Features — Mini Roadmap</h2>
+<p><pre><code>┌──────────────────────────────────────────────────────────────────┐
+│              mitrixogymcrm CRM Roadmap                            │
+│                     2026 — 2027                                  │
+└──────────────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Q2 2026   (April — June)       HIGH PRIORITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────────────────────┐
+  │ 📱 Native Mobile App (iOS + Android)           │
+  │    • Push Notifications                        │
+  │    • QR scanning with phone camera             │
+  │    • Offline Mode (works without internet)     │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 💬 WhatsApp Business API Integration           │
+  │    • Auto messages when membership expires     │
+  │    • Automatic PT appointment confirmations    │
+  │    • Scheduled marketing campaigns             │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 📊 Advanced Financial Dashboard                │
+  │    • Monthly P&amp;L (Profit &amp; Loss)               │
+  │    • Branch expense tracking                   │
+  │    • Net revenue after commissions             │
+  └────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Q3 2026   (July — September)   MEDIUM PRIORITY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────────────────────┐
+  │ 🎯 Integrated Loyalty Points System            │
+  │    • Earn points per attendance                │
+  │    • Redeem points for discounts or gifts      │
+  │    • Member page to view point balance         │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 🤖 AI Predictions &amp; Suggestions                │
+  │    • Predict who will leave (Churn Prediction) │
+  │    • Suggest best time to contact a lead       │
+  │    • Analyze patterns to boost conversion      │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 💳 Integrated Online Payment Gateway           │
+  │    • Paymob / Fawry Integration                │
+  │    • Members pay online                        │
+  │    • Auto-recorded in the system               │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 📅 Class Scheduling System                     │
+  │    • Weekly class timetable                    │
+  │    • Members book spots online                 │
+  │    • Track attendance per class                │
+  └────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Q4 2026   (October — December)  LONG-TERM VISION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────────────────────┐
+  │ 🏪 Member Portal                               │
+  │    • Members view their sessions &amp; attendance  │
+  │    • Book PT sessions                          │
+  │    • Renew membership online                   │
+  │    • View loyalty points                       │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 📈 Advanced Business Intelligence Reports      │
+  │    • Customer Lifetime Value (LTV)             │
+  │    • Quarterly and annual reports with compar. │
+  │    • NPS (member satisfaction score)           │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 🔗 External Integrations                       │
+  │    • Google Calendar for PT appointments       │
+  │    • Mailchimp for email campaigns             │
+  │    • Facebook Ads for lead tracking            │
+  └────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2027     Expansion Vision
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ┌────────────────────────────────────────────────┐
+  │ 🌐 Multi-Gym Platform                          │
+  │    • Manage multiple gyms from one account     │
+  │    • Transfer members between sister branches  │
+  │    • Cross-gym performance comparison board    │
+  └────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────┐
+  │ 🎥 Smart Digital Signage                       │
+  │    • Ads displayed on kiosk between visits     │
+  │    • Personalized offers per member package    │
+  └────────────────────────────────────────────────┘</code></pre></p>
+<hr>
+<h2 id="en-what-the-system-can-do-right-now-—-full-list">What the system can do RIGHT NOW — full list:</h2>
+<p><pre><code>Data Management:
+✅ Add / edit / delete leads and members
+✅ Import data from CSV and Google Sheets
+✅ Export any data to Excel (CSV)
+✅ Full system backups
+✅ Merge duplicate records
+
+Sales Management:
+✅ Track the lead journey from inquiry to membership
+✅ Log every interaction with a lead or member
+✅ Automatic Lead Scoring
+✅ Visual renewal management (Renewal Pipeline)
+✅ Set monthly targets per rep
+✅ Leaderboard comparing rep performance
+
+Payments:
+✅ Record payments with multiple methods
+✅ Instapay 12-digit reference validation
+✅ Print professional invoices
+✅ Export payment records
+
+Attendance:
+✅ QR Code kiosk for automatic check-in
+✅ Manual check-in from the system
+✅ Self check-in for members
+✅ View every member's attendance history
+
+PT Sessions:
+✅ Schedule PT sessions with date, time, and coach
+✅ Track attendance, no-shows, and cancellations
+✅ Auto-deduct sessions upon attendance
+✅ Monthly PT statistics
+
+Reports &amp; Analytics:
+✅ Lead Source ROI report
+✅ Churn Risk report
+✅ Cohort Retention report
+✅ Revenue Forecast report
+✅ Monthly revenue trend charts
+✅ Payment method breakdown
+✅ Rep commission reports
+
+Administration:
+✅ Full role and permissions system (5 roles)
+✅ User management and invitations
+✅ Manage packages, coaches, and branches
+✅ Complete activity audit log
+✅ Smart automatic notifications
+✅ Brand customization (logo, name, PINs)
+✅ Multi-branch support
+✅ Responsive UI (mobile + desktop)
+✅ Fast global search</code></pre></p>
+<hr>
+<h2 id="en-final-note">Final Note:</h2>
+<blockquote>The more data you put in, the more insight you get out.</blockquote>
+<blockquote>Every interaction you log, every payment you record, every lead you follow up</blockquote>
+<blockquote>builds a complete picture that helps you sell more and lose fewer members.</blockquote>
+<hr>
+<p><em>Version 2.1 | mitrixogymcrm CRM | April 2026</em><br><em>For technical support: contact the system administrator</em></p>
+    </div>
+    <div class="page-footer"><strong>mitrixogymcrm CRM</strong> — Sales Team Guide v2.1<br>April 2026 | All Rights Reserved</div>
+  </div>
+</div>
+
+<a class="back-top" href="#top" title="Back to top">↑</a>
+
+<script>
+  function switchLang(lang) {
+    document.getElementById('section-ar').style.display = lang === 'ar' ? 'block' : 'none';
+    document.getElementById('section-en').style.display = lang === 'en' ? 'block' : 'none';
+    document.getElementById('btn-ar').classList.toggle('active', lang === 'ar');
+    document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+    // scroll to the active cover
+    document.getElementById(lang + '-top').scrollIntoView();
+  }
+</script>
+</body>
+</html>

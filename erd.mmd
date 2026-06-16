@@ -1,0 +1,21 @@
+erDiagram
+    MEMBER ||--o{ PAYMENT : "submits"
+    MEMBER ||--o{ ATTENDANCE : "logs"
+    MEMBER ||--o{ PT_SESSION : "uses"
+    MEMBER {
+        string MemberID
+        string Name
+        string Status "Active/Expired/Hold"
+        date ExpiryDate
+        string QRCode
+    }
+    PAYMENT {
+        float Amount
+        string Method "Instapay/Cash/Visa"
+        string InstapayRef "12 Digits"
+        string SalesRep
+    }
+    PT_SESSION {
+        string CoachName
+        string Status "Attended/No-Show"
+    }

@@ -1,0 +1,12 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+.netlify/
+. g e m i n i /  
+*service-account.json
+dist-server/

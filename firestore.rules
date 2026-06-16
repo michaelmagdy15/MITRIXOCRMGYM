@@ -1,0 +1,722 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Global Auth Helpers
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ===============================================================
+    // mitrixogymcrm / GamenEG-Brand Root Auth Helpers
+    // ===============================================================
+
+    function userExists() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function ismitrixogymcrmAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email in [
+          "michaelmitry13@gmail.com",
+          "magd.gallab@gmail.com",
+          "admin@mitrixogymcrm.eg",
+          "mitrixogymcrm.egyptt@gmail.com",
+          "shadyyoussef305@gmail.com",
+          "atefmitrixogymcrm@gmail.com"
+        ] ||
+        (userExists() && getUserRole() in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager'])
+      );
+    }
+
+    function ismitrixogymcrmSuperAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email in [
+          "michaelmitry13@gmail.com",
+          "magd.gallab@gmail.com",
+          "admin@mitrixogymcrm.eg",
+          "mitrixogymcrm.egyptt@gmail.com",
+          "shadyyoussef305@gmail.com",
+          "atefmitrixogymcrm@gmail.com"
+        ] ||
+        (userExists() && getUserRole() in ['super_admin', 'crm_admin'])
+      );
+    }
+
+    function ismitrixogymcrmStaff() {
+      return ismitrixogymcrmAdmin() || (userExists() && getUserRole() in ['rep', 'sales_rep', 'coach']);
+    }
+
+    function isOwnClientRecord(clientId) {
+      return isAuthenticated() && (
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId == clientId ||
+            (
+              'clientDocId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && (
+                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId == clientId ||
+                (
+                  exists(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)) &&
+                  'linkedClientIds' in get(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)).data &&
+                  clientId in get(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)).data.linkedClientIds
+                )
+              )
+            )
+          )
+        ) ||
+        (
+          exists(/databases/$(database)/documents/clients/$(clientId)) && 
+          get(/databases/$(database)/documents/clients/$(clientId)).data.portalUserId == request.auth.uid
+        )
+      );
+    }
+
+    function isSafeClientSelfEdit() {
+      let allowed = ['name', 'phone', 'portalUserId'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
+             (!('portalUserId' in request.resource.data) || request.resource.data.portalUserId == request.auth.uid) &&
+             (!('portalUserId' in resource.data) || resource.data.portalUserId == request.auth.uid);
+    }
+
+    function canmitrixogymcrmDeletePayments() {
+      return isAuthenticated() && (
+        request.auth.token.email in ["michaelmitry13@gmail.com", "magd.gallab@gmail.com", "admin@mitrixogymcrm.eg"] ||
+        (userExists() && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'] ||
+          (
+            'can_delete_payments' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.can_delete_payments == true
+          )
+        ))
+      );
+    }
+
+    function canmitrixogymcrmAccessSettings() {
+      return isAuthenticated() && (
+        request.auth.token.email in ["michaelmitry13@gmail.com", "magd.gallab@gmail.com", "admin@mitrixogymcrm.eg"] ||
+        (userExists() && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'] ||
+          (
+            'can_access_settings_and_history' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.can_access_settings_and_history == true
+          )
+        ))
+      );
+    }
+
+    function canmitrixogymcrmViewGlobalDashboard() {
+      return isAuthenticated() && (
+        request.auth.token.email in ["michaelmitry13@gmail.com", "magd.gallab@gmail.com", "admin@mitrixogymcrm.eg"] ||
+        (userExists() && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'] ||
+          (
+            'can_view_global_dashboard' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.can_view_global_dashboard == true
+          )
+        ))
+      );
+    }
+
+    function ismitrixogymcrmSalesRep() {
+      return userExists() && (getUserRole() == 'sales_rep' || getUserRole() == 'rep');
+    }
+
+
+    // ===============================================================
+    // Matchmaking Helper Functions & Auth
+    // ===============================================================
+
+    function getMatchUserData() {
+      let uid = request.auth != null ? request.auth.uid : 'anonymous';
+      let userPath = /databases/$(database)/documents/match_users/$(uid);
+      return (request.auth != null && exists(userPath)) ? get(userPath).data : {
+        "role": "none",
+        "name": "Anonymous",
+        "can_delete_payments": false,
+        "can_access_settings_and_history": false,
+        "can_view_global_dashboard": false
+      };
+    }
+
+    function canMatchAccessSettings() {
+      let data = getMatchUserData();
+      return request.auth != null && (
+        data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager'] ||
+        data.can_access_settings_and_history == true
+      );
+    }
+
+    function isMatchAdmin() {
+      let data = getMatchUserData();
+      return request.auth != null && (
+        data.role in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager']
+      );
+    }
+
+    // ===============================================================
+    // ATPL Vector Helper Functions & Auth
+    // ===============================================================
+
+    function isAtplSuperAdmin() {
+      return isAuthenticated() && request.auth.token.email == "michaelmitry13@gmail.com" && request.auth.token.email_verified == true;
+    }
+
+    function isAtplAdmin() {
+      return isAtplSuperAdmin() || (
+        isAuthenticated() && (
+          (exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.is_admin == true) ||
+          (exists(/databases/$(database)/documents/atpl_profiles/$(request.auth.uid)) &&
+           get(/databases/$(database)/documents/atpl_profiles/$(request.auth.uid)).data.is_admin == true)
+        )
+      );
+    }
+
+    // ===============================================================
+    // GAMÉN Helper Functions & Auth
+    // ===============================================================
+
+    function isGamenAdmin() {
+      return request.auth != null 
+             && (request.auth.token.email == 'michaelmitry13@gmail.com' || request.auth.token.email == 'admin@gamen.eg');
+    }
+
+    // ===============================================================
+    // General Validation Helpers
+    // ===============================================================
+
+    function isNonEmptyString(val) {
+      return val is string && val.size() > 0;
+    }
+
+    function isValidBranding(data) {
+      return data.keys().hasAny(['companyName', 'logoUrl', 'kioskPin', 'dailyCheckinPin']) &&
+             (!('companyName' in data) || isNonEmptyString(data.companyName)) &&
+             (!('logoUrl' in data) || data.logoUrl is string);
+    }
+
+    function isSafeUserSelfEdit() {
+      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
+    // ===============================================================
+    // Entity Validators (mitrixogymcrm)
+    // ===============================================================
+
+    function isValidRole(role) {
+      return role in ['rep', 'manager', 'admin', 'super_admin', 'crm_admin'];
+    }
+
+    function isValidClient(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.phone is string && data.phone.size() >= 7 &&
+             data.status in ["Lead", "Active", "Nearly Expired", "Expired", "Hold"];
+    }
+
+    function isValidPaymentCreate(data) {
+      return data.clientId is string &&
+             data.amount_paid is number && data.amount_paid >= 0 &&
+             data.sales_rep_id is string;
+    }
+
+    function paymentImmutableFieldsUnchanged() {
+      let immutable = ['clientId', 'client_name', 'amount', 'sales_rep_id', 'created_at', 'package_category_type'];
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(immutable);
+    }
+
+    // Sessions status validation helper
+    function isValidSession(data) {
+      return isNonEmptyString(data.clientId) &&
+             data.status in ['Scheduled', 'Attended', 'No Show', 'Cancelled'];
+    }
+
+    function isValidInteraction(data) {
+      return isNonEmptyString(data.date) &&
+             data.type in ['Call', 'WhatsApp', 'Email', 'Visit'] &&
+             data.outcome in ['Interested', 'Not Answered', 'Scheduled Trial', 'Rejected', 'Other'] &&
+             isNonEmptyString(data.author);
+    }
+
+    function isValidAttendance(data) {
+      return isNonEmptyString(data.clientId) &&
+             isNonEmptyString(data.branch) &&
+             isNonEmptyString(data.date) &&
+             isNonEmptyString(data.recordedBy);
+    }
+
+    function isValidTask(data) {
+      return isNonEmptyString(data.title) &&
+             isNonEmptyString(data.dueDate) &&
+             data.status in ['Pending', 'In Progress', 'Completed'] &&
+             data.priority in ['Low', 'Medium', 'High'] &&
+             data.assignedTo is string &&
+             isNonEmptyString(data.createdBy) &&
+             isNonEmptyString(data.createdAt);
+    }
+
+    function isTaskCreator() {
+      return isAuthenticated() &&
+             resource != null &&
+             resource.data.createdBy == request.auth.uid;
+    }
+
+    function isValidPackage(data) {
+      return isNonEmptyString(data.name) &&
+             data.price is number && data.price >= 0 &&
+             data.sessions is number && data.sessions >= 0 &&
+             data.expiryDays is number && data.expiryDays >= 0 &&
+             data.type in ['Private', 'Group', 'Other'];
+    }
+
+    function isValidCoach(data) {
+      return isNonEmptyString(data.name) &&
+             data.active is bool;
+    }
+
+    function isValidTarget(data) {
+      return isNonEmptyString(data.userId) &&
+             data.targetAmount is number && data.targetAmount >= 0 &&
+             isNonEmptyString(data.month) &&
+             data.month.matches('^[0-9]{4}-[0-9]{2}$');
+    }
+
+    function isValidAuditLog(data) {
+      return isNonEmptyString(data.userId) &&
+             data.action in ['CREATE', 'UPDATE', 'DELETE'] &&
+             data.entityType in ['CLIENT', 'PAYMENT', 'PACKAGE_RECORD', 'LEAD',
+                                 'TARGET', 'ATTENDANCE', 'COACH', 'SYSTEM', 'BRANCH', 'SESSION'] &&
+             isNonEmptyString(data.entityId) &&
+             isNonEmptyString(data.timestamp);
+    }
+
+    // ===============================================================
+    // Entity Validators (Matchmaking)
+    // ===============================================================
+
+    function isValidMatch(data) {
+      return data.maleId is string && data.maleId.size() > 0 &&
+             data.maleName is string && data.maleName.size() > 0 &&
+             data.femaleId is string && data.femaleId.size() > 0 &&
+             data.femaleName is string && data.femaleName.size() > 0 &&
+             data.status in [
+               "PENDING_PROFILE_APPROVAL",
+               "PENDING_PHOTO_APPROVAL",
+               "PENDING_CONTACT_SHARE",
+               "MATCH_ACTIVE",
+               "PENDING_FEEDBACK"
+             ];
+    }
+
+    // ===============================================================
+    // Collection Group Rules
+    // ===============================================================
+
+    match /{path=**}/comments/{commentId} {
+      allow read, create: if ismitrixogymcrmStaff() || isMatchAdmin();
+      allow delete: if ismitrixogymcrmAdmin() || isMatchAdmin();
+    }
+
+    match /clients/{clientId}/comments/{commentId} {
+      allow read, write: if ismitrixogymcrmStaff();
+    }
+
+    match /clients/{clientId}/interactions/{interactionId} {
+      allow read, write: if ismitrixogymcrmStaff();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow write: if ismitrixogymcrmStaff() && isValidAttendance(request.resource.data);
+    }
+
+    // ===============================================================
+    // PROJECT 1: MITRIXOGYMCRM (Root Collections, Flat Structure)
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if ismitrixogymcrmAdmin() || (isOwner(userId) && request.resource.data.role in ['client', 'coach']);
+      allow update: if ismitrixogymcrmAdmin() || (isOwner(userId) && isSafeUserSelfEdit());
+      allow delete: if ismitrixogymcrmSuperAdmin();
+    }
+
+    match /targets/{targetId} {
+      allow get: if canmitrixogymcrmViewGlobalDashboard() || (ismitrixogymcrmSalesRep() && resource.data.sales_rep_id == request.auth.uid);
+      allow list: if canmitrixogymcrmViewGlobalDashboard() || ismitrixogymcrmSalesRep();
+      allow write: if canmitrixogymcrmViewGlobalDashboard();
+    }
+
+    match /userTargets/{targetId} {
+      allow get: if canmitrixogymcrmViewGlobalDashboard() || (ismitrixogymcrmSalesRep() && resource.data.userId == request.auth.uid);
+      allow list: if canmitrixogymcrmViewGlobalDashboard() || ismitrixogymcrmSalesRep();
+      allow write: if canmitrixogymcrmViewGlobalDashboard();
+    }
+
+    match /payments/{paymentId} {
+      allow get: if canmitrixogymcrmViewGlobalDashboard() || (ismitrixogymcrmSalesRep() && resource.data.sales_rep_id == request.auth.uid);
+      allow list: if canmitrixogymcrmViewGlobalDashboard() || ismitrixogymcrmSalesRep();
+      allow create: if isAuthenticated() && isValidPaymentCreate(request.resource.data);
+      allow update, delete: if canmitrixogymcrmDeletePayments();
+    }
+
+    match /settings/{settingId} {
+      allow read: if (settingId == 'branding' && isAuthenticated()) || canmitrixogymcrmAccessSettings();
+      allow write: if canmitrixogymcrmAccessSettings() && (settingId != 'branding' || isValidBranding(request.resource.data));
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if canmitrixogymcrmAccessSettings();
+      allow create: if isAuthenticated();
+      allow delete: if canmitrixogymcrmAccessSettings();
+    }
+
+    match /mail/{mailId} {
+      // Members and guests can create mail documents for email triggers
+      allow create: if true;
+      allow read, update, delete: if ismitrixogymcrmStaff();
+    }
+
+    match /clients/{clientId} {
+      allow get: if ismitrixogymcrmStaff() || isOwnClientRecord(clientId);
+      allow list: if ismitrixogymcrmStaff() || (isAuthenticated() && (
+        resource.data.portalUserId == request.auth.uid ||
+        resource.data.memberId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId ||
+        (
+          'clientDocId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && (
+            resource.data.id == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId ||
+            (
+              exists(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)) &&
+              'linkedClientIds' in get(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)).data &&
+              resource.data.id in get(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)).data.linkedClientIds
+            )
+          )
+        )
+      ));
+      allow create: if ismitrixogymcrmStaff() || (isAuthenticated() && request.resource.data.portalUserId == request.auth.uid);
+      allow update: if ismitrixogymcrmStaff() || (isOwnClientRecord(clientId) && isSafeClientSelfEdit());
+      allow delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /packages/{packageId} {
+      allow read: if isAuthenticated();
+      allow write: if ismitrixogymcrmAdmin();
+    }
+
+    match /coaches/{coachId} {
+      allow read: if isAuthenticated();
+      allow write: if ismitrixogymcrmAdmin();
+    }
+
+    match /coachSchedules/{coachId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(coachId) || ismitrixogymcrmAdmin();
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if ismitrixogymcrmStaff() || (isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId));
+      allow update: if ismitrixogymcrmStaff() || (
+        isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) &&
+        request.resource.data.clientId == resource.data.clientId
+      );
+      allow delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /tasks/{taskId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) || resource.data.assignedTo == request.auth.uid));
+      allow create: if isAuthenticated();
+      allow update: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /importBatches/{batchId} {
+      allow read, write: if ismitrixogymcrmAdmin();
+    }
+
+    match /juiceBarOrders/{orderId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId);
+      allow update: if ismitrixogymcrmStaff() || (
+        isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) &&
+        request.resource.data.status == 'Cancelled' &&
+        resource.data.status == 'Pending'
+      );
+      allow delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /lockers/{lockerId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.assignedTo != null && isOwnClientRecord(resource.data.assignedTo));
+      allow write: if ismitrixogymcrmStaff();
+    }
+
+    match /lockerRequests/{requestId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId);
+      allow update, delete: if ismitrixogymcrmStaff();
+    }
+
+    match /guestInvites/{inviteId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.hostId != null && isOwnClientRecord(resource.data.hostId));
+      allow create: if isAuthenticated() && request.resource.data.hostId != null && isOwnClientRecord(request.resource.data.hostId);
+      allow update, delete: if ismitrixogymcrmStaff();
+    }
+
+    match /clientPerformance/{performanceId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow write: if ismitrixogymcrmStaff();
+    }
+
+    match /subscriptionRequests/{requestId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId);
+      allow update, delete: if ismitrixogymcrmStaff();
+    }
+
+    match /pendingAccounts/{docId} {
+      allow create: if true;
+      allow read, update, delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /passwordResetRequests/{docId} {
+      allow create: if true;
+      allow read, update, delete: if ismitrixogymcrmAdmin();
+    }
+
+    // ===============================================================
+    // PROJECT 2: MATCHMAKING (Prefixed match_* Collections)
+    // ===============================================================
+
+    match /match_users/{userId} {
+      allow read, write: if isMatchAdmin() || isOwner(userId);
+    }
+
+    match /match_profiles/{profileId} {
+      allow read, write: if isMatchAdmin() || isOwner(profileId);
+    }
+
+    match /match_clients/{clientId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    match /match_matches/{matchId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    match /{path=**}/match_comments/{commentId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    match /{path=**}/match_interactions/{interactionId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    match /match_tasks/{taskId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    // Match both camelCase and snake_case versions
+    match /match_audit_logs/{logId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    match /match_auditLogs/{logId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    match /match_importBatches/{batchId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    match /match_counters/{counterId} {
+      allow read, write: if isMatchAdmin();
+    }
+
+    match /match_favorites/{favId} {
+      allow read, write: if isMatchAdmin() || isAuthenticated();
+    }
+
+    match /match_announcements/{annId} {
+      allow read: if isAuthenticated();
+      allow write: if isMatchAdmin();
+    }
+
+    match /match_messages/{msgId} {
+      allow read, write: if isMatchAdmin() || isAuthenticated();
+    }
+
+
+    // ===============================================================
+    // PROJECT 3: ATPL VECTOR (Prefixed atpl_* & Non-Prefixed Profiles/Subs)
+    // ===============================================================
+
+    // Common root models for ATPL Vector
+    match /profiles/{userId} {
+      allow read: if isOwner(userId) || isAtplAdmin();
+      allow create: if (isOwner(userId) && (!('is_admin' in request.resource.data) || request.resource.data.is_admin == false));
+      allow update: if (isOwner(userId) && (!('is_admin' in request.resource.data) || request.resource.data.is_admin == resource.data.is_admin)) || isAtplAdmin();
+      allow delete: if isAtplAdmin();
+    }
+    
+    match /subscriptions/{subscriptionId} {
+      allow read: if isOwner(subscriptionId) || isAtplAdmin();
+      allow create: if (isOwner(subscriptionId) && (!('plan' in request.resource.data) || (request.resource.data.plan != 'PRO' && request.resource.data.plan != 'PREMIUM')));
+      allow update: if (isOwner(subscriptionId) && (!('plan' in request.resource.data) || request.resource.data.plan == resource.data.plan || (request.resource.data.plan != 'PRO' && request.resource.data.plan != 'PREMIUM'))) || isAtplAdmin();
+      allow delete: if isAtplAdmin();
+    }
+
+    match /interactions/{interactionId} {
+      allow read: if isOwner(resource.data.userId) || isAtplAdmin();
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if isOwner(resource.data.userId) || isAtplAdmin();
+    }
+
+    // Prefixed collections
+    match /atpl_profiles/{userId} {
+      allow read: if isOwner(userId) || isAtplAdmin();
+      allow create: if (isOwner(userId) && (!('is_admin' in request.resource.data) || request.resource.data.is_admin == false));
+      allow update: if (isOwner(userId) && (!('is_admin' in request.resource.data) || request.resource.data.is_admin == resource.data.is_admin)) || isAtplAdmin();
+      allow delete: if isAtplAdmin();
+    }
+    
+    match /atpl_subscriptions/{subscriptionId} {
+      allow read: if isOwner(subscriptionId) || isAtplAdmin();
+      allow create: if (isOwner(subscriptionId) && (!('plan' in request.resource.data) || (request.resource.data.plan != 'PRO' && request.resource.data.plan != 'PREMIUM')));
+      allow update: if (isOwner(subscriptionId) && (!('plan' in request.resource.data) || request.resource.data.plan == resource.data.plan || (request.resource.data.plan != 'PRO' && request.resource.data.plan != 'PREMIUM'))) || isAtplAdmin();
+      allow delete: if isAtplAdmin();
+    }
+
+    match /atpl_counters/{counterId} {
+      allow read: if isAuthenticated();
+      allow write: if isAtplAdmin();
+    }
+
+    match /atpl_interactions/{interactionId} {
+      allow read: if isOwner(resource.data.userId) || isAtplAdmin();
+      allow create: if isOwner(request.resource.data.userId);
+      allow update, delete: if isOwner(resource.data.userId) || isAtplAdmin();
+    }
+    
+    match /atpl_settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAtplAdmin();
+    }
+
+    match /atpl_packages/{packageId} {
+      allow read: if isAuthenticated();
+      allow write: if isAtplAdmin();
+    }
+    
+    match /atpl_tasks/{taskId} {
+      allow read: if isAuthenticated();
+      allow write: if isAtplAdmin();
+    }
+
+    match /atpl_testimonials/{testimonialId} {
+      allow read: if true;
+      allow write: if isAuthenticated() || isAtplAdmin();
+    }
+
+    match /atpl_access_codes/{codeId} {
+      allow get: if isAuthenticated();
+      allow list, write: if isAtplAdmin();
+    }
+
+    match /atpl_flashcards/{cardId} {
+      allow read: if true;
+      allow write: if isAtplAdmin();
+    }
+
+    // ===============================================================
+    // PROJECT 4: GAMÉN Luxury Brand (Prefixed gamen_* Collections)
+    // ===============================================================
+
+    match /gamen_orders/{orderId} {
+      allow create: if request.resource.data.keys().hasAll(['orderRef', 'status', 'customer', 'items', 'totalPrice', 'paymentMethod', 'paymentStatus'])
+                    && request.resource.data.status == 'pending'
+                    && request.resource.data.totalPrice is number
+                    && request.resource.data.totalPrice > 0
+                    && request.resource.data.items is list
+                    && request.resource.data.items.size() > 0
+                    && request.resource.data.customer is map
+                    && request.resource.data.customer.email is string
+                    && request.resource.data.customer.email.size() > 5
+                    && request.resource.data.customer.email.matches('.+@.+')
+                    && request.resource.data.customer.phone is string
+                    && request.resource.data.customer.phone.size() >= 10;
+      allow read, delete: if isGamenAdmin();
+      allow update: if isGamenAdmin() || (
+                      // Allow client-side status updates on card transactions
+                      resource.data.status == 'pending'
+                      && (request.resource.data.status == 'confirmed' || request.resource.data.status == 'pending')
+                      && (request.resource.data.paymentStatus == 'paid' || request.resource.data.paymentStatus == 'failed')
+                      && request.resource.data.paymentMethod == 'paymob'
+                      // Prevent modification of vital order details
+                      && request.resource.data.orderRef == resource.data.orderRef
+                      && request.resource.data.totalPrice == resource.data.totalPrice
+                      && request.resource.data.items == resource.data.items
+                      && request.resource.data.customer.email == resource.data.customer.email
+                      && request.resource.data.customer.phone == resource.data.customer.phone
+                    );
+    }
+
+    match /gamen_products/{productId} {
+      allow read: if true;
+      allow write: if isGamenAdmin();
+    }
+
+    match /gamen_productOverrides/{overrideId} {
+      allow read: if true;
+      allow write: if isGamenAdmin();
+    }
+
+    match /gamen_mail/{mailId} {
+      allow create: if isGamenAdmin() || (
+                      request.resource.data.keys().hasAll(['to', 'message'])
+                      && request.resource.data.to is list
+                      && request.resource.data.to.size() <= 2
+                      && ('michaelmitry13@gmail.com' in request.resource.data.to 
+                          || 'info@gamen.world' in request.resource.data.to 
+                          || 'admin@gamen.eg' in request.resource.data.to)
+                      && request.resource.data.message is map
+                      && request.resource.data.message.subject is string
+                      && request.resource.data.message.subject.matches('^Order Confirmation.*')
+                    );
+      allow read, update, delete: if isGamenAdmin();
+    }
+
+    match /gamen_subscribers/{subId} {
+      allow create: if request.resource.data.email is string
+                    && request.resource.data.email.size() > 5
+                    && request.resource.data.email.matches('.+@.+');
+      allow read, update, delete: if isGamenAdmin();
+    }
+
+    match /gamen_traffic/{logId} {
+      allow create: if true;
+      allow read, update, delete: if isGamenAdmin();
+    }
+
+    // ===============================================================
+    // Platform Fallback / Super Admin Bypass
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if ismitrixogymcrmSuperAdmin();
+    }
+  }
+}

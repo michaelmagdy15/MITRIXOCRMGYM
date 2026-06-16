@@ -1,0 +1,2167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MITRIXOGYMCRM — Quote Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root {
+    --bg: #060606;
+    --bg-soft: #0c0c0c;
+    --bg-card: rgba(18, 18, 18, 0.65);
+    --line: rgba(255, 255, 255, 0.08);
+    --line-strong: rgba(255, 255, 255, 0.16);
+    --text: #ffffff;
+    --text-soft: #cccccc;
+    --text-muted: #777777;
+    --gold: #e5e5e5;
+    --gold-soft: rgba(255, 255, 255, 0.04);
+    --gold-border: rgba(255, 255, 255, 0.15);
+    --danger: #ff5555;
+    --condensed: 'Barlow Condensed', sans-serif;
+    --body: 'Barlow', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+    --shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── HEADER ── */
+  .app-header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(6, 6, 6, 0.7);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--line);
+    padding: 0 24px;
+    height: 58px;
+    display: flex; align-items: center;
+    justify-content: space-between; gap: 16px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .brand-logo img {
+    height: 34px;
+    width: auto;
+    display: block;
+    object-fit: contain;
+  }
+  .brand-sep {
+    width: 1px; height: 22px;
+    background: var(--line-strong);
+  }
+  .brand-sub {
+    font-family: var(--mono);
+    font-size: 9px; letter-spacing: 0.18em;
+    color: var(--text-muted); text-transform: uppercase;
+  }
+  .actions { display: flex; gap: 6px; align-items: center; }
+
+  button, .btn {
+    font-family: var(--body); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 10px 18px;
+    border: 1px solid var(--line-strong);
+    background: rgba(255, 255, 255, 0.03); color: var(--text);
+    cursor: pointer; border-radius: 6px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+  }
+  button:active {
+    transform: translateY(0);
+  }
+  .btn-primary {
+    background: var(--text); color: #000000;
+    border-color: var(--text); font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+  .btn-primary:hover {
+    background: #e5e5e5; border-color: #e5e5e5; color: #000000;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.15);
+  }
+  .btn-ghost { border-color: transparent; color: var(--text-soft); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--line); background: rgba(255, 255, 255, 0.05); }
+  .btn-icon { padding: 6px 8px; color: var(--text-muted); border-color: transparent; background: transparent; }
+  .btn-icon:hover { color: var(--danger); background: rgba(255, 85, 85, 0.1); border-color: transparent; transform: scale(1.1); }
+
+  /* ── MAIN LAYOUT ── */
+  .app-main {
+    display: grid;
+    grid-template-columns: minmax(380px, 1.1fr) minmax(380px, 0.9fr);
+    min-height: calc(100vh - 58px);
+  }
+  @media (max-width: 900px) {
+    .app-main { grid-template-columns: 1fr; }
+    .preview-pane { border-left: 0; border-top: 1px solid var(--line); }
+  }
+
+  /* ── FORM PANE ── */
+  .form-pane {
+    padding: 28px 24px 48px;
+    overflow-y: auto; overflow-x: hidden;
+    max-height: calc(100vh - 58px);
+    min-width: 0;
+  }
+  @media (max-width: 900px) { .form-pane { max-height: none; } }
+
+  .section { margin-bottom: 32px; }
+  .section-label {
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: 0.2em; color: var(--text-muted);
+    text-transform: uppercase; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .field-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .field-full { grid-column: 1 / -1; }
+  @media (max-width: 600px) {
+    .field-grid, .field-grid.three { grid-template-columns: 1fr; }
+    .field-full { grid-column: 1; }
+  }
+
+  label {
+    display: block; font-family: var(--mono); font-size: 9px;
+    letter-spacing: 0.14em; color: var(--text-muted);
+    text-transform: uppercase; margin-bottom: 6px;
+  }
+  input, textarea, select {
+    width: 100%; background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 14px; font-family: var(--body); font-size: 13px;
+    color: var(--text); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  input:hover, textarea:hover, select:hover {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none; border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-muted); font-style: italic; }
+  textarea { resize: vertical; min-height: 72px; line-height: 1.5; }
+  select {
+    cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' stroke-width='1.2' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+    padding-right: 32px;
+  }
+  select option { background: #0c0c0c; color: #fff; }
+
+  /* ── DURATION BLOCK ── */
+  .duration-block {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow);
+  }
+  .duration-header {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    gap: 12px;
+  }
+  .duration-title {
+    font-family: var(--condensed); font-size: 15px;
+    font-weight: 700; letter-spacing: 0.08em;
+    color: var(--gold); text-transform: uppercase;
+  }
+  .pkg-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 100px 32px;
+    gap: 10px; align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .pkg-row:last-of-type { border-bottom: 0; }
+  .pkg-row input { padding: 8px 10px; font-size: 13px; }
+  .pkg-row .num { font-family: var(--mono); font-size: 13px; text-align: right; }
+
+  .add-btn {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+    color: var(--text-soft); background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed var(--line-strong);
+    width: 100%; padding: 12px; margin-top: 14px;
+    cursor: pointer; text-transform: uppercase; border-radius: 6px;
+    transition: all 0.2s ease;
+  }
+  .add-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: var(--text);
+  }
+  .add-duration-btn { margin-top: 4px; }
+
+  /* ── NOTES / LIST ROWS ── */
+  .note-row {
+    display: flex; gap: 10px; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--line);
+  }
+  .note-row:last-of-type { border-bottom: 0; }
+  .note-row textarea {
+    flex: 1; min-height: 42px;
+    font-size: 13px; padding: 8px 12px;
+  }
+
+  /* ── METADATA ROWS ── */
+  .meta-row {
+    display: grid;
+    grid-template-columns: 1.1fr 1.9fr 32px;
+    gap: 10px;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .meta-row:last-of-type { border-bottom: 0; }
+  .meta-row input { padding: 8px 10px; font-size: 13px; }
+
+  /* ── PREVIEW PANE ── */
+  .preview-pane {
+    background: #0f0f0f;
+    border-left: 1px solid var(--line);
+    padding: 24px;
+    overflow-y: auto; overflow-x: hidden;
+    max-height: calc(100vh - 58px);
+    display: flex; flex-direction: column;
+    align-items: center; min-width: 0;
+  }
+  @media (max-width: 900px) { .preview-pane { max-height: none; } }
+
+  .preview-label {
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: 0.2em; color: var(--text-muted);
+    text-transform: uppercase; margin-bottom: 16px;
+    align-self: stretch; display: flex; justify-content: space-between;
+  }
+  .preview-frame {
+    width: 100%; max-width: 595px;
+    background: white;
+    box-shadow: 0 20px 80px rgba(0,0,0,0.8);
+    margin-bottom: 24px;
+    overflow: hidden; flex-shrink: 0;
+  }
+
+  /* ── PDF DOCUMENT ── */
+  .quote-doc {
+    width: 595px; min-height: 842px;
+    background: #fff; color: #0f0f0f;
+    font-family: var(--body);
+    position: relative; box-sizing: border-box;
+    transform-origin: top left; flex-shrink: 0;
+  }
+
+  /* Doc top bar */
+  .doc-header {
+    background: #0f0f0f;
+    padding: 28px 40px 20px;
+    position: relative;
+  }
+  .doc-logo img {
+    height: 46px;
+    width: auto;
+    display: block;
+    object-fit: contain;
+  }
+  .doc-logo-bar {
+    width: 52px; height: 2px;
+    background: var(--gold);
+    margin-top: 8px;
+  }
+  .doc-meta-top {
+    position: absolute; top: 28px; right: 40px;
+    text-align: right;
+    font-family: var(--mono); font-size: 8px;
+    letter-spacing: 0.1em; color: #888;
+    line-height: 1.7;
+  }
+  .doc-meta-num { color: var(--gold); font-size: 10px; margin-bottom: 2px; }
+
+  /* Title block */
+  .doc-title-block { padding: 22px 40px 0; text-align: center; }
+  .doc-title {
+    font-family: var(--condensed);
+    font-size: 46px; font-weight: 900;
+    letter-spacing: 0.08em; color: #0f0f0f;
+    line-height: 1;
+  }
+  .doc-title-rule {
+    display: flex; align-items: center;
+    gap: 10px; margin: 10px 0;
+  }
+  .doc-title-rule hr { flex: 1; border: 0; border-top: 1px solid var(--gold); }
+  .doc-prog-name {
+    font-family: var(--condensed); font-size: 13px;
+    font-weight: 700; letter-spacing: 0.2em;
+    color: var(--gold); text-transform: uppercase;
+    white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; max-width: 360px;
+  }
+  .doc-tagline {
+    font-size: 11px; color: #666;
+    line-height: 1.55; margin: 10px 0 0;
+    font-style: italic;
+  }
+  .doc-recipient {
+    display: inline-block;
+    margin-top: 10px;
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: 0.12em; color: #888;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border: 1px solid #e0e0e0;
+    border-radius: 2px;
+  }
+  .doc-recipient span { color: #0f0f0f; font-weight: 600; }
+
+  /* Stats bar */
+  .doc-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    margin: 20px 40px 0;
+    border-top: 1px solid #e5e5e5;
+    border-left: 1px solid #e5e5e5;
+  }
+  .doc-stat {
+    padding: 12px 10px;
+    border-right: 1px solid #e5e5e5;
+    border-bottom: 1px solid #e5e5e5;
+    text-align: center;
+  }
+
+  /* Section headings in doc */
+  .doc-section { padding: 18px 40px 0; }
+  .doc-section-title {
+    font-family: var(--condensed); font-size: 15px;
+    font-weight: 800; letter-spacing: 0.12em;
+    color: #0f0f0f; text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .doc-section-rule {
+    width: 28px; height: 2px;
+    background: var(--gold); margin-bottom: 10px;
+  }
+  .doc-section-text {
+    font-size: 10px; color: #555;
+    line-height: 1.6; overflow-wrap: break-word;
+  }
+
+  /* Session details box */
+  .doc-session-box {
+    background: #0f0f0f;
+    margin: 18px 40px 0;
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .doc-session-label {
+    font-family: var(--condensed); font-size: 8px;
+    font-weight: 700; letter-spacing: 0.18em;
+    color: var(--gold); text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .doc-session-val {
+    font-size: 10px; color: #fff;
+    font-weight: 500; line-height: 1.4;
+    overflow-wrap: break-word;
+  }
+
+  /* Packages */
+  .doc-packages { margin: 18px 40px 0; }
+  .doc-pkg-grid {
+    display: grid;
+    gap: 10px;
+  }
+  .doc-pkg-col { min-width: 0; }
+  .doc-pkg-head {
+    background: #0f0f0f;
+    padding: 10px 14px;
+  }
+  .doc-pkg-head-title {
+    font-family: var(--condensed); font-size: 13px;
+    font-weight: 800; letter-spacing: 0.1em;
+    color: var(--gold); text-transform: uppercase;
+  }
+  .doc-pkg-head-sub {
+    font-size: 8px; color: #aaa;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .doc-pkg-row {
+    display: flex; justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    background: #fff;
+  }
+  .doc-pkg-row:nth-child(even) { background: #f8f8f8; }
+  .doc-pkg-row:last-child { border-bottom: 0; }
+  .doc-pkg-name {
+    font-family: var(--condensed); font-size: 12px;
+    font-weight: 700; letter-spacing: 0.08em;
+    color: #0f0f0f; text-transform: uppercase;
+  }
+  .doc-pkg-participants {
+    font-size: 9px; color: #888;
+    margin-top: 1px;
+  }
+  .doc-pkg-price-block { text-align: right; }
+  .doc-pkg-currency {
+    font-family: var(--mono); font-size: 8px;
+    color: #888; letter-spacing: 0.08em;
+  }
+  .doc-pkg-price {
+    font-family: var(--condensed); font-size: 26px;
+    font-weight: 900; color: #0f0f0f;
+    line-height: 1;
+  }
+  .doc-pkg-per {
+    font-size: 7px; color: #aaa;
+    letter-spacing: 0.1em; text-transform: uppercase;
+  }
+
+  /* Notes */
+  .doc-notes { margin: 16px 40px 0; }
+  .doc-note-row {
+    display: flex; gap: 10px;
+    align-items: flex-start;
+    padding: 6px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .doc-note-row:last-child { border-bottom: 0; }
+  .doc-note-check {
+    width: 16px; height: 16px; flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+  }
+  .doc-note-check svg { width: 8px; height: 8px; }
+  .doc-note-text {
+    font-size: 9px; color: #555; line-height: 1.5;
+    overflow-wrap: break-word;
+  }
+
+  /* Doc footer */
+  .doc-footer {
+    background: #0f0f0f;
+    padding: 16px 40px;
+    margin-top: 24px;
+    display: flex; align-items: center;
+    justify-content: space-between;
+  }
+  .doc-footer-logo img {
+    height: 28px;
+    width: auto;
+    display: block;
+    object-fit: contain;
+  }
+  .doc-footer-divider {
+    width: 1px; height: 32px; background: var(--gold);
+  }
+  .doc-footer-tagline-main {
+    font-family: var(--condensed); font-size: 11px;
+    font-weight: 700; letter-spacing: 0.12em;
+    color: #fff; text-transform: uppercase;
+  }
+  .doc-footer-tagline-sub {
+    font-family: var(--condensed); font-size: 10px;
+    font-weight: 600; letter-spacing: 0.1em;
+    color: var(--gold); text-transform: uppercase;
+  }
+  .doc-founder {
+    font-family: var(--mono); font-size: 8px;
+    letter-spacing: 0.1em; color: #666;
+    text-transform: uppercase; text-align: right;
+  }
+  .doc-founder span { color: #aaa; }
+
+  /* ── DIALOG ── */
+  .dialog-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    z-index: 100; display: none;
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .dialog-backdrop.open { display: flex; }
+  .dialog {
+    background: var(--bg-card);
+    border: 1px solid var(--line-strong);
+    max-width: 480px; width: 100%; padding: 28px; border-radius: 4px;
+  }
+  .dialog h3 {
+    font-family: var(--condensed); font-size: 24px;
+    font-weight: 800; letter-spacing: 0.08em;
+    margin-bottom: 16px; text-transform: uppercase;
+  }
+  .saved-list { max-height: 320px; overflow-y: auto; margin-bottom: 16px; }
+  .saved-row {
+    display: flex; justify-content: space-between;
+    align-items: center; padding: 12px 0;
+    border-bottom: 1px solid var(--line); gap: 12px;
+  }
+  .saved-row-name {
+    font-family: var(--condensed); font-size: 15px;
+    font-weight: 700; letter-spacing: 0.04em;
+    color: var(--gold); text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .saved-row-meta {
+    font-family: var(--mono); font-size: 9px; color: var(--text-muted);
+  }
+  .saved-empty { text-align: center; padding: 32px 0; color: var(--text-muted); font-style: italic; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    background: var(--text); color: #0c0c0c;
+    padding: 10px 20px; font-family: var(--mono);
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    border-radius: 2px; opacity: 0;
+    pointer-events: none; transition: all 0.22s ease; z-index: 200;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+
+  /* Compact Mode to fit A4 */
+  .quote-doc.compact-mode {
+    min-height: 842px !important;
+  }
+  .quote-doc.compact-mode .doc-header {
+    padding: 16px 40px 10px !important;
+  }
+  .quote-doc.compact-mode .doc-logo img {
+    height: 32px !important;
+  }
+  .quote-doc.compact-mode .doc-logo-bar {
+    margin-top: 4px !important;
+  }
+  .quote-doc.compact-mode .doc-meta-top {
+    font-size: 7.5px !important;
+  }
+  .quote-doc.compact-mode .doc-title-block {
+    margin-top: 10px !important;
+  }
+  .quote-doc.compact-mode .doc-title {
+    font-size: 26px !important;
+  }
+  .quote-doc.compact-mode .doc-title-rule {
+    margin-top: 6px !important;
+  }
+  .quote-doc.compact-mode .doc-tagline {
+    font-size: 8.5px !important;
+    margin-top: 6px !important;
+  }
+  .quote-doc.compact-mode .doc-recipient {
+    margin-top: 8px !important;
+    padding: 4px 10px !important;
+  }
+  .quote-doc.compact-mode .doc-stats {
+    margin-top: 10px !important;
+  }
+  .quote-doc.compact-mode .doc-stat {
+    padding: 8px 6px !important;
+  }
+  .quote-doc.compact-mode .doc-session-box {
+    margin-top: 10px !important;
+    padding: 8px 16px !important;
+  }
+  .quote-doc.compact-mode .doc-section {
+    margin-top: 10px !important;
+    padding-top: 10px !important;
+  }
+  .quote-doc.compact-mode .doc-pkg-head {
+    padding: 8px 12px !important;
+  }
+  .quote-doc.compact-mode .doc-pkg-head-title {
+    font-size: 11px !important;
+  }
+  .quote-doc.compact-mode .doc-pkg-row {
+    padding: 8px 12px !important;
+  }
+  .quote-doc.compact-mode .doc-pkg-price {
+    font-size: 20px !important;
+  }
+  .quote-doc.compact-mode .doc-notes {
+    margin-top: 8px !important;
+  }
+  .quote-doc.compact-mode .doc-note-row {
+    padding: 3px 0 !important;
+  }
+  .quote-doc.compact-mode .doc-footer {
+    margin-top: 12px !important;
+    padding: 8px 40px !important;
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-logo"><img src="mitrixogymcrmlogo_white.png" alt="MITRIXOGYMCRM"></div>
+    <div class="brand-sep"></div>
+    <div class="brand-sub">Quote Builder</div>
+  </div>
+  <div class="actions">
+    <button class="btn-ghost" id="btn-load">Saved Quotes</button>
+    <button class="btn-ghost" id="btn-save">Save</button>
+    <button class="btn-ghost" id="btn-reset">Reset</button>
+    <button class="btn-primary" id="btn-pdf">Download PDF</button>
+  </div>
+</header>
+
+<main class="app-main">
+
+  <!-- FORM PANE -->
+  <section class="form-pane">
+
+    <div class="section">
+      <div class="section-label">Quote Type</div>
+      <div>
+        <label>Type</label>
+        <select id="f-quote-type">
+          <option value="Sports Program">Sports Program</option>
+          <option value="Discount Voucher Deals">Discount Voucher Deals</option>
+          <option value="Corporate Wellness">Corporate Wellness</option>
+          <option value="Sports Events">Sports Events</option>
+          <option value="Team Building">Team Building</option>
+          <option value="Compound Activations">Compound Activations</option>
+          <option value="School Programs">School Programs</option>
+          <option value="Kids Programs">Kids Programs</option>
+          <option value="Juniors Programs">Juniors Programs</option>
+          <option value="Self-Defense Workshops">Self-Defense Workshops</option>
+          <option value="Private Group Training">Private Group Training</option>
+          <option value="University Activations">University Activations</option>
+          <option value="Brand Activations">Brand Activations</option>
+          <option value="Ramadan Programs">Ramadan Programs</option>
+          <option value="Partnership Deals">Partnership Deals</option>
+          <option value="Sponsorship Proposals">Sponsorship Proposals</option>
+          <option value="Fighter Programs">Fighter Programs</option>
+          <option value="Advanced Training Programs">Advanced Training Programs</option>
+          <option value="Event Management">Event Management</option>
+          <option value="Coaching Services">Coaching Services</option>
+          <option value="Wellness Programs">Wellness Programs</option>
+          <option value="Corporate Event">Corporate Event</option>
+          <option value="Event">Event</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Program / Event Info</div>
+      <div class="field-grid">
+        <div class="field-full">
+          <label>Program Name</label>
+          <input id="f-prog-name" placeholder="Kids Boxing & Fitness Program">
+        </div>
+        <div class="field-full">
+          <label>Description</label>
+          <textarea id="f-prog-desc" placeholder="A safe, fun and professional training program..."></textarea>
+        </div>
+      </div>
+      <div style="margin-top: 14px;">
+        <label>Details / Metadata</label>
+        <div id="metadata-container"></div>
+        <button class="add-btn" id="btn-add-meta" type="button" style="margin-top: 8px;">+ Add Detail Row</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Schedule & Session Details</div>
+      <div class="field-grid three">
+        <div>
+          <label>Sessions / Days</label>
+          <input id="f-sessions-week" type="number" min="1" max="7" value="3">
+        </div>
+        <div>
+          <label>Show Frequency?</label>
+          <select id="f-show-freq">
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </div>
+        <div>
+          <label>Duration</label>
+          <input id="f-session-dur" placeholder="1 Hour 30 Minutes">
+        </div>
+        <div>
+          <label>Min Attendees</label>
+          <input id="f-min-pax" type="number" min="1" value="15">
+        </div>
+        <div>
+          <label>Max Attendees</label>
+          <input id="f-max-pax" type="number" min="1" value="20">
+        </div>
+        <div>
+          <label>Time Slot 1</label>
+          <input id="f-slot1" placeholder="09:00 AM – 10:30 AM">
+        </div>
+        <div class="field-full">
+          <label>Time Slot 2 (optional)</label>
+          <input id="f-slot2" placeholder="10:30 AM – 12:00 PM">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Client / Recipient</div>
+      <div class="field-grid">
+        <div>
+          <label>Organization / School</label>
+          <input id="f-org" placeholder="e.g. Cairo English School">
+        </div>
+        <div>
+          <label>Contact Name</label>
+          <input id="f-contact" placeholder="e.g. Ahmed Hassan">
+        </div>
+        <div class="field-full">
+          <label>Email / Contact</label>
+          <input id="f-email" placeholder="contact@school.com">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Quote Details</div>
+      <div class="field-grid three">
+        <div>
+          <label>Quote Number</label>
+          <input id="f-quote-num" placeholder="STR-2026-001">
+        </div>
+        <div>
+          <label>Date</label>
+          <input id="f-date" type="date">
+        </div>
+        <div>
+          <label>Valid Until</label>
+          <input id="f-valid" type="date">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Program Packages</div>
+      <div id="durations-container"></div>
+      <button class="add-btn add-duration-btn" id="btn-add-duration">+ Add Program Duration</button>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Pricing Settings</div>
+      <div class="field-grid">
+        <div>
+          <label>Currency</label>
+          <input id="f-currency" placeholder="EGP" value="EGP">
+        </div>
+        <div>
+          <label>Pricing Mode</label>
+          <select id="f-pricing-mode">
+            <option value="per_participant">Per Participant</option>
+            <option value="flat_rate">Flat Rate</option>
+          </select>
+        </div>
+        <div>
+          <label>Discount (%)</label>
+          <input id="f-discount" type="number" min="0" max="100" step="any" placeholder="0">
+        </div>
+        <div>
+          <label>Tax / VAT (%)</label>
+          <input id="f-tax" type="number" min="0" max="100" step="any" placeholder="0">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Footer Settings</div>
+      <div class="field-grid">
+        <div class="field-full">
+          <label>Tagline Line 1</label>
+          <input id="f-footer-tag1" placeholder="Building Stronger Kids,">
+        </div>
+        <div class="field-full">
+          <label>Tagline Line 2</label>
+          <input id="f-footer-tag2" placeholder="Inside & Outside The Ring.">
+        </div>
+        <div class="field-full">
+          <label>Contact Details</label>
+          <input id="f-footer-founder" placeholder="Shady Youssef">
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Notes</div>
+      <div id="notes-container"></div>
+      <button class="add-btn" id="btn-add-note">+ Add Note</button>
+    </div>
+
+  </section>
+
+  <!-- PREVIEW PANE -->
+  <aside class="preview-pane">
+    <div class="preview-label">
+      <span>PDF Preview</span>
+      <span>Auto-updating</span>
+    </div>
+    <div class="preview-frame">
+      <div class="quote-doc" id="quote-doc"></div>
+    </div>
+  </aside>
+</main>
+
+<!-- SAVED DIALOG -->
+<div class="dialog-backdrop" id="dlg-saved">
+  <div class="dialog">
+    <h3>Saved Quotes</h3>
+    <div class="saved-list" id="saved-list"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;">
+      <button id="dlg-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+const newId = () => Math.random().toString(36).slice(2, 8);
+
+const state = {
+  quote: { number: '', date: today(), valid: plusDays(30), type: 'Sports Program' },
+  program: {
+    name: 'Kids Boxing & Fitness Program',
+    description: 'A safe, fun and professional training program designed to build stronger kids — physically, mentally and socially.',
+    metadata: [
+      { id: newId(), key: 'Age Group', value: 'Children Groups' },
+      { id: newId(), key: 'Location', value: 'mitrixogymcrm Facility' },
+      { id: newId(), key: 'Supervision', value: 'Full Supervision & Care' }
+    ]
+  },
+  schedule: {
+    showFrequency: true,
+    sessionsPerWeek: 3,
+    sessionDuration: '1 Hour 30 Minutes',
+    minParticipants: 15,
+    maxParticipants: 20,
+    slot1: '09:00 AM – 10:30 AM',
+    slot2: '10:30 AM – 12:00 PM'
+  },
+  client: { organization: '', contact: '', email: '' },
+  pricing: {
+    currency: 'EGP',
+    mode: 'per_participant',
+    discountPercent: 0,
+    taxPercent: 0
+  },
+  durations: [
+    {
+      id: newId(), label: '1 Month Program',
+      packages: [
+        { id: newId(), name: 'Package A', participants: 20, price: 1850 },
+        { id: newId(), name: 'Package B', participants: 15, price: 2200 }
+      ]
+    },
+    {
+      id: newId(), label: '3 Months Program',
+      packages: [
+        { id: newId(), name: 'Package A', participants: 20, price: 3900 },
+        { id: newId(), name: 'Package B', participants: 15, price: 4100 }
+      ]
+    }
+  ],
+  notes: [
+    { id: newId(), text: 'Pricing includes coaching, supervision and station setup.' },
+    { id: newId(), text: 'Sessions are scheduled upon agreement and availability.' },
+    { id: newId(), text: "All training activities are adapted to children's age and level." },
+    { id: newId(), text: 'Non-refundable after program confirmation.' }
+  ],
+  footer: {
+    tagline1: 'Building Stronger Kids,',
+    tagline2: 'Inside & Outside The Ring.',
+    founder: 'Shady Youssef'
+  }
+};
+
+function migrateState(s) {
+  if (!s) return;
+  // Ensure program metadata is created from older flat fields if they exist
+  if (s.program) {
+    if (s.program.ageGroup !== undefined) {
+      if (!s.program.metadata) {
+        s.program.metadata = [
+          { id: newId(), key: 'Age Group', value: s.program.ageGroup || '' },
+          { id: newId(), key: 'Location', value: s.program.location || '' },
+          { id: newId(), key: 'Supervision', value: s.program.supervision || '' }
+        ];
+      }
+      delete s.program.ageGroup;
+      delete s.program.location;
+      delete s.program.supervision;
+    }
+    if (!s.program.metadata) {
+      s.program.metadata = [];
+    }
+  }
+
+  // Ensure pricing exists
+  if (!s.pricing) {
+    s.pricing = {
+      currency: 'EGP',
+      mode: 'per_participant',
+      discountPercent: 0,
+      taxPercent: 0
+    };
+  }
+
+  // Ensure footer tagline & founder settings exist
+  if (!s.footer) {
+    s.footer = {
+      tagline1: 'Building Stronger Kids,',
+      tagline2: 'Inside & Outside The Ring.',
+      founder: s.founder || 'Shady Youssef'
+    };
+    delete s.founder;
+  }
+
+  // Ensure showFrequency exists
+  if (s.schedule && s.schedule.showFrequency === undefined) {
+    s.schedule.showFrequency = true;
+  }
+}
+
+function calcPackage(price, participants) {
+  const currency = state.pricing?.currency || 'EGP';
+  const mode = state.pricing?.mode || 'per_participant';
+  const discountPct = parseFloat(state.pricing?.discountPercent) || 0;
+  const taxPct = parseFloat(state.pricing?.taxPercent) || 0;
+
+  const rate = price;
+  let subtotal = 0;
+  if (mode === 'per_participant') {
+    subtotal = price * participants;
+  } else {
+    subtotal = price;
+  }
+
+  const discountAmount = subtotal * (discountPct / 100);
+  const taxedBase = subtotal - discountAmount;
+  const taxAmount = taxedBase * (taxPct / 100);
+  const total = taxedBase + taxAmount;
+
+  return {
+    rate,
+    subtotal,
+    discountAmount,
+    taxAmount,
+    total,
+    currency,
+    mode,
+    discountPct,
+    taxPct
+  };
+}
+
+function today() { return new Date().toISOString().slice(0, 10); }
+function plusDays(n) { return new Date(Date.now() + n * 86400000).toISOString().slice(0, 10); }
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return iso;
+  return `${d.getDate()} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]} ${d.getFullYear()}`;
+}
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ═══════════════════════════════════════════
+   STORAGE (artifact + local fallback)
+═══════════════════════════════════════════ */
+const Store = {
+  async get(k) {
+    try { if (window.storage?.get) { const r = await window.storage.get(k); return r ? JSON.parse(r.value) : null; } } catch {}
+    try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; }
+  },
+  async set(k, v) {
+    const s = JSON.stringify(v);
+    try { if (window.storage?.set) return await window.storage.set(k, s); } catch {}
+    try { localStorage.setItem(k, s); } catch {}
+  },
+  async delete(k) {
+    try { if (window.storage?.delete) return await window.storage.delete(k); } catch {}
+    try { localStorage.removeItem(k); } catch {}
+  },
+  async list(prefix = '') {
+    try { if (window.storage?.list) { const r = await window.storage.list(prefix); return r?.keys || []; } } catch {}
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i); if (k?.startsWith(prefix)) keys.push(k);
+      } return keys;
+    } catch { return []; }
+  }
+};
+
+/* ═══════════════════════════════════════════
+   QUOTE NUMBER
+═══════════════════════════════════════════ */
+async function genQuoteNum() {
+  const yr = new Date().getFullYear();
+  const pfx = `STR-${yr}-`;
+  const keys = await Store.list('sqt:');
+  let max = 0;
+  for (const k of keys) {
+    const q = await Store.get(k);
+    if (q?.quote?.number?.startsWith(pfx)) {
+      const n = parseInt(q.quote.number.slice(pfx.length), 10);
+      if (!isNaN(n) && n > max) max = n;
+    }
+  }
+  return pfx + String(max + 1).padStart(3, '0');
+}
+
+/* ═══════════════════════════════════════════
+   RENDER — DURATIONS + PACKAGES
+═══════════════════════════════════════════ */
+function renderDurations() {
+  const el = document.getElementById('durations-container');
+  el.innerHTML = '';
+  state.durations.forEach((dur, di) => {
+    const block = document.createElement('div');
+    block.className = 'duration-block';
+
+    const pkgRows = dur.packages.map((pkg, pi) => `
+      <div class="pkg-row" data-dur="${dur.id}" data-pkg="${pkg.id}">
+        <input class="pkg-name" placeholder="Package A" value="${esc(pkg.name)}">
+        <input class="pkg-pax num" type="number" min="1" placeholder="20" value="${pkg.participants}">
+        <input class="pkg-price num" type="number" min="0" placeholder="1850" value="${pkg.price}">
+        <button class="btn-icon pkg-remove" data-dur="${dur.id}" data-pkg="${pkg.id}" title="Remove">✕</button>
+      </div>
+    `).join('');
+
+    block.innerHTML = `
+      <div class="duration-header">
+        <input class="duration-title" data-dur="${dur.id}" value="${esc(dur.label)}" placeholder="1 Month Program"
+          style="background:transparent;border:0;border-bottom:1px solid #333;color:var(--gold);
+            font-family:var(--condensed);font-size:15px;font-weight:700;letter-spacing:0.08em;
+            text-transform:uppercase;padding:2px 0;width:calc(100% - 40px);">
+        <button class="btn-icon dur-remove" data-dur="${dur.id}" title="Remove duration">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 80px 100px 32px;gap:10px;margin-bottom:6px;">
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;color:var(--text-muted);text-transform:uppercase;">PACKAGE</div>
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;color:var(--text-muted);text-align:right;text-transform:uppercase;">PAX</div>
+        <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.1em;color:var(--text-muted);text-align:right;text-transform:uppercase;">PRICE (${esc(state.pricing?.currency || 'EGP')})</div>
+        <div></div>
+      </div>
+      ${pkgRows}
+      <button class="add-btn add-pkg-btn" data-dur="${dur.id}">+ Add Package Tier</button>
+    `;
+    el.appendChild(block);
+  });
+
+  // Wire up events
+  el.querySelectorAll('.duration-title').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const id = e.target.dataset.dur;
+      const d = state.durations.find(d => d.id === id);
+      if (d) d.label = e.target.value;
+      renderPreview();
+    });
+  });
+  el.querySelectorAll('.dur-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const id = e.currentTarget.dataset.dur;
+      state.durations = state.durations.filter(d => d.id !== id);
+      renderDurations(); renderPreview();
+    });
+  });
+  el.querySelectorAll('.pkg-name').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const row = e.target.closest('.pkg-row');
+      getPkg(row.dataset.dur, row.dataset.pkg, pkg => pkg.name = e.target.value);
+      renderPreview();
+    });
+  });
+  el.querySelectorAll('.pkg-pax').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const row = e.target.closest('.pkg-row');
+      getPkg(row.dataset.dur, row.dataset.pkg, pkg => pkg.participants = parseInt(e.target.value) || 0);
+      renderPreview();
+    });
+  });
+  el.querySelectorAll('.pkg-price').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const row = e.target.closest('.pkg-row');
+      getPkg(row.dataset.dur, row.dataset.pkg, pkg => pkg.price = parseFloat(e.target.value) || 0);
+      renderPreview();
+    });
+  });
+  el.querySelectorAll('.pkg-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const { dur, pkg } = e.currentTarget.dataset;
+      const d = state.durations.find(d => d.id === dur);
+      if (d) d.packages = d.packages.filter(p => p.id !== pkg);
+      renderDurations(); renderPreview();
+    });
+  });
+  el.querySelectorAll('.add-pkg-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const id = e.currentTarget.dataset.dur;
+      const d = state.durations.find(d => d.id === id);
+      if (d) d.packages.push({ id: newId(), name: 'Package', participants: 20, price: 0 });
+      renderDurations(); renderPreview();
+    });
+  });
+}
+
+function renderMetadata() {
+  const el = document.getElementById('metadata-container');
+  if (!el) return;
+  el.innerHTML = '';
+  
+  if (!state.program.metadata || state.program.metadata.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-style:italic;font-size:12px;padding:8px 0;">No details added. Click "+ Add Detail Row" to add one.</div>';
+    return;
+  }
+
+  state.program.metadata.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'meta-row';
+    row.dataset.id = item.id;
+    row.innerHTML = `
+      <input class="meta-key" placeholder="Label (e.g. Age Group)" value="${esc(item.key)}">
+      <input class="meta-val" placeholder="Value (e.g. Children Groups)" value="${esc(item.value)}">
+      <button class="btn-icon meta-remove" data-id="${item.id}" title="Remove">✕</button>
+    `;
+    el.appendChild(row);
+  });
+
+  // Wire up events
+  el.querySelectorAll('.meta-key').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const row = e.target.closest('.meta-row');
+      const id = row.dataset.id;
+      const item = state.program.metadata.find(m => m.id === id);
+      if (item) item.key = e.target.value;
+      renderPreview();
+    });
+  });
+
+  el.querySelectorAll('.meta-val').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const row = e.target.closest('.meta-row');
+      const id = row.dataset.id;
+      const item = state.program.metadata.find(m => m.id === id);
+      if (item) item.value = e.target.value;
+      renderPreview();
+    });
+  });
+
+  el.querySelectorAll('.meta-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const id = e.currentTarget.dataset.id;
+      state.program.metadata = state.program.metadata.filter(m => m.id !== id);
+      renderMetadata();
+      renderPreview();
+    });
+  });
+}
+
+function getPkg(durId, pkgId, fn) {
+  const d = state.durations.find(d => d.id === durId);
+  if (d) { const p = d.packages.find(p => p.id === pkgId); if (p) fn(p); }
+}
+
+/* ═══════════════════════════════════════════
+   RENDER — NOTES
+═══════════════════════════════════════════ */
+function renderNotes() {
+  const el = document.getElementById('notes-container');
+  el.innerHTML = '';
+  state.notes.forEach(note => {
+    const row = document.createElement('div');
+    row.className = 'note-row';
+    row.innerHTML = `
+      <textarea data-id="${note.id}" placeholder="Add a note…">${esc(note.text)}</textarea>
+      <button class="btn-icon note-remove" data-id="${note.id}" title="Remove">✕</button>
+    `;
+    el.appendChild(row);
+  });
+  el.querySelectorAll('textarea').forEach(t => {
+    autoSize(t);
+    t.addEventListener('input', e => {
+      const n = state.notes.find(n => n.id === e.target.dataset.id);
+      if (n) n.text = e.target.value;
+      autoSize(t); renderPreview();
+    });
+  });
+  el.querySelectorAll('.note-remove').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const id = e.currentTarget.dataset.id;
+      state.notes = state.notes.filter(n => n.id !== id);
+      renderNotes(); renderPreview();
+    });
+  });
+}
+
+function autoSize(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+
+/* ═══════════════════════════════════════════
+   RENDER — HTML PREVIEW
+═══════════════════════════════════════════ */
+function renderPreview() {
+  const el = document.getElementById('quote-doc');
+  const s = state;
+  const slots = [s.schedule.slot1, s.schedule.slot2].filter(x => x && x.trim());
+  const recipient = s.client.organization || s.client.contact;
+
+  // Package grid columns
+  const numDur = s.durations.length;
+  const pkgGridStyle = `grid-template-columns: repeat(${Math.min(numDur, 3)}, 1fr);`;
+
+  const pkgCols = s.durations.map(dur => `
+    <div class="doc-pkg-col">
+      <div class="doc-pkg-head">
+        <div class="doc-pkg-head-title">${esc(dur.label)}</div>
+        ${s.schedule.showFrequency !== false ? `<div class="doc-pkg-head-sub">${s.schedule.sessionsPerWeek} Sessions Per Week</div>` : ''}
+      </div>
+      ${dur.packages.map(pkg => {
+        const math = calcPackage(pkg.price, pkg.participants);
+        const hasDiscount = math.discountPct > 0;
+        const hasTax = math.taxPct > 0;
+        const currency = math.currency;
+
+        let receiptHtml = '';
+        if (hasDiscount || hasTax || math.mode === 'per_participant') {
+          const lines = [];
+          const padL = (label, val, len = 22) => {
+            const spaces = len - label.length - val.length;
+            return label + ' '.repeat(Math.max(1, spaces)) + val;
+          };
+
+          if (math.mode === 'per_participant') {
+            lines.push(padL('RATE', `${math.rate.toLocaleString()} ${currency}`));
+            lines.push(padL('QTY', `${pkg.participants} pax`));
+          }
+          lines.push(padL('SUBTOTAL', `${math.subtotal.toLocaleString()} ${currency}`));
+          if (hasDiscount) {
+            lines.push(padL(`DISC (${math.discountPct}%)`, `-${math.discountAmount.toLocaleString()} ${currency}`));
+          }
+          if (hasTax) {
+            lines.push(padL(`TAX (${math.taxPct}%)`, `+${math.taxAmount.toLocaleString()} ${currency}`));
+          }
+          lines.push('-'.repeat(22));
+          lines.push(padL('TOTAL', `${math.total.toLocaleString()} ${currency}`));
+
+          receiptHtml = `
+            <div style="font-family:var(--mono);font-size:8px;line-height:1.3;background:#fafafa;
+              border:1px dashed #ccc;padding:6px 8px;margin-top:8px;color:#333;white-space:pre;">${lines.join('\n')}</div>
+          `;
+        }
+
+        const formattedPrice = math.mode === 'per_participant' 
+          ? math.rate.toLocaleString('en-US') 
+          : math.total.toLocaleString('en-US');
+
+        const perLabel = math.mode === 'per_participant' ? 'Per Participant' : 'Flat Rate';
+
+        return `
+          <div class="doc-pkg-row" style="flex-direction:column;align-items:stretch;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div class="doc-pkg-name">${esc(pkg.name)}</div>
+                <div class="doc-pkg-participants">${pkg.participants} Participants</div>
+              </div>
+              <div class="doc-pkg-price-block">
+                <div class="doc-pkg-currency">${esc(currency)}</div>
+                <div class="doc-pkg-price">${formattedPrice}</div>
+                <div class="doc-pkg-per">${perLabel}</div>
+              </div>
+            </div>
+            ${receiptHtml}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `).join('');
+
+  const notesHtml = s.notes.filter(n => n.text.trim()).map(n => `
+    <div class="doc-note-row">
+      <div class="doc-note-check">
+        <svg viewBox="0 0 8 6" fill="none"><path d="M1 3l2 2 4-4" stroke="#0f0f0f" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="doc-note-text">${esc(n.text)}</div>
+    </div>
+  `).join('');
+
+  // Assemble dynamic metadata details
+  const statsList = [];
+  if (s.program.metadata) {
+    s.program.metadata.forEach(m => {
+      if (m.key?.trim()) {
+        statsList.push({ label: m.key, val: m.value });
+      }
+    });
+  }
+  if (s.schedule.showFrequency !== false) {
+    statsList.push({ label: 'Frequency', val: `${s.schedule.sessionsPerWeek} Sessions Per Week` });
+  }
+
+  const statsHtml = statsList.map(st => `
+    <div class="doc-stat">
+      <div style="font-family:var(--condensed);font-size:8px;font-weight:700;letter-spacing:0.2em;color:var(--gold);text-transform:uppercase;margin-bottom:4px;">${esc(st.label)}</div>
+      <div class="doc-stat-val">${esc(st.val || '—')}</div>
+    </div>
+  `).join('');
+
+  const quoteTypeLabel = s.quote.type || 'Quotation';
+
+  el.innerHTML = `
+    <div class="doc-header">
+      <div class="doc-logo"><img src="mitrixogymcrmlogo_white.png" alt="MITRIXOGYMCRM"></div>
+      <div class="doc-logo-bar"></div>
+      <div class="doc-meta-top">
+        <div class="doc-meta-num">${esc(s.quote.number || 'STR-2026-—')}</div>
+        <div style="color:#fff;font-weight:600;">${esc(quoteTypeLabel).toUpperCase()}</div>
+        <div>Issued · ${fmtDate(s.quote.date)}</div>
+        <div>Valid · ${fmtDate(s.quote.valid)}</div>
+      </div>
+    </div>
+
+    <div class="doc-title-block">
+      <div class="doc-title">QUOTATION</div>
+      <div class="doc-title-rule">
+        <hr>
+        <div class="doc-prog-name">${esc(s.program.name || 'Program Name')}</div>
+        <hr>
+      </div>
+      ${s.program.description ? `<div class="doc-tagline">${esc(s.program.description)}</div>` : ''}
+      ${recipient ? `<div class="doc-recipient">Prepared for: <span>${esc(recipient)}</span></div>` : ''}
+      ${s.client.email ? `<div style="font-family:var(--mono);font-size:8px;color:#888;margin-top:4px;">${esc(s.client.email)}</div>` : ''}
+    </div>
+
+    <div class="doc-stats" style="grid-template-columns: repeat(${Math.max(1, Math.min(3, statsList.length))}, 1fr);">
+      ${statsHtml}
+    </div>
+
+    <div class="doc-session-box">
+      <div>
+        <div class="doc-session-label">Session Duration</div>
+        <div class="doc-session-val">${esc(s.schedule.sessionDuration || '—').toUpperCase()}</div>
+      </div>
+      <div>
+        <div class="doc-session-label">Available Time Slots</div>
+        <div class="doc-session-val">${slots.map(esc).join('<br>') || '—'}</div>
+      </div>
+      <div>
+        <div class="doc-session-label">Group Size</div>
+        <div class="doc-session-val">Min ${s.schedule.minParticipants} – Max ${s.schedule.maxParticipants} Participants</div>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <div class="doc-section-title">Program Packages</div>
+      <div class="doc-section-rule"></div>
+    </div>
+    <div class="doc-packages">
+      <div class="doc-pkg-grid" style="${pkgGridStyle}">
+        ${pkgCols || '<div style="color:#aaa;font-size:11px;padding:12px 0;">No packages added yet.</div>'}
+      </div>
+    </div>
+
+    ${s.notes.some(n => n.text.trim()) ? `
+      <div class="doc-section" style="margin-top:16px;">
+        <div class="doc-section-title">Notes</div>
+        <div class="doc-section-rule"></div>
+      </div>
+      <div class="doc-notes">${notesHtml}</div>
+    ` : ''}
+
+    <div class="doc-footer">
+      <div class="doc-footer-logo"><img src="mitrixogymcrmlogo_white.png" alt="MITRIXOGYMCRM"></div>
+      <div class="doc-footer-divider"></div>
+      <div class="doc-footer-tagline">
+        <div class="doc-footer-tagline-main">${esc(s.footer.tagline1)}</div>
+        <div class="doc-footer-tagline-sub">${esc(s.footer.tagline2)}</div>
+      </div>
+      ${s.footer.founder ? `
+        <div class="doc-founder">
+          Contact Details<br><span>${esc(s.footer.founder)}</span>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  requestAnimationFrame(scalePreview);
+}
+
+function scalePreview() {
+  const frame = document.querySelector('.preview-frame');
+  const doc   = document.getElementById('quote-doc');
+  if (!frame || !doc) return;
+  doc.style.transform = '';
+  const docH = doc.offsetHeight || 842;
+  const pane = frame.parentElement;
+  const paneW = pane.clientWidth - 48;
+  const scale = Math.min(1, paneW / 595);
+  if (scale < 1) {
+    doc.style.transform = `scale(${scale})`;
+    frame.style.height = Math.round(docH * scale) + 'px';
+  } else {
+    frame.style.height = '';
+  }
+  frame.style.width = Math.min(paneW, 595) + 'px';
+}
+
+window.addEventListener('resize', scalePreview);
+
+/* ═══════════════════════════════════════════
+   PDF GENERATION — native jsPDF
+═══════════════════════════════════════════ */
+async function downloadPDF() {
+  const btn = document.getElementById('btn-pdf');
+  const orig = btn.textContent; btn.textContent = 'Generating…'; btn.disabled = true;
+  try {
+    if (!window.jspdf?.jsPDF) throw new Error('jsPDF library not loaded');
+    if (!window.html2canvas) throw new Error('html2canvas library not loaded');
+
+    const docElement = document.getElementById('quote-doc');
+    if (!docElement) throw new Error('Quote preview document element not found');
+
+    // Temporarily reset transform so html2canvas captures the full, un-scaled doc
+    const originalTransform = docElement.style.transform;
+    docElement.style.transform = 'none';
+
+    // Apply compact mode if the natural scrollHeight exceeds 842px
+    const needsCompact = docElement.scrollHeight > 842;
+    if (needsCompact) {
+      docElement.classList.add('compact-mode');
+    }
+
+    // Ensure logo base64 is available (may not be ready if download clicked very quickly)
+    if (!window._logoB64) {
+      try {
+        window._logoB64 = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          fetch('mitrixogymcrmlogo_white.png').then(res => res.blob()).then(blob => {
+            r.onload = e => resolve(e.target.result);
+            r.onerror = reject;
+            r.readAsDataURL(blob);
+          }).catch(reject);
+        });
+      } catch { /* will capture without logo swap */ }
+    }
+
+    // Swap all <img> srcs to base64 to prevent canvas tainting (CORS)
+    const imgs = Array.from(docElement.querySelectorAll('img'));
+    const originalSrcs = imgs.map(img => img.src);
+    if (window._logoB64) imgs.forEach(img => { img.src = window._logoB64; });
+
+    // Small delay to let the browser paint the swapped images
+    await new Promise(r => setTimeout(r, 80));
+
+    // Capture the full document at high DPI
+    const canvas = await html2canvas(docElement, {
+      scale: 2,
+      useCORS: false,
+      allowTaint: false,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: 595,
+      windowWidth: 595
+    });
+
+    // Restore original image srcs
+    imgs.forEach((img, i) => { img.src = originalSrcs[i]; });
+
+    // Restore scale and remove compact mode
+    docElement.classList.remove('compact-mode');
+    docElement.style.transform = originalTransform;
+    scalePreview();
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
+    const { jsPDF } = window.jspdf;
+
+    const ptWidth  = 595.28;  // A4 width in pt
+    const ptHeight = 841.89;  // A4 height in pt
+
+    // Full height proportional to canvas aspect ratio
+    const naturalHeightPt = (canvas.height / canvas.width) * ptWidth;
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'pt',
+      format: 'a4',
+      compress: true
+    });
+
+    // Scale to fit exactly 1 A4 page
+    let finalW = ptWidth;
+    let finalH = naturalHeightPt;
+    let xOffset = 0;
+    let yOffset = 0;
+
+    if (naturalHeightPt > ptHeight) {
+      const scale = ptHeight / naturalHeightPt;
+      finalW = ptWidth * scale;
+      finalH = ptHeight;
+      xOffset = (ptWidth - finalW) / 2;
+    }
+
+    pdf.addImage(imgData, 'JPEG', xOffset, yOffset, finalW, finalH, undefined, 'FAST');
+
+    const safeName = (state.client.organization || state.program.name || 'mitrixogymcrm')
+      .replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    const num = (state.quote.number || 'quote').replace(/[^a-z0-9-]/gi, '');
+
+    // pdf.save() triggers a proper named download — no blob URL needed
+    pdf.save(`MITRIXOGYMCRM_${num}_${safeName}.pdf`);
+
+    showToast('PDF Downloaded');
+  } catch (err) {
+    console.error(err);
+    showToast('Error: ' + err.message);
+  } finally {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
+function drawPDF(pdf) {
+  const W = 595.28, H = 841.89;
+  const ML = 42, MR = 42, MT = 0, MB = 48;
+  const CW = W - ML - MR;
+
+  // Color helpers
+  const gold    = [229, 229, 229];
+  const black   = [15, 15, 15];
+  const white   = [255, 255, 255];
+  const gray    = [102, 102, 102];
+  const ltGray  = [235, 235, 235];
+  const altRow  = [248, 248, 248];
+  const darkBg  = [20, 20, 20];
+
+  // ── HEADER BAR ──
+  pdf.setFillColor(...darkBg); pdf.rect(0, 0, W, 90, 'F');
+
+  // MITRIXOGYMCRM logo image
+  const logoX = ML, logoY = 18;
+  if (window._logoB64) {
+    pdf.addImage(window._logoB64, 'PNG', logoX, logoY, 0, 44);
+  } else {
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(32); pdf.setTextColor(...white);
+    let cx = logoX;
+    for (const ch of 'MITRIXOGYMCRM') { pdf.text(ch, cx, 50); cx += pdf.getTextWidth(ch) + 3.2; }
+  }
+
+  // Gold bar under logo
+  pdf.setFillColor(...gold); pdf.rect(logoX, logoY + 48, 48, 2, 'F');
+
+  // Quote meta — top right
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10);
+  pdf.setTextColor(...gold);
+  pdf.text(state.quote.number || 'STR-2026-—', W - MR, 30, { align: 'right' });
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(180, 180, 180);
+  pdf.text(`Issued · ${fmtDate(state.quote.date)}`, W - MR, 44, { align: 'right' });
+  pdf.text(`Valid until · ${fmtDate(state.quote.valid)}`, W - MR, 56, { align: 'right' });
+
+  let y = 110;
+
+  // ── QUOTATION TITLE ──
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(38);
+  pdf.setTextColor(...black);
+  pdf.text('QUOTATION', W / 2, y, { align: 'center' });
+  y += 12;
+
+  // Gold rule with program name
+  const pn = (state.program.name || 'Program').toUpperCase();
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(...gold);
+  const pnW = pdf.getTextWidth(pn);
+  const ruleGap = 10;
+  const ruleY = y + 4;
+  pdf.setDrawColor(...gold); pdf.setLineWidth(0.8);
+  pdf.line(ML, ruleY, W / 2 - pnW / 2 - ruleGap, ruleY);
+  pdf.text(pn, W / 2, ruleY + 3, { align: 'center' });
+  pdf.line(W / 2 + pnW / 2 + ruleGap, ruleY, W - MR, ruleY);
+  y += 18;
+
+  // Description
+  if (state.program.description) {
+    pdf.setFont('helvetica', 'italic'); pdf.setFontSize(10); pdf.setTextColor(...gray);
+    const descL = pdf.splitTextToSize(state.program.description, CW * 0.78);
+    pdf.text(descL, W / 2, y, { align: 'center' });
+    y += descL.length * 13 + 6;
+  }
+
+  // Issued to box
+  const recipient = state.client.organization || state.client.contact;
+  if (recipient) {
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); pdf.setTextColor(...gray);
+    const isTxt = `Prepared for: `;
+    const isTxtW = pdf.getTextWidth(isTxt);
+    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...black);
+    const recW = pdf.getTextWidth(recipient.toUpperCase());
+    const totalW = isTxtW + recW + 28;
+    const bx = (W - totalW) / 2;
+    pdf.setDrawColor(...ltGray); pdf.setLineWidth(0.5);
+    pdf.rect(bx, y, totalW, 18, 'S');
+    pdf.setFont('helvetica', 'normal'); pdf.setTextColor(...gray);
+    pdf.text(isTxt, bx + 14, y + 12);
+    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...black);
+    pdf.text(recipient.toUpperCase(), bx + 14 + isTxtW, y + 12);
+    y += 26;
+  }
+
+  y += 10;
+
+  // ── DYNAMIC STATS GRID (3 COLUMNS) ──
+  const stats = [];
+  if (state.program.metadata) {
+    state.program.metadata.forEach(m => {
+      if (m.key?.trim()) {
+        stats.push({ label: m.key.toUpperCase(), val: m.value || '—' });
+      }
+    });
+  }
+  if (state.schedule.showFrequency !== false) {
+    stats.push({ label: 'FREQUENCY', val: `${state.schedule.sessionsPerWeek} Sessions Per Week` });
+  }
+
+  const numCols = Math.max(1, Math.min(3, stats.length));
+  const colW = CW / numCols;
+  const statRowH = 38;
+  const rowsCount = Math.ceil(stats.length / numCols);
+  const gridH = rowsCount * statRowH;
+
+  pdf.setDrawColor(...ltGray); pdf.setLineWidth(0.5);
+  pdf.rect(ML, y, CW, gridH, 'S');
+
+  stats.forEach((s, idx) => {
+    const r = Math.floor(idx / numCols);
+    const c = idx % numCols;
+
+    const cellX = ML + c * colW;
+    const cellY = y + r * statRowH;
+
+    if (c < numCols - 1) {
+      pdf.line(cellX + colW, cellY, cellX + colW, cellY + statRowH);
+    }
+    if (r < rowsCount - 1) {
+      pdf.line(cellX, cellY + statRowH, cellX + colW, cellY + statRowH);
+    }
+
+    const sx = cellX + colW / 2;
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7); pdf.setTextColor(...gold);
+    pdf.text(s.label, sx, cellY + 13, { align: 'center' });
+
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); pdf.setTextColor(...black);
+    const vl = pdf.splitTextToSize(s.val, colW - 12);
+    pdf.text(vl[0] || '', sx, cellY + 25, { align: 'center' });
+    if (vl[1]) {
+      pdf.text(vl[1], sx, cellY + 33, { align: 'center' });
+    }
+  });
+  y += gridH + 16;
+
+  // ── SESSION DETAILS BOX ──
+  const sessionH = 56;
+  pdf.setFillColor(...darkBg); pdf.rect(ML, y, CW, sessionH, 'F');
+  const scols = [
+    { label: 'SESSION DURATION', val: (state.schedule.sessionDuration || '—').toUpperCase() },
+    { label: 'AVAILABLE TIME SLOTS', val: [state.schedule.slot1, state.schedule.slot2].filter(s => s?.trim()).join('   /   ') || '—' },
+    { label: 'GROUP SIZE', val: `Min ${state.schedule.minParticipants} – Max ${state.schedule.maxParticipants}` }
+  ];
+  const sColW = CW / 3;
+  scols.forEach((sc, i) => {
+    const sx = ML + sColW * i + 12;
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7); pdf.setTextColor(...gold);
+    pdf.text(sc.label, sx, y + 18);
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9.5); pdf.setTextColor(...white);
+    const vl = pdf.splitTextToSize(sc.val, sColW - 16);
+    pdf.text(vl, sx, y + 34);
+  });
+  y += sessionH + 22;
+
+  // ── PACKAGES ──
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13);
+  pdf.setTextColor(...black); pdf.text('PROGRAM PACKAGES', ML, y);
+  y += 5; pdf.setFillColor(...gold); pdf.rect(ML, y, 28, 2, 'F'); y += 14;
+
+  const numDur = state.durations.length;
+  if (numDur > 0) {
+    const durW = (CW - (numDur - 1) * 10) / numDur;
+    const hasFreq = state.schedule.showFrequency !== false;
+    const headH = hasFreq ? 30 : 22;
+    let colMaxY = y + headH;
+
+    state.durations.forEach((dur, di) => {
+      const dx = ML + di * (durW + 10);
+      // Header
+      pdf.setFillColor(...darkBg); pdf.rect(dx, y, durW, headH, 'F');
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); pdf.setTextColor(...gold);
+      pdf.text(dur.label.toUpperCase(), dx + durW / 2, y + (hasFreq ? 14 : 15), { align: 'center' });
+      if (hasFreq) {
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(180, 180, 180);
+        pdf.text(`${state.schedule.sessionsPerWeek} SESSIONS PER WEEK`, dx + durW / 2, y + 25, { align: 'center' });
+      }
+
+      let py = y + headH;
+      dur.packages.forEach((pkg, pi) => {
+        const math = calcPackage(pkg.price, pkg.participants);
+        const hasDiscount = math.discountPct > 0;
+        const hasTax = math.taxPct > 0;
+        const currency = math.currency;
+
+        let receiptLines = [];
+        if (hasDiscount || hasTax || math.mode === 'per_participant') {
+          const padL = (label, val, len = 22) => {
+            const spaces = len - label.length - val.length;
+            return label + ' '.repeat(Math.max(1, spaces)) + val;
+          };
+          if (math.mode === 'per_participant') {
+            receiptLines.push(padL('RATE', `${math.rate.toLocaleString()} ${currency}`));
+            receiptLines.push(padL('QTY', `${pkg.participants} pax`));
+          }
+          receiptLines.push(padL('SUBTOTAL', `${math.subtotal.toLocaleString()} ${currency}`));
+          if (hasDiscount) {
+            receiptLines.push(padL(`DISC (${math.discountPct}%)`, `-${math.discountAmount.toLocaleString()} ${currency}`));
+          }
+          if (hasTax) {
+            receiptLines.push(padL(`TAX (${math.taxPct}%)`, `+${math.taxAmount.toLocaleString()} ${currency}`));
+          }
+          receiptLines.push('-'.repeat(22));
+          receiptLines.push(padL('TOTAL', `${math.total.toLocaleString()} ${currency}`));
+        }
+
+        const hasReceipt = receiptLines.length > 0;
+        const cardH = hasReceipt ? 46 + receiptLines.length * 9.5 + 14 : 46;
+
+        pdf.setFillColor(...(pi % 2 === 0 ? altRow : white));
+        pdf.rect(dx, py, durW, cardH, 'F');
+        pdf.setDrawColor(...ltGray); pdf.setLineWidth(0.4);
+        pdf.rect(dx, py, durW, cardH, 'S');
+
+        // Name + pax
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5); pdf.setTextColor(...black);
+        pdf.text(pkg.name.toUpperCase(), dx + 10, py + 16);
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(...gray);
+        pdf.text(`${pkg.participants} Participants`, dx + 10, py + 28);
+
+        // Price
+        const formattedPrice = math.mode === 'per_participant' 
+          ? math.rate.toLocaleString('en-US') 
+          : math.total.toLocaleString('en-US');
+        const perLabel = math.mode === 'per_participant' ? 'PER PARTICIPANT' : 'FLAT RATE';
+
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7); pdf.setTextColor(...gray);
+        pdf.text(currency, dx + durW - 10, py + 14, { align: 'right' });
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(18); pdf.setTextColor(...black);
+        pdf.text(formattedPrice, dx + durW - 10, py + 28, { align: 'right' });
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5); pdf.setTextColor(...gray);
+        pdf.text(perLabel, dx + durW - 10, py + 37, { align: 'right' });
+
+        if (hasReceipt) {
+          const rx = dx + 10;
+          const ry = py + 42;
+          const rw = durW - 20;
+          const rh = receiptLines.length * 9.5 + 8;
+
+          pdf.setFillColor(250, 250, 250);
+          pdf.rect(rx, ry, rw, rh, 'F');
+          pdf.setDrawColor(200, 200, 200); pdf.setLineWidth(0.4);
+          pdf.rect(rx, ry, rw, rh, 'S');
+
+          pdf.setFont('courier', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(50, 50, 50);
+          receiptLines.forEach((line, li) => {
+            pdf.text(line, rx + 6, ry + 10 + li * 9.5);
+          });
+        }
+
+        py += cardH;
+      });
+      if (py > colMaxY) colMaxY = py;
+    });
+    y = colMaxY + 22;
+  }
+
+  // ── NOTES ──
+  const visNotes = state.notes.filter(n => n.text.trim());
+  if (visNotes.length) {
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(13);
+    pdf.setTextColor(...black); pdf.text('NOTES', ML, y);
+    y += 5; pdf.setFillColor(...gold); pdf.rect(ML, y, 28, 2, 'F'); y += 14;
+
+    visNotes.forEach(note => {
+      pdf.setFillColor(...gold); pdf.circle(ML + 5, y - 2, 4.5, 'F');
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7); pdf.setTextColor(...black);
+      pdf.text('✓', ML + 2.2, y);
+
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9.5); pdf.setTextColor(...gray);
+      const nl = pdf.splitTextToSize(note.text, CW - 20);
+      pdf.text(nl, ML + 16, y);
+      y += nl.length * 12 + 8;
+    });
+    y += 6;
+  }
+
+  // ── FOOTER ──
+  const footerY = H - 58;
+  pdf.setFillColor(...darkBg); pdf.rect(0, footerY, W, 58, 'F');
+
+  if (window._logoB64) {
+    pdf.addImage(window._logoB64, 'PNG', ML, footerY + 10, 0, 32);
+  } else {
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(20); pdf.setTextColor(...white);
+    let fx = ML;
+    for (const ch of 'MITRIXOGYMCRM') { pdf.text(ch, fx, footerY + 28); fx += pdf.getTextWidth(ch) + 2.2; }
+  }
+
+  pdf.setDrawColor(180, 180, 180); pdf.setLineWidth(1);
+  pdf.line(ML + 100, footerY + 12, ML + 100, footerY + 44);
+
+  // Taglines from state
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...white);
+  pdf.text((state.footer.tagline1 || '').toUpperCase(), ML + 112, footerY + 24);
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...gold);
+  pdf.text((state.footer.tagline2 || '').toUpperCase(), ML + 112, footerY + 38);
+
+  // Contact Details from state
+  if (state.footer.founder) {
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5); pdf.setTextColor(160, 160, 160);
+    pdf.text('CONTACT DETAILS:', W - MR, footerY + 22, { align: 'right' });
+    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(...white);
+    pdf.text(state.footer.founder.toUpperCase(), W - MR, footerY + 34, { align: 'right' });
+  }
+}
+
+/* ═══════════════════════════════════════════
+   SAVE / LOAD
+═══════════════════════════════════════════ */
+async function saveQuote() {
+  if (!state.quote.number) {
+    state.quote.number = await genQuoteNum();
+    document.getElementById('f-quote-num').value = state.quote.number;
+  }
+  await Store.set(`sqt:${state.quote.number}`, { ...state, savedAt: new Date().toISOString() });
+  showToast(`Saved · ${state.quote.number}`); renderPreview();
+}
+
+async function openSavedDialog() {
+  const list = document.getElementById('saved-list');
+  list.innerHTML = '<div class="saved-empty">Loading…</div>';
+  document.getElementById('dlg-saved').classList.add('open');
+  const keys = await Store.list('sqt:');
+  if (!keys.length) { list.innerHTML = '<div class="saved-empty">No saved quotes.</div>'; return; }
+  const quotes = (await Promise.all(keys.map(async k => ({ k, d: await Store.get(k) }))))
+    .filter(x => x.d).sort((a, b) => (b.d.savedAt || '').localeCompare(a.d.savedAt || ''));
+  list.innerHTML = '';
+  quotes.forEach(({ k, d }) => {
+    const row = document.createElement('div');
+    row.className = 'saved-row';
+    row.innerHTML = `
+      <div style="flex:1;min-width:0;">
+        <div class="saved-row-name">${esc(d.program?.name || 'Untitled')}</div>
+        <div class="saved-row-meta">${esc(d.quote?.number || '—')} · ${esc(d.client?.organization || d.client?.contact || 'No recipient')}</div>
+      </div>
+      <button class="btn-ghost btn-load-item">Load</button>
+      <button class="btn-icon btn-del-item">✕</button>
+    `;
+    row.querySelector('.btn-load-item').onclick = () => { loadState(d); document.getElementById('dlg-saved').classList.remove('open'); };
+    row.querySelector('.btn-del-item').onclick = async () => { if (confirm('Delete?')) { await Store.delete(k); openSavedDialog(); } };
+    list.appendChild(row);
+  });
+}
+
+function loadState(d) {
+  const parsed = JSON.parse(JSON.stringify(d));
+  migrateState(parsed);
+  Object.assign(state, parsed);
+  syncForm(); renderMetadata(); renderDurations(); renderNotes(); renderPreview();
+  showToast(`Loaded · ${d.quote?.number}`);
+}
+
+/* ═══════════════════════════════════════════
+   FORM SYNC
+═══════════════════════════════════════════ */
+function syncForm() {
+  const s = state;
+  setVal('f-prog-name',    s.program.name);
+  setVal('f-prog-desc',    s.program.description);
+  setVal('f-sessions-week',s.schedule.sessionsPerWeek);
+  setVal('f-show-freq',    s.schedule.showFrequency !== false ? 'yes' : 'no');
+  setVal('f-session-dur',  s.schedule.sessionDuration);
+  setVal('f-min-pax',      s.schedule.minParticipants);
+  setVal('f-max-pax',      s.schedule.maxParticipants);
+  setVal('f-slot1',        s.schedule.slot1);
+  setVal('f-slot2',        s.schedule.slot2);
+  setVal('f-org',          s.client.organization);
+  setVal('f-contact',      s.client.contact);
+  setVal('f-email',        s.client.email);
+  setVal('f-quote-num',    s.quote.number);
+  setVal('f-date',         s.quote.date);
+  setVal('f-valid',        s.quote.valid);
+  setVal('f-quote-type',   s.quote.type || 'Sports Program');
+  
+  // Pricing
+  setVal('f-currency',     s.pricing.currency);
+  setVal('f-pricing-mode', s.pricing.mode);
+  setVal('f-discount',     s.pricing.discountPercent);
+  setVal('f-tax',          s.pricing.taxPercent);
+
+  // Footer taglines
+  setVal('f-footer-tag1',  s.footer.tagline1);
+  setVal('f-footer-tag2',  s.footer.tagline2);
+  setVal('f-footer-founder', s.footer.founder);
+}
+function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v ?? ''; }
+
+function wireForm() {
+  const bind = (id, setter) => {
+    document.getElementById(id)?.addEventListener('input', e => { setter(e.target.value); renderPreview(); });
+  };
+  const bindSelect = (id, setter) => {
+    document.getElementById(id)?.addEventListener('change', e => { setter(e.target.value); renderPreview(); });
+  };
+  bind('f-prog-name',    v => state.program.name = v);
+  bind('f-prog-desc',    v => state.program.description = v);
+  bind('f-sessions-week',v => { state.schedule.sessionsPerWeek = parseInt(v) || 1; renderPreview(); });
+  bindSelect('f-show-freq', v => { state.schedule.showFrequency = (v === 'yes'); renderPreview(); });
+  bind('f-session-dur',  v => state.schedule.sessionDuration = v);
+  bind('f-min-pax',      v => state.schedule.minParticipants = parseInt(v) || 0);
+  bind('f-max-pax',      v => state.schedule.maxParticipants = parseInt(v) || 0);
+  bind('f-slot1',        v => state.schedule.slot1 = v);
+  bind('f-slot2',        v => state.schedule.slot2 = v);
+  bind('f-org',          v => state.client.organization = v);
+  bind('f-contact',      v => state.client.contact = v);
+  bind('f-email',        v => state.client.email = v);
+  bind('f-quote-num',    v => state.quote.number = v);
+  bind('f-date',         v => state.quote.date = v);
+  bind('f-valid',        v => state.quote.valid = v);
+  bindSelect('f-quote-type', v => state.quote.type = v);
+  
+  // Pricing Settings
+  bind('f-currency',     v => { state.pricing.currency = v; renderDurations(); });
+  bindSelect('f-pricing-mode', v => state.pricing.mode = v);
+  bind('f-discount',     v => state.pricing.discountPercent = parseFloat(v) || 0);
+  bind('f-tax',          v => state.pricing.taxPercent = parseFloat(v) || 0);
+
+  // Footer Settings
+  bind('f-footer-tag1',  v => state.footer.tagline1 = v);
+  bind('f-footer-tag2',  v => state.footer.tagline2 = v);
+  bind('f-footer-founder', v => state.footer.founder = v);
+}
+
+/* ═══════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════ */
+let _tt;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(_tt); _tt = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════ */
+async function init() {
+  // Preload logo as base64 for jsPDF (awaited so it's ready before any download)
+  try {
+    window._logoB64 = await new Promise((resolve, reject) => {
+      fetch('mitrixogymcrmlogo_white.png').then(res => res.blob()).then(blob => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }).catch(reject);
+    });
+  } catch {}
+
+  // Run backward compatible migrations
+  migrateState(state);
+
+  state.quote.number = await genQuoteNum();
+  syncForm();
+  renderMetadata();
+  renderDurations();
+  renderNotes();
+  renderPreview();
+  wireForm();
+
+  // Quote type switcher
+  const quoteTypeDefaults = {
+    sports: {
+      name: 'Kids Boxing & Fitness Program',
+      description: 'A safe, fun and professional training program designed to build stronger kids — physically, mentally and socially.',
+      metadata: [
+        { key: 'Age Group', value: 'Children Groups' },
+        { key: 'Location', value: 'mitrixogymcrm Facility' },
+        { key: 'Supervision', value: 'Full Supervision & Care' }
+      ],
+      pricing: { currency: 'EGP', mode: 'per_participant', discountPercent: 0, taxPercent: 0 },
+      slot1: '09:00 AM – 10:30 AM', slot2: '10:30 AM – 12:00 PM',
+      durations: [
+        { label: '1 Month Program', packages: [{ name: 'Package A', participants: 20, price: 1850 }, { name: 'Package B', participants: 15, price: 2200 }] },
+        { label: '3 Months Program', packages: [{ name: 'Package A', participants: 20, price: 3900 }, { name: 'Package B', participants: 15, price: 4100 }] }
+      ],
+      notes: ['Pricing includes coaching, supervision and station setup.', 'Sessions are scheduled upon agreement and availability.', "All training activities are adapted to children's age and level.", 'Non-refundable after program confirmation.'],
+      footer: { tagline1: 'Building Stronger Kids,', tagline2: 'Inside & Outside The Ring.', founder: 'Shady Youssef' }
+    },
+    event: {
+      name: 'mitrixogymcrm Event Package',
+      description: 'A high-energy event experience featuring professional boxing and fitness activations for all ages.',
+      metadata: [
+        { key: 'Age Group', value: 'All Ages' },
+        { key: 'Location', value: 'Client Venue / mitrixogymcrm Facility' },
+        { key: 'Supervision', value: 'Full Event Coordination' }
+      ],
+      pricing: { currency: 'USD', mode: 'flat_rate', discountPercent: 5, taxPercent: 14 },
+      slot1: '10:00 AM – 01:00 PM', slot2: '03:00 PM – 06:00 PM',
+      durations: [
+        { label: 'Half-Day Event', packages: [{ name: 'Basic', participants: 50, price: 4500 }, { name: 'Premium', participants: 50, price: 7000 }] },
+        { label: 'Full-Day Event', packages: [{ name: 'Basic', participants: 100, price: 8000 }, { name: 'Premium', participants: 100, price: 12000 }] }
+      ],
+      notes: ['Pricing includes equipment setup and professional coaches.', 'Venue logistics and transport are client responsibility.', 'Minimum 3 days notice required for booking.', 'Non-refundable after confirmation.'],
+      footer: { tagline1: 'Unleash Your Energy,', tagline2: 'mitrixogymcrm Your Event Today.', founder: 'Shady Youssef' }
+    },
+    corporate: {
+      name: 'mitrixogymcrm Corporate Wellness Program',
+      description: 'Tailored corporate wellness sessions to boost team morale, health, and productivity through professional boxing and fitness coaching.',
+      metadata: [
+        { key: 'Age Group', value: 'Corporate Teams' },
+        { key: 'Location', value: 'Client Office / mitrixogymcrm Facility' },
+        { key: 'Supervision', value: 'HR & Coaching Coordination' }
+      ],
+      pricing: { currency: 'EUR', mode: 'flat_rate', discountPercent: 10, taxPercent: 12 },
+      slot1: '08:00 AM – 09:30 AM', slot2: '12:00 PM – 01:30 PM',
+      durations: [
+        { label: 'Monthly Retainer', packages: [{ name: 'Team of 20', participants: 20, price: 6500 }, { name: 'Team of 40', participants: 40, price: 11000 }] },
+        { label: 'Quarterly Package', packages: [{ name: 'Team of 20', participants: 20, price: 17000 }, { name: 'Team of 40', participants: 40, price: 28000 }] }
+      ],
+      notes: ['Pricing includes dedicated coach, equipment, and session planning.', 'Scheduling is flexible and agreed upon in advance.', 'Progress reports available upon request.', 'Non-refundable after program confirmation.'],
+      footer: { tagline1: 'Corporate Excellence,', tagline2: 'Healthy Minds, Stronger Teams.', founder: 'Shady Youssef' }
+    }
+  };
+
+  document.getElementById('f-quote-type')?.addEventListener('change', e => {
+    const d = quoteTypeDefaults[e.target.value];
+    if (!d) return;
+    state.program = {
+      name: d.name,
+      description: d.description,
+      metadata: d.metadata.map(m => ({ id: newId(), ...m }))
+    };
+    state.pricing = { ...d.pricing };
+    state.schedule.slot1 = d.slot1;
+    state.schedule.slot2 = d.slot2;
+    state.durations = d.durations.map(dur => ({ id: newId(), label: dur.label, packages: dur.packages.map(p => ({ id: newId(), ...p })) }));
+    state.notes = d.notes.map(text => ({ id: newId(), text }));
+    state.footer = { ...d.footer };
+
+    syncForm();
+    renderMetadata();
+    renderDurations();
+    renderNotes();
+    renderPreview();
+    showToast('Template loaded');
+  });
+
+  document.getElementById('btn-add-meta').onclick = () => {
+    if (!state.program.metadata) state.program.metadata = [];
+    state.program.metadata.push({ id: newId(), key: '', value: '' });
+    renderMetadata();
+    renderPreview();
+  };
+
+  document.getElementById('btn-add-duration').onclick = () => {
+    state.durations.push({
+      id: newId(), label: 'New Duration',
+      packages: [{ id: newId(), name: 'Package A', participants: 20, price: 0 }]
+    });
+    renderDurations(); renderPreview();
+  };
+  document.getElementById('btn-add-note').onclick = () => {
+    state.notes.push({ id: newId(), text: '' });
+    renderNotes();
+  };
+  document.getElementById('btn-pdf').onclick = downloadPDF;
+  document.getElementById('btn-save').onclick = saveQuote;
+  document.getElementById('btn-load').onclick = openSavedDialog;
+  document.getElementById('dlg-close').onclick = () => document.getElementById('dlg-saved').classList.remove('open');
+  document.getElementById('dlg-saved').onclick = e => { if (e.target.id === 'dlg-saved') e.target.classList.remove('open'); };
+  document.getElementById('btn-reset').onclick = async () => {
+    if (!confirm('Reset? Unsaved changes will be lost.')) return;
+    state.durations = [
+      { id: newId(), label: '1 Month Program', packages: [{ id: newId(), name: 'Package A', participants: 20, price: 1850 }, { id: newId(), name: 'Package B', participants: 15, price: 2200 }] },
+      { id: newId(), label: '3 Months Program', packages: [{ id: newId(), name: 'Package A', participants: 20, price: 3900 }, { id: newId(), name: 'Package B', participants: 15, price: 4100 }] }
+    ];
+    state.notes = [
+      { id: newId(), text: 'Pricing includes coaching, supervision and station setup.' },
+      { id: newId(), text: 'Sessions are scheduled upon agreement and availability.' },
+      { id: newId(), text: "All training activities are adapted to children's age and level." },
+      { id: newId(), text: 'Non-refundable after program confirmation.' }
+    ];
+    state.client = { organization: '', contact: '', email: '' };
+    state.program = {
+      name: 'Kids Boxing & Fitness Program',
+      description: 'A safe, fun and professional training program designed to build stronger kids — physically, mentally and socially.',
+      metadata: [
+        { id: newId(), key: 'Age Group', value: 'Children Groups' },
+        { id: newId(), key: 'Location', value: 'mitrixogymcrm Facility' },
+        { id: newId(), key: 'Supervision', value: 'Full Supervision & Care' }
+      ]
+    };
+    state.quote = { number: await genQuoteNum(), date: today(), valid: plusDays(30) };
+    state.pricing = {
+      currency: 'EGP',
+      mode: 'per_participant',
+      discountPercent: 0,
+      taxPercent: 0
+    };
+    state.footer = {
+      tagline1: 'Building Stronger Kids,',
+      tagline2: 'Inside & Outside The Ring.',
+      founder: 'Shady Youssef'
+    };
+    syncForm(); renderMetadata(); renderDurations(); renderNotes(); renderPreview();
+    showToast('Reset');
+  };
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

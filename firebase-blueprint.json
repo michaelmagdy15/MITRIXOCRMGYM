@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "Client": {
+      "title": "Client",
+      "description": "A client or lead in the system",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string", "enum": ["Lead", "Active", "Nearly Expired", "Expired"] },
+        "assignedTo": { "type": "string", "description": "User ID of the assigned representative" },
+        "interest": { "type": "string", "enum": ["Interested", "Not Interested", "Pending"] },
+        "category": { "type": "string", "enum": ["Out of area zone", "Social class", "Price", "No answer", "Other", "None"] },
+        "source": { "type": "string", "enum": ["Instagram", "WhatsApp", "Walk-in", "Social Media", "Other"] },
+        "stage": { "type": "string", "enum": ["New", "Trial", "Follow Up", "Converted", "Lost"] },
+        "expectedVisitDate": { "type": "string", "format": "date-time" },
+        "trialDate": { "type": "string", "format": "date-time" },
+        "packageType": { "type": "string" },
+        "sessionsRemaining": { "type": "number" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "membershipExpiry": { "type": "string", "format": "date-time" },
+        "dateOfBirth": { "type": "string", "format": "date-time" },
+        "points": { "type": "number" },
+        "lastContactDate": { "type": "string", "format": "date-time" },
+        "nextReminderDate": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone", "status"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a client or lead",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "author": { "type": "string" }
+      },
+      "required": ["text", "date", "author"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "A payment record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "method": { "type": "string", "enum": ["Cash", "Credit Card", "Bank Transfer", "Instapay", "Other"] },
+        "instapayRef": { "type": "string", "description": "12-digit reference number for Instapay" },
+        "packageType": { "type": "string" },
+        "notes": { "type": "string" },
+        "recordedBy": { "type": "string" }
+      },
+      "required": ["clientId", "amount", "date", "method", "packageType"]
+    },
+    "PrivateSession": {
+      "title": "PrivateSession",
+      "description": "A private session record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Scheduled", "Attended", "No Show", "Cancelled"] },
+        "notes": { "type": "string" }
+      },
+      "required": ["clientId", "date", "status"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "A system audit log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string", "enum": ["CREATE", "UPDATE", "DELETE"] },
+        "entityType": { "type": "string", "enum": ["CLIENT", "PAYMENT", "SESSION", "LEAD", "TARGET"] },
+        "entityId": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "action", "entityType", "entityId", "timestamp"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A system user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["manager", "rep", "admin"] },
+        "email": { "type": "string", "format": "email" }
+      },
+      "required": ["name", "role", "email"]
+    }
+  },
+  "firestore": {
+    "/clients/{clientId}": {
+      "schema": { "$ref": "Client" },
+      "description": "Collection of clients and leads"
+    },
+    "/clients/{clientId}/comments/{commentId}": {
+      "schema": { "$ref": "Comment" },
+      "description": "Subcollection of comments for a client"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "Payment" },
+      "description": "Collection of payment records"
+    },
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "PrivateSession" },
+      "description": "Collection of private session records"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "AuditLog" },
+      "description": "Collection of system audit logs"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "Collection of system users"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+graph TD
+    A([Walk-In / Lead]) --> B[Rep logs Lead in CRM]
+    B --> C{Status?}
+    C -->|Follow Up| D[Log Interaction / Call]
+    C -->|Converted| E[Generate Member ID & QR Code]
+    E --> F[Process Payment]
+    F --> G([Active Membership])
+    
+    G --> H{Front Desk Check-in}
+    H -->|Scans QR Code| I{System Checks Expiry}
+    I -->|Valid| J[Log Attendance & Allow Entry]
+    I -->|Expired/Hold| K[Block Entry & Prompt Payment]

@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "mitrixogymcrmEG",
+    "slug": "mitrixogymcrm-eg",
+    "version": "1.0.2",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mitrixogymcrmboxing.crm",
+      "buildNumber": "5",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app requires access to the camera to scan member QR codes for attendance and check-in.",
+        "NSPhotoLibraryUsageDescription": "This app requires access to your photo library to let you upload profile pictures and branding logos.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.mitrixogymcrmboxing.crm",
+      "versionCode": 5,
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a0a",
+        "foregroundImage": "./assets/icon.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "91ff5ffa-407c-49c6-9a0e-c1edc54db1fb"
+      }
+    }
+  }
+}
