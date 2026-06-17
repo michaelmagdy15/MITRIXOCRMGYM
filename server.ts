@@ -15,6 +15,8 @@ const defaultFirebaseConfig = JSON.parse(
 // In production, these could be fetched dynamically from a database (e.g. Redis, Firestore admin) or GCS.
 const tenantConfigs: Record<string, any> = {
   "localhost": defaultFirebaseConfig,
+  "strike.mitrixo.com": defaultFirebaseConfig,
+  "strikeboxing.mitrixo.com": defaultFirebaseConfig, // Map the original Strike CRM to the default database
   "mitrixogymcrm-boxing.local": {
     ...defaultFirebaseConfig,
     projectId: "mitrixogymcrm-boxing-tenant-1",
