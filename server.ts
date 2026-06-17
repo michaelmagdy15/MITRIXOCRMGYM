@@ -81,13 +81,13 @@ async function startServer() {
 
   // Provisioning endpoint for new gym onboarding
   app.post("/api/provision", async (req, res) => {
-    const { tenantId, tenantName, ownerEmail, ownerName, ownerPassword, locationId } = req.body;
+    const { tenantId, tenantName, ownerEmail, ownerName, ownerPassword, locationId, enableMobileApp } = req.body;
     if (!tenantId || !tenantName || !ownerEmail || !ownerName) {
       return res.status(400).json({ error: "Missing required fields: tenantId, tenantName, ownerEmail, ownerName" });
     }
     
     try {
-      console.log(`[Server] Received provisioning request for tenant: ${tenantId}`);
+      console.log(`[Server] Received provisioning request for tenant: ${tenantId}, enableMobileApp: ${enableMobileApp}`);
       const result = await provisionNewGym({
         tenantId,
         tenantName,
@@ -95,6 +95,7 @@ async function startServer() {
         ownerName,
         ownerPassword,
         locationId,
+        enableMobileApp,
       });
       return res.json(result);
     } catch (error) {

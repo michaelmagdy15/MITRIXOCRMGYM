@@ -43,16 +43,14 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     attendance: true,
     reports: true,
     quotes: true,
-    operations: true
+    operations: true,
+    mobileApp: false
   });
 
-  // Branding — use one-time read for members/coaches to avoid onSnapshot permission errors
+  // Branding — load or subscribe to branding settings
   useEffect(() => {
-    // Wait for role to be determined before subscribing
-    if (!isAuthenticated && !role) return;
-
-    if (role === 'client' || role === 'coach') {
-      // One-time read for members
+    if (!isAuthenticated || role === 'client' || role === 'coach') {
+      // One-time read for unauthenticated/members/coaches
       getDoc(doc(db, 'settings', 'branding'))
         .then((snapshot) => {
           if (snapshot.exists()) setBranding(snapshot.data() as BrandingSettings);
@@ -73,9 +71,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
 
   // Features — load or subscribe to feature flags
   useEffect(() => {
-    if (!isAuthenticated && !role) return;
-
-    if (role === 'client' || role === 'coach') {
+    if (!isAuthenticated || role === 'client' || role === 'coach') {
       getDoc(doc(db, 'settings', 'features'))
         .then((snapshot) => {
           if (snapshot.exists()) setFeatures(prev => ({ ...prev, ...snapshot.data() }));

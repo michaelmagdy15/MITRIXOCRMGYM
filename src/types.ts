@@ -355,5 +355,7 @@ export interface FeatureFlags {
   reports?: boolean;
   quotes?: boolean;
   operations?: boolean;
+  mobileApp?: boolean;
 }
+
 

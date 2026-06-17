@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
-import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, FileText, Coffee, Package } from 'lucide-react';
+import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, FileText, Coffee, Package, Smartphone } from 'lucide-react';
 
 import { activeConfig } from './firebase';
 
@@ -24,6 +24,7 @@ export default function AdminHub() {
   const [reports, setReports] = useState(features.reports !== false);
   const [quotes, setQuotes] = useState(features.quotes !== false);
   const [operations, setOperations] = useState(features.operations !== false);
+  const [mobileApp, setMobileApp] = useState(features.mobileApp === true);
 
   const handleSave = async () => {
     setIsLoading(true);
@@ -37,7 +38,8 @@ export default function AdminHub() {
         attendance,
         reports,
         quotes,
-        operations
+        operations,
+        mobileApp
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -191,6 +193,22 @@ export default function AdminHub() {
                   </div>
                 </div>
                 <Switch checked={operations} onCheckedChange={setOperations} disabled={isLoading} />
+              </div>
+
+              {/* Mobile App */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-muted rounded-lg mt-0.5">
+                    <Smartphone className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Mobile App & Storefront</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Enable guest package purchase storefront, class bookings, and digital member pass.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={mobileApp} onCheckedChange={setMobileApp} disabled={isLoading} />
               </div>
             </div>
 

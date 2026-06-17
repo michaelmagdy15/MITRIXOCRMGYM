@@ -48,6 +48,7 @@ interface ProvisionDetails {
   ownerName: string;     // e.g. "John Doe"
   ownerPassword?: string; // e.g. "temporary-password"
   locationId?: string;   // e.g. "europe-west1"
+  enableMobileApp?: boolean;
 }
 
 /**
@@ -194,6 +195,18 @@ export async function seedTenantDatabase(databaseId: string, details: ProvisionD
   await db.collection('settings').doc('branding').set({
     companyName: details.tenantName,
     logoUrl: '', // empty to use dynamic text-based branding
+  });
+  
+  // 1.5 Seed settings/features
+  await db.collection('settings').doc('features').set({
+    leads: true,
+    ptPackages: true,
+    payments: true,
+    attendance: true,
+    reports: true,
+    quotes: true,
+    operations: true,
+    mobileApp: !!details.enableMobileApp,
   });
   
   // 2. Seed settings/branches

@@ -24,6 +24,7 @@ export default function OnboardingWizard() {
   const [ownerName, setOwnerName] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
+  const [enableMobileApp, setEnableMobileApp] = useState(false);
 
   const handleSubdomainChange = (val: string) => {
     // Keep it lowercase, digits, and hyphens only
@@ -60,6 +61,7 @@ export default function OnboardingWizard() {
           ownerEmail,
           ownerName,
           ownerPassword,
+          enableMobileApp,
         }),
       });
 
@@ -197,6 +199,20 @@ export default function OnboardingWizard() {
                   </span>
                 </div>
                 <p className="text-[10px] text-zinc-500 mt-1">Lowercase letters, numbers, and hyphens only.</p>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <input 
+                  type="checkbox"
+                  id="enable-mobile"
+                  checked={enableMobileApp}
+                  onChange={e => setEnableMobileApp(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-800 bg-zinc-950 text-primary focus:ring-primary cursor-pointer accent-primary"
+                  disabled={isLoading}
+                />
+                <Label htmlFor="enable-mobile" className="text-zinc-300 font-bold uppercase text-xs tracking-wider cursor-pointer select-none">
+                  Request Mobile App & Storefront
+                </Label>
               </div>
 
               <div className="border-t border-zinc-900 my-4 pt-4 space-y-4">
