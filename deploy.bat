@@ -13,17 +13,16 @@ echo [1/3] Adding changes to Git...
 git add .
 
 echo.
-echo [2/3] Committing & Staging...
+echo [2/3] Committing changes...
 git commit -m "%commit_msg%"
 
 echo.
-echo [3/3] Pushing to GitHub (Triggers Cloud Run deploy)...
-git push origin master
+echo [3/3] Deploying directly to Google Cloud Run...
+gcloud builds submit --config cloudbuild.yaml --substitutions=_TAG=latest
 
 echo.
 echo =========================================
-echo   Push Complete! Check your Cloud Build /
-echo   Cloud Run console for deployment status.
+echo   Deployment Complete!
 echo =========================================
 echo.
 pause
