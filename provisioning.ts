@@ -54,20 +54,8 @@ interface ProvisionDetails {
  * Programmatically creates a Firestore database instance within the GCP/Firebase project.
  * Uses the GCP Firestore Resource Manager REST API.
  */
-export async function createFirestoreDatabase(projectId: string, databaseId: string, locationId: string = 'europe-west1') {
+export async function createFirestoreDatabase(projectId: string, databaseId: string, accessToken: string, locationId: string = 'europe-west1') {
   console.log(`[Provisioning] Creating Firestore database "${databaseId}" in project "${projectId}"...`);
-  
-  const auth = new GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/cloud-platform']
-  });
-  
-  const client = await auth.getClient();
-  const tokenResponse = await client.getAccessToken();
-  const accessToken = tokenResponse.token;
-  
-  if (!accessToken) {
-    throw new Error('Failed to retrieve GCP access token for database creation.');
-  }
   
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases?databaseId=${databaseId}`;
   
@@ -96,6 +84,98 @@ export async function createFirestoreDatabase(projectId: string, databaseId: str
   const result = await response.json();
   console.log(`[Provisioning] Database creation initiated:`, result);
   return result;
+}
+
+/**
+ * Programmatically deploys Firestore security rules to a named database.
+ * Uses the Firebase Rules REST API.
+ */
+export async function deployFirestoreRules(projectId: string, databaseId: string, accessToken: string) {
+  console.log(`[Provisioning] Deploying Firestore security rules to "${databaseId}"...`);
+  
+  const rulesPath = path.join(process.cwd(), 'firestore.rules');
+  if (!fs.existsSync(rulesPath)) {
+    throw new Error(`Rules file not found at: ${rulesPath}`);
+  }
+  const rulesContent = fs.readFileSync(rulesPath, 'utf8');
+  
+  // 1. Create Ruleset
+  const rulesetUrl = `https://firebaserules.googleapis.com/v1/projects/${projectId}/rulesets`;
+  const rulesetRes = await fetch(rulesetUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      source: {
+        files: [
+          {
+            name: 'firestore.rules',
+            content: rulesContent,
+          }
+        ]
+      }
+    }),
+  });
+  
+  if (!rulesetRes.ok) {
+    const errText = await rulesetRes.text();
+    throw new Error(`Failed to create Firestore ruleset: ${errText}`);
+  }
+  
+  const ruleset = await rulesetRes.json();
+  const rulesetName = ruleset.name; // projects/{projectId}/rulesets/{rulesetId}
+  console.log(`[Provisioning] Ruleset created successfully: ${rulesetName}`);
+  
+  // 2. Create Release
+  const releaseUrl = `https://firebaserules.googleapis.com/v1/projects/${projectId}/releases`;
+  const releaseName = `projects/${projectId}/releases/cloud.firestore/${databaseId}`;
+  
+  const releaseRes = await fetch(releaseUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: releaseName,
+      rulesetName: rulesetName,
+    }),
+  });
+  
+  if (!releaseRes.ok) {
+    const errText = await releaseRes.text();
+    if (releaseRes.status === 409 || errText.includes('ALREADY_EXISTS') || errText.includes('already exists')) {
+      console.log(`[Provisioning] Release "${releaseName}" already exists. Updating it via PATCH...`);
+      
+      const patchUrl = `https://firebaserules.googleapis.com/v1/${releaseName}`;
+      const patchRes = await fetch(patchUrl, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          release: {
+            name: releaseName,
+            rulesetName: rulesetName,
+          },
+          updateMask: 'rulesetName',
+        }),
+      });
+      
+      if (!patchRes.ok) {
+        const patchErr = await patchRes.text();
+        throw new Error(`Failed to update Firestore rules release: ${patchErr}`);
+      }
+      console.log(`[Provisioning] Rules release updated successfully.`);
+      return;
+    }
+    throw new Error(`Failed to create Firestore rules release: ${errText}`);
+  }
+  
+  console.log(`[Provisioning] Rules release created successfully for "${databaseId}".`);
 }
 
 /**
@@ -182,14 +262,29 @@ export async function provisionNewGym(details: ProvisionDetails) {
   const databaseId = `db-${details.tenantId}`;
   
   try {
+    // Get OAuth2 Access Token first
+    const auth = new GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/cloud-platform']
+    });
+    const client = await auth.getClient();
+    const tokenResponse = await client.getAccessToken();
+    const accessToken = tokenResponse.token;
+    
+    if (!accessToken) {
+      throw new Error('Failed to retrieve GCP access token for provisioning.');
+    }
+
     // 1. Create Firestore Database
-    await createFirestoreDatabase(projectId, databaseId, details.locationId || 'europe-west1');
+    await createFirestoreDatabase(projectId, databaseId, accessToken, details.locationId || 'europe-west1');
+    
+    // 2. Deploy security rules to the new database
+    await deployFirestoreRules(projectId, databaseId, accessToken);
     
     // Wait for database instance activation (Firestore creation can take a few seconds)
     console.log('[Provisioning] Waiting 10 seconds for database activation...');
     await new Promise((resolve) => setTimeout(resolve, 10000));
     
-    // 2. Seed database
+    // 3. Seed database
     const seedResult = await seedTenantDatabase(databaseId, details);
     
     return {

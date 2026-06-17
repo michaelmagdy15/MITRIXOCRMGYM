@@ -372,7 +372,7 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read: if (settingId == 'branding' && isAuthenticated()) || canmitrixogymcrmAccessSettings();
+      allow read: if (settingId == 'branding') || canmitrixogymcrmAccessSettings();
       allow write: if canmitrixogymcrmAccessSettings() && (settingId != 'branding' || isValidBranding(request.resource.data));
     }
 
