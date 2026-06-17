@@ -66,6 +66,10 @@ export async function createFirestoreDatabase(projectId: string, databaseId: str
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`[Provisioning] API Error: ${errorText}`);
+    if (response.status === 409 || errorText.includes('ALREADY_EXISTS') || errorText.includes('already exists')) {
+      console.log(`[Provisioning] Database "${databaseId}" already exists. Proceeding to seed.`);
+      return { alreadyExists: true };
+    }
     throw new Error(`Failed to create Firestore database: ${response.statusText} - ${errorText}`);
   }
   
