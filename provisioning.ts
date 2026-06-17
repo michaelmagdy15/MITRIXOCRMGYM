@@ -4,6 +4,24 @@ import { GoogleAuth } from 'google-auth-library';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 
+// Get default project ID from config
+const defaultConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
+let defaultProjectId = 'faa-test-guide-v2';
+if (fs.existsSync(defaultConfigPath)) {
+  try {
+    const config = JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
+    if (config.projectId) {
+      defaultProjectId = config.projectId;
+    }
+  } catch (e) {
+    console.error('Failed to read default project ID from config:', e);
+  }
+}
+
+// Override Cloud Run host project environment variables to target our Firestore/Auth project
+process.env.GOOGLE_CLOUD_PROJECT = defaultProjectId;
+process.env.GCP_PROJECT = defaultProjectId;
+
 // Initialize firebase-admin
 // Automatically picks up Application Default Credentials (ADC) in Cloud Run,
 // or uses service-account.json if present in the working directory for local testing.
@@ -17,18 +35,6 @@ if (fs.existsSync(serviceAccountPath)) {
 } else {
   if (admin.apps.length === 0) {
     // Fallback to Application Default Credentials (ADC)
-    const defaultConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    let defaultProjectId = 'faa-test-guide-v2';
-    if (fs.existsSync(defaultConfigPath)) {
-      try {
-        const config = JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
-        if (config.projectId) {
-          defaultProjectId = config.projectId;
-        }
-      } catch (e) {
-        console.error('Failed to read default project ID from config:', e);
-      }
-    }
     admin.initializeApp({
       projectId: defaultProjectId
     });
