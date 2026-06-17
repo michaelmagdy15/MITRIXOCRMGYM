@@ -58,7 +58,7 @@ export async function createFirestoreDatabase(projectId: string, databaseId: str
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      type: 'FIRESTORE_STANDARD',
+      type: 'FIRESTORE_NATIVE',
       locationId: locationId,
     }),
   });
