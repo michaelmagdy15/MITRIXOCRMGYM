@@ -343,13 +343,16 @@ export default function SuperAdminHub() {
 
       {/* Feature Configuration Dialog */}
       <Dialog open={editingTenant !== null} onOpenChange={(open) => { if (!open) setEditingTenant(null); }}>
-        <DialogContent className="sm:max-w-md border-border/50 shadow-2xl bg-zinc-950 text-white">
+        <DialogContent 
+          style={{ maxWidth: '680px', width: '95%' }}
+          className="border-border/50 shadow-2xl bg-zinc-950 text-white"
+        >
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
               <Sliders className="h-5 w-5 text-rose-500" />
               Manage Features
             </DialogTitle>
-            <DialogDescription className="text-zinc-400">
+            <DialogDescription className="text-zinc-450">
               Configure active modules for <strong className="text-zinc-200">{editingTenant?.gymName}</strong> ({editingTenant?.databaseId})
             </DialogDescription>
           </DialogHeader>
@@ -373,121 +376,121 @@ export default function SuperAdminHub() {
                 </Alert>
               )}
 
-              <div className="divide-y divide-zinc-800 border-y border-zinc-800 max-h-[400px] overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1 py-1">
                 {/* Leads */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl mt-0.5">
-                      <UserPlus className="h-4 w-4 text-amber-400" />
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg shrink-0 mt-0.5">
+                      <UserPlus className="h-3.5 w-3.5 text-amber-400" />
                     </div>
-                    <div>
-                      <Label className="font-bold text-xs text-zinc-200">Leads Module</Label>
-                      <p className="text-[10px] text-zinc-500">Track prospective clients & trial sessions.</p>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('leads')}>Leads Module</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Track prospective clients & trials.</p>
                     </div>
                   </div>
                   <Switch checked={features.leads} onCheckedChange={() => toggleFeature('leads')} disabled={savingFeatures} />
                 </div>
 
                 {/* PT Packages */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-purple-500/10 border border-purple-500/20 rounded-xl mt-0.5">
-                      <Package className="h-4 w-4 text-purple-400" />
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-purple-500/10 border border-purple-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Package className="h-3.5 w-3.5 text-purple-400" />
                     </div>
-                    <div>
-                      <Label className="font-bold text-xs text-zinc-200">PT Packages</Label>
-                      <p className="text-[10px] text-zinc-500">Private training package deductions & coaches.</p>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('ptPackages')}>PT Packages</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Package deductions & coaches.</p>
                     </div>
                   </div>
                   <Switch checked={features.ptPackages} onCheckedChange={() => toggleFeature('ptPackages')} disabled={savingFeatures} />
                 </div>
 
                 {/* Payments */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mt-0.5">
-                      <CreditCard className="h-4 w-4 text-emerald-400" />
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg shrink-0 mt-0.5">
+                      <CreditCard className="h-3.5 w-3.5 text-emerald-400" />
                     </div>
-                    <div>
-                      <Label className="font-bold text-xs text-zinc-200">Payments & Invoicing</Label>
-                      <p className="text-[10px] text-zinc-500">Record payments & view revenue target metrics.</p>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('payments')}>Payments & Invoices</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Record payments & view metrics.</p>
                     </div>
                   </div>
                   <Switch checked={features.payments} onCheckedChange={() => toggleFeature('payments')} disabled={savingFeatures} />
                 </div>
 
                 {/* Attendance */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-sky-500/10 border border-sky-500/20 rounded-xl mt-0.5">
-                      <Scan className="h-4 w-4 text-sky-400" />
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-sky-500/10 border border-sky-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Scan className="h-3.5 w-3.5 text-sky-400" />
                     </div>
-                    <div>
-                      <Label className="font-bold text-xs text-zinc-200">Attendance & QR</Label>
-                      <p className="text-[10px] text-zinc-500">Enable check-ins via QR scanner kiosk.</p>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('attendance')}>Attendance & QR</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Check-ins via QR scanner kiosk.</p>
                     </div>
                   </div>
                   <Switch checked={features.attendance} onCheckedChange={() => toggleFeature('attendance')} disabled={savingFeatures} />
                 </div>
 
                 {/* Reports */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-violet-500/10 border border-violet-500/20 rounded-xl mt-0.5">
-                      <BarChart3 className="h-4 w-4 text-violet-400" />
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-violet-500/10 border border-violet-500/20 rounded-lg shrink-0 mt-0.5">
+                      <BarChart3 className="h-3.5 w-3.5 text-violet-400" />
                     </div>
-                    <div>
-                      <Label className="font-bold text-xs text-zinc-200">Analytics & Reports</Label>
-                      <p className="text-[10px] text-zinc-500">Access performance reports and data exports.</p>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('reports')}>Analytics & Reports</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Access reports & data exports.</p>
                     </div>
                   </div>
                   <Switch checked={features.reports} onCheckedChange={() => toggleFeature('reports')} disabled={savingFeatures} />
                 </div>
 
                 {/* Quotes */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-xl mt-0.5">
-                      <FileText className="h-4 w-4 text-rose-400" />
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg shrink-0 mt-0.5">
+                      <FileText className="h-3.5 w-3.5 text-rose-400" />
                     </div>
-                    <div>
-                      <Label className="font-bold text-xs text-zinc-200">Quotes Generator</Label>
-                      <p className="text-[10px] text-zinc-500">Allow generating custom commercial quote PDFs.</p>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('quotes')}>Quotes Generator</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Generate custom commercial quote PDFs.</p>
                     </div>
                   </div>
                   <Switch checked={features.quotes} onCheckedChange={() => toggleFeature('quotes')} disabled={savingFeatures} />
                 </div>
 
                 {/* Operations */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-xl mt-0.5">
-                      <Users className="h-4 w-4 text-blue-400" />
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Users className="h-3.5 w-3.5 text-blue-400" />
                     </div>
-                    <div>
-                      <Label className="font-bold text-xs text-zinc-200">Club Operations</Label>
-                      <p className="text-[10px] text-zinc-500">Manage lockers, juice bar, & guest invites.</p>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('operations')}>Club Operations</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Lockers, juice bar, & guest invites.</p>
                     </div>
                   </div>
                   <Switch checked={features.operations} onCheckedChange={() => toggleFeature('operations')} disabled={savingFeatures} />
                 </div>
 
                 {/* Mobile App */}
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-orange-500/10 border border-orange-500/20 rounded-xl mt-0.5">
-                      <Smartphone className="h-4 w-4 text-orange-400" />
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-orange-500/10 border border-orange-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Smartphone className="h-3.5 w-3.5 text-orange-400" />
                     </div>
-                    <div>
-                      <Label className="font-bold text-xs text-zinc-200">White-Label Mobile App</Label>
-                      <p className="text-[10px] text-zinc-500">Enable mobile app logins and sync services.</p>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('mobileApp')}>Mobile App Sync</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Enable mobile app logins & sync services.</p>
                     </div>
                   </div>
                   <Switch checked={features.mobileApp} onCheckedChange={() => toggleFeature('mobileApp')} disabled={savingFeatures} />
                 </div>
               </div>
 
-              <DialogFooter className="mt-4">
+              <DialogFooter className="mt-4 gap-2">
                 <Button variant="ghost" onClick={() => setEditingTenant(null)} disabled={savingFeatures} className="text-zinc-400 hover:text-white rounded-xl">
                   Cancel
                 </Button>
