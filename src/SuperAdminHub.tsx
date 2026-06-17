@@ -19,7 +19,7 @@ export default function SuperAdminHub() {
     setLoading(true);
     setError('');
     try {
-      const db = getFirestore(getApp(), 'db-registry');
+      const db = getFirestore(getApp(), 'db-registry-2');
       const snap = await getDocs(collection(db, 'tenants'));
       const list = snap.docs.map(docSnap => ({
         id: docSnap.id,
@@ -41,7 +41,7 @@ export default function SuperAdminHub() {
     setError('');
     const nextStatus = currentStatus === 'active' ? 'suspended' : 'active';
     try {
-      const db = getFirestore(getApp(), 'db-registry');
+      const db = getFirestore(getApp(), 'db-registry-2');
       await updateDoc(doc(db, 'tenants', tenantId), {
         status: nextStatus
       });

@@ -3,7 +3,7 @@ const path = require('path');
 const { GoogleAuth } = require('google-auth-library');
 
 const PROJECT_ID = 'faa-test-guide-v2';
-const DATABASES = ['(default)', 'db-test', 'db-testrules', 'db-gyma', 'db-inzanathletics', 'db-registry'];
+const DATABASES = ['(default)', 'db-test', 'db-testrules', 'db-gyma', 'db-inzanathletics', 'db-registry-2'];
 
 async function deployFirestoreRules(projectId, databaseId, accessToken) {
   console.log(`[Rules Deploy] Deploying rules to "${databaseId}"...`);

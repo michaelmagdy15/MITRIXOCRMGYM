@@ -72,7 +72,7 @@ async function getTenantInfoForHost(hostname: string): Promise<{ config: any; st
   if (hostParts.length >= 2 && hostParts[0] === 'superadmin') {
     const registryConfig = {
       ...defaultFirebaseConfig,
-      firestoreDatabaseId: "db-registry"
+      firestoreDatabaseId: "db-registry-2"
     };
     return { config: registryConfig, status: 'active' };
   }
@@ -89,7 +89,7 @@ async function getTenantInfoForHost(hostname: string): Promise<{ config: any; st
   }
   
   try {
-    const centralDb = getFirestore('db-registry');
+    const centralDb = getFirestore('db-registry-2');
     
     // A. Search by customDomain
     const customQuery = await centralDb.collection('tenants')

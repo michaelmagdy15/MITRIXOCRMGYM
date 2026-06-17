@@ -302,7 +302,7 @@ export async function provisionNewGym(details: ProvisionDetails) {
     
     // 4. Register tenant in central db-registry database
     console.log(`[Provisioning] Registering tenant "${details.tenantId}" in central db-registry...`);
-    const centralDb = getFirestore('db-registry');
+    const centralDb = getFirestore('db-registry-2');
     await centralDb.collection('tenants').doc(details.tenantId).set({
       id: details.tenantId,
       subdomain: details.tenantId,

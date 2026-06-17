@@ -22,6 +22,31 @@
       "predeploy": [
         "node sync-rules.cjs"
       ]
+    },
+    {
+      "database": "db-test",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
+    },
+    {
+      "database": "db-testrules",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
+    },
+    {
+      "database": "db-gyma",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
+    },
+    {
+      "database": "db-inzanathletics",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
+    },
+    {
+      "database": "db-registry-2",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
     }
   ],
   "storage": {
