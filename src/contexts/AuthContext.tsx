@@ -229,6 +229,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Users listener
   useEffect(() => {
     if (!currentUser) return;
+
+    // Do not subscribe to these CRM listeners when running in Platform Super Admin mode
+    const isSuperAdminMode = window.location.hostname.startsWith('superadmin.') || 
+                             window.location.pathname === '/superadmin';
+    if (isSuperAdminMode) return;
+
     const staffQuery = query(
       collection(db, 'users'),
       where('role', 'in', ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'])
@@ -260,6 +266,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!currentUser) return;
     const role = currentUser.role;
     if (role !== 'manager' && role !== 'admin' && role !== 'super_admin' && role !== 'crm_admin') return;
+
+    // Do not subscribe to these CRM listeners when running in Platform Super Admin mode
+    const isSuperAdminMode = window.location.hostname.startsWith('superadmin.') || 
+                             window.location.pathname === '/superadmin';
+    if (isSuperAdminMode) return;
 
     const unsubPending = onSnapshot(
       query(collection(db, 'pendingAccounts'), where('status', '==', 'pending'), orderBy('requestedAt', 'desc')),
