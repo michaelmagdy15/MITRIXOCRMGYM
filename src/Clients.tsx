@@ -1,5 +1,6 @@
 import React, { useState, useDeferredValue, useRef } from 'react';
 import { useAppContext } from './context';
+import { useLanguage } from './contexts/LanguageContext';
 import { ASSIGNABLE_ROLES } from './constants';
 import { usePackages } from './hooks/usePackages';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,6 +54,7 @@ const migratePackageData = (client: Client, systemPackages: any[]): Partial<Clie
 };
 
 export default function Clients() {
+  const { t } = useLanguage();
   const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount } = useAppContext();
   const { packages } = usePackages();
   const [activeTab, setActiveTab] = useState('active');
@@ -510,7 +512,7 @@ export default function Clients() {
       {/* ── Mobile card list (< md) ── */}
       <div className="md:hidden divide-y divide-border">
         {clientList.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">No members found.</div>
+          <div className="py-12 text-center text-sm text-muted-foreground">{t('members.no_members')}</div>
         ) : clientList.map(client => {
           const totalPaid = payments.filter(p => p.clientId === client.id).reduce((s, p) => s + p.amount, 0);
           const assignedName = (() => {
@@ -535,7 +537,7 @@ export default function Clients() {
                   {getStatusBadge(client.status)}
                   {typeof client.sessionsRemaining === 'number' ? (
                     <Badge variant={client.sessionsRemaining < 0 ? 'destructive' : 'secondary'} className="text-[10px] h-4">
-                      {client.sessionsRemaining} left
+                      {client.sessionsRemaining} {t('common.left')}
                     </Badge>
                   ) : client.sessionsRemaining === 'unlimited' ? (
                     <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-200 border text-[10px] h-4">∞</Badge>
@@ -577,19 +579,19 @@ export default function Clients() {
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                       {/* Quick info grid */}
                       <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div><span className="text-[10px] uppercase text-muted-foreground block">Package</span><span className="font-semibold text-xs">{client.packageType || '—'}</span></div>
-                        <div><span className="text-[10px] uppercase text-muted-foreground block">Sessions Left</span><span className="font-semibold text-xs">{client.sessionsRemaining === 'unlimited' ? '∞ Unlimited' : client.sessionsRemaining ?? '—'}</span></div>
-                        <div><span className="text-[10px] uppercase text-muted-foreground block">Expiry</span><span className="font-semibold text-xs">{client.membershipExpiry ? format(parseISO(client.membershipExpiry), 'MMM d, yyyy') : '—'}</span></div>
-                        <div><span className="text-[10px] uppercase text-muted-foreground block">Total Paid</span><span className="font-semibold text-xs text-green-600">{totalPaid.toLocaleString()} LE</span></div>
-                        <div><span className="text-[10px] uppercase text-muted-foreground block">Phone</span><span className="font-semibold text-xs">{client.phone}</span></div>
-                        <div><span className="text-[10px] uppercase text-muted-foreground block">Assigned To</span><span className="font-semibold text-xs">{assignedName || 'Unassigned'}</span></div>
+                        <div><span className="text-[10px] uppercase text-muted-foreground block">{t('members.table.package')}</span><span className="font-semibold text-xs">{client.packageType || '—'}</span></div>
+                        <div><span className="text-[10px] uppercase text-muted-foreground block">{t('members.table.sessions')}</span><span className="font-semibold text-xs">{client.sessionsRemaining === 'unlimited' ? '∞ Unlimited' : client.sessionsRemaining ?? '—'}</span></div>
+                        <div><span className="text-[10px] uppercase text-muted-foreground block">{t('payments.expiry')}</span><span className="font-semibold text-xs">{client.membershipExpiry ? format(parseISO(client.membershipExpiry), 'MMM d, yyyy') : '—'}</span></div>
+                        <div><span className="text-[10px] uppercase text-muted-foreground block">{t('members.table.total_paid')}</span><span className="font-semibold text-xs text-green-600">{totalPaid.toLocaleString()} LE</span></div>
+                        <div><span className="text-[10px] uppercase text-muted-foreground block">{t('leads.table.phone')}</span><span className="font-semibold text-xs">{client.phone}</span></div>
+                        <div><span className="text-[10px] uppercase text-muted-foreground block">{t('leads.assigned_to')}</span><span className="font-semibold text-xs">{assignedName || t('leads.tabs.unassigned')}</span></div>
                       </div>
                       {/* Interactions */}
                       {isDetailsLoading && activeClientDetails?.clientId === client.id ? (
                         <div className="flex justify-center p-4"><RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" /></div>
                       ) : activeClientDetails?.clientId === client.id && activeClientDetails.interactions.length > 0 ? (
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Recent Interactions</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">{t('common.recent_interactions')}</p>
                           <div className="space-y-2">
                             {[...activeClientDetails.interactions].sort((a,b) => new Date(b.date).getTime()-new Date(a.date).getTime()).slice(0,3).map(ia => (
                               <div key={ia.id} className="text-xs bg-muted/30 rounded-lg p-2.5">
@@ -607,7 +609,7 @@ export default function Clients() {
                       {isDetailsLoading && activeClientDetails?.clientId === client.id ? null : 
                        activeClientDetails?.clientId === client.id && activeClientDetails.comments.length > 0 ? (
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Notes</p>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">{t('payments.table.notes')}</p>
                           <div className="space-y-2">
                             {[...activeClientDetails.comments].sort((a,b) => new Date(b.date).getTime()-new Date(a.date).getTime()).slice(0,2).map(c => (
                               <div key={c.id} className="text-xs bg-muted/30 rounded-lg p-2.5">
@@ -625,7 +627,7 @@ export default function Clients() {
                             <QRCodeSVG id={`qr-mobile-${client.id}`} value={client.memberId || client.id} size={140} level="H" includeMargin data-qr-id={client.memberId || client.id} />
                           </div>
                           <Button variant="outline" size="sm" className="w-full" onClick={() => downloadQRCode(client.memberId || client.id, client.name)}>
-                            <Download className="mr-2 h-4 w-4" />Download QR
+                            <Download className="mr-2 h-4 w-4" />{t('common.download_qr')}
                           </Button>
                           <Button variant="outline" size="sm" className="w-full text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => {
                             const clientPayments = payments.filter(p => p.clientId === client.id);
@@ -634,7 +636,7 @@ export default function Clients() {
                               : null;
                             generateClientContract(client, latestPayment?.amount, latestPayment?.method);
                           }}>
-                            <FileText className="mr-2 h-4 w-4" />Generate Contract
+                            <FileText className="mr-2 h-4 w-4" />{t('common.generate_contract')}
                           </Button>
                         </div>
                       )}
@@ -663,17 +665,17 @@ export default function Clients() {
                 onCheckedChange={(checked) => handleSelectAll(!!checked)}
               />
             </TableHead>
-            <TableHead>ID</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Phone</TableHead>
-            <TableHead className="hidden md:table-cell">Branch</TableHead>
-            <TableHead className="hidden md:table-cell">Package</TableHead>
-            <TableHead>Sessions</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="hidden sm:table-cell">Expiry Date</TableHead>
-            {canViewGlobalDashboard && <TableHead className="hidden lg:table-cell">Total Paid</TableHead>}
-            {canViewGlobalDashboard && <TableHead className="hidden xl:table-cell">Assigned To</TableHead>}
-            <TableHead>Actions</TableHead>
+            <TableHead>{t('leads.table.id')}</TableHead>
+            <TableHead>{t('leads.table.name')}</TableHead>
+            <TableHead>{t('leads.table.phone')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('leads.branch')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('members.table.package')}</TableHead>
+            <TableHead>{t('members.table.sessions')}</TableHead>
+            <TableHead>{t('members.table.status')}</TableHead>
+            <TableHead className="hidden sm:table-cell">{t('members.table.expiry_date')}</TableHead>
+            {canViewGlobalDashboard && <TableHead className="hidden lg:table-cell">{t('members.table.total_paid')}</TableHead>}
+            {canViewGlobalDashboard && <TableHead className="hidden xl:table-cell">{t('leads.assigned_to')}</TableHead>}
+            <TableHead>{t('leads.table.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -705,15 +707,15 @@ export default function Clients() {
                 </div>
               </TableCell>
               <TableCell className="hidden md:table-cell">
-                <Badge variant="secondary">{client.branch || 'Unassigned'}</Badge>
+                <Badge variant="secondary">{client.branch || t('leads.tabs.unassigned')}</Badge>
               </TableCell>
               <TableCell className="hidden md:table-cell">
-                <Badge variant="outline">{client.packageType || 'None'}</Badge>
+                <Badge variant="outline">{client.packageType || t('leads.tabs.other')}</Badge>
               </TableCell>
               <TableCell>
                 {typeof client.sessionsRemaining === 'number' ? (
                   <Badge variant={client.sessionsRemaining < 0 ? 'destructive' : 'secondary'}>
-                    {client.sessionsRemaining} left
+                    {client.sessionsRemaining} {t('common.left')}
                   </Badge>
                 ) : client.sessionsRemaining === 'unlimited' ? (
                   <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-200 border">∞ Unlimited</Badge>
@@ -731,7 +733,7 @@ export default function Clients() {
                     {format(parseISO(client.membershipExpiry), 'MMM d, yyyy')}
                   </div>
                 ) : (
-                  <span className="text-muted-foreground text-sm">Not set</span>
+                  <span className="text-muted-foreground text-sm">{t('leads.tabs.unassigned')}</span>
                 )}
               </TableCell>
               {canViewGlobalDashboard && (
@@ -746,7 +748,7 @@ export default function Clients() {
                     value={client.assignedTo || 'unassigned'}
                     onChange={(e) => updateClient(client.id, { assignedTo: e.target.value === 'unassigned' ? '' : e.target.value })}
                   >
-                    <option value="unassigned">Unassigned</option>
+                    <option value="unassigned">{t('leads.tabs.unassigned')}</option>
                     {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
                       <option key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</option>
                     ))}
@@ -783,7 +785,7 @@ export default function Clients() {
                     }
                   }}>
                     <DialogTrigger render={<Button variant="outline" size="sm" />}>
-                      Manage
+                      {t('common.manage')}
                     </DialogTrigger>
                     <DialogContent className="!w-full !max-w-4xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
                       {/* Compact header */}
@@ -1204,11 +1206,11 @@ export default function Clients() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold tracking-tight">Members Database</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t('members.title')}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportToCSV}>
             <Download className="mr-2 h-4 w-4" />
-            Export CSV
+            {t('leads.export_csv')}
           </Button>
           <Button 
             variant="outline" 
@@ -1217,7 +1219,7 @@ export default function Clients() {
             disabled={isRecalculating}
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${isRecalculating ? 'animate-spin' : ''}`} />
-            Recalculate All Expiry
+            {t('members.recalculate_expiry')}
           </Button>
           <ImportData type="Active" />
           <ImportHistory />
@@ -1229,28 +1231,28 @@ export default function Clients() {
           )}
           <Dialog open={isNewMemberOpen} onOpenChange={setIsNewMemberOpen}>
             <DialogTrigger render={<Button size="sm" />}>
-              <Plus className="mr-2 h-4 w-4" /> Add Member
+              <Plus className="mr-2 h-4 w-4" /> {t('members.add_member')}
             </DialogTrigger>
           <DialogContent className="!w-full !max-w-[1200px] max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-3xl bg-background/95 backdrop-blur-xl">
             <DialogHeader className="p-10 pb-6 bg-muted/30 border-b">
               <DialogTitle className="text-3xl font-extrabold tracking-tight flex items-center gap-3">
                 <UserPlus className="h-8 w-8 text-primary" />
-                Add New Member
+                {t('members.add_member')}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-10 pt-8 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Full Name</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.table.name')}</Label>
                   <Input 
-                    placeholder="Enter member's full name" 
+                    placeholder={t('members.search_placeholder')} 
                     className="h-14 rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
                     value={newMemberName} 
                     onChange={(e) => setNewMemberName(e.target.value)} 
                   />
                 </div>
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Phone Number</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.table.phone')}</Label>
                   <Input 
                     placeholder="+20 1xx xxxx xxx" 
                     className="h-14 rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
@@ -1259,10 +1261,10 @@ export default function Clients() {
                   />
                 </div>
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Branch</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.branch')}</Label>
                   <Select value={newMemberBranch} onValueChange={(v) => setNewMemberBranch(v || '')}>
                     <SelectTrigger className="h-14 rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder="Select branch" />
+                      <SelectValue placeholder={t('leads.branch')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
                       {branches.map(b => (
@@ -1272,13 +1274,13 @@ export default function Clients() {
                   </Select>
                 </div>
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Initial Assignment</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.assigned_to')}</Label>
                   <Select value={newMemberAssignedTo} onValueChange={(v) => setNewMemberAssignedTo(v || '')}>
                     <SelectTrigger className="h-14 rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder="Select assignment" />
+                      <SelectValue placeholder={t('leads.assigned_to')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      <SelectItem value="unassigned" className="rounded-xl py-3 px-4">Unassigned</SelectItem>
+                      <SelectItem value="unassigned" className="rounded-xl py-3 px-4">{t('leads.tabs.unassigned')}</SelectItem>
                       {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
                         <SelectItem key={rep.id} value={rep.id} className="rounded-xl py-3 px-4">{rep.name || rep.email}</SelectItem>
                       ))}
@@ -1294,16 +1296,16 @@ export default function Clients() {
                     className="mt-0.5 h-5 w-5"
                   />
                   <div>
-                    <p className="text-sm font-semibold">Linked family account</p>
+                    <p className="text-sm font-semibold">{t('members.linked_family_account')}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Check this if this member shares a phone number with another member (e.g. a child using a parent's number, or siblings). Bypasses the duplicate phone check.
+                      {t('members.linked_family_desc')}
                     </p>
                   </div>
                 </label>
               </div>
               <div className="mt-6">
                 <Button onClick={handleAddMember} className="w-full h-16 rounded-2xl text-xl font-extrabold shadow-2xl shadow-primary/30 hover:shadow-primary/50 transition-all hover:scale-[1.01] active:scale-[0.99]">
-                  Create Member Profile
+                  {t('members.create_member_profile')}
                 </Button>
               </div>
             </div>
@@ -1315,11 +1317,11 @@ export default function Clients() {
       <Tabs defaultValue="active" onValueChange={setActiveTab}>
         <div className="flex flex-col md:flex-row items-end gap-4 mb-6 bg-card p-4 rounded-xl border shadow-sm">
           <div className="flex-1 w-full space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground ml-1">Search Name/Phone/ID</Label>
+            <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('members.search_placeholder')}</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Search..." 
+                placeholder={t('members.search_placeholder')} 
                 className="pl-9 h-11 bg-muted/30 border-none focus-visible:ring-1"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1328,13 +1330,13 @@ export default function Clients() {
           </div>
           
           <div className="w-full md:w-[180px] space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground ml-1">Branch</Label>
+            <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('leads.branch')}</Label>
             <select 
               className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
               value={filterBranch}
               onChange={(e) => setFilterBranch(e.target.value)}
             >
-              <option value="All">All Branches</option>
+              <option value="All">{t('dashboard.all_branches')}</option>
               {branches.map(b => (
                 <option key={b} value={b}>{b}</option>
               ))}
@@ -1342,7 +1344,7 @@ export default function Clients() {
           </div>
 
           <div className="w-full md:w-[180px] space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground ml-1">Sort By</Label>
+            <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('leads.sort_by')}</Label>
             <div className="relative">
               <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <select 
@@ -1350,23 +1352,23 @@ export default function Clients() {
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
               >
-                <option value="newest">Newest First</option>
-                <option value="id-asc">Member ID (Low-High)</option>
-                <option value="id-desc">Member ID (High-Low)</option>
+                <option value="newest">{t('common.newest_first')}</option>
+                <option value="id-asc">{t('common.member_id_low_high')}</option>
+                <option value="id-desc">{t('common.member_id_high_low')}</option>
               </select>
             </div>
           </div>
           {/* Assigned Rep filter — sales manager & CRM admin only */}
           {(currentUser?.role === 'manager' || currentUser?.role === 'crm_admin') && (
             <div className="w-full md:w-[200px] space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground ml-1">Assigned To</Label>
+              <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('leads.assigned_to')}</Label>
               <select
                 className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
                 value={filterRep}
                 onChange={(e) => setFilterRep(e.target.value)}
               >
-                <option value="all">All Reps</option>
-                <option value="unassigned">Unassigned</option>
+                <option value="all">{t('dashboard.all_reps')}</option>
+                <option value="unassigned">{t('leads.tabs.unassigned')}</option>
                 {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
                   <option key={rep.id} value={rep.id}>{rep.name || rep.email}</option>
                 ))}
@@ -1377,10 +1379,10 @@ export default function Clients() {
 
         <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
           <TabsList className="flex w-max sm:w-full bg-muted/50 rounded-lg p-1 justify-start sm:justify-center">
-            <TabsTrigger value="active" className="px-4 text-xs sm:text-sm">Active ({activeMembers.length + nearlyExpired.length})</TabsTrigger>
-            <TabsTrigger value="hold" className="px-4 text-xs sm:text-sm">Hold ({onHold.length})</TabsTrigger>
-            <TabsTrigger value="expired" className="px-4 text-xs sm:text-sm">Expired ({expired.length})</TabsTrigger>
-            <TabsTrigger value="renewal" className="px-4 text-xs sm:text-sm bg-blue-500/10 text-blue-700 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">Renewal Pipeline</TabsTrigger>
+            <TabsTrigger value="active" className="px-4 text-xs sm:text-sm">{t('members.tabs.active')} ({activeMembers.length + nearlyExpired.length})</TabsTrigger>
+            <TabsTrigger value="hold" className="px-4 text-xs sm:text-sm">{t('members.tabs.hold')} ({onHold.length})</TabsTrigger>
+            <TabsTrigger value="expired" className="px-4 text-xs sm:text-sm">{t('members.tabs.expired')} ({expired.length})</TabsTrigger>
+            <TabsTrigger value="renewal" className="px-4 text-xs sm:text-sm bg-blue-500/10 text-blue-700 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">{t('members.tabs.renewal_pipeline')}</TabsTrigger>
           </TabsList>
         </div>
 
@@ -1390,16 +1392,16 @@ export default function Clients() {
               <div className="bg-primary/10 border border-primary/20 text-primary p-3 rounded-lg flex flex-wrap items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="bg-primary text-primary-foreground">
-                    {selectedClientIds.length} selected
+                    {selectedClientIds.length} {t('common.selected')}
                   </Badge>
                   <Button variant="ghost" size="sm" onClick={() => setSelectedClientIds([])}>
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
                   {canDeleteRecords && (
                     <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
-                      <Trash2 className="h-4 w-4 mr-2" /> Delete Selected
+                      <Trash2 className="h-4 w-4 mr-2" /> {t('common.delete_selected')}
                     </Button>
                   )}
                 </div>
@@ -1415,7 +1417,7 @@ export default function Clients() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4">
                 <p className="text-sm text-muted-foreground">
-                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredMembers.length)} of {filteredMembers.length} entries
+                  {t('common.showing')} {(currentPage - 1) * itemsPerPage + 1} {t('common.to')} {Math.min(currentPage * itemsPerPage, filteredMembers.length)} {t('common.of')} {filteredMembers.length} {t('common.entries')}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button 
@@ -1426,7 +1428,7 @@ export default function Clients() {
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <span className="text-sm">Page {currentPage} of {totalPages}</span>
+                  <span className="text-sm">{t('common.page')} {currentPage} {t('common.of')} {totalPages}</span>
                   <Button 
                     variant="outline" 
                     size="sm" 

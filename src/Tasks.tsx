@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAppContext } from './context';
 import { useAuth } from './contexts/AuthContext';
 import { useTasks } from './hooks/useTasks';
+import { useLanguage } from './contexts/LanguageContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import { Task, TaskStatus, TaskPriority } from './types';
 import { Badge } from '@/components/ui/badge';
 
 export default function Tasks() {
+  const { t } = useLanguage();
   const { users, clients } = useAppContext();
   const { currentUser } = useAuth();
   const { tasks, addTask, updateTask, deleteTask } = useTasks();
@@ -109,40 +111,40 @@ export default function Tasks() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Tasks</h2>
-          <p className="text-muted-foreground">Manage your to-dos and follow-ups.</p>
+          <h2 className="text-2xl font-bold tracking-tight">{t('tasks.title')}</h2>
+          <p className="text-muted-foreground">{t('tasks.subtitle')}</p>
         </div>
         <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
           <DialogTrigger render={
             <Button>
               <Plus className="mr-2 h-4 w-4" />
-              Add Task
+              {t('tasks.add_task')}
             </Button>
           } />
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Add New Task</DialogTitle>
+              <DialogTitle>{t('tasks.add_task')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Title</Label>
+                <Label>{t('tasks.task_title')}</Label>
                 <Input 
                   value={newTask.title} 
                   onChange={e => setNewTask({...newTask, title: e.target.value})} 
-                  placeholder="Follow up with lead..."
+                  placeholder={t('tasks.task_title')}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Description</Label>
+                <Label>{t('tasks.task_description')}</Label>
                 <Input 
                   value={newTask.description} 
                   onChange={e => setNewTask({...newTask, description: e.target.value})} 
-                  placeholder="Optional details..."
+                  placeholder={t('tasks.task_description')}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Due Date</Label>
+                  <Label>{t('tasks.due_date')}</Label>
                   <Input 
                     type="date" 
                     value={newTask.dueDate} 
@@ -150,7 +152,7 @@ export default function Tasks() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Priority</Label>
+                  <Label>{t('tasks.priority')}</Label>
                   <Select value={newTask.priority} onValueChange={(v) => v && setNewTask({...newTask, priority: v as TaskPriority})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -163,7 +165,7 @@ export default function Tasks() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Assign To</Label>
+                  <Label>{t('tasks.assign_to')}</Label>
                   <Select value={newTask.assignedTo} onValueChange={v => v && setNewTask({...newTask, assignedTo: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -174,11 +176,11 @@ export default function Tasks() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Related Client (Optional)</Label>
+                  <Label>{t('tasks.related_client')}</Label>
                   <Select value={newTask.clientId || 'none'} onValueChange={v => v && setNewTask({...newTask, clientId: v})}>
-                    <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t('tasks.client')} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="none">{t('leads.tabs.unassigned')}</SelectItem>
                       {clients.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
@@ -187,7 +189,7 @@ export default function Tasks() {
                 </div>
               </div>
               <Button className="w-full" onClick={handleAddTask} disabled={!newTask.title || !newTask.dueDate}>
-                Create Task
+                {t('tasks.create_task')}
               </Button>
             </div>
           </DialogContent>
@@ -198,8 +200,8 @@ export default function Tasks() {
         {sortedTasks.length === 0 ? (
           <div className="text-center py-12 border rounded-lg bg-muted/20">
             <CheckCircle2 className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-medium">No tasks found</h3>
-            <p className="text-muted-foreground">You're all caught up!</p>
+            <h3 className="text-lg font-medium">{t('tasks.no_tasks')}</h3>
+            <p className="text-muted-foreground">{t('tasks.caught_up')}</p>
           </div>
         ) : (
           sortedTasks.map(task => {
@@ -256,13 +258,13 @@ export default function Tasks() {
                       
                       {assignedUser && (
                         <div className="flex items-center gap-1">
-                          <span className="font-medium">Assignee:</span> {assignedUser.name}
+                          <span className="font-medium">{t('tasks.assignee')}:</span> {assignedUser.name}
                         </div>
                       )}
                       
                       {relatedClient && (
                         <div className="flex items-center gap-1">
-                          <span className="font-medium">Client:</span> {relatedClient.name}
+                          <span className="font-medium">{t('tasks.client')}:</span> {relatedClient.name}
                         </div>
                       )}
                     </div>
@@ -277,7 +279,7 @@ export default function Tasks() {
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingTask && isAssigneeOnly(editingTask) ? 'Update Task Status' : 'Edit Task'}</DialogTitle>
+            <DialogTitle>{editingTask && isAssigneeOnly(editingTask) ? t('tasks.update_task_status') : t('tasks.edit_task')}</DialogTitle>
           </DialogHeader>
           {editingTask && (
             <div className="space-y-4 py-4">
@@ -289,7 +291,7 @@ export default function Tasks() {
                     {editingTask.description && <span className="block mt-1">{editingTask.description}</span>}
                   </p>
                   <div className="space-y-2">
-                    <Label>Status</Label>
+                    <Label>{t('tasks.status')}</Label>
                     <Select value={editingTask.status} onValueChange={(v) => v && setEditingTask({...editingTask, status: v as TaskStatus})}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -304,14 +306,14 @@ export default function Tasks() {
                 /* Creators / managers get full edit */
                 <>
                   <div className="space-y-2">
-                    <Label>Title</Label>
+                    <Label>{t('tasks.task_title')}</Label>
                     <Input
-                      value={editingTask.title}
-                      onChange={e => setEditingTask({...editingTask, title: e.target.value})}
+                       value={editingTask.title}
+                       onChange={e => setEditingTask({...editingTask, title: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Description</Label>
+                    <Label>{t('tasks.task_description')}</Label>
                     <Input
                       value={editingTask.description || ''}
                       onChange={e => setEditingTask({...editingTask, description: e.target.value})}
@@ -319,7 +321,7 @@ export default function Tasks() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Due Date</Label>
+                      <Label>{t('tasks.due_date')}</Label>
                       <Input
                         type="date"
                         value={editingTask.dueDate}
@@ -327,7 +329,7 @@ export default function Tasks() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Status</Label>
+                      <Label>{t('tasks.status')}</Label>
                       <Select value={editingTask.status} onValueChange={(v) => v && setEditingTask({...editingTask, status: v as TaskStatus})}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -340,7 +342,7 @@ export default function Tasks() {
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Priority</Label>
+                      <Label>{t('tasks.priority')}</Label>
                       <Select value={editingTask.priority} onValueChange={(v) => v && setEditingTask({...editingTask, priority: v as TaskPriority})}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -351,7 +353,7 @@ export default function Tasks() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Assign To</Label>
+                      <Label>{t('tasks.assign_to')}</Label>
                       <Select value={editingTask.assignedTo} onValueChange={v => v && setEditingTask({...editingTask, assignedTo: v})}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -363,11 +365,11 @@ export default function Tasks() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Related Client (Optional)</Label>
+                    <Label>{t('tasks.related_client')}</Label>
                     <Select value={editingTask.clientId || 'none'} onValueChange={v => v && setEditingTask({...editingTask, clientId: v})}>
-                      <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t('tasks.client')} /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="none">{t('leads.tabs.unassigned')}</SelectItem>
                         {clients.map(c => (
                           <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                         ))}
@@ -377,7 +379,7 @@ export default function Tasks() {
                 </>
               )}
               <Button className="w-full" onClick={handleEditTask} disabled={!editingTask.title || !editingTask.dueDate}>
-                Save Changes
+                {t('tasks.save_changes')}
               </Button>
             </div>
           )}

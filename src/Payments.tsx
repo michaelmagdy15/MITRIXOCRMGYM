@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from './context';
+import { useLanguage } from './contexts/LanguageContext';
 import { SALES_NAME_MAPPING } from './constants';
 import { useCoaches } from './hooks/useCoaches';
 import { usePackages } from './hooks/usePackages';
@@ -35,6 +36,7 @@ function toCanonical(name: string): string {
   return name.trim();
 }
 export default function Payments() {
+  const { t } = useLanguage();
   const { clients, users, updateClient, addClient, currentUser, branding, canDeletePayments, branches, processPaymentTransaction } = useAppContext();
   const { coaches } = useCoaches();
   const { packages } = usePackages();
@@ -803,29 +805,29 @@ export default function Payments() {
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold tracking-tight">Payments</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t('payments.title')}</h2>
         <Dialog open={isNewPaymentOpen} onOpenChange={setIsNewPaymentOpen}>
           <DialogTrigger render={<Button />}>
-            <Plus className="mr-2 h-4 w-4" /> Record Payment
+            <Plus className="mr-2 h-4 w-4" /> {t('payments.record_payment')}
           </DialogTrigger>
           <DialogContent className="w-full max-w-full md:max-w-[1400px] h-[100dvh] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-none md:rounded-3xl bg-background/95 backdrop-blur-xl">
             <DialogHeader className="p-5 md:p-10 pb-4 md:pb-6 pt-12 md:pt-10 bg-muted/30 border-b">
               <DialogTitle className="text-xl md:text-3xl font-extrabold tracking-tight flex items-center gap-2 md:gap-3">
                 <CreditCard className="h-6 w-6 md:h-8 md:w-8 text-primary" />
-                Record New Payment
+                {t('payments.record_payment')}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-5 md:p-10 pt-6 md:pt-8 pb-10 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 md:gap-x-10 gap-y-4 md:gap-y-8">
                 
                 <div className="space-y-3 lg:col-span-2">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Client / Member</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.table.client')}</Label>
                   <div className="relative" ref={clientDropdownRef}>
                     <div className="relative">
                       <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
                       <Input
                         className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 pl-14 pr-5 text-lg focus-visible:ring-primary"
-                        placeholder="Search by name, phone, or member ID..."
+                        placeholder={t('header.search_placeholder')}
                         value={clientSearch}
                         onChange={e => { setClientSearch(e.target.value); setClientDropdownOpen(true); if (!e.target.value) setClientId(''); }}
                         onFocus={() => setClientDropdownOpen(true)}
@@ -835,16 +837,16 @@ export default function Payments() {
                       <div className="absolute z-50 mt-1 w-full rounded-2xl border border-white/10 bg-popover shadow-2xl overflow-hidden">
                         {isCreatingNew ? (
                           <div className="p-5 space-y-3">
-                            <p className="text-sm font-bold flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary" />New Member</p>
+                            <p className="text-sm font-bold flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary" />{t('members.add_member')}</p>
                             <Input
-                              placeholder="Full name *"
+                              placeholder={`${t('leads.table.name')} *`}
                               className="h-10 rounded-xl text-sm bg-background/60"
                               value={newClientName}
                               onChange={e => setNewClientName(e.target.value)}
                               autoFocus
                             />
                             <Input
-                              placeholder="Phone number *"
+                              placeholder={`${t('leads.table.phone')} *`}
                               className="h-10 rounded-xl text-sm bg-background/60"
                               value={newClientPhone}
                               onChange={e => setNewClientPhone(e.target.value)}
@@ -854,17 +856,17 @@ export default function Payments() {
                               value={newClientBranch}
                               onChange={e => setNewClientBranch(e.target.value)}
                             >
-                              <option value="">Branch (optional)</option>
+                              <option value="">{t('leads.branch')}</option>
                               {branches.map(b => <option key={b} value={b}>{b}</option>)}
                             </select>
                             <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
                               <Checkbox checked={newClientLinked} onCheckedChange={c => setNewClientLinked(!!c)} />
-                              Linked family account (shares phone with another member)
+                              {t('members.linked_family_account')}
                             </label>
                             <div className="flex gap-2 pt-1">
-                              <Button size="sm" variant="outline" className="flex-1 rounded-xl" onMouseDown={() => { setIsCreatingNew(false); }}>Cancel</Button>
+                              <Button size="sm" variant="outline" className="flex-1 rounded-xl" onMouseDown={() => { setIsCreatingNew(false); }}>{t('common.cancel')}</Button>
                               <Button size="sm" className="flex-1 rounded-xl font-bold" onMouseDown={handleCreateNewClient} disabled={!newClientName.trim() || !newClientPhone.trim()}>
-                                Create &amp; Select
+                                {t('common.create_and_select')}
                               </Button>
                             </div>
                           </div>
@@ -876,7 +878,7 @@ export default function Payments() {
                               onMouseDown={() => { setIsCreatingNew(true); }}
                             >
                               <UserPlus className="h-4 w-4 text-primary shrink-0" />
-                              <span className="text-sm font-semibold text-primary">New Member — create &amp; select</span>
+                              <span className="text-sm font-semibold text-primary">{t('members.add_member')} — {t('common.create_and_select')}</span>
                             </button>
                             <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
                               {clients
@@ -908,7 +910,7 @@ export default function Payments() {
                                 const t = clientSearch.toLowerCase();
                                   return c.name?.toLowerCase().includes(t) || c.phone?.includes(t) || c.memberId?.toString().includes(t);
                               }).length === 0 && (
-                                <div className="px-5 py-4 text-sm text-muted-foreground text-center">No clients found</div>
+                                <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('members.no_members')}</div>
                               )}
                             </div>
                           </>
@@ -919,7 +921,7 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Payment Date</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_date')}</Label>
                   <Input
                     type="date"
                     className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
@@ -930,7 +932,7 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Membership Start Date</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.start_date')}</Label>
                   <Input
                     type="date"
                     className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
@@ -949,7 +951,7 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Membership End Date</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.end_date')}</Label>
                   <Input
                     type="date"
                     className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
@@ -959,7 +961,7 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Amount (LE)</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.amount')}</Label>
                   <div className="relative">
                     <Input 
                       type="number" 
@@ -973,7 +975,7 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Discount (Optional)</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.discount')}</Label>
                   <div className="flex gap-2">
                     <Select value={discountType || 'none'} onValueChange={(v) => {
                       if (v === 'none') {
@@ -1011,39 +1013,39 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Payment Method</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_method')}</Label>
                   <Select value={method} onValueChange={(v) => v && setMethod(v as Payment['method'])}>
                     <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder="Select method" />
+                      <SelectValue placeholder={t('payments.payment_method')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      <SelectItem value="Cash" className="rounded-xl py-3 px-4">Cash</SelectItem>
-                      <SelectItem value="Credit Card" className="rounded-xl py-3 px-4">Credit Card</SelectItem>
+                      <SelectItem value="Cash" className="rounded-xl py-3 px-4">{t('dashboard.cash')}</SelectItem>
+                      <SelectItem value="Credit Card" className="rounded-xl py-3 px-4">{t('dashboard.visa')}</SelectItem>
                       <SelectItem value="Bank Transfer" className="rounded-xl py-3 px-4">Bank Transfer</SelectItem>
-                      <SelectItem value="Instapay" className="rounded-xl py-3 px-4">Instapay</SelectItem>
-                      <SelectItem value="Other" className="rounded-xl py-3 px-4">Other</SelectItem>
+                      <SelectItem value="Instapay" className="rounded-xl py-3 px-4">{t('dashboard.instapay')}</SelectItem>
+                      <SelectItem value="Other" className="rounded-xl py-3 px-4">{t('leads.tabs.other')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 {method === 'Instapay' && (
                   <div className="space-y-3">
-                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Instapay Ref (12 digits)</Label>
+                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.instapay_ref')}</Label>
                     <Input 
                       placeholder="123456789012" 
                       className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-mono"
                       value={instapayRef} 
                       maxLength={12}
-                      onChange={(e) => setInstapayRef(e.target.value.replace(/\D/g, ''))} 
+                      onChange={(e) => setPaymentDate(e.target.value.replace(/\D/g, ''))} 
                     />
                   </div>
                 )}
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Package Type</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.package_type')}</Label>
                   <Select value={packageType} onValueChange={handlePackageChange}>
                     <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder="Select package" />
+                      <SelectValue placeholder={t('payments.package_type')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
                       {packages.map(pkg => (
@@ -1058,7 +1060,7 @@ export default function Payments() {
 
                 {packageType === 'Custom' && (
                   <div className="space-y-3">
-                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Custom Package Name</Label>
+                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.custom_package_name')}</Label>
                     <Input 
                       placeholder="e.g., 5 S GT Adults" 
                       className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
@@ -1070,10 +1072,10 @@ export default function Payments() {
 
                 {((packageType && packageType !== 'Custom' && /\bpt\b/i.test(packageType)) || (packageType === 'Custom' && /\bpt\b/i.test(customPackage))) && (
                   <div className="space-y-3">
-                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Coach</Label>
+                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.coach')}</Label>
                     <Select value={coachName} onValueChange={(v) => { if(!v) return; setCoachName(v); if (v !== '__custom__') setCustomCoachName(''); }}>
                       <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                        <SelectValue placeholder="Assigned coach" />
+                        <SelectValue placeholder={t('payments.coach')} />
                       </SelectTrigger>
                       <SelectContent className="rounded-2xl border-none shadow-2xl">
                         {coaches.filter(c => c.active).map(coach => (
@@ -1094,7 +1096,7 @@ export default function Payments() {
                 )}
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Sales Person</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.sales_person')}</Label>
                   <Select value={salesName} onValueChange={v => v && setSalesName(v)}>
                     <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
                       <SelectValue placeholder="For commission" />
@@ -1108,7 +1110,7 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Recorded By</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.recorded_by')}</Label>
                   <Select value={recordedById} onValueChange={v => v && setRecordedById(v)}>
                     <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
                       <SelectValue placeholder="Staff member">
@@ -1124,7 +1126,7 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3 lg:col-span-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Internal Notes (Optional)</Label>
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.internal_notes')}</Label>
                   <Input
                     placeholder="Add descriptive notes for this transaction..."
                     className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
@@ -1140,13 +1142,13 @@ export default function Payments() {
                   className="h-12 md:h-16 px-6 md:px-10 rounded-xl md:rounded-2xl text-sm md:text-lg font-bold border-white/10 hover:bg-muted/50 transition-all"
                   onClick={() => setIsNewPaymentOpen(false)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button 
                   onClick={handleAddPayment} 
                   className="flex-1 h-12 md:h-16 rounded-xl md:rounded-2xl text-base md:text-xl font-extrabold shadow-2xl shadow-primary/30 hover:shadow-primary/50 transition-all hover:scale-[1.01] active:scale-[0.99]"
                 >
-                  Complete Transaction
+                  {t('payments.complete_transaction')}
                 </Button>
               </div>
             </div>
@@ -1156,11 +1158,11 @@ export default function Payments() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4 mb-6 bg-card p-4 rounded-xl border shadow-sm">
         <div className="space-y-1.5 xl:col-span-1">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">Search Payments</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.search')}</Label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Name, ID, Phone, Ref..." 
+              placeholder={t('payments.filters.search')} 
               className="pl-9 h-11 bg-muted/30 border-none focus-visible:ring-1"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -1169,29 +1171,29 @@ export default function Payments() {
         </div>
         
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">Method</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.method')}</Label>
           <select 
             className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
             value={filterMethod}
             onChange={(e) => setFilterMethod(e.target.value)}
           >
-            <option value="All">All Methods</option>
-            <option value="Cash">Cash</option>
-            <option value="Credit Card">Credit Card</option>
-            <option value="Bank Transfer">Bank Transfer</option>
-            <option value="Instapay">Instapay</option>
-            <option value="Other">Other</option>
+            <option value="All">{t('common.all_methods')}</option>
+            <option value="Cash">{t('dashboard.cash')}</option>
+            <option value="Credit Card">{t('dashboard.visa')}</option>
+            <option value="Bank Transfer">{t('common.bank_transfer')}</option>
+            <option value="Instapay">{t('dashboard.instapay')}</option>
+            <option value="Other">{t('common.other')}</option>
           </select>
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">Branch</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.branch')}</Label>
           <select 
             className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
             value={filterBranch}
             onChange={(e) => setFilterBranch(e.target.value)}
           >
-            <option value="All">All Branches</option>
+            <option value="All">{t('dashboard.all_branches')}</option>
             <option value="COMPLEX">COMPLEX</option>
             <option value="MIVIDA">MIVIDA</option>
             <option value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</option>
@@ -1199,13 +1201,13 @@ export default function Payments() {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">Package</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.package')}</Label>
           <select
             className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
             value={filterPackage}
             onChange={(e) => setFilterPackage(e.target.value)}
           >
-            <option value="All">All Packages</option>
+            <option value="All">{t('common.all_packages')}</option>
             {uniquePackageNames.map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
@@ -1213,13 +1215,13 @@ export default function Payments() {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">PT Coach</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.pt_coach')}</Label>
           <select
             className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
             value={filterCoach}
             onChange={(e) => setFilterCoach(e.target.value)}
           >
-            <option value="All">All Coaches</option>
+            <option value="All">{t('common.all_coaches')}</option>
             {uniqueCoachNames.map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
@@ -1227,13 +1229,13 @@ export default function Payments() {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">Sales Person</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.sales_person')}</Label>
           <select 
             className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
             value={filterSalesName}
             onChange={(e) => setFilterSalesName(e.target.value)}
           >
-            <option value="All">All Sales Reps</option>
+            <option value="All">{t('dashboard.all_reps')}</option>
             {uniqueSalesNames.map((name: string) => (
               <option key={name} value={name}>
                 {name}
@@ -1243,7 +1245,7 @@ export default function Payments() {
         </div>
 
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">From Date</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.from_date')}</Label>
           <Input 
             type="date"
             className="flex h-11 w-full rounded-md bg-muted/30 px-3 py-2 text-sm border-none focus-visible:ring-1"
@@ -1252,7 +1254,7 @@ export default function Payments() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">To Date</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.to_date')}</Label>
           <Input 
             type="date"
             className="flex h-11 w-full rounded-md bg-muted/30 px-3 py-2 text-sm border-none focus-visible:ring-1"
@@ -1261,7 +1263,7 @@ export default function Payments() {
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">Sort By</Label>
+          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.sort_by')}</Label>
           <select
             className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
             value={`${sortConfig.key}-${sortConfig.direction}`}
@@ -1270,10 +1272,10 @@ export default function Payments() {
               setSortConfig({ key: key as keyof Payment, direction: direction as 'asc' | 'desc' });
             }}
           >
-            <option value="date-desc">Newest First</option>
-            <option value="date-asc">Oldest First</option>
-            <option value="amount-desc">Amount (High to Low)</option>
-            <option value="amount-asc">Amount (Low to High)</option>
+            <option value="date-desc">{t('payments.filters.sort_options.newest_first')}</option>
+            <option value="date-asc">{t('payments.filters.sort_options.oldest_first')}</option>
+            <option value="amount-desc">{t('payments.filters.sort_options.amount_high_low')}</option>
+            <option value="amount-asc">{t('payments.filters.sort_options.amount_low_high')}</option>
           </select>
         </div>
 
@@ -1284,7 +1286,7 @@ export default function Payments() {
             onCheckedChange={(checked) => setFilterShowOnlyHeld(checked as boolean)}
           />
           <Label htmlFor="filterHeld" className="text-xs font-semibold text-muted-foreground cursor-pointer">
-            Show Only Held
+            {t('payments.filters.show_only_held')}
           </Label>
         </div>
       </div>
@@ -1295,9 +1297,9 @@ export default function Payments() {
           <CardHeader className="pb-3 pt-4 px-5">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" />
-              PT Coach Earnings
+              {t('payments.coach_earnings.title')}
               <span className="text-xs font-normal text-muted-foreground ml-1">
-                — based on current filters ({filteredPayments.filter(p => p.coachName).length} PT payments)
+                — {t('payments.coach_earnings.based_on_filters')} ({filteredPayments.filter(p => p.coachName).length} {t('payments.coach_earnings.pt_payments')})
               </span>
             </CardTitle>
           </CardHeader>
@@ -1317,19 +1319,19 @@ export default function Payments() {
                   </div>
                   <div>
                     <div className={`text-sm font-semibold leading-tight ${filterCoach === coach ? 'text-primary' : ''}`}>{coach}</div>
-                    <div className="text-xs text-green-600 font-bold">{total.toLocaleString()} LE</div>
+                    <div className="text-xs text-green-600 font-bold">{total.toLocaleString()} {t('payments.currency_le')}</div>
                   </div>
                   {filterCoach === coach && (
-                    <Badge className="text-[10px] bg-primary/10 text-primary border-none ml-1">Filtered</Badge>
+                    <Badge className="text-[10px] bg-primary/10 text-primary border-none ml-1">{t('common.selected')}</Badge>
                   )}
                 </div>
               ))}
               {/* Grand total PT revenue */}
               <div className="flex items-center gap-3 bg-primary/10 border border-primary/30 rounded-xl px-4 py-2.5 shadow-sm ml-auto">
                 <div>
-                  <div className="text-xs text-muted-foreground font-medium">Total PT Revenue</div>
+                  <div className="text-xs text-muted-foreground font-medium">{t('payments.coach_earnings.total_pt_revenue')}</div>
                   <div className="text-base font-extrabold text-primary">
-                    {coachEarnings.reduce((sum, [, v]) => sum + v, 0).toLocaleString()} LE
+                    {coachEarnings.reduce((sum, [, v]) => sum + v, 0).toLocaleString()} {t('payments.currency_le')}
                   </div>
                 </div>
               </div>
@@ -1344,16 +1346,16 @@ export default function Payments() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead className="hidden sm:table-cell">Branch</TableHead>
-                  <TableHead className="hidden sm:table-cell">Method</TableHead>
-                  <TableHead className="hidden md:table-cell">Package</TableHead>
-                  <TableHead className="hidden lg:table-cell">Recorded By</TableHead>
-                  <TableHead className="hidden xl:table-cell">Sales Member</TableHead>
-                  <TableHead className="hidden xl:table-cell">Notes</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t('payments.table.date')}</TableHead>
+                  <TableHead>{t('payments.table.client')}</TableHead>
+                  <TableHead>{t('payments.table.amount')}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{t('payments.table.branch')}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{t('payments.table.method')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('payments.table.package')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('payments.table.recorded_by')}</TableHead>
+                  <TableHead className="hidden xl:table-cell">{t('payments.table.sales_member')}</TableHead>
+                  <TableHead className="hidden xl:table-cell">{t('payments.table.notes')}</TableHead>
+                  <TableHead className="text-right">{t('payments.table.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1391,10 +1393,10 @@ export default function Payments() {
                         <TableCell className="font-medium text-xs sm:text-sm">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
-                              <span>{client?.name || 'Unknown Client'}</span>
+                              <span>{client?.name || t('payments.table.unknown_client')}</span>
                               {payment.isOnHold && (
-                                <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px]" title={payment.holdReason || 'On hold'}>
-                                  HOLD
+                                <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px]" title={payment.holdReason || t('payments.hold')}>
+                                  {t('payments.hold')}
                                 </Badge>
                               )}
                             </div>
@@ -1403,20 +1405,22 @@ export default function Payments() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="font-bold text-green-600 text-xs sm:text-sm">{payment.amount.toLocaleString()} LE</TableCell>
+                        <TableCell className="font-bold text-green-600 text-xs sm:text-sm">{payment.amount.toLocaleString()} {t('payments.currency_le')}</TableCell>
                         <TableCell className="hidden sm:table-cell">
                           <Badge variant="secondary" className="text-[10px]">
-                            {payment.branch || client?.branch || 'Unassigned'}
+                            {payment.branch || client?.branch || t('leads.tabs.unassigned')}
                           </Badge>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           <div className="flex items-center">
                             {getMethodIcon(payment.method)}
                             <div>
-                              <div className="text-xs sm:text-sm">{payment.method}</div>
+                              <div className="text-xs sm:text-sm">
+                                {payment.method === 'Cash' ? t('dashboard.cash') : payment.method === 'Credit Card' ? t('dashboard.visa') : payment.method === 'Bank Transfer' ? t('common.bank_transfer') : payment.method === 'Instapay' ? t('dashboard.instapay') : payment.method === 'Other' ? t('common.other') : payment.method}
+                              </div>
                               {payment.instapayRef && (
                                 <div className="text-[10px] text-muted-foreground font-mono">
-                                  Ref: {payment.instapayRef}
+                                  {t('payments.ref')}: {payment.instapayRef}
                                 </div>
                               )}
                             </div>
@@ -1427,7 +1431,7 @@ export default function Payments() {
                             <Badge variant="outline" className="text-[10px] sm:text-xs">{payment.packageType}</Badge>
                             {payment.coachName && (
                               <span className="text-[10px] text-muted-foreground flex items-center">
-                                <span className="font-medium">Coach:</span> <span className="ml-1">{payment.coachName}</span>
+                                <span className="font-medium">{t('payments.coach')}:</span> <span className="ml-1">{payment.coachName}</span>
                               </span>
                             )}
                           </div>
@@ -1446,7 +1450,7 @@ export default function Payments() {
                         <TableCell className="text-muted-foreground text-xs hidden xl:table-cell">{payment.notes || '-'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => printInvoice(payment, client)} title="Print Invoice">
+                            <Button variant="ghost" size="sm" onClick={() => printInvoice(payment, client)} title={t('payments.print_invoice')}>
                               <Printer className="h-4 w-4" />
                             </Button>
                             <Dialog open={isUpgradeDialogOpen && upgradePaymentId === payment.id} onOpenChange={(open) => {
@@ -1461,27 +1465,31 @@ export default function Payments() {
                                 setUpgradePaymentId(null);
                               }
                             }}>
-                              <DialogTrigger render={<Button variant="ghost" size="sm" title="Upgrade Package" className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20" />}>
+                              <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.upgrade_package')} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20" />}>
                                 <TrendingUp className="h-4 w-4" />
                               </DialogTrigger>
                               <DialogContent className="max-w-md">
                                 <DialogHeader>
-                                  <DialogTitle>Upgrade Package</DialogTitle>
+                                  <DialogTitle>{t('payments.upgrade.title')}</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-4">
                                   <p className="text-sm text-muted-foreground">
-                                    Upgrade <strong>{client?.name}</strong> from <strong>{payment.packageType}</strong> to a new package.
+                                    {t('payments.upgrade.hint').split(/(\{name\}|\{package\})/g).map((part, i) => {
+                                      if (part === '{name}') return <strong key={i}>{client?.name}</strong>;
+                                      if (part === '{package}') return <strong key={i}>{payment.packageType}</strong>;
+                                      return part;
+                                    })}
                                   </p>
                                   <div className="space-y-2">
-                                    <Label htmlFor="upgradePackage" className="text-sm font-semibold">New Package</Label>
+                                    <Label htmlFor="upgradePackage" className="text-sm font-semibold">{t('payments.upgrade.new_package')}</Label>
                                     <Select value={upgradePackageType} onValueChange={(v) => v && setUpgradePackageType(v)}>
                                       <SelectTrigger>
-                                        <SelectValue placeholder="Select package" />
+                                        <SelectValue placeholder={t('payments.upgrade.select_package')} />
                                       </SelectTrigger>
                                       <SelectContent>
                                         {packages.map(pkg => (
                                           <SelectItem key={pkg.id} value={pkg.name}>
-                                            {pkg.name} ({pkg.price} LE)
+                                            {pkg.name} ({pkg.price} {t('payments.currency_le')})
                                           </SelectItem>
                                         ))}
                                       </SelectContent>
@@ -1489,7 +1497,7 @@ export default function Payments() {
                                   </div>
                                   <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-2">
-                                      <Label htmlFor="upgradeDate" className="text-sm font-semibold">Upgrade Date</Label>
+                                      <Label htmlFor="upgradeDate" className="text-sm font-semibold">{t('payments.upgrade.upgrade_date')}</Label>
                                       <Input
                                         id="upgradeDate"
                                         type="date"
@@ -1498,24 +1506,24 @@ export default function Payments() {
                                       />
                                     </div>
                                     <div className="space-y-2">
-                                      <Label htmlFor="upgradeMethod" className="text-sm font-semibold">Method</Label>
+                                      <Label htmlFor="upgradeMethod" className="text-sm font-semibold">{t('payments.upgrade.method')}</Label>
                                       <Select value={upgradeMethod} onValueChange={(v) => v && setUpgradeMethod(v as Payment['method'])}>
                                         <SelectTrigger>
                                           <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="Cash">Cash</SelectItem>
-                                          <SelectItem value="Credit Card">Credit Card</SelectItem>
-                                          <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                                          <SelectItem value="Instapay">Instapay</SelectItem>
-                                          <SelectItem value="Other">Other</SelectItem>
+                                          <SelectItem value="Cash">{t('dashboard.cash')}</SelectItem>
+                                          <SelectItem value="Credit Card">{t('dashboard.visa')}</SelectItem>
+                                          <SelectItem value="Bank Transfer">{t('common.bank_transfer')}</SelectItem>
+                                          <SelectItem value="Instapay">{t('dashboard.instapay')}</SelectItem>
+                                          <SelectItem value="Other">{t('common.other')}</SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </div>
                                   </div>
                                   {upgradeMethod === 'Instapay' && (
                                     <div className="space-y-2">
-                                      <Label htmlFor="upgradeInstapay" className="text-sm font-semibold">Instapay Ref (12 digits)</Label>
+                                      <Label htmlFor="upgradeInstapay" className="text-sm font-semibold">{t('payments.upgrade.instapay_ref')}</Label>
                                       <Input
                                         id="upgradeInstapay"
                                         placeholder="123456789012"
@@ -1527,10 +1535,10 @@ export default function Payments() {
                                   )}
                                   <div className="flex gap-2 justify-end pt-4">
                                     <Button variant="outline" onClick={() => setIsUpgradeDialogOpen(false)}>
-                                      Cancel
+                                      {t('common.cancel')}
                                     </Button>
                                     <Button onClick={handleUpgradePackage} className="bg-blue-600 hover:bg-blue-700">
-                                      Process Upgrade
+                                      {t('payments.upgrade.process_upgrade')}
                                     </Button>
                                   </div>
                                 </div>
@@ -1552,16 +1560,16 @@ export default function Payments() {
                                   setEditingPaymentId(null);
                                 }
                               }}>
-                                <DialogTrigger render={<Button variant="ghost" size="sm" title="Edit Payment" />}>
+                                <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.edit_payment')} />}>
                                   <DollarSign className="h-4 w-4" />
                                 </DialogTrigger>
                                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                                   <DialogHeader>
-                                    <DialogTitle>Edit Payment - {client?.name}</DialogTitle>
+                                    <DialogTitle>{t('payments.edit.title')} - {client?.name}</DialogTitle>
                                   </DialogHeader>
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                      <Label className="text-xs font-semibold">Payment Date</Label>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.payment_date')}</Label>
                                       <Input
                                         type="date"
                                         value={editPaymentDate}
@@ -1570,26 +1578,26 @@ export default function Payments() {
                                       />
                                     </div>
                                     <div>
-                                      <Label className="text-xs font-semibold">Customer Name</Label>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.customer_name')}</Label>
                                       <Input
                                         value={editClientName}
                                         onChange={(e) => setEditClientName(e.target.value)}
-                                        placeholder="Customer name"
+                                        placeholder={t('payments.edit.customer_name')}
                                       />
                                     </div>
                                     <div>
-                                      <Label className="text-xs font-semibold">Customer Number/Phone</Label>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.customer_phone')}</Label>
                                       <Input
                                         value={editClientPhone}
                                         onChange={(e) => setEditClientPhone(e.target.value)}
-                                        placeholder="Phone or member ID"
+                                        placeholder={t('payments.edit.customer_phone')}
                                       />
                                     </div>
                                     <div>
-                                      <Label className="text-xs font-semibold">Branch</Label>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.branch')}</Label>
                                       <Select value={editBranch} onValueChange={(val) => setEditBranch(val || '')}>
                                         <SelectTrigger className="h-9">
-                                          <SelectValue placeholder="Select branch" />
+                                          <SelectValue placeholder={t('payments.edit.select_branch')} />
                                         </SelectTrigger>
                                         <SelectContent>
                                           {branches.map(b => (
@@ -1599,25 +1607,25 @@ export default function Payments() {
                                       </Select>
                                     </div>
                                     <div>
-                                      <Label className="text-xs font-semibold">Payment Method</Label>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.method')}</Label>
                                       <Select value={editMethod} onValueChange={(val) => setEditMethod(val as Payment['method'])}>
                                         <SelectTrigger className="h-9">
-                                          <SelectValue placeholder="Select method" />
+                                          <SelectValue placeholder={t('payments.edit.select_method')} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="Cash">Cash</SelectItem>
-                                          <SelectItem value="Credit Card">Credit Card</SelectItem>
-                                          <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
-                                          <SelectItem value="Instapay">Instapay</SelectItem>
-                                          <SelectItem value="Other">Other</SelectItem>
+                                          <SelectItem value="Cash">{t('dashboard.cash')}</SelectItem>
+                                          <SelectItem value="Credit Card">{t('dashboard.visa')}</SelectItem>
+                                          <SelectItem value="Bank Transfer">{t('common.bank_transfer')}</SelectItem>
+                                          <SelectItem value="Instapay">{t('dashboard.instapay')}</SelectItem>
+                                          <SelectItem value="Other">{t('common.other')}</SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </div>
                                     <div>
-                                      <Label className="text-xs font-semibold">Sales Name</Label>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.sales_name')}</Label>
                                       <Select value={editSalesName} onValueChange={(val) => setEditSalesName(val || '')}>
                                         <SelectTrigger className="h-9">
-                                          <SelectValue placeholder="Select sales rep" />
+                                          <SelectValue placeholder={t('payments.edit.select_sales_rep')} />
                                         </SelectTrigger>
                                         <SelectContent>
                                           {uniqueSalesNames.map((name: string) => (
@@ -1629,7 +1637,7 @@ export default function Payments() {
                                       </Select>
                                     </div>
                                     <div>
-                                      <Label className="text-xs font-semibold">Amount (LE)</Label>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.amount')}</Label>
                                       <Input
                                         type="number"
                                         value={editAmount}
@@ -1638,11 +1646,11 @@ export default function Payments() {
                                       />
                                     </div>
                                     <div className="col-span-2">
-                                      <Label className="text-xs font-semibold">Notes</Label>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.notes')}</Label>
                                       <Input
                                         value={editNotes}
                                         onChange={(e) => setEditNotes(e.target.value)}
-                                        placeholder="Add notes..."
+                                        placeholder={t('payments.edit.notes_placeholder')}
                                       />
                                     </div>
                                   </div>
@@ -1651,7 +1659,7 @@ export default function Payments() {
                                       variant="outline"
                                       onClick={() => setEditingPaymentId(null)}
                                     >
-                                      Cancel
+                                      {t('common.cancel')}
                                     </Button>
                                     <Button
                                       onClick={async () => {
@@ -1674,7 +1682,7 @@ export default function Payments() {
                                         setEditingPaymentId(null);
                                       }}
                                     >
-                                      Save Changes
+                                      {t('payments.edit.save_changes')}
                                     </Button>
                                   </div>
                                 </DialogContent>
@@ -1692,22 +1700,25 @@ export default function Payments() {
                                   setHoldReason('');
                                 }
                               }}>
-                                <DialogTrigger render={<Button variant="ghost" size="sm" title="Hold Payment" className="text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20" />}>
+                                <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.hold_payment')} className="text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20" />}>
                                   <Pause className="h-4 w-4" />
                                 </DialogTrigger>
                                 <DialogContent className="max-w-md">
                                   <DialogHeader>
-                                    <DialogTitle>Hold Payment</DialogTitle>
+                                    <DialogTitle>{t('payments.hold_dialog.title')}</DialogTitle>
                                   </DialogHeader>
                                   <div className="space-y-4">
                                     <p className="text-sm text-muted-foreground">
-                                      Place payment for <strong>{client?.name}</strong> on hold.
+                                      {t('payments.hold_dialog.hint').split(/(\{name\})/g).map((part, i) => {
+                                        if (part === '{name}') return <strong key={i}>{client?.name}</strong>;
+                                        return part;
+                                      })}
                                     </p>
                                     <div className="space-y-2">
-                                      <Label htmlFor="holdReason" className="text-sm font-semibold">Reason for Hold</Label>
+                                      <Label htmlFor="holdReason" className="text-sm font-semibold">{t('payments.hold_dialog.reason')}</Label>
                                       <Input
                                         id="holdReason"
-                                        placeholder="e.g., Pending verification, Customer requested..."
+                                        placeholder={t('payments.hold_dialog.reason_placeholder')}
                                         value={holdReason}
                                         onChange={(e) => setHoldReason(e.target.value)}
                                         className="rounded-lg"
@@ -1715,10 +1726,10 @@ export default function Payments() {
                                     </div>
                                     <div className="flex gap-2 justify-end pt-4">
                                       <Button variant="outline" onClick={() => setIsHoldDialogOpen(false)}>
-                                        Cancel
+                                        {t('common.cancel')}
                                       </Button>
                                       <Button onClick={handleHoldPayment} className="bg-amber-600 hover:bg-amber-700">
-                                        Confirm Hold
+                                        {t('payments.hold_dialog.confirm_hold')}
                                       </Button>
                                     </div>
                                   </div>
@@ -1730,7 +1741,7 @@ export default function Payments() {
                                 size="sm"
                                 className="text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
                                 onClick={() => handleReleasePayment(payment.id)}
-                                title="Release Payment from Hold"
+                                title={t('payments.release_payment')}
                               >
                                 <Play className="h-4 w-4" />
                               </Button>
@@ -1741,7 +1752,7 @@ export default function Payments() {
                                 size="sm"
                                 className={`${payment.isOnHold ? 'opacity-50 cursor-not-allowed' : 'text-destructive hover:bg-destructive/10'}`}
                                 onClick={() => handleDeletePayment(payment.id)}
-                                title={payment.isOnHold ? 'Cannot delete held payments' : 'Delete Payment'}
+                                title={payment.isOnHold ? t('payments.cannot_delete_held') : t('payments.delete_payment')}
                                 disabled={payment.isOnHold}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1754,8 +1765,8 @@ export default function Payments() {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      No payments recorded yet.
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      {t('payments.no_payments')}
                     </TableCell>
                   </TableRow>
                 )}
@@ -1768,7 +1779,7 @@ export default function Payments() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <p className="text-sm text-muted-foreground">
-            Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredPayments.length)} of {filteredPayments.length} entries
+            {t('common.showing')} {(currentPage - 1) * itemsPerPage + 1} {t('common.to')} {Math.min(currentPage * itemsPerPage, filteredPayments.length)} {t('common.of')} {filteredPayments.length} {t('common.entries')}
           </p>
           <div className="flex items-center gap-2">
             <Button 
@@ -1779,7 +1790,7 @@ export default function Payments() {
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm">Page {currentPage} of {totalPages}</span>
+            <span className="text-sm">{t('common.page')} {currentPage} {t('common.of')} {totalPages}</span>
             <Button 
               variant="outline" 
               size="sm" 
@@ -1795,17 +1806,17 @@ export default function Payments() {
       {canViewBranchTotals && branchTotals && Object.keys(branchTotals).length > 0 && (
         <div className="mt-8">
           <div className="flex items-center gap-3 mb-4">
-            <h3 className="text-lg font-semibold">Revenue by Branch</h3>
+            <h3 className="text-lg font-semibold">{t('payments.revenue_by_branch')}</h3>
             {(filterDateFrom || filterDateTo) && (
               <span className="text-sm text-muted-foreground bg-muted/50 px-3 py-1 rounded-full">
                 {filterDateFrom && filterDateTo
                   ? `${filterDateFrom} → ${filterDateTo}`
                   : filterDateFrom
-                  ? `From ${filterDateFrom}`
-                  : `Until ${filterDateTo}`}
+                  ? `${t('payments.branch_totals.from')} ${filterDateFrom}`
+                  : `${t('payments.branch_totals.until')} ${filterDateTo}`}
               </span>
             )}
-            <span className="text-sm text-muted-foreground">· {filteredPayments.length} payments</span>
+            <span className="text-sm text-muted-foreground">· {filteredPayments.length} {t('nav.payments')}</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {Object.entries(branchTotals)
@@ -1820,14 +1831,14 @@ export default function Payments() {
                     <div key={m} className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground flex items-center gap-2">
                         {getMethodIcon(m as Payment['method'])}
-                        {m}
+                        {m === 'Cash' ? t('dashboard.cash') : m === 'Credit Card' ? t('dashboard.visa') : m === 'Bank Transfer' ? t('common.bank_transfer') : m === 'Instapay' ? t('dashboard.instapay') : m === 'Other' ? t('common.other') : m}
                       </span>
-                      <span className="font-medium tabular-nums">{(data[m] ?? 0).toLocaleString()} LE</span>
+                      <span className="font-medium tabular-nums">{(data[m] ?? 0).toLocaleString()} {t('payments.currency_le')}</span>
                     </div>
                   ))}
                   <div className="flex justify-between items-center pt-2 border-t font-bold">
-                    <span>Total</span>
-                    <span className="text-primary tabular-nums">{(data.Total || 0).toLocaleString()} LE</span>
+                    <span>{t('payments.branch_totals.total')}</span>
+                    <span className="text-primary tabular-nums">{(data.Total || 0).toLocaleString()} {t('payments.currency_le')}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -1836,9 +1847,9 @@ export default function Payments() {
           {Object.keys(branchTotals).length > 1 && (
             <div className="mt-4 flex justify-end">
               <div className="bg-primary/10 border border-primary/20 rounded-xl px-6 py-3 flex items-center gap-6">
-                <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Grand Total</span>
+                <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{t('payments.branch_totals.grand_total')}</span>
                 <span className="text-2xl font-extrabold text-primary tabular-nums">
-                  {Object.values(branchTotals).reduce((sum, d) => sum + (d.Total || 0), 0).toLocaleString()} LE
+                  {Object.values(branchTotals).reduce((sum, d) => sum + (d.Total || 0), 0).toLocaleString()} {t('payments.currency_le')}
                 </span>
               </div>
             </div>
@@ -1847,7 +1858,7 @@ export default function Payments() {
       )}
 
       <div className="mt-8">
-        <h3 className="text-lg font-semibold mb-4">Available Packages</h3>
+        <h3 className="text-lg font-semibold mb-4">{t('payments.available_packages')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {packages.map(pkg => (
             <Card key={pkg.id} className="bg-muted/30">
@@ -1856,20 +1867,20 @@ export default function Payments() {
               </CardHeader>
               <CardContent>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-muted-foreground">Price:</span>
-                  <span className="font-bold text-primary">{pkg.price.toLocaleString()} LE</span>
+                  <span className="text-sm text-muted-foreground">{t('payments.packages_list.price')}</span>
+                  <span className="font-bold text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
                 </div>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-muted-foreground">Sessions:</span>
+                  <span className="text-sm text-muted-foreground">{t('payments.packages_list.sessions')}</span>
                   <span className="font-medium">{pkg.sessions}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Expiry:</span>
-                  <span className="text-xs">{pkg.expiryDays} days</span>
+                  <span className="text-sm text-muted-foreground">{t('payments.packages_list.expiry')}</span>
+                  <span className="text-xs">{pkg.expiryDays} {t('payments.days')}</span>
                 </div>
                 {pkg.branch !== 'ALL' && (
                   <div className="mt-3 pt-3 border-t">
-                    <Badge variant="outline" className="text-[10px]">{pkg.branch} Branch</Badge>
+                    <Badge variant="outline" className="text-[10px]">{pkg.branch} {t('payments.packages_list.branch')}</Badge>
                   </div>
                 )}
               </CardContent>
@@ -1877,7 +1888,7 @@ export default function Payments() {
           ))}
           {packages.length === 0 && (
             <p className="text-sm text-muted-foreground col-span-full text-center py-4">
-              No packages defined in settings.
+              {t('payments.packages_list.no_packages')}
             </p>
           )}
         </div>

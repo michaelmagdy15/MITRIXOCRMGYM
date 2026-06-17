@@ -8,6 +8,7 @@ import { AppProvider, useAppContext } from './context';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ function AppContent() {
   const canUseQuoteGenerator = QUOTE_GENERATOR_EMAILS.includes((authUser?.email || '').toLowerCase());
   const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features } = useAppContext();
   const { theme, toggleTheme } = useTheme();
+  const { t, language, toggleLanguage, isRtl } = useLanguage();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
   const [isCheckinMode, setIsCheckinMode] = React.useState(window.location.pathname === '/checkin');
   const [isHelpMode, setIsHelpMode] = React.useState(window.location.pathname === '/help');
@@ -126,19 +128,29 @@ function AppContent() {
           <div className="flex items-center space-x-2">
             <Shield className="h-6 w-6 text-rose-500" />
             <h1 className="text-lg font-logo tracking-[0.1em] uppercase text-primary font-bold">
-              PLATFORM PORTAL
+              {t('header.platform_portal')}
             </h1>
-            <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px] font-bold">SUPER ADMIN</Badge>
+            <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px] font-bold">{t('header.super_admin')}</Badge>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-foreground">{currentUser.name}</p>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{currentUser.role}</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleLanguage}
+              className="h-8 px-2.5 text-xs font-bold flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/40 hover:bg-muted text-foreground"
+            >
+              <span>🌐</span>
+              <span className="hidden sm:inline">{language === 'en' ? 'العربية' : 'English'}</span>
+              <span className="sm:hidden">{language === 'en' ? 'AR' : 'EN'}</span>
+            </Button>
+            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8" title={t('common.toggle_theme')}>
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8 text-destructive hover:bg-destructive/10" title="Logout">
+            <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8 text-destructive hover:bg-destructive/10" title={t('common.logout')}>
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -236,7 +248,7 @@ function AppContent() {
                   {branding.companyName}
                 </h1>
               )}
-              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">KIOSK MODE</Badge>
+              <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20">{t('header.kiosk_mode')}</Badge>
           </div>
           <Button 
             variant="ghost" 
@@ -244,8 +256,8 @@ function AppContent() {
             className="text-muted-foreground hover:text-destructive"
             onClick={() => setKioskAuthenticated(false)}
           >
-            <LogOut className="h-4 w-4 mr-2" />
-            Lock
+            <LogOut className="h-4 w-4 me-2" />
+            {t('common.logout')}
           </Button>
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-8">
@@ -307,61 +319,61 @@ function AppContent() {
   const isPlatformAdmin = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'].includes(currentUser?.email?.toLowerCase());
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
+    { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, show: true },
     {
       id: 'leads',
-      label: 'Leads',
+      label: t('nav.leads'),
       icon: UserPlus,
       show: (features.leads !== false) && (currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin')
     },
-    { id: 'clients', label: 'Members', icon: Users, show: true },
-    { id: 'tasks', label: 'Tasks', icon: CheckSquare, show: currentUser.role !== 'admin' },
+    { id: 'clients', label: t('nav.clients'), icon: Users, show: true },
+    { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: currentUser.role !== 'admin' },
     {
       id: 'payments',
-      label: 'Payments',
+      label: t('nav.payments'),
       icon: CreditCard,
       show: (features.payments !== false) && !!(canViewGlobalDashboard || canDeletePayments)
     },
-    { id: 'attendance', label: 'Attendance', icon: Scan, show: features.attendance !== false },
+    { id: 'attendance', label: t('nav.attendance'), icon: Scan, show: features.attendance !== false },
     {
       id: 'reports',
-      label: 'Reports',
+      label: t('nav.reports'),
       icon: BarChart3,
       show: (features.reports !== false) && !!(isManagerOrSama && currentUser.role !== 'admin')
     },
     {
       id: 'audit',
-      label: 'History',
+      label: t('nav.audit'),
       icon: History,
       show: !!(canAccessSettings && currentUser.role !== 'admin')
     },
     {
       id: 'settings',
-      label: 'Settings',
+      label: t('nav.settings'),
       icon: SettingsIcon,
       show: !!(canAccessSettings && currentUser.role !== 'admin')
     },
     {
       id: 'qrcode',
-      label: 'App QR',
+      label: t('nav.qrcode'),
       icon: Smartphone,
       show: !!(canAccessSettings && currentUser.role !== 'admin' && !/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent))
     },
     {
       id: 'quotes',
-      label: 'Quotes',
+      label: t('nav.quotes'),
       icon: FileText,
       show: (features.quotes !== false) && canUseQuoteGenerator
     },
     {
       id: 'operations',
-      label: 'Operations',
+      label: t('nav.operations'),
       icon: Coffee,
       show: (features.operations !== false) && (currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin')
     },
     {
       id: 'admin-hub',
-      label: 'Admin Hub',
+      label: t('nav.admin-hub'),
       icon: ShieldAlert,
       show: isManagerOrSama && currentUser.role !== 'admin'
     }
@@ -373,11 +385,11 @@ function AppContent() {
     <div className="min-h-screen bg-background text-foreground flex font-sans overflow-x-hidden">
       <div className="flex-1 flex w-full">
         {/* Desktop Collapsible Sidebar */}
-        <aside className={`hidden md:flex flex-col bg-card border-r border-border h-screen sticky top-0 z-40 sidebar-transition flex-shrink-0 ${isSidebarCollapsed ? 'w-16' : 'w-64'}`}>
+        <aside className={`hidden md:flex flex-col bg-card border-e border-border h-screen sticky top-0 z-40 sidebar-transition flex-shrink-0 ${isSidebarCollapsed ? 'w-16' : 'w-64'}`}>
           <div className="p-4 flex items-center justify-center border-b h-16 relative overflow-hidden flex-shrink-0">
             {/* Logo/Branding with transition */}
-            <div className={`flex items-center space-x-2 transition-all duration-300 absolute left-4 top-4 ${
-              isSidebarCollapsed ? 'opacity-0 -translate-x-4 pointer-events-none' : 'opacity-100 translate-x-0'
+            <div className={`flex items-center space-x-2 transition-all duration-300 absolute start-4 top-4 ${
+              isSidebarCollapsed ? 'opacity-0 ltr:-translate-x-4 rtl:translate-x-4 pointer-events-none' : 'opacity-100 translate-x-0'
             }`}>
               {branding.logoUrl ? (
                 <img 
@@ -426,8 +438,8 @@ function AppContent() {
                   <Icon className="h-5 w-5 flex-shrink-0" />
                   <span className={`text-sm font-medium transition-all duration-300 overflow-hidden whitespace-nowrap ${
                     isSidebarCollapsed 
-                      ? 'opacity-0 max-w-0 ml-0 pointer-events-none' 
-                      : 'opacity-100 max-w-[150px] ml-3'
+                      ? 'opacity-0 max-w-0 ms-0 pointer-events-none' 
+                      : 'opacity-100 max-w-[150px] ms-3'
                   }`}>
                     {item.label}
                   </span>
@@ -467,7 +479,7 @@ function AppContent() {
             <div className={`flex items-center justify-between border-t border-border/50 pt-2 transition-all duration-300 ${
               isSidebarCollapsed ? 'flex-col gap-2' : 'flex-row'
             }`}>
-              <Button variant="ghost" size="icon" onClick={toggleTheme} title="Toggle dark mode" className="h-8 w-8">
+              <Button variant="ghost" size="icon" onClick={toggleTheme} title={t('common.toggle_theme')} className="h-8 w-8">
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               
@@ -476,19 +488,21 @@ function AppContent() {
                 size="icon" 
                 onClick={toggleSidebar} 
                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                title={isSidebarCollapsed ? t('common.expand_sidebar') : t('common.collapse_sidebar')}
               >
-                {isSidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                {isSidebarCollapsed 
+                  ? (isRtl ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />) 
+                  : (isRtl ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />)}
               </Button>
               
-              <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="h-8 w-8 text-destructive hover:bg-destructive/10">
+              <Button variant="ghost" size="icon" onClick={logout} title={t('common.logout')} className="h-8 w-8 text-destructive hover:bg-destructive/10">
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>
 
             {!isSidebarCollapsed && (
               <div className="text-[10px] text-muted-foreground/40 text-center mt-1 pt-1 border-t border-border/30 animate-in fade-in duration-300">
-                Made & managed by <a href="https://mitrixo.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground font-medium underline underline-offset-2 decoration-muted-foreground/20 hover:decoration-foreground transition-colors">mitrixo.com systems</a>
+                {t('common.made_by')}
               </div>
             )}
           </div>
@@ -503,7 +517,7 @@ function AppContent() {
         )}
 
         {/* Mobile Left Drawer Sidebar Panel */}
-        <aside className={`fixed inset-y-0 left-0 w-72 bg-card border-r border-border z-50 md:hidden flex flex-col p-4 shadow-2xl transition-transform duration-300 transform ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <aside className={`fixed inset-y-0 start-0 w-72 bg-card border-e border-border z-50 md:hidden flex flex-col p-4 shadow-2xl transition-transform duration-300 transform ${isMobileSidebarOpen ? 'translate-x-0' : 'ltr:-translate-x-full rtl:translate-x-full'}`}>
           <div className="flex items-center justify-between mb-6 pb-4 border-b">
             <div className="flex items-center space-x-2">
               {branding.logoUrl ? (
@@ -571,28 +585,34 @@ function AppContent() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wider truncate">{currentUser.role}</p>
               </div>
             </div>
-            <div className="flex items-center justify-between pt-2">
-              <Button variant="outline" size="sm" onClick={toggleTheme} className="flex-1 mr-2 gap-2 h-9">
-                {theme === 'dark' ? (
-                  <>
-                    <Sun className="h-4 w-4" />
-                    <span>Light Mode</span>
-                  </>
-                ) : (
-                  <>
-                    <Moon className="h-4 w-4" />
-                    <span>Dark Mode</span>
-                  </>
-                )}
+            <div className="flex flex-col gap-2 pt-2 border-t mt-2">
+              <Button variant="outline" size="sm" onClick={toggleLanguage} className="w-full gap-2 h-9">
+                <span>🌐</span>
+                <span>{language === 'en' ? 'العربية' : 'English'}</span>
               </Button>
-              <Button variant="destructive" size="sm" onClick={logout} className="flex-1 ml-2 gap-2 h-9">
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
-              </Button>
+              <div className="flex items-center justify-between">
+                <Button variant="outline" size="sm" onClick={toggleTheme} className="flex-1 me-2 gap-2 h-9">
+                  {theme === 'dark' ? (
+                    <>
+                      <Sun className="h-4 w-4" />
+                      <span>{t('common.light_mode')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="h-4 w-4" />
+                      <span>{t('common.dark_mode')}</span>
+                    </>
+                  )}
+                </Button>
+                <Button variant="destructive" size="sm" onClick={logout} className="flex-1 ms-2 gap-2 h-9">
+                  <LogOut className="h-4 w-4" />
+                  <span>{t('common.logout')}</span>
+                </Button>
+              </div>
             </div>
 
             <div className="text-[10px] text-muted-foreground/40 text-center mt-1 pt-1 border-t border-border/30">
-              Made & managed by <a href="https://mitrixo.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground font-medium underline underline-offset-2 decoration-muted-foreground/20 hover:decoration-foreground transition-colors">mitrixo.com systems</a>
+              {t('common.made_by')}
             </div>
           </div>
         </aside>
@@ -631,11 +651,11 @@ function AppContent() {
 
               {/* Desktop search bar */}
               <div className="hidden md:flex relative w-full max-w-sm">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Search by name, phone, or ID..."
-                  className="w-full pl-9 bg-muted/50 border-none"
+                  placeholder={t('header.search_placeholder')}
+                  className="w-full ps-9 bg-muted/50 border-none"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -650,12 +670,12 @@ function AppContent() {
                   >
                     <SelectTrigger className={`h-8 w-[150px] text-xs ${previewRole ? 'border-amber-500 text-amber-600 font-medium' : ''}`}>
                       <div className="flex items-center">
-                         {previewRole ? <Eye className="h-3.5 w-3.5 mr-2" /> : <EyeOff className="h-3.5 w-3.5 mr-2" />}
+                         {previewRole ? <Eye className="h-3.5 w-3.5 me-2" /> : <EyeOff className="h-3.5 w-3.5 me-2" />}
                          <SelectValue placeholder="Preview Role" />
                       </div>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Exit Preview</SelectItem>
+                      <SelectItem value="none">{t('header.exit_preview')}</SelectItem>
                       <SelectItem value="crm_admin">CRM Admin</SelectItem>
                       <SelectItem value="super_admin">Super Admin</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
@@ -667,7 +687,19 @@ function AppContent() {
               )}
             </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-4 ml-auto">
+            <div className="flex items-center space-x-2 sm:space-x-4 ms-auto">
+              {/* Language Toggle Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleLanguage}
+                className="h-8 px-2.5 text-xs font-bold flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 hover:bg-muted text-foreground"
+              >
+                <span>🌐</span>
+                <span className="hidden sm:inline">{language === 'en' ? 'العربية' : 'English'}</span>
+                <span className="sm:hidden">{language === 'en' ? 'AR' : 'EN'}</span>
+              </Button>
+
               {/* Search trigger on mobile */}
               <div className="md:hidden">
                 <Button variant="ghost" size="icon" onClick={() => {
@@ -708,11 +740,11 @@ function AppContent() {
           {/* Mobile search bar if toggled */}
           <div id="mobile-search" className="hidden md:hidden bg-card border-b p-2 flex-shrink-0">
             <div className="relative w-full">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
-                placeholder="Search by name, phone, or ID..."
-                className="w-full pl-9 bg-muted/50 border-none"
+                placeholder={t('header.search_placeholder')}
+                className="w-full ps-9 bg-muted/50 border-none"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -821,10 +853,12 @@ export default function App() {
           <AuthAwareSettingsProvider>
             <AppProvider>
               <ThemeProvider>
-                <CartProvider>
-                  <AppContent />
-                  <BuildVersionFooter />
-                </CartProvider>
+                <LanguageProvider>
+                  <CartProvider>
+                    <AppContent />
+                    <BuildVersionFooter />
+                  </CartProvider>
+                </LanguageProvider>
               </ThemeProvider>
             </AppProvider>
           </AuthAwareSettingsProvider>

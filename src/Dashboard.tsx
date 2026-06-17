@@ -11,6 +11,7 @@ import { useAppContext } from './context';
 import { SALES_NAME_MAPPING } from './constants';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { differenceInDays, isSameDay, parseISO, isAfter, isBefore, addDays, subDays, subMonths, startOfMonth, endOfMonth, isWithinInterval, format, getDay } from 'date-fns';
+import { useLanguage } from './contexts/LanguageContext';
 
 const PRIVATE_PACKAGES = [
   'drop session pt', 
@@ -48,6 +49,7 @@ import OnlineUsers from './components/OnlineUsers';
 
 function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], renderItem: (item: any) => React.ReactNode, itemsPerPage?: number }) {
   const [currentPage, setCurrentPage] = useState(1);
+  const { t } = useLanguage();
   const totalPages = Math.ceil((items || []).length / itemsPerPage);
   const paginatedItems = (items || []).slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -65,10 +67,10 @@ function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], 
             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
             disabled={currentPage === 1}
           >
-            <ChevronLeft className="h-3 w-3 mr-1" /> Prev
+            <ChevronLeft className="h-3 w-3 mr-1" /> {t('common.prev')}
           </Button>
           <span className="text-xs text-muted-foreground">
-            Page {currentPage} of {totalPages}
+            {t('common.page')} {currentPage} {t('common.of')} {totalPages}
           </span>
           <Button 
             variant="outline" 
@@ -77,7 +79,7 @@ function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], 
             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
           >
-            Next <ChevronRight className="h-3 w-3 ml-1" />
+            {t('common.next')} <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
         </div>
       )}
@@ -87,6 +89,7 @@ function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], 
 
 export default function Dashboard() {
   const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, branches, clients: contextClients, payments: contextPayments, attendances } = useAppContext();
+  const { t, language } = useLanguage();
   // Use context data directly instead of creating duplicate Firestore listeners.
   // Context 'clients' and 'payments' are already filtered for the current user's visibility.
   // For manager cross-rep analysis we need unfiltered data — but all users in context already
@@ -558,8 +561,8 @@ export default function Dashboard() {
         <div className="flex flex-wrap items-center gap-3 bg-muted/30 p-3 rounded-lg border border-border/50">
           <Users className="h-5 w-5 text-muted-foreground shrink-0" />
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-medium">Representative Performance</h3>
-            <p className="text-xs text-muted-foreground hidden sm:block">Filter statistics by sales representative</p>
+            <h3 className="text-sm font-medium">{t('dashboard.rep_performance')}</h3>
+            <p className="text-xs text-muted-foreground hidden sm:block">{t('dashboard.filter_by_rep')}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setSelectedMonthOffset(o => o + 1)}>
@@ -573,12 +576,12 @@ export default function Dashboard() {
           {canViewRepBreakdown && (
             <Select value={selectedRepId} onValueChange={(v) => setSelectedRepId(v || 'all')}>
               <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Select representative">
-                  {selectedRepId === 'all' ? 'All Representatives' : reps.find(r => r.id === selectedRepId)?.name ?? 'Unknown User'}
+                <SelectValue placeholder={t('dashboard.select_rep')}>
+                  {selectedRepId === 'all' ? t('dashboard.all_reps') : reps.find(r => r.id === selectedRepId)?.name ?? 'Unknown User'}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Representatives</SelectItem>
+                <SelectItem value="all">{t('dashboard.all_reps')}</SelectItem>
                 {reps.map(rep => (
                   <SelectItem key={rep.id} value={rep.id}>{rep.name}</SelectItem>
                 ))}
@@ -587,10 +590,10 @@ export default function Dashboard() {
           )}
           <Select value={selectedBranch} onValueChange={(v) => setSelectedBranch(v || 'all')}>
             <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Select branch" />
+              <SelectValue placeholder={t('dashboard.select_branch')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Branches</SelectItem>
+              <SelectItem value="all">{t('dashboard.all_branches')}</SelectItem>
               {branches.map(b => (
                 <SelectItem key={b} value={b}>{b}</SelectItem>
               ))}
@@ -600,7 +603,7 @@ export default function Dashboard() {
       ) : (
         <div className="flex items-center gap-3 bg-muted/30 px-4 py-3 rounded-lg border border-border/50">
           <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="text-sm text-muted-foreground flex-1">Viewing history for</span>
+          <span className="text-sm text-muted-foreground flex-1">{t('dashboard.viewing_history')}</span>
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -630,21 +633,21 @@ export default function Dashboard() {
         {currentUser?.role === 'admin' ? (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Payments</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('dashboard.total_payments')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{filteredSalesData.currentAmount.toLocaleString()} LE</div>
               <div className="mt-4 space-y-2 text-sm text-muted-foreground">
                 <div className="flex justify-between">
-                  <span>Cash:</span>
+                  <span>{t('dashboard.cash')}:</span>
                   <span className="font-medium text-foreground">{totalCash.toLocaleString()} LE</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Visa:</span>
+                  <span>{t('dashboard.visa')}:</span>
                   <span className="font-medium text-foreground">{totalVisa.toLocaleString()} LE</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Instapay:</span>
+                  <span>{t('dashboard.instapay')}:</span>
                   <span className="font-medium text-foreground">{totalInstapay.toLocaleString()} LE</span>
                 </div>
               </div>
@@ -653,7 +656,7 @@ export default function Dashboard() {
         ) : (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Sales Target</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('dashboard.sales_target')}</CardTitle>
               {canAccessSettings && (
                 <CardAction>
                   <Dialog open={isTargetDialogOpen} onOpenChange={setIsTargetDialogOpen}>
@@ -666,18 +669,18 @@ export default function Dashboard() {
                     />
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>Update Sales Target</DialogTitle>
+                        <DialogTitle>{t('dashboard.update_sales_target')}</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                          <Label>New Target Amount (LE)</Label>
+                          <Label>{t('dashboard.new_target_amount')}</Label>
                           <Input 
                             type="number" 
                             value={newTarget} 
                             onChange={(e) => setNewTarget(e.target.value)} 
                           />
                         </div>
-                        <Button onClick={handleUpdateTarget} className="w-full">Save Target</Button>
+                        <Button onClick={handleUpdateTarget} className="w-full">{t('dashboard.save_target')}</Button>
                       </div>
                     </DialogContent>
                   </Dialog>
@@ -687,7 +690,7 @@ export default function Dashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{filteredSalesData.currentAmount.toLocaleString()} LE</div>
               <p className="text-xs text-muted-foreground">
-                {filteredSalesData.percentage}% of {filteredSalesData.targetAmount.toLocaleString()} LE target
+                {filteredSalesData.percentage}% {t('common.of')} {filteredSalesData.targetAmount.toLocaleString()} LE {t('dashboard.sales_target')}
               </p>
               <div className="mt-4 h-2 w-full bg-secondary rounded-full overflow-hidden">
                 <div 
@@ -697,19 +700,19 @@ export default function Dashboard() {
               </div>
 
               <div className="mt-4 pt-3 border-t">
-                <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-2">Packages Breakdown</span>
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-2">{t('dashboard.packages_breakdown')}</span>
                 <div className="space-y-4 text-sm">
                   <div className="space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="text-muted-foreground block text-[11px] mb-0.5">PT Packages</span>
+                        <span className="text-muted-foreground block text-[11px] mb-0.5">{t('dashboard.pt_packages')}</span>
                         <span className="text-lg font-bold">
                           {filteredSalesData.privateRevenue.toLocaleString()} <span className="text-xs font-normal">LE</span>
                         </span>
                       </div>
                       <div className="text-right">
                         <Badge variant="outline" className="font-semibold px-1.5 py-0 h-5 bg-blue-500/10 text-blue-500 border-blue-500/20">
-                          {filteredSalesData.privateSessionsSold} packages
+                          {filteredSalesData.privateSessionsSold} {t('dashboard.packages')}
                         </Badge>
                       </div>
                     </div>
@@ -718,14 +721,14 @@ export default function Dashboard() {
                   <div className="space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <span className="text-muted-foreground block text-[11px] mb-0.5">Group Packages</span>
+                        <span className="text-muted-foreground block text-[11px] mb-0.5">{t('dashboard.group_packages')}</span>
                         <span className="text-lg font-bold">
                           {filteredSalesData.groupRevenue.toLocaleString()} <span className="text-xs font-normal">LE</span>
                         </span>
                       </div>
                       <div className="text-right">
                         <Badge variant="outline" className="font-semibold px-1.5 py-0 h-5 bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
-                          {filteredSalesData.groupSessionsSold} packages
+                          {filteredSalesData.groupSessionsSold} {t('dashboard.packages')}
                         </Badge>
                       </div>
                     </div>
@@ -738,66 +741,66 @@ export default function Dashboard() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Leads</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.active_leads')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalLeads}</div>
             <p className="text-xs text-muted-foreground">
-              Needs follow-up
+              {t('dashboard.needs_follow_up')}
             </p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.expiring_soon')}</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">{nearlyExpired}</div>
             <p className="text-xs text-muted-foreground">
-              Packages ending in &lt; 30 days
+              {t('dashboard.ending_30d')}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Expired</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.total_expired')}</CardTitle>
             <AlertTriangle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">{expired}</div>
             <p className="text-xs text-muted-foreground">
-              Expired memberships
+              {t('dashboard.expired_memberships')}
             </p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Upcoming Birthdays</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.upcoming_birthdays')}</CardTitle>
             <Gift className="h-4 w-4 text-pink-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{upcomingBirthdays.length}</div>
-            <p className="text-xs text-muted-foreground">In the next 7 days</p>
+            <p className="text-xs text-muted-foreground">{t('dashboard.next_7_days')}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">New Members</CardTitle>
+            <CardTitle className="text-sm font-medium">{t('dashboard.new_members')}</CardTitle>
             <UserPlus className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-600">{newMembersCount}</div>
             <p className="text-xs text-muted-foreground">
-              Joined in {format(selectedMonth, 'MMM yyyy')}
+              {t('dashboard.joined_in')} {format(selectedMonth, 'MMM yyyy')}
             </p>
             <div className="mt-3 pt-3 border-t flex justify-between text-xs text-muted-foreground">
-              <span>Returning active</span>
+              <span>{t('dashboard.returning_active')}</span>
               <span className="font-semibold text-foreground">{returningMembersCount}</span>
             </div>
           </CardContent>
@@ -810,7 +813,7 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <CalendarDays className="h-4 w-4 text-muted-foreground" />
-              Branch Attendance — Last 90 Days
+              {t('dashboard.branch_attendance')}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -822,7 +825,7 @@ export default function Dashboard() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr>
-                        <th className="text-left pr-3 pb-2 font-medium text-muted-foreground w-28">Branch</th>
+                        <th className="text-left pr-3 pb-2 font-medium text-muted-foreground w-28">{t('dashboard.branch')}</th>
                         {DAY_LABELS.map(d => (
                           <th key={d} className="pb-2 font-medium text-muted-foreground text-center w-12">{d}</th>
                         ))}
@@ -857,7 +860,7 @@ export default function Dashboard() {
                     </tbody>
                   </table>
                   <p className="mt-3 text-[10px] text-muted-foreground">
-                    Colour intensity = relative check-in volume. Darker = busier.
+                    {t('dashboard.heatmap_legend')}
                   </p>
                 </div>
               );
@@ -872,14 +875,14 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Action Required: Packages</CardTitle>
+            <CardTitle>{t('dashboard.action_required_packages')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {negativeSessions.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-semibold text-red-600 flex items-center">
-                    <AlertTriangle className="h-4 w-4 mr-1" /> Negative Packages (Needs Renewal)
+                    <AlertTriangle className="h-4 w-4 mr-1" /> {t('dashboard.negative_packages')}
                   </h4>
                   <PaginatedList 
                     items={negativeSessions} 
@@ -889,7 +892,7 @@ export default function Dashboard() {
                           <p className="font-medium text-sm">{client.name}</p>
                           <p className="text-xs text-muted-foreground">{client.packageType}</p>
                         </div>
-                        <Badge variant="destructive">{client.sessionsRemaining} packages</Badge>
+                        <Badge variant="destructive">{client.sessionsRemaining} {t('dashboard.packages')}</Badge>
                       </div>
                     )} 
                   />
@@ -899,7 +902,7 @@ export default function Dashboard() {
               {noAttendance.length > 0 && (
                 <div className="space-y-2 mt-4">
                   <h4 className="text-sm font-semibold text-amber-600 flex items-center">
-                    <CalendarDays className="h-4 w-4 mr-1" /> No Attendance Yet
+                    <CalendarDays className="h-4 w-4 mr-1" /> {t('dashboard.no_attendance_yet')}
                   </h4>
                   <PaginatedList 
                     items={noAttendance} 
@@ -909,7 +912,7 @@ export default function Dashboard() {
                           <p className="font-medium text-sm">{client.name}</p>
                           <p className="text-xs text-muted-foreground">{client.packageType}</p>
                         </div>
-                        <Badge variant="outline" className="text-amber-600 border-amber-600">No Attend</Badge>
+                        <Badge variant="outline" className="text-amber-600 border-amber-600">{t('dashboard.no_attendance')}</Badge>
                       </div>
                     )} 
                   />
@@ -919,7 +922,7 @@ export default function Dashboard() {
               {expiredList.length > 0 && (
                 <div className="space-y-2 mt-4">
                   <h4 className="text-sm font-semibold text-red-600 flex items-center">
-                    <AlertTriangle className="h-4 w-4 mr-1" /> Expired Packages
+                    <AlertTriangle className="h-4 w-4 mr-1" /> {t('dashboard.expired_packages')}
                   </h4>
                   <PaginatedList 
                     items={expiredList} 
@@ -927,9 +930,9 @@ export default function Dashboard() {
                       <div key={client.id} className="flex items-center justify-between p-2 border border-red-200 bg-red-50 dark:bg-red-900/10 rounded-md">
                         <div>
                           <p className="font-medium text-sm">{client.name}</p>
-                          <p className="text-xs text-muted-foreground">Expired: {client.membershipExpiry ? new Date(client.membershipExpiry).toLocaleDateString() : 'Unknown'}</p>
+                          <p className="text-xs text-muted-foreground">{t('members.table.expiry_date') || 'Expired'}: {client.membershipExpiry ? new Date(client.membershipExpiry).toLocaleDateString() : 'Unknown'}</p>
                         </div>
-                        <Badge variant="destructive">Expired</Badge>
+                        <Badge variant="destructive">{t('members.tabs.expired') || 'Expired'}</Badge>
                       </div>
                     )} 
                   />
@@ -937,7 +940,7 @@ export default function Dashboard() {
               )}
 
               {negativeSessions.length === 0 && noAttendance.length === 0 && expiredList.length === 0 && (
-                <p className="text-sm text-muted-foreground">All package tracking is up to date.</p>
+                <p className="text-sm text-muted-foreground">{t('dashboard.all_packages_ok')}</p>
               )}
             </div>
           </CardContent>
@@ -945,14 +948,14 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Urgent Reminders</CardTitle>
+            <CardTitle>{t('dashboard.urgent_reminders')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {upcomingVisits.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-semibold text-blue-600 flex items-center">
-                    <CalendarDays className="h-4 w-4 mr-1" /> Upcoming Visits
+                    <CalendarDays className="h-4 w-4 mr-1" /> {t('dashboard.upcoming_visits')}
                   </h4>
                   <PaginatedList 
                     items={upcomingVisits} 
@@ -960,7 +963,7 @@ export default function Dashboard() {
                       <div key={client.id} className="flex items-center justify-between p-2 border rounded-md">
                         <div>
                           <p className="font-medium text-sm">{client.name}</p>
-                          <p className="text-xs text-muted-foreground">Expected Visit: {new Date(client.expectedVisitDate!).toLocaleDateString()}</p>
+                          <p className="text-xs text-muted-foreground">{t('dashboard.expected_visit')}: {new Date(client.expectedVisitDate!).toLocaleDateString()}</p>
                         </div>
                       </div>
                     )} 
@@ -971,7 +974,7 @@ export default function Dashboard() {
               {nearlyExpiredList.length > 0 && (
                 <div className="space-y-2 mt-4">
                   <h4 className="text-sm font-semibold text-amber-600 flex items-center">
-                    <AlertTriangle className="h-4 w-4 mr-1" /> Expiring Soon
+                    <AlertTriangle className="h-4 w-4 mr-1" /> {t('dashboard.expiring_soon')}
                   </h4>
                   <PaginatedList 
                     items={nearlyExpiredList} 
@@ -979,7 +982,7 @@ export default function Dashboard() {
                       <div key={client.id} className="flex items-center justify-between p-2 border border-amber-200 bg-amber-50 dark:bg-amber-900/10 rounded-md">
                         <div>
                           <p className="font-medium text-sm">{client.name}</p>
-                          <p className="text-xs text-muted-foreground">Expires: {client.membershipExpiry ? new Date(client.membershipExpiry).toLocaleDateString() : 'Unknown'}</p>
+                          <p className="text-xs text-muted-foreground">{t('members.table.expiry_date') || 'Expires'}: {client.membershipExpiry ? new Date(client.membershipExpiry).toLocaleDateString() : 'Unknown'}</p>
                         </div>
                       </div>
                     )} 
@@ -990,7 +993,7 @@ export default function Dashboard() {
               {attentionLeads.length > 0 && (
                 <div className="space-y-2 mt-4">
                   <h4 className="text-sm font-semibold text-purple-600 flex items-center">
-                    <AlertTriangle className="h-4 w-4 mr-1" /> Leads Needing Attention
+                    <AlertTriangle className="h-4 w-4 mr-1" /> {t('dashboard.leads_needing_attention')}
                   </h4>
                   <PaginatedList 
                     items={attentionLeads} 
@@ -998,7 +1001,7 @@ export default function Dashboard() {
                       <div key={client.id} className="flex items-center justify-between p-2 border border-purple-200 bg-purple-50 dark:bg-purple-900/10 rounded-md">
                         <div>
                           <p className="font-medium text-sm">{client.name}</p>
-                          <p className="text-xs text-muted-foreground">Last comment {differenceInDays(now, parseISO(client.comments.reduce((latest: any, current: any) => isAfter(parseISO(current.date), parseISO(latest.date)) ? current : latest, client.comments[0]).date))} days ago</p>
+                          <p className="text-xs text-muted-foreground">{t('dashboard.last_comment')} {differenceInDays(now, parseISO(client.comments.reduce((latest: any, current: any) => isAfter(parseISO(current.date), parseISO(latest.date)) ? current : latest, client.comments[0]).date))} {t('dashboard.days_ago')}</p>
                         </div>
                       </div>
                     )} 
@@ -1007,7 +1010,7 @@ export default function Dashboard() {
               )}
 
               {upcomingVisits.length === 0 && nearlyExpiredList.length === 0 && attentionLeads.length === 0 && (
-                <p className="text-sm text-muted-foreground">No urgent reminders at this time.</p>
+                <p className="text-sm text-muted-foreground">{t('dashboard.no_urgent_reminders')}</p>
               )}
             </div>
           </CardContent>
@@ -1022,7 +1025,7 @@ export default function Dashboard() {
       {/* ── Team Charts (managers see global, reps see personal) ── */}
       {canViewGlobalDashboard ? (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold tracking-tight">Team Analytics</h2>
+          <h2 className="text-lg font-semibold tracking-tight">{t('dashboard.team_analytics')}</h2>
 
           <div className="grid grid-cols-1">
             <ConversionFunnel 
@@ -1035,7 +1038,7 @@ export default function Dashboard() {
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">6-Month Revenue Trend</CardTitle>
+                <CardTitle className="text-sm font-medium">{t('dashboard.six_month_revenue')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={220}>
@@ -1049,7 +1052,7 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(v: any) => [`${v.toLocaleString()} LE`, 'Revenue']} />
+                    <Tooltip formatter={(v: any) => [`${v.toLocaleString()} LE`, t('payments.table.amount') || 'Revenue']} />
                     <Area type="monotone" dataKey="Revenue" stroke="#6366f1" fill="url(#revGrad)" strokeWidth={2} dot={{ r: 3 }} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1058,7 +1061,7 @@ export default function Dashboard() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm font-medium">Rep Performance — {format(selectedMonth, 'MMMM yyyy')}</CardTitle>
+                <CardTitle className="text-sm font-medium">{t('dashboard.rep_performance')} — {format(selectedMonth, 'MMMM yyyy')}</CardTitle>
               </CardHeader>
               <CardContent>
                 {repComparisonData.length === 0 ? (
@@ -1071,8 +1074,8 @@ export default function Dashboard() {
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                       <Tooltip formatter={(v: any) => `${v.toLocaleString()} LE`} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar dataKey="Revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Target" fill="#e2e8f0" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Revenue" name={t('payments.table.amount') || 'Revenue'} fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Target" name={t('dashboard.sales_target') || 'Target'} fill="#e2e8f0" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -1094,9 +1097,9 @@ export default function Dashboard() {
                     <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: any) => `${v.toLocaleString()} LE`} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="Cash" stackId="a" fill="#22c55e" />
-                    <Bar dataKey="Visa" stackId="a" fill="#3b82f6" />
-                    <Bar dataKey="Instapay" stackId="a" fill="#ec4899" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Cash" name={t('dashboard.cash')} stackId="a" fill="#22c55e" />
+                    <Bar dataKey="Visa" name={t('dashboard.visa')} stackId="a" fill="#3b82f6" />
+                    <Bar dataKey="Instapay" name={t('dashboard.instapay')} stackId="a" fill="#ec4899" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -1114,8 +1117,8 @@ export default function Dashboard() {
                     <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
                     <Tooltip />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="Private" stackId="b" fill="#8b5cf6" />
-                    <Bar dataKey="Group" stackId="b" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Private" name={t('dashboard.pt_packages')} stackId="b" fill="#8b5cf6" />
+                    <Bar dataKey="Group" name={t('dashboard.group_packages')} stackId="b" fill="#10b981" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -1187,7 +1190,7 @@ export default function Dashboard() {
                         <tr key={rep.id} className="border-b border-gray-50 hover:bg-indigo-50/30 transition-colors group">
                           <td className="px-6 py-4">
                             <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-sm font-bold text-gray-700 group-hover:bg-indigo-100 group-hover:text-indigo-700 transition-colors">
-                              {index + 1}
+                                {index + 1}
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -1248,9 +1251,9 @@ export default function Dashboard() {
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v: any) => `${v.toLocaleString()} LE`} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Private" stackId="rev" fill="#6366f1" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="Group" stackId="rev" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Target" fill="#e2e8f0" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Private" name={t('dashboard.pt_packages')} stackId="rev" fill="#6366f1" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Group" name={t('dashboard.group_packages')} stackId="rev" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Target" name={t('dashboard.sales_target') || 'Target'} fill="#e2e8f0" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

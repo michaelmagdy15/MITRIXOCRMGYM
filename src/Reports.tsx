@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from './context';
+import { useLanguage } from './contexts/LanguageContext';
 import {
   format,
   parseISO,
@@ -63,19 +64,21 @@ function KPICard({
 }
 
 const CustomTooltipRevenue = ({ active, payload, label }: any) => {
+  const { t } = useLanguage();
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-background border rounded-lg p-3 shadow-lg text-sm">
       <p className="font-semibold mb-1">{label}</p>
-      <p className="text-emerald-600">Revenue: {payload[0]?.value?.toLocaleString()} LE</p>
+      <p className="text-emerald-600">{t('payments.table.amount') || 'Revenue'}: {payload[0]?.value?.toLocaleString()} LE</p>
       {payload[0]?.payload?.conversion != null && (
-        <p className="text-muted-foreground">{payload[0].payload.conversion}% conversion</p>
+        <p className="text-muted-foreground">{payload[0].payload.conversion}% {t('reports.conversion_rate')}</p>
       )}
     </div>
   );
 };
 
 const CustomTooltipRetention = ({ active, payload, label }: any) => {
+  const { t } = useLanguage();
   if (!active || !payload?.length) return null;
   const active_ = payload.find((p: any) => p.dataKey === 'active')?.value ?? 0;
   const churned = payload.find((p: any) => p.dataKey === 'churned')?.value ?? 0;
@@ -84,15 +87,16 @@ const CustomTooltipRetention = ({ active, payload, label }: any) => {
   return (
     <div className="bg-background border rounded-lg p-3 shadow-lg text-sm">
       <p className="font-semibold mb-1">{label}</p>
-      <p className="text-blue-600">Still Active: {active_}</p>
-      <p className="text-red-500">Left: {churned}</p>
-      <p className="text-muted-foreground font-medium mt-1">{rate}% retention</p>
+      <p className="text-blue-600">{t('reports.still_active')}: {active_}</p>
+      <p className="text-red-500">{t('reports.left')}: {churned}</p>
+      <p className="text-muted-foreground font-medium mt-1">{rate}% {t('reports.monthly_retention')}</p>
     </div>
   );
 };
 
 export default function Reports() {
   const { clients, payments, attendances } = useAppContext();
+  const { t, language } = useLanguage();
   const now = new Date();
 
   const exportToCSV = (data: any[], filename: string) => {
@@ -258,37 +262,37 @@ export default function Reports() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">Sales Overview</h2>
-        <p className="text-muted-foreground text-sm">Your gym's performance at a glance</p>
+        <h2 className="text-2xl font-bold tracking-tight">{t('reports.title')}</h2>
+        <p className="text-muted-foreground text-sm">{t('reports.subtitle')}</p>
       </div>
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
-          title="Members at Risk"
+          title={t('reports.members_at_risk')}
           value={churnRisk.length}
-          subtitle="No visit in 14+ days"
+          subtitle={t('reports.no_visit_14d')}
           icon={AlertTriangle}
           color="red"
         />
         <KPICard
-          title="Active Members"
+          title={t('reports.active_members')}
           value={activeCount}
-          subtitle="Currently enrolled"
+          subtitle={t('reports.currently_enrolled')}
           icon={Users}
           color="green"
         />
         <KPICard
-          title="Conversion Rate"
+          title={t('reports.conversion_rate')}
           value={conversionRate + '%'}
-          subtitle="Leads turned into members"
+          subtitle={t('reports.leads_to_members')}
           icon={TrendingUp}
           color="blue"
         />
         <KPICard
-          title="Revenue This Month"
+          title={t('reports.revenue_this_month')}
           value={revenueThisMonth.toLocaleString() + ' LE'}
-          subtitle="Payments collected so far"
+          subtitle={t('reports.payments_so_far')}
           icon={DollarSign}
           color="indigo"
         />
@@ -301,17 +305,17 @@ export default function Reports() {
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <TrendingUp className="h-5 w-5 text-emerald-500" />
-                Where Members Come From
+                {t('reports.where_members_come_from')}
               </CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Revenue collected per lead source</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t('reports.revenue_per_source')}</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => exportToCSV(sourceCSV, 'lead_sources')}>
-              <Download className="h-4 w-4 mr-1" /> Export
+              <Download className="h-4 w-4 mr-1" /> {t('reports.export')}
             </Button>
           </CardHeader>
           <CardContent>
             {sourceROI.length === 0 ? (
-              <p className="text-center text-muted-foreground py-10">No data yet.</p>
+              <p className="text-center text-muted-foreground py-10">{t('reports.no_data_yet') || 'No data yet.'}</p>
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={Math.max(160, sourceROI.length * 44)}>
@@ -341,7 +345,7 @@ export default function Reports() {
                         style={{ background: SOURCE_COLORS[i % SOURCE_COLORS.length] }}
                       />
                       <span className="text-muted-foreground">{r.source}:</span>
-                      <span className="font-semibold">{r.conversion}% conv.</span>
+                      <span className="font-semibold">{r.conversion}% {language === 'ar' ? 'تحويل' : 'conv.'}</span>
                     </div>
                   ))}
                 </div>
@@ -356,13 +360,13 @@ export default function Reports() {
             <div>
               <CardTitle className="flex items-center gap-2 text-lg text-red-600">
                 <AlertTriangle className="h-5 w-5" />
-                Members at Risk
+                {t('reports.members_at_risk')}
                 <Badge variant="destructive" className="ml-1">{churnRisk.length}</Badge>
               </CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Haven't visited in 14 or more days — call them!</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t('reports.call_them')}</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => exportToCSV(churnCSV, 'members_at_risk')}>
-              <Download className="h-4 w-4 mr-1" /> Export
+              <Download className="h-4 w-4 mr-1" /> {t('reports.export')}
             </Button>
           </CardHeader>
           <CardContent>
@@ -370,7 +374,7 @@ export default function Reports() {
               {churnRisk.length === 0 ? (
                 <div className="text-center py-10">
                   <div className="text-3xl mb-2">🎉</div>
-                  <p className="text-muted-foreground text-sm">All members are attending regularly.</p>
+                  <p className="text-muted-foreground text-sm">{t('reports.attending_regularly')}</p>
                 </div>
               ) : (
                 churnRisk.map(m => {
@@ -384,7 +388,7 @@ export default function Reports() {
                       <div>
                         <p className="font-medium text-sm">{m.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {m.lastDate ? `Last visit: ${m.lastDate}` : 'Never visited'}
+                          {m.lastDate ? `${t('reports.last_visit')}: ${m.lastDate}` : t('reports.never_visited')}
                         </p>
                       </div>
                       <Badge
@@ -395,7 +399,7 @@ export default function Reports() {
                         }
                         variant="outline"
                       >
-                        {m.daysAgo !== null ? `${m.daysAgo}d ago` : 'Never'}
+                        {m.daysAgo !== null ? `${m.daysAgo}${t('reports.days_ago') || 'd ago'}` : t('reports.never')}
                       </Badge>
                     </div>
                   );
@@ -411,19 +415,19 @@ export default function Reports() {
             <div>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <Users className="h-5 w-5 text-blue-500" />
-                Monthly Retention
+                {t('reports.monthly_retention')}
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Of members who joined each month — how many are still active vs. left
+                {t('reports.retention_desc')}
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => exportToCSV(cohortCSV, 'retention')}>
-              <Download className="h-4 w-4 mr-1" /> Export
+              <Download className="h-4 w-4 mr-1" /> {t('reports.export')}
             </Button>
           </CardHeader>
           <CardContent>
             {cohortRetention.length === 0 ? (
-              <p className="text-center text-muted-foreground py-10">No data yet.</p>
+              <p className="text-center text-muted-foreground py-10">{t('reports.no_data_yet') || 'No data yet.'}</p>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={cohortRetention} margin={{ left: -10, right: 8, top: 8, bottom: 0 }}>
@@ -431,7 +435,7 @@ export default function Reports() {
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip content={<CustomTooltipRetention />} />
                   <Legend
-                    formatter={(value) => (value === 'active' ? 'Still Active' : 'Left')}
+                    formatter={(value) => (value === 'active' ? t('reports.still_active') : t('reports.left'))}
                     wrapperStyle={{ fontSize: 12 }}
                   />
                   <Bar dataKey="active" name="active" stackId="a" fill="#3b82f6" />
@@ -448,10 +452,10 @@ export default function Reports() {
             <div>
               <CardTitle className="flex items-center gap-2 text-lg text-indigo-600 dark:text-indigo-400">
                 <RefreshCw className="h-5 w-5" />
-                Renewal Forecast
+                {t('reports.renewal_forecast')}
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Memberships expiring this month and expected renewals
+                {t('reports.expiring_desc')}
               </p>
             </div>
             <Badge variant="outline" className="border-indigo-400 text-indigo-600 text-xs">
@@ -462,19 +466,19 @@ export default function Reports() {
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-background rounded-xl border p-4 text-center">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2">
-                  Expiring This Month
+                  {t('reports.expiring_this_month')}
                 </p>
                 <p className="text-3xl font-extrabold text-indigo-600">{revenueForecast.expiringCount}</p>
-                <p className="text-xs text-muted-foreground mt-1">members</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('reports.members')}</p>
               </div>
               <div className="bg-background rounded-xl border p-4 text-center">
                 <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold mb-2">
-                  Their Total Value
+                  {t('reports.total_value')}
                 </p>
                 <p className="text-3xl font-extrabold text-indigo-600">
                   {revenueForecast.sumValue.toLocaleString()}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">LE if all renew</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('reports.if_all_renew')}</p>
               </div>
             </div>
 
@@ -483,18 +487,18 @@ export default function Reports() {
                 <DollarSign className="h-40 w-40 text-white absolute -right-4 -top-4" />
               </div>
               <p className="text-indigo-100 text-xs font-semibold uppercase tracking-wider mb-1">
-                Expected Renewal Revenue
+                {t('reports.expected_renewal_rev')}
               </p>
               <p className="text-4xl font-extrabold text-white">
                 {Math.round(revenueForecast.forecast).toLocaleString()}{' '}
                 <span className="text-lg font-normal opacity-70">LE</span>
               </p>
               <p className="text-indigo-200 text-xs mt-2">
-                Based on{' '}
+                {t('reports.based_on')}{' '}
                 <span className="font-bold text-white">
-                  {(revenueForecast.renewalRate * 100).toFixed(0)}% avg renewal rate
+                  {(revenueForecast.renewalRate * 100).toFixed(0)}% {t('reports.avg_renewal_rate')}
                 </span>{' '}
-                over the last 3 months
+                {t('reports.over_last_3_months')}
               </p>
             </div>
 
@@ -516,7 +520,7 @@ export default function Reports() {
               }
             >
               <Download className="h-4 w-4 mr-2" />
-              Download Forecast
+              {t('reports.download_forecast')}
             </Button>
           </CardContent>
         </Card>

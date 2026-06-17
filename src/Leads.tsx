@@ -1,6 +1,7 @@
 import { QRCodeSVG } from 'qrcode.react';
 import React, { useState, useDeferredValue, useRef, useEffect } from 'react';
 import { useAppContext } from './context';
+import { useLanguage } from './contexts/LanguageContext';
 import { ASSIGNABLE_ROLES } from './constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -33,6 +34,7 @@ export default function Leads() {
     fetchClientDetails,
     clients, addClient, updateClient, deleteMultipleClients, deleteClient, addComment, addInteraction
   } = useAppContext();
+  const { t } = useLanguage();
 
   // Debounce timers for lead name/phone edits
   const debounceTimers = useRef<{ [key: string]: any }>({});
@@ -596,21 +598,21 @@ export default function Leads() {
                 onCheckedChange={(checked) => handleSelectAll(!!checked)}
               />
             </TableHead>
-            <TableHead>ID</TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Score</TableHead>
-            <TableHead>Phone</TableHead>
-            <TableHead className="hidden md:table-cell">Branch</TableHead>
-            <TableHead className="hidden md:table-cell">Source</TableHead>
-            <TableHead>Stage</TableHead>
-            <TableHead>Paid Status</TableHead>
-            <TableHead className="hidden lg:table-cell">Interest</TableHead>
-            <TableHead className="hidden lg:table-cell">Category</TableHead>
-            <TableHead className="hidden xl:table-cell">Trial/Visit Date</TableHead>
-            <TableHead className="hidden md:table-cell">Last Contact</TableHead>
-            <TableHead>Next Reminder</TableHead>
-            {canAssignLeads && <TableHead className="hidden lg:table-cell">Assigned To</TableHead>}
-            <TableHead>Actions</TableHead>
+            <TableHead>{t('leads.table.id')}</TableHead>
+            <TableHead>{t('leads.table.name')}</TableHead>
+            <TableHead>{t('leads.table.score')}</TableHead>
+            <TableHead>{t('leads.table.phone')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('leads.branch')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('leads.table.source')}</TableHead>
+            <TableHead>{t('leads.stage')}</TableHead>
+            <TableHead>{t('leads.table.paid_status')}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t('leads.interest')}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t('leads.table.category')}</TableHead>
+            <TableHead className="hidden xl:table-cell">{t('leads.table.trial_date')}</TableHead>
+            <TableHead className="hidden md:table-cell">{t('leads.table.last_contact')}</TableHead>
+            <TableHead>{t('leads.table.next_reminder')}</TableHead>
+            {canAssignLeads && <TableHead className="hidden lg:table-cell">{t('leads.assigned_to')}</TableHead>}
+            <TableHead>{t('leads.table.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -704,7 +706,7 @@ export default function Leads() {
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
                       {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
                         <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
                       ))}
@@ -1199,39 +1201,39 @@ export default function Leads() {
   return (
     <div className="space-y-4 relative">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold tracking-tight">Leads Follow-up</h2>
+        <h2 className="text-2xl font-bold tracking-tight">{t('leads.title')}</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportToCSV}>
             <Download className="mr-2 h-4 w-4" />
-            Export CSV
+            {t('leads.export_csv')}
           </Button>
           <ImportData type="Lead" />
           <ImportHistory />
           {canDeleteRecords && (
             <Button variant="destructive" size="sm" onClick={handleDeleteAllLeads}>
               <Trash2 className="mr-2 h-4 w-4" />
-              Delete All Leads
+              {t('leads.delete_all')}
             </Button>
           )}
           <Dialog open={isNewLeadOpen} onOpenChange={setIsNewLeadOpen}>
             <DialogTrigger render={<Button size="sm" />}>
-              <Plus className="mr-2 h-4 w-4" /> Add Lead
+              <Plus className="mr-2 h-4 w-4" /> {t('leads.add_lead')}
             </DialogTrigger>
             <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Add New Lead</DialogTitle>
+                <DialogTitle>{t('leads.add_lead')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Name</Label>
+                  <Label>{t('leads.table.name')}</Label>
                   <Input id="name" placeholder="Client Name" value={newLeadName} onChange={(e) => setNewLeadName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Phone</Label>
+                  <Label>{t('leads.table.phone')}</Label>
                   <Input id="phone" placeholder="+20 100..." value={newLeadPhone} onChange={(e) => setNewLeadPhone(e.target.value)} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Source</Label>
+                  <Label>{t('leads.table.source')}</Label>
                   <Select value={newLeadSource} onValueChange={(v) => setNewLeadSource(v as LeadSource)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select source" />
@@ -1246,7 +1248,7 @@ export default function Leads() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Branch</Label>
+                  <Label>{t('leads.branch')}</Label>
                   <Select value={newLeadBranch} onValueChange={(v) => setNewLeadBranch(v as Branch)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select branch" />
@@ -1260,20 +1262,20 @@ export default function Leads() {
                 </div>
                 {currentUser?.role === 'rep' ? (
                   <div className="space-y-2">
-                    <Label>Assigned To</Label>
+                    <Label>{t('leads.assigned_to')}</Label>
                     <div className="h-10 px-3 flex items-center rounded-md border bg-muted/50 text-sm text-muted-foreground">
                       {currentUser.name || currentUser.email} (you)
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <Label>Assigned To</Label>
+                    <Label>{t('leads.assigned_to')}</Label>
                     <Select value={newLeadAssignedTo} onValueChange={(v) => setNewLeadAssignedTo(v || '')}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select assignment" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
                         {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
                           <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown'}</SelectItem>
                         ))}
@@ -1292,7 +1294,7 @@ export default function Leads() {
                     <p className="text-xs text-muted-foreground mt-0.5">Shares a phone number with another member (e.g. parent's number for a child)</p>
                   </div>
                 </label>
-                <Button className="w-full" onClick={handleAddLead}>Save Lead</Button>
+                <Button className="w-full" onClick={handleAddLead}>{t('leads.add_lead')}</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -1302,7 +1304,7 @@ export default function Leads() {
       <Card className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
           <div className="space-y-2">
-            <Label className="text-xs">Sort By</Label>
+            <Label className="text-xs">{t('leads.sort_by')}</Label>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'newest' | 'oldest' | 'score')}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="Sort" />
@@ -1317,20 +1319,20 @@ export default function Leads() {
           <div className="space-y-2">
             <Label className="text-xs">Search Name/Phone</Label>
             <Input 
-              placeholder="Search..." 
+              placeholder={t('leads.search_placeholder')} 
               value={searchTerm} 
               onChange={(e) => setSearchTerm(e.target.value)}
               className="h-9"
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Branch</Label>
+            <Label className="text-xs">{t('leads.branch')}</Label>
             <Select value={filterBranch} onValueChange={(v) => setFilterBranch(v as Branch | 'All')}>
               <SelectTrigger className="h-9">
-                <SelectValue placeholder="All Branches" />
+                <SelectValue placeholder={t('dashboard.all_branches')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="All">All Branches</SelectItem>
+                <SelectItem value="All">{t('dashboard.all_branches')}</SelectItem>
                 <SelectItem value="COMPLEX">COMPLEX</SelectItem>
                 <SelectItem value="MIVIDA">MIVIDA</SelectItem>
                 <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
@@ -1338,7 +1340,7 @@ export default function Leads() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Stage</Label>
+            <Label className="text-xs">{t('leads.stage')}</Label>
             <Select value={filterStage} onValueChange={(v) => setFilterStage(v as LeadStage | 'All')}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="All Stages" />
@@ -1354,7 +1356,7 @@ export default function Leads() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Interest</Label>
+            <Label className="text-xs">{t('leads.interest')}</Label>
             <Select value={filterInterest} onValueChange={(v) => setFilterInterest(v as LeadInterest | 'All')}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="All Interests" />
@@ -1368,20 +1370,20 @@ export default function Leads() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Assigned To</Label>
+            <Label className="text-xs">{t('leads.assigned_to')}</Label>
             <Select value={filterAssignedTo} onValueChange={(v) => setFilterAssignedTo(v || 'All')}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="All Reps">
                   {filterAssignedTo === 'All' || !filterAssignedTo
                     ? undefined
                     : filterAssignedTo === 'unassigned'
-                      ? 'Unassigned'
+                      ? t('leads.tabs.unassigned')
                       : users.find(u => u.id === filterAssignedTo)?.name || 'Unknown User'}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">All Reps</SelectItem>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
+                <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
                 {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
                   <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
                 ))}
@@ -1488,15 +1490,15 @@ export default function Leads() {
       <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
         <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
           <TabsList className="flex w-max sm:w-full bg-muted/50 rounded-lg p-1 justify-start sm:justify-center mb-4">
-            <TabsTrigger value="unassigned" className="px-4 text-xs sm:text-sm text-amber-600 font-bold dark:text-amber-500">Unassigned</TabsTrigger>
-            <TabsTrigger value="all" className="px-4 text-xs sm:text-sm">All</TabsTrigger>
-            <TabsTrigger value="instagram" className="px-4 text-xs sm:text-sm">Instagram</TabsTrigger>
-            <TabsTrigger value="whatsapp" className="px-4 text-xs sm:text-sm">WhatsApp</TabsTrigger>
-            <TabsTrigger value="walkin" className="px-4 text-xs sm:text-sm">Walk-in</TabsTrigger>
-            <TabsTrigger value="tiktok" className="px-4 text-xs sm:text-sm">TikTok</TabsTrigger>
-            <TabsTrigger value="other" className="px-4 text-xs sm:text-sm">Other</TabsTrigger>
-            <TabsTrigger value="trials" className="px-4 text-xs sm:text-sm">Trials</TabsTrigger>
-            <TabsTrigger value="followup" className="px-4 text-xs sm:text-sm">Follow up</TabsTrigger>
+            <TabsTrigger value="unassigned" className="px-4 text-xs sm:text-sm text-amber-600 font-bold dark:text-amber-500">{t('leads.tabs.unassigned')}</TabsTrigger>
+            <TabsTrigger value="all" className="px-4 text-xs sm:text-sm">{t('leads.tabs.all')}</TabsTrigger>
+            <TabsTrigger value="instagram" className="px-4 text-xs sm:text-sm">{t('leads.tabs.instagram')}</TabsTrigger>
+            <TabsTrigger value="whatsapp" className="px-4 text-xs sm:text-sm">{t('leads.tabs.whatsapp')}</TabsTrigger>
+            <TabsTrigger value="walkin" className="px-4 text-xs sm:text-sm">{t('leads.tabs.walk_in')}</TabsTrigger>
+            <TabsTrigger value="tiktok" className="px-4 text-xs sm:text-sm">{t('leads.tabs.tiktok')}</TabsTrigger>
+            <TabsTrigger value="other" className="px-4 text-xs sm:text-sm">{t('leads.tabs.other')}</TabsTrigger>
+            <TabsTrigger value="trials" className="px-4 text-xs sm:text-sm">{t('leads.tabs.trials')}</TabsTrigger>
+            <TabsTrigger value="followup" className="px-4 text-xs sm:text-sm">{t('leads.tabs.follow_up')}</TabsTrigger>
           </TabsList>
         </div>
         
@@ -1520,7 +1522,7 @@ export default function Leads() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-sm">Page {currentPage} of {totalPages}</span>
+              <span className="text-sm">{t('common.page')} {currentPage} {t('common.of')} {totalPages}</span>
               <Button 
                 variant="outline" 
                 size="sm" 

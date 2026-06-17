@@ -47,6 +47,7 @@
     "functions",
     "node_modules",
     "dist",
-    "dist-server"
+    "dist-server",
+    "scratch"
   ]
 }
