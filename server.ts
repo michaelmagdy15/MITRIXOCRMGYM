@@ -99,29 +99,35 @@ async function getTenantInfoForHost(hostname: string): Promise<{ config: any; st
       
     if (!customQuery.empty) {
       const docSnap = customQuery.docs[0];
-      const data = docSnap.data();
-      const config = {
-        ...defaultFirebaseConfig,
-        firestoreDatabaseId: data.databaseId
-      };
-      cache[normalizedHost] = { config, status: data.status || 'active', expiresAt: Date.now() + CACHE_TTL_MS };
-      return { config, status: data.status || 'active' };
-    }
-    
-    // B. Search by subdomain (e.g. gym.mitrixo.com -> subdomain 'gym')
-    const parts = normalizedHost.split('.');
-    if (parts.length >= 3) {
-      const subdomain = parts[0];
-      if (subdomain !== 'www' && subdomain !== 'api') {
-        const subDoc = await centralDb.collection('tenants').doc(subdomain).get();
-        if (subDoc.exists) {
-          const data = subDoc.data();
+      if (docSnap) {
+        const data = docSnap.data();
+        if (data) {
           const config = {
             ...defaultFirebaseConfig,
             firestoreDatabaseId: data.databaseId
           };
           cache[normalizedHost] = { config, status: data.status || 'active', expiresAt: Date.now() + CACHE_TTL_MS };
           return { config, status: data.status || 'active' };
+        }
+      }
+    }
+    
+    // B. Search by subdomain (e.g. gym.mitrixo.com -> subdomain 'gym')
+    const parts = normalizedHost.split('.');
+    if (parts.length >= 3) {
+      const subdomain = parts[0];
+      if (subdomain && subdomain !== 'www' && subdomain !== 'api') {
+        const subDoc = await centralDb.collection('tenants').doc(subdomain).get();
+        if (subDoc.exists) {
+          const data = subDoc.data();
+          if (data) {
+            const config = {
+              ...defaultFirebaseConfig,
+              firestoreDatabaseId: data.databaseId
+            };
+            cache[normalizedHost] = { config, status: data.status || 'active', expiresAt: Date.now() + CACHE_TTL_MS };
+            return { config, status: data.status || 'active' };
+          }
         }
       }
     }
@@ -215,10 +221,11 @@ async function startServer() {
         // Inject the dynamic client config
         const html = await injectFirebaseConfig(template, hostname);
         
-        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+        return res.status(200).set({ "Content-Type": "text/html" }).end(html);
       } catch (e) {
         vite.ssrFixStacktrace(e as Error);
         next(e);
+        return;
       }
     });
   } else {
@@ -241,10 +248,10 @@ async function startServer() {
         // Inject dynamic config into production index.html
         const html = await injectFirebaseConfig(template, hostname);
         
-        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+        return res.status(200).set({ "Content-Type": "text/html" }).end(html);
       } catch (error) {
         console.error("Error serving index.html:", error);
-        res.status(500).send("Internal Server Error");
+        return res.status(500).send("Internal Server Error");
       }
     });
   }
