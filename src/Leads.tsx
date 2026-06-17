@@ -21,6 +21,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Trash2, ChevronLeft, ChevronRight, User, Search, MapPin, Tag, Info, AlertCircle, Activity, QrCode, Copy, RefreshCw } from 'lucide-react';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
+import { WhatsAppDialog } from './components/WhatsAppDialog';
+import { MessageCircle } from 'lucide-react';
 
 export default function Leads() {
   const {
@@ -36,6 +38,7 @@ export default function Leads() {
   const debounceTimers = useRef<{ [key: string]: any }>({});
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [selectedLead, setSelectedLead] = useState<Client | null>(null);
+  const [whatsAppLead, setWhatsAppLead] = useState<Client | null>(null);
   const [newComment, setNewComment] = useState('');
   const [interactionType, setInteractionType] = useState<InteractionType>('Call');
   const [interactionOutcome, setInteractionOutcome] = useState<InteractionOutcome>('Interested');
@@ -558,6 +561,15 @@ export default function Leads() {
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-8 w-8 shrink-0 text-green-500 hover:bg-green-50 hover:text-green-600"
+                onClick={() => setWhatsAppLead(lead)}
+                title="Send WhatsApp"
+              >
+                <MessageCircle className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
                 className="h-8 w-8 shrink-0"
                 onClick={() => { setSelectedLead(lead); setIsMobileLeadDialogOpen(true); loadLeadDetails(lead.id); }}
               >
@@ -701,8 +713,18 @@ export default function Leads() {
                 </TableCell>
               )}
               <TableCell>
-                <Dialog onOpenChange={(open) => { if (open) { setSelectedLead(lead); loadLeadDetails(lead.id); } }}>
-                  <DialogTrigger render={<Button variant="ghost" size="sm" />}>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-green-500 hover:bg-green-50 hover:text-green-600"
+                    onClick={() => setWhatsAppLead(lead)}
+                    title="Send WhatsApp"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </Button>
+                  <Dialog onOpenChange={(open) => { if (open) { setSelectedLead(lead); loadLeadDetails(lead.id); } }}>
+                    <DialogTrigger render={<Button variant="ghost" size="sm" />}>
                     <MessageSquare className="h-4 w-4 mr-2" />
                     <span className="hidden sm:inline">Log Activity</span>
                   </DialogTrigger>
@@ -1164,6 +1186,7 @@ export default function Leads() {
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 )}
+                </div>
               </TableCell>
             </TableRow>
           ))}
@@ -1448,6 +1471,19 @@ export default function Leads() {
         variant="destructive"
         confirmText="Yes, Delete Everything"
       />
+
+      {whatsAppLead && (
+        <WhatsAppDialog
+          isOpen={!!whatsAppLead}
+          onOpenChange={(open) => !open && setWhatsAppLead(null)}
+          client={whatsAppLead}
+          onSuccess={() => {
+            if (activeLeadDetails?.leadId === whatsAppLead.id) {
+              loadLeadDetails(whatsAppLead.id);
+            }
+          }}
+        />
+      )}
 
       <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
         <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">

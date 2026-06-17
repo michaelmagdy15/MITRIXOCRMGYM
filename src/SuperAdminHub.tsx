@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { getApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Shield, Search, RefreshCw, Power, PowerOff, Globe, Database, Calendar, Users } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { 
+  Shield, Search, RefreshCw, Power, PowerOff, Globe, Database, 
+  Calendar, Users, Sliders, CheckCircle2, UserPlus, CreditCard, 
+  Scan, BarChart3, FileText, Package, Smartphone 
+} from 'lucide-react';
 import { Tenant } from './types';
 
 export default function SuperAdminHub() {
@@ -14,6 +21,23 @@ export default function SuperAdminHub() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+
+  // Features Dialog State
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [features, setFeatures] = useState({
+    leads: true,
+    ptPackages: true,
+    payments: true,
+    attendance: true,
+    reports: true,
+    quotes: true,
+    operations: true,
+    mobileApp: false
+  });
+  const [loadingFeatures, setLoadingFeatures] = useState(false);
+  const [savingFeatures, setSavingFeatures] = useState(false);
+  const [featuresError, setFeaturesError] = useState('');
+  const [featuresSuccess, setFeaturesSuccess] = useState(false);
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -51,6 +75,77 @@ export default function SuperAdminHub() {
     } catch (err: any) {
       setError(err.message || 'Failed to update workspace status.');
     }
+  };
+
+  const openFeaturesModal = async (tenant: Tenant) => {
+    setEditingTenant(tenant);
+    setLoadingFeatures(true);
+    setFeaturesError('');
+    setFeaturesSuccess(false);
+
+    try {
+      const tenantDb = getFirestore(getApp(), tenant.databaseId);
+      const featuresRef = doc(tenantDb, 'settings', 'features');
+      const snap = await getDoc(featuresRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        setFeatures({
+          leads: data.leads !== false,
+          ptPackages: data.ptPackages !== false,
+          payments: data.payments !== false,
+          attendance: data.attendance !== false,
+          reports: data.reports !== false,
+          quotes: data.quotes !== false,
+          operations: data.operations !== false,
+          mobileApp: data.mobileApp === true
+        });
+      } else {
+        // Fallback default configurations
+        setFeatures({
+          leads: true,
+          ptPackages: true,
+          payments: true,
+          attendance: true,
+          reports: true,
+          quotes: true,
+          operations: true,
+          mobileApp: false
+        });
+      }
+    } catch (err: any) {
+      setFeaturesError(`Could not load features from database [${tenant.databaseId}]: ${err.message}`);
+    } finally {
+      setLoadingFeatures(false);
+    }
+  };
+
+  const saveFeatures = async () => {
+    if (!editingTenant) return;
+    setSavingFeatures(true);
+    setFeaturesError('');
+    setFeaturesSuccess(false);
+
+    try {
+      const tenantDb = getFirestore(getApp(), editingTenant.databaseId);
+      const featuresRef = doc(tenantDb, 'settings', 'features');
+      await setDoc(featuresRef, features, { merge: true });
+      
+      setFeaturesSuccess(true);
+      setTimeout(() => {
+        setEditingTenant(null);
+      }, 1500);
+    } catch (err: any) {
+      setFeaturesError(`Failed to save features: ${err.message}`);
+    } finally {
+      setSavingFeatures(false);
+    }
+  };
+
+  const toggleFeature = (key: keyof typeof features) => {
+    setFeatures(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
   };
 
   const filteredTenants = tenants.filter(t => 
@@ -207,24 +302,35 @@ export default function SuperAdminHub() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button 
-                          size="sm" 
-                          variant={tenant.status === 'active' ? 'destructive' : 'default'} 
-                          className="h-8 px-3.5 text-xs font-bold rounded-xl gap-1.5"
-                          onClick={() => toggleTenantStatus(tenant.id, tenant.status)}
-                        >
-                          {tenant.status === 'active' ? (
-                            <>
-                              <PowerOff className="h-3.5 w-3.5" />
-                              Suspend
-                            </>
-                          ) : (
-                            <>
-                              <Power className="h-3.5 w-3.5" />
-                              Activate
-                            </>
-                          )}
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-3 text-xs font-bold rounded-xl gap-1.5"
+                            onClick={() => openFeaturesModal(tenant)}
+                          >
+                            <Sliders className="h-3.5 w-3.5" />
+                            Features
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant={tenant.status === 'active' ? 'destructive' : 'default'} 
+                            className="h-8 px-3.5 text-xs font-bold rounded-xl gap-1.5"
+                            onClick={() => toggleTenantStatus(tenant.id, tenant.status)}
+                          >
+                            {tenant.status === 'active' ? (
+                              <>
+                                <PowerOff className="h-3.5 w-3.5" />
+                                Suspend
+                              </>
+                            ) : (
+                              <>
+                                <Power className="h-3.5 w-3.5" />
+                                Activate
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -234,6 +340,165 @@ export default function SuperAdminHub() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Feature Configuration Dialog */}
+      <Dialog open={editingTenant !== null} onOpenChange={(open) => { if (!open) setEditingTenant(null); }}>
+        <DialogContent className="sm:max-w-md border-border/50 shadow-2xl bg-zinc-950 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2">
+              <Sliders className="h-5 w-5 text-rose-500" />
+              Manage Features
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Configure active modules for <strong className="text-zinc-200">{editingTenant?.gymName}</strong> ({editingTenant?.databaseId})
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingFeatures ? (
+            <div className="py-12 flex flex-col items-center justify-center text-sm text-zinc-400">
+              <RefreshCw className="h-6 w-6 animate-spin mb-2 text-rose-500" />
+              Fetching tenant settings...
+            </div>
+          ) : (
+            <div className="space-y-4 py-2">
+              {featuresError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{featuresError}</AlertDescription>
+                </Alert>
+              )}
+              {featuresSuccess && (
+                <Alert className="bg-emerald-950/20 border-emerald-500/30 text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  <AlertDescription>Features updated successfully!</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="divide-y divide-zinc-800 border-y border-zinc-800 max-h-[400px] overflow-y-auto pr-1">
+                {/* Leads */}
+                <div className="flex items-center justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl mt-0.5">
+                      <UserPlus className="h-4 w-4 text-amber-400" />
+                    </div>
+                    <div>
+                      <Label className="font-bold text-xs text-zinc-200">Leads Module</Label>
+                      <p className="text-[10px] text-zinc-500">Track prospective clients & trial sessions.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.leads} onCheckedChange={() => toggleFeature('leads')} disabled={savingFeatures} />
+                </div>
+
+                {/* PT Packages */}
+                <div className="flex items-center justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-purple-500/10 border border-purple-500/20 rounded-xl mt-0.5">
+                      <Package className="h-4 w-4 text-purple-400" />
+                    </div>
+                    <div>
+                      <Label className="font-bold text-xs text-zinc-200">PT Packages</Label>
+                      <p className="text-[10px] text-zinc-500">Private training package deductions & coaches.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.ptPackages} onCheckedChange={() => toggleFeature('ptPackages')} disabled={savingFeatures} />
+                </div>
+
+                {/* Payments */}
+                <div className="flex items-center justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl mt-0.5">
+                      <CreditCard className="h-4 w-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <Label className="font-bold text-xs text-zinc-200">Payments & Invoicing</Label>
+                      <p className="text-[10px] text-zinc-500">Record payments & view revenue target metrics.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.payments} onCheckedChange={() => toggleFeature('payments')} disabled={savingFeatures} />
+                </div>
+
+                {/* Attendance */}
+                <div className="flex items-center justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-sky-500/10 border border-sky-500/20 rounded-xl mt-0.5">
+                      <Scan className="h-4 w-4 text-sky-400" />
+                    </div>
+                    <div>
+                      <Label className="font-bold text-xs text-zinc-200">Attendance & QR</Label>
+                      <p className="text-[10px] text-zinc-500">Enable check-ins via QR scanner kiosk.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.attendance} onCheckedChange={() => toggleFeature('attendance')} disabled={savingFeatures} />
+                </div>
+
+                {/* Reports */}
+                <div className="flex items-center justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-violet-500/10 border border-violet-500/20 rounded-xl mt-0.5">
+                      <BarChart3 className="h-4 w-4 text-violet-400" />
+                    </div>
+                    <div>
+                      <Label className="font-bold text-xs text-zinc-200">Analytics & Reports</Label>
+                      <p className="text-[10px] text-zinc-500">Access performance reports and data exports.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.reports} onCheckedChange={() => toggleFeature('reports')} disabled={savingFeatures} />
+                </div>
+
+                {/* Quotes */}
+                <div className="flex items-center justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-xl mt-0.5">
+                      <FileText className="h-4 w-4 text-rose-400" />
+                    </div>
+                    <div>
+                      <Label className="font-bold text-xs text-zinc-200">Quotes Generator</Label>
+                      <p className="text-[10px] text-zinc-500">Allow generating custom commercial quote PDFs.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.quotes} onCheckedChange={() => toggleFeature('quotes')} disabled={savingFeatures} />
+                </div>
+
+                {/* Operations */}
+                <div className="flex items-center justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-xl mt-0.5">
+                      <Users className="h-4 w-4 text-blue-400" />
+                    </div>
+                    <div>
+                      <Label className="font-bold text-xs text-zinc-200">Club Operations</Label>
+                      <p className="text-[10px] text-zinc-500">Manage lockers, juice bar, & guest invites.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.operations} onCheckedChange={() => toggleFeature('operations')} disabled={savingFeatures} />
+                </div>
+
+                {/* Mobile App */}
+                <div className="flex items-center justify-between py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-orange-500/10 border border-orange-500/20 rounded-xl mt-0.5">
+                      <Smartphone className="h-4 w-4 text-orange-400" />
+                    </div>
+                    <div>
+                      <Label className="font-bold text-xs text-zinc-200">White-Label Mobile App</Label>
+                      <p className="text-[10px] text-zinc-500">Enable mobile app logins and sync services.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.mobileApp} onCheckedChange={() => toggleFeature('mobileApp')} disabled={savingFeatures} />
+                </div>
+              </div>
+
+              <DialogFooter className="mt-4">
+                <Button variant="ghost" onClick={() => setEditingTenant(null)} disabled={savingFeatures} className="text-zinc-400 hover:text-white rounded-xl">
+                  Cancel
+                </Button>
+                <Button onClick={saveFeatures} disabled={savingFeatures} className="bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold gap-2">
+                  {savingFeatures ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

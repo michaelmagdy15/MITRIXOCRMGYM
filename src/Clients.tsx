@@ -20,6 +20,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import ImportData from './ImportData';
 import ImportHistory from './ImportHistory';
+import { WhatsAppDialog } from './components/WhatsAppDialog';
+import { MessageCircle } from 'lucide-react';
 import RenewalPipeline from './components/RenewalPipeline';
 import ResyncAssignments from './components/ResyncAssignments';
 import ResyncPayments from './components/ResyncPayments';
@@ -70,6 +72,7 @@ export default function Clients() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
+  const [whatsAppClient, setWhatsAppClient] = useState<Client | null>(null);
 
   const [isNewMemberOpen, setIsNewMemberOpen] = useState(false);
   const [isRecalculateConfirmOpen, setIsRecalculateConfirmOpen] = useState(false);
@@ -549,6 +552,15 @@ export default function Clients() {
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-green-500 hover:bg-green-50 hover:text-green-600"
+                  onClick={() => setWhatsAppClient(client)}
+                  title="Send WhatsApp"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                </Button>
                 <Dialog onOpenChange={(open) => open && loadClientDetails(client.id)}>
                   <DialogTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8" />}>
                     <User className="h-4 w-4" />
@@ -743,6 +755,15 @@ export default function Clients() {
               )}
               <TableCell>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-green-500 hover:bg-green-50 hover:text-green-600"
+                    onClick={() => setWhatsAppClient(client)}
+                    title="Send WhatsApp"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700" title="Generate Contract" onClick={() => {
                     const clientPayments = payments.filter(p => p.clientId === client.id);
                     const latestPayment = clientPayments.length > 0 
@@ -1458,6 +1479,19 @@ export default function Clients() {
         variant="destructive"
         confirmText="Delete All Selected"
       />
+
+      {whatsAppClient && (
+        <WhatsAppDialog
+          isOpen={!!whatsAppClient}
+          onOpenChange={(open) => !open && setWhatsAppClient(null)}
+          client={whatsAppClient}
+          onSuccess={() => {
+            if (activeClientDetails?.clientId === whatsAppClient.id) {
+              loadClientDetails(whatsAppClient.id);
+            }
+          }}
+        />
+      )}
       
       <Dialog open={!!upgradeDialogClientId} onOpenChange={(open) => { if (!open) { setUpgradeDialogClientId(null); setUpgradePkgName(''); setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd')); } }}>
         <DialogContent className="max-w-md rounded-2xl">
