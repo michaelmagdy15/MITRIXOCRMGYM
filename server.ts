@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 
 // Use process.cwd() instead of __dirname to avoid ESM/CJS path resolution issues on Windows
@@ -12,11 +13,14 @@ const defaultFirebaseConfig = JSON.parse(
 );
 
 // Map hostnames to their respective database configurations.
-// In production, these could be fetched dynamically from a database (e.g. Redis, Firestore admin) or GCS.
+const strikeCrmConfig = { ...defaultFirebaseConfig };
+delete strikeCrmConfig.firestoreDatabaseId;
+
 const tenantConfigs: Record<string, any> = {
-  "localhost": defaultFirebaseConfig,
-  "strike.mitrixo.com": defaultFirebaseConfig,
-  "strikeboxing.mitrixo.com": defaultFirebaseConfig, // Map the original Strike CRM to the default database
+  "localhost": defaultFirebaseConfig, // has firestoreDatabaseId: "db-test"
+  "strike.mitrixo.com": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
+  "strikeboxing.mitrixo.com": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
+  "dashboard.strikeboxing-eg.pro": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
   "mitrixogymcrm-boxing.local": {
     ...defaultFirebaseConfig,
     projectId: "mitrixogymcrm-boxing-tenant-1",
@@ -27,27 +31,113 @@ const tenantConfigs: Record<string, any> = {
   }
 };
 
-function getFirebaseConfigForHost(hostname: string) {
-  // Matches exact hostname in manual configs
-  if (tenantConfigs[hostname]) {
-    return tenantConfigs[hostname];
+// Caching interface for tenant lookups
+interface CacheEntry {
+  config: any;
+  status: 'active' | 'suspended' | 'not_found';
+  expiresAt: number;
+}
+
+const cache: Record<string, CacheEntry> = {};
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
+
+const SUSPENDED_HTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Suspended</title>
+  <style>
+    body { background: #000; color: #fff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    div { text-align: center; border: 1px solid #27272a; padding: 40px; border-radius: 24px; background: #09090b; max-width: 400px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+    h1 { color: #f43f5e; font-size: 24px; text-transform: uppercase; margin-bottom: 16px; font-weight: 900; letter-spacing: 0.05em; }
+    p { color: #a1a1aa; font-size: 14px; line-height: 1.6; margin: 0; }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>Workspace Suspended</h1>
+    <p>This gym CRM workspace has been temporarily suspended. Please contact your system administrator or billing support to resume access.</p>
+  </div>
+</body>
+</html>
+`;
+
+async function getTenantInfoForHost(hostname: string): Promise<{ config: any; status: string }> {
+  const normalizedHost = hostname.toLowerCase().trim();
+  
+  // 1. Intercept superadmin subdomains to route them directly to the registry database
+  const hostParts = normalizedHost.split('.');
+  if (hostParts.length >= 2 && hostParts[0] === 'superadmin') {
+    const registryConfig = {
+      ...defaultFirebaseConfig,
+      firestoreDatabaseId: "db-registry"
+    };
+    return { config: registryConfig, status: 'active' };
+  }
+
+  // 2. Check in-memory Cache
+  const cached = cache[normalizedHost];
+  if (cached && Date.now() < cached.expiresAt) {
+    return { config: cached.config, status: cached.status };
   }
   
-  // Resolve dynamically based on subdomains (e.g., gym1.mitrixo.com -> db-gym1)
-  const parts = hostname.toLowerCase().split(".");
-  if (parts.length >= 3) {
-    const subdomain = parts[0];
-    // Ignore common non-tenant subdomains
-    if (subdomain !== "www" && subdomain !== "api") {
-      console.log(`[Server] Dynamically routing hostname "${hostname}" to database "db-${subdomain}"`);
-      return {
+  // 3. Fallbacks for localhost & static configs
+  if (tenantConfigs[normalizedHost]) {
+    return { config: tenantConfigs[normalizedHost], status: 'active' };
+  }
+  
+  try {
+    const centralDb = getFirestore('db-registry');
+    
+    // A. Search by customDomain
+    const customQuery = await centralDb.collection('tenants')
+      .where('customDomain', '==', normalizedHost)
+      .limit(1)
+      .get();
+      
+    if (!customQuery.empty) {
+      const docSnap = customQuery.docs[0];
+      const data = docSnap.data();
+      const config = {
         ...defaultFirebaseConfig,
-        firestoreDatabaseId: `db-${subdomain}`
+        firestoreDatabaseId: data.databaseId
       };
+      cache[normalizedHost] = { config, status: data.status || 'active', expiresAt: Date.now() + CACHE_TTL_MS };
+      return { config, status: data.status || 'active' };
     }
+    
+    // B. Search by subdomain (e.g. gym.mitrixo.com -> subdomain 'gym')
+    const parts = normalizedHost.split('.');
+    if (parts.length >= 3) {
+      const subdomain = parts[0];
+      if (subdomain !== 'www' && subdomain !== 'api') {
+        const subDoc = await centralDb.collection('tenants').doc(subdomain).get();
+        if (subDoc.exists) {
+          const data = subDoc.data();
+          const config = {
+            ...defaultFirebaseConfig,
+            firestoreDatabaseId: data.databaseId
+          };
+          cache[normalizedHost] = { config, status: data.status || 'active', expiresAt: Date.now() + CACHE_TTL_MS };
+          return { config, status: data.status || 'active' };
+        }
+      }
+    }
+  } catch (error) {
+    console.error(`[Server] Error fetching tenant config for host "${hostname}":`, error);
   }
   
-  return defaultFirebaseConfig;
+  // Cache negative lookup to prevent spam
+  cache[normalizedHost] = { config: defaultFirebaseConfig, status: 'not_found', expiresAt: Date.now() + CACHE_TTL_MS };
+  return { config: defaultFirebaseConfig, status: 'not_found' };
+}
+
+async function injectFirebaseConfig(html: string, hostname: string): Promise<string> {
+  const { config } = await getTenantInfoForHost(hostname);
+  const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(config)};</script>`;
+  return html.replace("<!-- FIREBASE_CONFIG_PLACEHOLDER -->", scriptTag);
 }
 
 function getRequestHostname(req: express.Request): string {
@@ -59,12 +149,6 @@ function getRequestHostname(req: express.Request): string {
     }
   }
   return req.hostname;
-}
-
-function injectFirebaseConfig(html: string, hostname: string): string {
-  const config = getFirebaseConfigForHost(hostname);
-  const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(config)};</script>`;
-  return html.replace("<!-- FIREBASE_CONFIG_PLACEHOLDER -->", scriptTag);
 }
 
 async function startServer() {
@@ -115,16 +199,21 @@ async function startServer() {
     app.use(vite.middlewares);
 
     app.get("*", async (req, res, next) => {
-      const url = req.originalUrl;
+      const hostname = getRequestHostname(req);
       try {
+        const { status } = await getTenantInfoForHost(hostname);
+        if (status === 'suspended') {
+          return res.status(402).set({ "Content-Type": "text/html" }).end(SUSPENDED_HTML);
+        }
+        
         const templatePath = path.join(process.cwd(), "index.html");
         let template = fs.readFileSync(templatePath, "utf-8");
         
         // Transform the template (injects react preambles, HMR client script, etc.)
-        template = await vite.transformIndexHtml(url, template);
+        template = await vite.transformIndexHtml(req.originalUrl, template);
         
         // Inject the dynamic client config
-        const html = injectFirebaseConfig(template, getRequestHostname(req));
+        const html = await injectFirebaseConfig(template, hostname);
         
         res.status(200).set({ "Content-Type": "text/html" }).end(html);
       } catch (e) {
@@ -138,13 +227,19 @@ async function startServer() {
     // Serve static assets, but do not serve index.html statically (index: false)
     app.use(express.static(distPath, { index: false }));
     
-    app.get("*", (req, res) => {
+    app.get("*", async (req, res) => {
+      const hostname = getRequestHostname(req);
       try {
+        const { status } = await getTenantInfoForHost(hostname);
+        if (status === 'suspended') {
+          return res.status(402).set({ "Content-Type": "text/html" }).end(SUSPENDED_HTML);
+        }
+        
         const templatePath = path.join(distPath, "index.html");
         const template = fs.readFileSync(templatePath, "utf-8");
         
         // Inject dynamic config into production index.html
-        const html = injectFirebaseConfig(template, getRequestHostname(req));
+        const html = await injectFirebaseConfig(template, hostname);
         
         res.status(200).set({ "Content-Type": "text/html" }).end(html);
       } catch (error) {

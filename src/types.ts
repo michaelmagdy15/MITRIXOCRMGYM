@@ -358,4 +358,15 @@ export interface FeatureFlags {
   mobileApp?: boolean;
 }
 
+export interface Tenant {
+  id: string; // Matches subdomain
+  subdomain: string;
+  customDomain?: string;
+  databaseId: string;
+  gymName: string;
+  status: 'active' | 'suspended';
+  createdAt: string;
+}
+
+
 

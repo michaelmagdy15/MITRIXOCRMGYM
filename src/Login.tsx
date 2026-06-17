@@ -19,9 +19,10 @@ type View = 'login' | 'signup' | 'signup-success';
 
 interface LoginProps {
   onSwitchToMemberStore?: () => void;
+  isSuperAdmin?: boolean;
 }
 
-export default function Login({ onSwitchToMemberStore }: LoginProps = {}) {
+export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: LoginProps = {}) {
   const { loginWithEmail, loginWithCoachId, loginWithMemberId, submitSignUpRequest, submitPasswordResetRequest, submitMemberPasswordResetRequest, isAuthReady, authError, setAuthError } = useAuth();
   const { branding } = useSettings();
 
@@ -154,6 +155,81 @@ export default function Login({ onSwitchToMemberStore }: LoginProps = {}) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (isSuperAdmin) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 md:p-12 font-sans relative overflow-y-auto">
+        <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="mb-8 text-center flex flex-col items-center">
+            <h1 className="text-4xl font-extralight tracking-[0.2em] uppercase text-rose-500 font-logo">PLATFORM</h1>
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-[0.4em] font-logo mt-2">Super Admin Portal</p>
+          </div>
+
+          <div className="space-y-2 text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-white">Sign In</h1>
+            <p className="text-sm text-zinc-400">Enter your platform credentials to access the central registry.</p>
+          </div>
+
+          <Card className="border-zinc-800 bg-zinc-950/80 shadow-2xl">
+            <CardContent className="pt-6">
+              {authError && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription className="break-words font-mono text-xs">
+                    {authError}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {error && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+
+              <form onSubmit={handleEmailLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="admin-email" className="text-zinc-300">Email Address</Label>
+                  <Input 
+                    id="admin-email"
+                    type="email" 
+                    placeholder="you@mitrixo.com" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    className="bg-zinc-900 border-zinc-800 text-white placeholder:text-zinc-500 focus-visible:ring-rose-500"
+                    required 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="admin-password" className="text-zinc-300">Password</Label>
+                  </div>
+                  <div className="relative">
+                    <Input 
+                      id="admin-password"
+                      type={showPassword ? 'text' : 'password'} 
+                      value={password} 
+                      onChange={(e) => setPassword(e.target.value)} 
+                      className="bg-zinc-900 border-zinc-800 text-white pr-10 focus-visible:ring-rose-500"
+                      required 
+                    />
+                    <button 
+                      type="button" 
+                      onClick={() => setShowPassword(!showPassword)} 
+                      className="absolute right-3 top-2.5 text-zinc-500 hover:text-zinc-300"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+                <Button type="submit" disabled={isLoading} className="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold h-11 rounded-xl">
+                  {isLoading ? 'Signing In...' : 'Access Portal'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

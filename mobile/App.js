@@ -16,7 +16,17 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
-const PRODUCTION_URL = 'https://dashboard.mitrixogymcrmboxing-eg.pro/';
+let config = {
+  PRODUCTION_URL: 'https://dashboard.mitrixogymcrmboxing-eg.pro/',
+  APP_NAME: 'MITRIXOGYMCRM'
+};
+try {
+  config = require('./config.json');
+} catch (e) {
+  // Use default fallback configurations
+}
+const PRODUCTION_URL = config.PRODUCTION_URL;
+const APP_NAME = config.APP_NAME;
 
 // Configure notification behavior for when the app is in the foreground
 Notifications.setNotificationHandler({
@@ -97,7 +107,7 @@ export default function App() {
   const renderLoading = () => (
     <View style={styles.loaderContainer}>
       <ActivityIndicator size="large" color="#ffffff" />
-      <Text style={styles.loaderText}>MITRIXOGYMCRM</Text>
+      <Text style={styles.loaderText}>{APP_NAME}</Text>
       <Text style={styles.loaderSubtext}>Loading your dashboard...</Text>
     </View>
   );

@@ -300,6 +300,18 @@ export async function provisionNewGym(details: ProvisionDetails) {
     // 3. Seed database
     const seedResult = await seedTenantDatabase(databaseId, details);
     
+    // 4. Register tenant in central db-registry database
+    console.log(`[Provisioning] Registering tenant "${details.tenantId}" in central db-registry...`);
+    const centralDb = getFirestore('db-registry');
+    await centralDb.collection('tenants').doc(details.tenantId).set({
+      id: details.tenantId,
+      subdomain: details.tenantId,
+      databaseId,
+      gymName: details.tenantName,
+      status: 'active',
+      createdAt: new Date().toISOString(),
+    });
+    
     return {
       success: true,
       databaseId,

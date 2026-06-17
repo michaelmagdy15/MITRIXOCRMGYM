@@ -25,7 +25,7 @@ import Login from './Login';
 import Reports from './Reports';
 import MemberCheckin from './MemberCheckin';
 import HelpPage from './HelpPage';
-import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -42,6 +42,7 @@ import ClubOperations from './ClubOperations';
 import { CartProvider, useCart } from './member/CartContext';
 import OnboardingWizard from './OnboardingWizard';
 import AdminHub from './AdminHub';
+import SuperAdminHub from './SuperAdminHub';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com'];
 
@@ -96,6 +97,58 @@ function AppContent() {
       setTimeout(() => setPinError(false), 2000);
     }
   };
+
+  const isSuperAdminMode = window.location.hostname.startsWith('superadmin.') || 
+                           window.location.pathname === '/superadmin';
+
+  if (isSuperAdminMode) {
+    if (!currentUser) {
+      return <Login isSuperAdmin={true} />;
+    }
+    const isPlatformAdmin = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'].includes(currentUser?.email?.toLowerCase());
+    if (!isPlatformAdmin) {
+      return (
+        <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
+          <ShieldAlert className="h-16 w-16 text-rose-500 mb-4 animate-bounce" />
+          <h1 className="text-2xl font-black uppercase tracking-tight mb-2">Access Denied</h1>
+          <p className="text-zinc-400 text-sm max-w-md mb-6">
+            Your account ({currentUser.email}) does not have permission to access the Platform Super Admin Portal.
+          </p>
+          <Button onClick={logout} variant="outline" className="rounded-xl border-zinc-800 hover:bg-zinc-900 text-white">
+            Log Out & Switch Accounts
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+        <header className="border-b bg-card shadow-sm h-16 flex items-center justify-between px-6 flex-shrink-0">
+          <div className="flex items-center space-x-2">
+            <Shield className="h-6 w-6 text-rose-500" />
+            <h1 className="text-lg font-logo tracking-[0.1em] uppercase text-primary font-bold">
+              PLATFORM PORTAL
+            </h1>
+            <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px] font-bold">SUPER ADMIN</Badge>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right hidden sm:block">
+              <p className="text-xs font-bold text-foreground">{currentUser.name}</p>
+              <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{currentUser.role}</p>
+            </div>
+            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8 text-destructive hover:bg-destructive/10" title="Logout">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        </header>
+        <main className="flex-1 overflow-auto p-4 md:p-8">
+          <SuperAdminHub />
+        </main>
+      </div>
+    );
+  }
 
   const isOnboardingMode = window.location.hostname.startsWith('onboarding.') || 
                            window.location.hostname.startsWith('signup.') || 
@@ -310,7 +363,7 @@ function AppContent() {
       id: 'admin-hub',
       label: 'Admin Hub',
       icon: ShieldAlert,
-      show: isPlatformAdmin
+      show: isManagerOrSama && currentUser.role !== 'admin'
     }
   ];
 
@@ -738,6 +791,7 @@ function AppContent() {
                 <AdminHub />
               </TabsContent>
             )}
+
             </Tabs>
           </main>
         </div>
