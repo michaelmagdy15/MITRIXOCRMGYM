@@ -206,51 +206,15 @@ export default function Login({ onSwitchToMemberStore }: LoginProps = {}) {
   // ── Main login view ──
   // ── Main login view ──
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row font-sans">
-      {/* Left Column - Hero Branding (Desktop Only) */}
-      <div className="hidden md:flex md:w-1/2 bg-zinc-950 relative overflow-hidden flex-col justify-between p-12 text-white">
-        <div className="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-luminosity" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1470&auto=format&fit=crop')` }} />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/80" />
-        
-        <div className="relative z-10 flex items-center gap-3">
-          {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt={branding.companyName} className="h-10 w-auto object-contain" />
-          ) : (
-            <h1 className="text-2xl font-black tracking-widest uppercase text-primary font-logo">
-              {branding.companyName}
-            </h1>
-          )}
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 md:p-12 font-sans relative overflow-y-auto">
+      <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* Logo */}
+        <Logo />
+
+        <div className="space-y-2 text-center">
+          <h1 className="text-3xl font-bold tracking-tight">Welcome Back</h1>
+          <p className="text-sm text-muted-foreground">Select your portal role to sign in to your workspace.</p>
         </div>
-
-        <div className="relative z-10 space-y-4 max-w-md">
-          <h2 className="text-4xl font-extrabold tracking-tight leading-none uppercase">
-            Unlock your <span className="text-primary text-gradient">true potential</span>
-          </h2>
-          <p className="text-sm text-zinc-400 font-light leading-relaxed">
-            Gamified workout challenges, direct access to expert AI fitness coaching, real-time performance tracking, and direct connection with your friends. Join our community and train like a pro today.
-          </p>
-        </div>
-
-        <div className="relative z-10 flex justify-between text-xs text-zinc-500">
-          <span>&copy; {new Date().getFullYear()} {branding.companyName}</span>
-          <a href="https://mitrixo.com" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
-            Powered by mitrixo.com
-          </a>
-        </div>
-      </div>
-
-      {/* Right Column - Auth Forms */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 md:p-12 bg-background relative overflow-y-auto">
-        <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* Logo on mobile only */}
-          <div className="md:hidden">
-            <Logo />
-          </div>
-
-          <div className="space-y-2 text-center md:text-left">
-            <h1 className="text-3xl font-bold tracking-tight">Welcome Back</h1>
-            <p className="text-sm text-muted-foreground">Select your portal role to sign in to your workspace.</p>
-          </div>
 
           <Card className="border-border/50 shadow-2xl glass-card">
             <CardContent className="pt-6">
@@ -429,11 +393,10 @@ export default function Login({ onSwitchToMemberStore }: LoginProps = {}) {
             </Button>
           )}
 
-          <div className="text-center text-xs text-muted-foreground/60 md:hidden">
+          <div className="text-center text-xs text-muted-foreground/60">
             Made & managed by <a href="https://mitrixo.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors font-medium underline underline-offset-4 decoration-muted-foreground/30 hover:decoration-foreground">mitrixo.com systems</a>
           </div>
         </div>
-      </div>
 
       {/* ── Forgot Password Dialog (Staff / Coach — email) ── */}
       <Dialog open={forgotOpen} onOpenChange={open => { setForgotOpen(open); if (!open) setForgotSubmitted(false); }}>

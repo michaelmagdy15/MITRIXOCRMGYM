@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { BrandingSettings, SalesTarget, Branch } from '../types';
+import { BrandingSettings, SalesTarget, Branch, FeatureFlags } from '../types';
 import { db } from '../firebase';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { addAuditLog } from '../services/auditService';
@@ -16,6 +16,8 @@ interface SettingsContextType {
   updateBranches: (branches: Branch[]) => Promise<void>;
   commissionRates: { ptRate: number; groupRate: number };
   updateCommissionRates: (rates: { ptRate: number; groupRate: number }) => Promise<void>;
+  features: FeatureFlags;
+  updateFeatures: (updates: Partial<FeatureFlags>) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -34,6 +36,15 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   });
   const [branches, setBranches] = useState<Branch[]>(['COMPLEX', 'MIVIDA', 'mitrixogymcrm IMPACT']);
   const [commissionRates, setCommissionRates] = useState({ ptRate: 8, groupRate: 5 });
+  const [features, setFeatures] = useState<FeatureFlags>({
+    leads: true,
+    ptPackages: true,
+    payments: true,
+    attendance: true,
+    reports: true,
+    quotes: true,
+    operations: true
+  });
 
   // Branding — use one-time read for members/coaches to avoid onSnapshot permission errors
   useEffect(() => {
@@ -58,6 +69,29 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       (error) => console.warn('Firestore Error (branding):', error.code || error.message)
     );
     return () => { unsubBranding(); };
+  }, [role, isAuthenticated]);
+
+  // Features — load or subscribe to feature flags
+  useEffect(() => {
+    if (!isAuthenticated && !role) return;
+
+    if (role === 'client' || role === 'coach') {
+      getDoc(doc(db, 'settings', 'features'))
+        .then((snapshot) => {
+          if (snapshot.exists()) setFeatures(prev => ({ ...prev, ...snapshot.data() }));
+        })
+        .catch((err) => console.warn('Could not load features:', err.message));
+      return;
+    }
+
+    const unsubFeatures = onSnapshot(
+      doc(db, 'settings', 'features'),
+      (snapshot) => {
+        if (snapshot.exists()) setFeatures(prev => ({ ...prev, ...snapshot.data() }));
+      },
+      (error) => console.warn('Firestore Error (features):', error.message)
+    );
+    return () => { unsubFeatures(); };
   }, [role, isAuthenticated]);
 
   // Auth-required settings — only subscribe when a privileged user is logged in to avoid permission errors
@@ -119,6 +153,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     await addAuditLog('UPDATE', 'TARGET', 'commission', `Updated commission rates: PT ${rates.ptRate}%, Group ${rates.groupRate}%`);
   }, []);
 
+  const updateFeatures = useCallback(async (updates: Partial<FeatureFlags>) => {
+    await setDoc(doc(db, 'settings', 'features'), updates, { merge: true });
+    await addAuditLog('UPDATE', 'SYSTEM', 'features', `Updated system feature flags`);
+  }, []);
+
   const value = useMemo(() => ({
     branding,
     updateBranding,
@@ -131,7 +170,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     updateBranches,
     commissionRates,
     updateCommissionRates,
-  }), [branding, searchQuery, salesTarget, branches, commissionRates, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates]);
+    features,
+    updateFeatures,
+  }), [branding, searchQuery, salesTarget, branches, commissionRates, features, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates, updateFeatures]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 };

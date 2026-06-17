@@ -346,3 +346,14 @@ export interface GuestInvite {
   status: 'Pending' | 'Attended' | 'Expired';
   createdAt: string;
 }
+
+export interface FeatureFlags {
+  leads?: boolean;
+  ptPackages?: boolean;
+  payments?: boolean;
+  attendance?: boolean;
+  reports?: boolean;
+  quotes?: boolean;
+  operations?: boolean;
+}
+

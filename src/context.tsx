@@ -42,7 +42,8 @@ import {
   BrandingSettings,
   Attendance,
   Branch,
-  CommissionRates
+  CommissionRates,
+  FeatureFlags
 } from './types';
 import { cleanData } from './utils';
 import { processPaymentTransaction, PaymentTransactionParams } from './services/transactionService';
@@ -96,6 +97,8 @@ export interface AppContextType {
   isAuthReady: boolean;
   branding: BrandingSettings;
   updateBranding: (branding: Partial<BrandingSettings>) => Promise<void>;
+  features: FeatureFlags;
+  updateFeatures: (updates: Partial<FeatureFlags>) => Promise<void>;
   previewRole: UserRole | null;
   setPreviewRole: (role: UserRole | null) => void;
   attendances: Attendance[];
@@ -147,7 +150,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     branches,
     updateBranches,
     commissionRates,
-    updateCommissionRates
+    updateCommissionRates,
+    features,
+    updateFeatures
   } = useSettings();
 
   const {
@@ -528,6 +533,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isAuthReady,
     branding,
     updateBranding,
+    features,
+    updateFeatures,
     previewRole,
     setPreviewRole,
     attendances,
@@ -555,7 +562,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     salesStats, visiblePayments, loadingPayments, ptPackageRecords,
     auditLogs, visibleTasks, allTasks, packages, loadingPackages,
     coaches, importBatches, userTargets, searchQuery, isAuthReady, branding,
-    previewRole, attendances, canDeletePayments, canAccessSettings,
+    features, updateFeatures, previewRole, attendances, canDeletePayments, canAccessSettings,
     canViewGlobalDashboard, canDeleteRecords, canAssignLeads,
     commissionRates, isManagerOrSama, branches, fetchClientDetails, createClientAccount
   ]);

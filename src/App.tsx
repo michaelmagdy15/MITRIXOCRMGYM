@@ -40,14 +40,15 @@ import { QRCodePage } from './components/QRCodePage';
 import QuoteGenerator from './QuoteGenerator';
 import ClubOperations from './ClubOperations';
 import { CartProvider, useCart } from './member/CartContext';
-import Checkout from './member/Checkout';
+import OnboardingWizard from './OnboardingWizard';
+import AdminHub from './AdminHub';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com'];
 
 function AppContent() {
   const { currentUser: authUser } = useAuth();
   const canUseQuoteGenerator = QUOTE_GENERATOR_EMAILS.includes((authUser?.email || '').toLowerCase());
-  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama } = useAppContext();
+  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features } = useAppContext();
   const { theme, toggleTheme } = useTheme();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
   const [isCheckinMode, setIsCheckinMode] = React.useState(window.location.pathname === '/checkin');
@@ -95,6 +96,14 @@ function AppContent() {
       setTimeout(() => setPinError(false), 2000);
     }
   };
+
+  const isOnboardingMode = window.location.hostname.startsWith('onboarding.') || 
+                           window.location.hostname.startsWith('signup.') || 
+                           window.location.pathname === '/onboarding';
+
+  if (isOnboardingMode) {
+    return <OnboardingWizard />;
+  }
 
   if (isHelpMode) {
     return <HelpPage />;
@@ -242,13 +251,15 @@ function AppContent() {
     );
   }
 
+  const isPlatformAdmin = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'].includes(currentUser?.email?.toLowerCase());
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     {
       id: 'leads',
       label: 'Leads',
       icon: UserPlus,
-      show: currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin'
+      show: (features.leads !== false) && (currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin')
     },
     { id: 'clients', label: 'Members', icon: Users, show: true },
     { id: 'tasks', label: 'Tasks', icon: CheckSquare, show: currentUser.role !== 'admin' },
@@ -256,14 +267,14 @@ function AppContent() {
       id: 'payments',
       label: 'Payments',
       icon: CreditCard,
-      show: !!(canViewGlobalDashboard || canDeletePayments)
+      show: (features.payments !== false) && !!(canViewGlobalDashboard || canDeletePayments)
     },
-    { id: 'attendance', label: 'Attendance', icon: Scan, show: true },
+    { id: 'attendance', label: 'Attendance', icon: Scan, show: features.attendance !== false },
     {
       id: 'reports',
       label: 'Reports',
       icon: BarChart3,
-      show: !!(isManagerOrSama && currentUser.role !== 'admin')
+      show: (features.reports !== false) && !!(isManagerOrSama && currentUser.role !== 'admin')
     },
     {
       id: 'audit',
@@ -287,13 +298,19 @@ function AppContent() {
       id: 'quotes',
       label: 'Quotes',
       icon: FileText,
-      show: canUseQuoteGenerator
+      show: (features.quotes !== false) && canUseQuoteGenerator
     },
     {
       id: 'operations',
       label: 'Operations',
       icon: Coffee,
-      show: currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin'
+      show: (features.operations !== false) && (currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin')
+    },
+    {
+      id: 'admin-hub',
+      label: 'Admin Hub',
+      icon: ShieldAlert,
+      show: isPlatformAdmin
     }
   ];
 
@@ -713,6 +730,12 @@ function AppContent() {
             {(currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin') && (
               <TabsContent value="operations" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
                 <ClubOperations />
+              </TabsContent>
+            )}
+
+            {isPlatformAdmin && (
+              <TabsContent value="admin-hub" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <AdminHub />
               </TabsContent>
             )}
             </Tabs>
