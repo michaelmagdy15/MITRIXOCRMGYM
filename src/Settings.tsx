@@ -3,6 +3,8 @@ import { useAppContext } from './context';
 import { useAuth } from './contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { storage } from './firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -24,6 +26,9 @@ export default function Settings() {
   const { changeMyPassword, runExistingUsersMigration } = useAuth();
   const [companyName, setCompanyName] = useState(branding.companyName);
   const [logoUrl, setLogoUrl] = useState(branding.logoUrl);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadStatus, setLogoUploadStatus] = useState<string | null>(null);
   const [kioskPin, setKioskPin] = useState(branding.kioskPin || '');
   const [dailyPin, setDailyPin] = useState(branding.dailyCheckinPin || '');
   const [isSaving, setIsSaving] = useState(false);
@@ -79,6 +84,36 @@ export default function Settings() {
     setKioskPin(branding.kioskPin || '');
     setDailyPin(branding.dailyCheckinPin || '');
   }, [branding]);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setLogoUploadStatus('Please select an image file.');
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setLogoUploadStatus('Logo must be under 3 MB.');
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    setLogoUploadStatus(null);
+    try {
+      const extension = file.name.split('.').pop() || 'png';
+      const fileRef = storageRef(storage, `branding/logo-${Date.now()}.${extension}`);
+      await uploadBytes(fileRef, file, { contentType: file.type });
+      const url = await getDownloadURL(fileRef);
+      setLogoUrl(url);
+      setLogoUploadStatus('Logo uploaded successfully!');
+    } catch (err: any) {
+      console.error(err);
+      setLogoUploadStatus('Upload failed. Please try again.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -398,15 +433,39 @@ export default function Settings() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="logoUrl">Logo URL</Label>
-                    <Input
-                      id="logoUrl"
-                      value={logoUrl}
-                      onChange={(e) => setLogoUrl(e.target.value)}
-                      placeholder="https://example.com/logo.png"
-                    />
+                    <Label htmlFor="logoUrl">Logo URL / Upload</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        id="logoUrl"
+                        value={logoUrl}
+                        onChange={(e) => setLogoUrl(e.target.value)}
+                        placeholder="https://example.com/logo.png"
+                        className="flex-1"
+                      />
+                      <input
+                        ref={logoFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleLogoUpload}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => logoFileInputRef.current?.click()}
+                        disabled={isUploadingLogo}
+                        className="shrink-0 font-semibold cursor-pointer"
+                      >
+                        {isUploadingLogo ? 'Uploading...' : 'Upload Logo'}
+                      </Button>
+                    </div>
+                    {logoUploadStatus && (
+                      <p className={`text-xs ${logoUploadStatus.includes('successfully') ? 'text-emerald-600' : 'text-destructive'}`}>
+                        {logoUploadStatus}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
-                      Transparent PNG works best.
+                      Transparent PNG or SVG works best. Max 3MB. Don't forget to click "Save Branding" below to apply.
                     </p>
                   </div>
                   {logoUrl && (
