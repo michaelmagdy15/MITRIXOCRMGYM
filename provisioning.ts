@@ -17,7 +17,21 @@ if (fs.existsSync(serviceAccountPath)) {
 } else {
   if (admin.apps.length === 0) {
     // Fallback to Application Default Credentials (ADC)
-    admin.initializeApp();
+    const defaultConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    let defaultProjectId = 'faa-test-guide-v2';
+    if (fs.existsSync(defaultConfigPath)) {
+      try {
+        const config = JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
+        if (config.projectId) {
+          defaultProjectId = config.projectId;
+        }
+      } catch (e) {
+        console.error('Failed to read default project ID from config:', e);
+      }
+    }
+    admin.initializeApp({
+      projectId: defaultProjectId
+    });
   }
 }
 
