@@ -10,3 +10,4 @@ coverage/
 . g e m i n i /  
 *service-account.json
 dist-server/
+scratch/

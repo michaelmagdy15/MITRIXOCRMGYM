@@ -194,6 +194,112 @@ async function startServer() {
     }
   });
 
+  // Public endpoint for new tenant subscription requests
+  app.post("/api/subscription-request", async (req, res) => {
+    const { gymName, subdomain, ownerName, ownerEmail, amountPaid, paymentMethod, transactionId } = req.body;
+    
+    if (!gymName || !subdomain || !ownerName || !ownerEmail) {
+      return res.status(400).json({ error: "Missing required fields: gymName, subdomain, ownerName, ownerEmail" });
+    }
+
+    // Subdomain alphanumeric check
+    if (!/^[a-z0-9-]+$/.test(subdomain.trim())) {
+      return res.status(400).json({ error: "Subdomain must contain only lowercase letters, numbers, and hyphens." });
+    }
+
+    try {
+      const centralDb = getFirestore('db-registry-2');
+      
+      // Check if subdomain is already taken in tenants registry
+      const tenantDoc = await centralDb.collection('tenants').doc(subdomain.trim().toLowerCase()).get();
+      if (tenantDoc.exists) {
+        return res.status(409).json({ error: "This subdomain is already taken." });
+      }
+
+      // Check if subdomain is already taken in pending requests
+      const requestDoc = await centralDb.collection('requests').doc(subdomain.trim().toLowerCase()).get();
+      if (requestDoc.exists && requestDoc.data()?.status === 'pending') {
+        return res.status(409).json({ error: "This subdomain is pending approval." });
+      }
+
+      const requestId = subdomain.trim().toLowerCase();
+      const newRequest = {
+        id: requestId,
+        gymName: gymName.trim(),
+        subdomain: requestId,
+        ownerName: ownerName.trim(),
+        ownerEmail: ownerEmail.trim(),
+        amountPaid: amountPaid || 0,
+        paymentMethod: paymentMethod || 'Mock checkout',
+        transactionId: transactionId || `TX-${Math.random().toString(36).substring(2, 12).toUpperCase()}`,
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+
+      await centralDb.collection('requests').doc(requestId).set(newRequest);
+      console.log(`[Server] Subscription request registered for: ${requestId}`);
+      return res.json({ success: true, requestId });
+    } catch (error) {
+      console.error("[Server] Error creating subscription request:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Endpoint for Super Admin to approve a pending request and trigger provisioning
+  app.post("/api/approve-request", async (req, res) => {
+    const { requestId } = req.body;
+    if (!requestId) {
+      return res.status(400).json({ error: "Missing required field: requestId" });
+    }
+
+    try {
+      const centralDb = getFirestore('db-registry-2');
+      const requestRef = centralDb.collection('requests').doc(requestId);
+      const requestSnap = await requestRef.get();
+
+      if (!requestSnap.exists) {
+        return res.status(404).json({ error: "Subscription request not found." });
+      }
+
+      const requestData = requestSnap.data();
+      if (!requestData) {
+        return res.status(500).json({ error: "Subscription request document is empty." });
+      }
+
+      if (requestData.status !== 'pending') {
+        return res.status(400).json({ error: `Request is already ${requestData.status}.` });
+      }
+
+      console.log(`[Server] Super Admin approved subscription request: ${requestId}. Starting provisioning...`);
+
+      // Execute provisioning
+      const result = await provisionNewGym({
+        tenantId: requestData.subdomain,
+        tenantName: requestData.gymName,
+        ownerEmail: requestData.ownerEmail,
+        ownerName: requestData.ownerName,
+        enableMobileApp: true // Default to true for premium signups
+      });
+
+      // Update request status to approved
+      await requestRef.update({
+        status: 'approved',
+        approvedAt: new Date().toISOString(),
+        databaseId: result.databaseId,
+        ownerUid: result.ownerUid
+      });
+
+      return res.json({
+        success: true,
+        databaseId: result.databaseId,
+        temporaryPassword: result.temporaryPassword
+      });
+    } catch (error) {
+      console.error("[Server] Approval and provisioning error:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

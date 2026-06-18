@@ -45,6 +45,7 @@ import { CartProvider, useCart } from './member/CartContext';
 import OnboardingWizard from './OnboardingWizard';
 import AdminHub from './AdminHub';
 import SuperAdminHub from './SuperAdminHub';
+import SubscriptionCheckout from './member/SubscriptionCheckout';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com'];
 
@@ -57,6 +58,7 @@ function AppContent() {
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
   const [isCheckinMode, setIsCheckinMode] = React.useState(window.location.pathname === '/checkin');
   const [isHelpMode, setIsHelpMode] = React.useState(window.location.pathname === '/help');
+  const [isSubscribeMode, setIsSubscribeMode] = React.useState(window.location.pathname === '/subscribe');
   const [kioskAuthenticated, setKioskAuthenticated] = React.useState(false);
   const [pinInput, setPinInput] = React.useState('');
   const [pinError, setPinError] = React.useState(false);
@@ -83,6 +85,7 @@ function AppContent() {
       setIsKioskMode(window.location.pathname === '/kiosk');
       setIsCheckinMode(window.location.pathname === '/checkin');
       setIsHelpMode(window.location.pathname === '/help');
+      setIsSubscribeMode(window.location.pathname === '/subscribe');
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -100,6 +103,10 @@ function AppContent() {
       setTimeout(() => setPinError(false), 2000);
     }
   };
+
+  if (isSubscribeMode) {
+    return <SubscriptionCheckout />;
+  }
 
   const isSuperAdminMode = window.location.hostname.startsWith('superadmin.') || 
                            window.location.pathname === '/superadmin';

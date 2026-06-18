@@ -12,15 +12,37 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { 
   Shield, Search, RefreshCw, Power, PowerOff, Globe, Database, 
   Calendar, Users, Sliders, CheckCircle2, UserPlus, CreditCard, 
-  Scan, BarChart3, FileText, Package, Smartphone, Plus 
+  Scan, BarChart3, FileText, Package, Smartphone, Plus, Mail, User, Building, Loader2, Clock
 } from 'lucide-react';
 import { Tenant } from './types';
+
+interface SubscriptionRequest {
+  id: string;
+  gymName: string;
+  subdomain: string;
+  ownerName: string;
+  ownerEmail: string;
+  amountPaid: number;
+  paymentMethod: string;
+  transactionId: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+  approvedAt?: string;
+}
 
 export default function SuperAdminHub() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+
+  // Hub Tab State
+  const [activeHubTab, setActiveHubTab] = useState<'tenants' | 'leads'>('tenants');
+
+  // Subscription requests states
+  const [requests, setRequests] = useState<SubscriptionRequest[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
   // Features Dialog State
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
@@ -133,8 +155,65 @@ export default function SuperAdminHub() {
     }
   };
 
+  const fetchRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const db = getFirestore(getApp(), 'db-registry-2');
+      const snap = await getDocs(collection(db, 'requests'));
+      const list = snap.docs.map(docSnap => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as SubscriptionRequest));
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setRequests(list);
+    } catch (err: any) {
+      console.error('Failed to fetch requests:', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const handleApproveRequest = async (requestId: string) => {
+    setApprovingId(requestId);
+    setError('');
+    setProvisionSuccess(false);
+    setTempPasswordShow('');
+    try {
+      const response = await fetch('/api/approve-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requestId }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to approve request.');
+      }
+
+      const result = await response.json();
+      
+      // Update local state to approved
+      setRequests(prev => prev.map(req => req.id === requestId ? { ...req, status: 'approved' } : req));
+      
+      // Show success alert in the provisioning modal
+      setProvisionSuccess(true);
+      setTempPasswordShow(result.temporaryPassword);
+      setIsCreateOpen(true);
+      
+      // Refresh tenants registry
+      fetchTenants();
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during approval.');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
   useEffect(() => {
     fetchTenants();
+    fetchRequests();
   }, []);
 
   const toggleTenantStatus = async (tenantId: string, currentStatus: 'active' | 'suspended') => {
@@ -306,122 +385,277 @@ export default function SuperAdminHub() {
         </Card>
       </div>
 
+      {/* Tab Selector */}
+      <div className="flex border-b border-border gap-6">
+        <button
+          onClick={() => setActiveHubTab('tenants')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all relative ${
+            activeHubTab === 'tenants' 
+              ? 'border-rose-500 text-rose-500' 
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Gym Registries ({stats.total})
+        </button>
+        <button
+          onClick={() => setActiveHubTab('leads')}
+          className={`pb-3 text-sm font-bold border-b-2 transition-all relative ${
+            activeHubTab === 'leads' 
+              ? 'border-rose-500 text-rose-500' 
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Subscription Leads ({requests.length})
+          {requests.some(r => r.status === 'pending') && (
+            <span className="absolute top-0 -right-2 h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+          )}
+        </button>
+      </div>
+
       {/* Search Bar */}
       <div className="flex items-center gap-3 bg-card border rounded-2xl p-3 max-w-md shadow-sm">
         <Search className="h-5 w-5 text-muted-foreground shrink-0" />
         <Input 
-          placeholder="Search by name, subdomain, custom domain..." 
+          placeholder={
+            activeHubTab === 'tenants' 
+              ? "Search by name, subdomain, custom domain..." 
+              : "Search by name, subdomain, owner email..."
+          }
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="border-0 bg-transparent p-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm"
         />
       </div>
 
-      {/* Tenants Table */}
-      <Card className="border-border/50 shadow-md">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b bg-muted/30">
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Gym name</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Subdomain</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Custom domain</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Database ID</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Created</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground">
-                      <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
-                      Loading central registry...
-                    </td>
+      {/* Tables Switched Content */}
+      {activeHubTab === 'tenants' ? (
+        <Card className="border-border/50 shadow-md">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Gym name</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Subdomain</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Custom domain</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Database ID</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Created</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground text-right">Actions</th>
                   </tr>
-                ) : filteredTenants.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground font-medium">
-                      No gym workspaces found matching search criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTenants.map(tenant => (
-                    <tr key={tenant.id} className="hover:bg-muted/10 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-sm text-foreground">{tenant.gymName}</div>
-                      </td>
-                      <td className="px-6 py-4 font-mono text-xs text-zinc-300">
-                        {tenant.subdomain}.mitrixo.com
-                      </td>
-                      <td className="px-6 py-4 font-mono text-xs text-zinc-300">
-                        {tenant.customDomain ? (
-                          <span className="flex items-center gap-1">
-                            <Globe className="h-3 w-3 text-zinc-400" />
-                            {tenant.customDomain}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-500">—</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 font-mono text-xs text-rose-400 flex items-center gap-1.5 pt-5">
-                        <Database className="h-3.5 w-3.5" />
-                        {tenant.databaseId}
-                      </td>
-                      <td className="px-6 py-4">
-                        {tenant.status === 'active' ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] font-bold">Active</Badge>
-                        ) : (
-                          <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px] font-bold">Suspended</Badge>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-xs text-muted-foreground font-semibold">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3.5 w-3.5" />
-                          {tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 px-3 text-xs font-bold rounded-xl gap-1.5"
-                            onClick={() => openFeaturesModal(tenant)}
-                          >
-                            <Sliders className="h-3.5 w-3.5" />
-                            Features
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant={tenant.status === 'active' ? 'destructive' : 'default'} 
-                            className="h-8 px-3.5 text-xs font-bold rounded-xl gap-1.5"
-                            onClick={() => toggleTenantStatus(tenant.id, tenant.status)}
-                          >
-                            {tenant.status === 'active' ? (
-                              <>
-                                <PowerOff className="h-3.5 w-3.5" />
-                                Suspend
-                              </>
-                            ) : (
-                              <>
-                                <Power className="h-3.5 w-3.5" />
-                                Activate
-                              </>
-                            )}
-                          </Button>
-                        </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
+                        Loading central registry...
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                  ) : filteredTenants.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground font-medium">
+                        No gym workspaces found matching search criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTenants.map(tenant => (
+                      <tr key={tenant.id} className="hover:bg-muted/10 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-sm text-foreground">{tenant.gymName}</div>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs text-zinc-300">
+                          {tenant.subdomain}.mitrixo.com
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs text-zinc-300">
+                          {tenant.customDomain ? (
+                            <span className="flex items-center gap-1">
+                              <Globe className="h-3 w-3 text-zinc-400" />
+                              {tenant.customDomain}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs text-rose-400 flex items-center gap-1.5 pt-5">
+                          <Database className="h-3.5 w-3.5" />
+                          {tenant.databaseId}
+                        </td>
+                        <td className="px-6 py-4">
+                          {tenant.status === 'active' ? (
+                            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] font-bold">Active</Badge>
+                          ) : (
+                            <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px] font-bold">Suspended</Badge>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-xs text-muted-foreground font-semibold">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 px-3 text-xs font-bold rounded-xl gap-1.5"
+                              onClick={() => openFeaturesModal(tenant)}
+                            >
+                              <Sliders className="h-3.5 w-3.5" />
+                              Features
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant={tenant.status === 'active' ? 'destructive' : 'default'} 
+                              className="h-8 px-3.5 text-xs font-bold rounded-xl gap-1.5"
+                              onClick={() => toggleTenantStatus(tenant.id, tenant.status)}
+                            >
+                              {tenant.status === 'active' ? (
+                                <>
+                                  <PowerOff className="h-3.5 w-3.5" />
+                                  Suspend
+                                </>
+                              ) : (
+                                <>
+                                  <Power className="h-3.5 w-3.5" />
+                                  Activate
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-border/50 shadow-md animate-in fade-in duration-200">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Gym name</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Subdomain</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Owner details</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Payment</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Status</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">Requested</th>
+                    <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted-foreground text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {loadingRequests ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground">
+                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-primary" />
+                        Loading subscription leads...
+                      </td>
+                    </tr>
+                  ) : requests.filter(r => 
+                      r.gymName.toLowerCase().includes(search.toLowerCase()) ||
+                      r.subdomain.toLowerCase().includes(search.toLowerCase()) ||
+                      r.ownerEmail.toLowerCase().includes(search.toLowerCase()) ||
+                      r.ownerName.toLowerCase().includes(search.toLowerCase())
+                    ).length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-muted-foreground font-medium">
+                        No subscription leads found matching search criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    requests.filter(r => 
+                      r.gymName.toLowerCase().includes(search.toLowerCase()) ||
+                      r.subdomain.toLowerCase().includes(search.toLowerCase()) ||
+                      r.ownerEmail.toLowerCase().includes(search.toLowerCase()) ||
+                      r.ownerName.toLowerCase().includes(search.toLowerCase())
+                    ).map(req => (
+                      <tr key={req.id} className="hover:bg-muted/10 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                            <Building className="h-4 w-4 text-zinc-400" />
+                            {req.gymName}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs text-zinc-300">
+                          {req.subdomain}.mitrixo.com
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-xs font-bold text-zinc-200 flex items-center gap-1.5">
+                            <User className="h-3.5 w-3.5 text-zinc-400" />
+                            {req.ownerName}
+                          </div>
+                          <div className="text-[10px] text-zinc-450 flex items-center gap-1.5 mt-0.5">
+                            <Mail className="h-3 w-3 text-zinc-500" />
+                            {req.ownerEmail}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                            <CreditCard className="h-3.5 w-3.5" />
+                            ${req.amountPaid} ({req.paymentMethod})
+                          </div>
+                          <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                            TX: {req.transactionId}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          {req.status === 'pending' ? (
+                            <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
+                              <Clock className="h-3.5 w-3.5 animate-pulse" />
+                              Pending Approval
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] font-bold flex items-center gap-1 w-fit">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Approved & Active
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-xs text-muted-foreground font-semibold">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {req.createdAt ? new Date(req.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          {req.status === 'pending' ? (
+                            <Button 
+                              size="sm" 
+                              disabled={approvingId !== null}
+                              className="bg-rose-600 hover:bg-rose-500 text-white h-8 px-3.5 text-xs font-bold rounded-xl gap-1.5 shadow-sm"
+                              onClick={() => handleApproveRequest(req.id)}
+                            >
+                              {approvingId === req.id ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Activating...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Approve & Activate
+                                </>
+                              )}
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-zinc-500 font-bold italic">Active</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Feature Configuration Dialog */}
       <Dialog open={editingTenant !== null} onOpenChange={(open) => { if (!open) setEditingTenant(null); }}>
