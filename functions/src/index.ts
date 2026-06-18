@@ -3,7 +3,7 @@ import { onDocumentCreated, onDocumentUpdated, FirestoreEvent, QueryDocumentSnap
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import { sendNewLeadEmail, sendAssignmentEmail } from "./utils/mailer";
+import { sendNewLeadEmail, sendAssignmentEmail, sendLeadReplyEmail } from "./utils/mailer";
 
 // Initialize Firebase Admin for Firestore access
 admin.initializeApp();
@@ -222,8 +222,17 @@ export const onLeadCreated = onDocumentCreated("clients/{clientId}", async (even
         source: leadData.source || "Unknown"
       })
     );
+
+    // 3. Send professional confirmation auto-reply email to the lead
+    if (leadData.email && leadData.email.trim() !== "") {
+      logger.info(`Sending confirmation auto-reply email to lead: ${leadData.email}`);
+      emailPromises.push(
+        sendLeadReplyEmail(leadData.email.trim(), leadData.name)
+      );
+    }
+
     await Promise.all(emailPromises);
-    logger.info(`Lead notifications sent to ${recipientEmails.length} users.`);
+    logger.info(`Lead notifications sent to ${recipientEmails.length} users and auto-reply sent to lead.`);
 
   } catch (error) {
     logger.error("Error in onLeadCreated trigger:", error);

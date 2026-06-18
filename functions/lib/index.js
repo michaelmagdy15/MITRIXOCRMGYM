@@ -214,8 +214,13 @@ exports.onLeadCreated = (0, firestore_1.onDocumentCreated)("clients/{clientId}",
             phone: leadData.phone,
             source: leadData.source || "Unknown"
         }));
+        // 3. Send professional confirmation auto-reply email to the lead
+        if (leadData.email && leadData.email.trim() !== "") {
+            logger.info(`Sending confirmation auto-reply email to lead: ${leadData.email}`);
+            emailPromises.push((0, mailer_1.sendLeadReplyEmail)(leadData.email.trim(), leadData.name));
+        }
         await Promise.all(emailPromises);
-        logger.info(`Lead notifications sent to ${recipientEmails.length} users.`);
+        logger.info(`Lead notifications sent to ${recipientEmails.length} users and auto-reply sent to lead.`);
     }
     catch (error) {
         logger.error("Error in onLeadCreated trigger:", error);
