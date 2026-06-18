@@ -3,6 +3,7 @@ import path from 'path';
 import { GoogleAuth } from 'google-auth-library';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
+import nodemailer from 'nodemailer';
 
 // Get default project ID from config
 const defaultConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
@@ -311,6 +312,19 @@ export async function provisionNewGym(details: ProvisionDetails) {
       status: 'active',
       createdAt: new Date().toISOString(),
     });
+
+    // 5. Fire welcome email with temporary password and instructions
+    try {
+      await sendWelcomeEmail(
+        details.ownerEmail,
+        details.ownerName,
+        details.tenantName,
+        details.tenantId,
+        seedResult.temporaryPassword
+      );
+    } catch (emailErr) {
+      console.error('[Provisioning] Failed to send welcome email:', emailErr);
+    }
     
     return {
       success: true,
@@ -322,4 +336,65 @@ export async function provisionNewGym(details: ProvisionDetails) {
     console.error('[Provisioning] Provisioning failed:', error);
     throw error;
   }
+}
+
+/**
+ * Sends a welcome email using Nodemailer with SMTP settings from environment variables.
+ */
+async function sendWelcomeEmail(toEmail: string, ownerName: string, gymName: string, subdomain: string, temporaryPassword: string) {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const fromEmail = process.env.FROM_EMAIL || 'no-reply@mitrixogymcrm.com';
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    console.warn('[Provisioning] SMTP credentials not fully set in environment. Welcome email logged to console:');
+    console.log('--------------------------------------------------');
+    console.log(`To: ${toEmail}`);
+    console.log(`Subject: Welcome to ${gymName} CRM!`);
+    console.log(`Portal URL: https://${subdomain}.mitrixo.com`);
+    console.log(`Username/Email: ${toEmail}`);
+    console.log(`Temporary Password: ${temporaryPassword}`);
+    console.log('--------------------------------------------------');
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465, // true for 465, false for other ports
+    auth: {
+      user: smtpUser,
+      pass: smtpPass
+    }
+  });
+
+  const appUrl = `https://${subdomain}.mitrixo.com`;
+
+  const mailOptions = {
+    from: `"Mitrixo CRM Support" <${fromEmail}>`,
+    to: toEmail,
+    subject: `Welcome to ${gymName} CRM - Access Details`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px; background-color: #09090b; color: #ffffff;">
+        <h2 style="color: #f43f5e; border-bottom: 1px solid #27272a; padding-bottom: 10px; text-transform: uppercase;">Welcome to ${gymName} CRM!</h2>
+        <p style="color: #a1a1aa;">Hello <strong>${ownerName}</strong>,</p>
+        <p style="color: #a1a1aa;">Your gym workspace and database have been successfully provisioned. Here are your access details:</p>
+        
+        <div style="background-color: #18181b; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #27272a;">
+          <p style="margin: 5px 0; color: #f43f5e;"><strong>Portal URL:</strong> <a href="${appUrl}" style="color: #60a5fa; text-decoration: none;">${appUrl}</a></p>
+          <p style="margin: 5px 0; color: #ffffff;"><strong>Username / Email:</strong> ${toEmail}</p>
+          <p style="margin: 5px 0; color: #ffffff;"><strong>Temporary Password:</strong> <code style="background: #27272a; padding: 2px 6px; border-radius: 4px; color: #ffffff;">${temporaryPassword}</code></p>
+        </div>
+        
+        <p style="color: #a1a1aa; font-size: 13px;">* For security reasons, you will be prompted to change your password immediately upon your first sign-in.</p>
+        <hr style="border: none; border-top: 1px solid #27272a; margin: 20px 0;" />
+        <p style="color: #71717a; font-size: 11px; text-align: center;">Powered by Mitrixo CRM Systems</p>
+      </div>
+    `
+  };
+
+  const info = await transporter.sendMail(mailOptions);
+  console.log(`[Provisioning] Welcome email sent successfully: ${info.messageId}`);
 }

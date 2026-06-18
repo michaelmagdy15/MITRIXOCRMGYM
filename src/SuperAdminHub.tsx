@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { 
   Shield, Search, RefreshCw, Power, PowerOff, Globe, Database, 
   Calendar, Users, Sliders, CheckCircle2, UserPlus, CreditCard, 
-  Scan, BarChart3, FileText, Package, Smartphone 
+  Scan, BarChart3, FileText, Package, Smartphone, Plus 
 } from 'lucide-react';
 import { Tenant } from './types';
 
@@ -38,6 +38,82 @@ export default function SuperAdminHub() {
   const [savingFeatures, setSavingFeatures] = useState(false);
   const [featuresError, setFeaturesError] = useState('');
   const [featuresSuccess, setFeaturesSuccess] = useState(false);
+
+  // Provisioning Dialog State
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newGymName, setNewGymName] = useState('');
+  const [newSubdomain, setNewSubdomain] = useState('');
+  const [newOwnerName, setNewOwnerName] = useState('');
+  const [newOwnerEmail, setNewOwnerEmail] = useState('');
+  const [newOwnerPassword, setNewOwnerPassword] = useState('');
+  const [enableMobileApp, setEnableMobileApp] = useState(false);
+  const [provisioning, setProvisioning] = useState(false);
+  const [provisionSuccess, setProvisionSuccess] = useState(false);
+  const [provisionError, setProvisionError] = useState('');
+  const [tempPasswordShow, setTempPasswordShow] = useState('');
+
+  const handleProvisionGym = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProvisioning(true);
+    setProvisionError('');
+    setProvisionSuccess(false);
+    setTempPasswordShow('');
+
+    // Basic validation
+    if (!newGymName.trim() || !newSubdomain.trim() || !newOwnerName.trim() || !newOwnerEmail.trim()) {
+      setProvisionError('Please fill in all required fields.');
+      setProvisioning(false);
+      return;
+    }
+
+    // Subdomain alphanumeric check
+    if (!/^[a-z0-9-]+$/.test(newSubdomain.trim())) {
+      setProvisionError('Subdomain must contain only lowercase letters, numbers, and hyphens.');
+      setProvisioning(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/provision', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tenantId: newSubdomain.trim().toLowerCase(),
+          tenantName: newGymName.trim(),
+          ownerEmail: newOwnerEmail.trim(),
+          ownerName: newOwnerName.trim(),
+          ownerPassword: newOwnerPassword.trim() || undefined,
+          enableMobileApp,
+        }),
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to provision tenant.');
+      }
+
+      const result = await response.json();
+      setProvisionSuccess(true);
+      setTempPasswordShow(result.temporaryPassword);
+      
+      // Refresh list
+      fetchTenants();
+
+      // Reset form
+      setNewGymName('');
+      setNewSubdomain('');
+      setNewOwnerName('');
+      setNewOwnerEmail('');
+      setNewOwnerPassword('');
+      setEnableMobileApp(false);
+    } catch (err: any) {
+      setProvisionError(err.message || 'An error occurred during provisioning.');
+    } finally {
+      setProvisioning(false);
+    }
+  };
 
   const fetchTenants = async () => {
     setLoading(true);
@@ -173,10 +249,16 @@ export default function SuperAdminHub() {
             Platform-wide tenant registry, custom domain routing, and account lifecycle management.
           </p>
         </div>
-        <Button onClick={fetchTenants} disabled={loading} variant="outline" className="gap-2 rounded-xl h-10">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh Registry
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl h-10 font-bold">
+            <Plus className="h-4 w-4" />
+            Provision Gym
+          </Button>
+          <Button onClick={fetchTenants} disabled={loading} variant="outline" className="gap-2 rounded-xl h-10">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh Registry
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -500,6 +582,131 @@ export default function SuperAdminHub() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Provisioning Dialog */}
+      <Dialog open={isCreateOpen} onOpenChange={(open) => { if (!open) { setIsCreateOpen(false); setProvisionError(''); setProvisionSuccess(false); setTempPasswordShow(''); } }}>
+        <DialogContent 
+          style={{ maxWidth: '540px', width: '95%' }}
+          className="border-border/50 shadow-2xl bg-zinc-950 text-white rounded-3xl"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black uppercase tracking-tight flex items-center gap-2">
+              <Database className="h-5 w-5 text-rose-500" />
+              Provision New Gym Tenant
+            </DialogTitle>
+            <DialogDescription className="text-zinc-400">
+              Create a new isolated database, seed default schemas, configure auth, and fire welcome instructions.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleProvisionGym} className="space-y-4 py-2">
+            {provisionError && (
+              <Alert variant="destructive" className="rounded-2xl">
+                <AlertDescription>{provisionError}</AlertDescription>
+              </Alert>
+            )}
+
+            {provisionSuccess && (
+              <Alert className="bg-emerald-950/20 border-emerald-500/30 text-emerald-400 rounded-2xl">
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                <AlertDescription>
+                  Gym tenant provisioned and activated successfully!
+                  {tempPasswordShow && (
+                    <div className="mt-2 p-2.5 bg-zinc-900 border rounded-xl font-mono text-xs text-white">
+                      <strong>Temp Password:</strong> {tempPasswordShow}
+                      <p className="text-[10px] text-zinc-400 mt-1">An email has been fired with instructions.</p>
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-zinc-300">Gym / Business Name *</Label>
+                <Input 
+                  placeholder="e.g. Iron Gym" 
+                  value={newGymName} 
+                  onChange={e => setNewGymName(e.target.value)}
+                  className="bg-zinc-900 border-zinc-800 rounded-xl text-sm"
+                  disabled={provisioning}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-zinc-300">Desired Subdomain *</Label>
+                <div className="relative">
+                  <Input 
+                    placeholder="e.g. irongym" 
+                    value={newSubdomain} 
+                    onChange={e => setNewSubdomain(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                    className="bg-zinc-900 border-zinc-800 rounded-xl text-sm pr-20"
+                    disabled={provisioning}
+                    required
+                  />
+                  <span className="absolute right-3 top-2.5 text-xs text-zinc-500 font-bold">.mitrixo.com</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-zinc-300">Owner Full Name *</Label>
+                <Input 
+                  placeholder="e.g. Captain Yasser" 
+                  value={newOwnerName} 
+                  onChange={e => setNewOwnerName(e.target.value)}
+                  className="bg-zinc-900 border-zinc-800 rounded-xl text-sm"
+                  disabled={provisioning}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-zinc-300">Owner Email Address *</Label>
+                <Input 
+                  type="email"
+                  placeholder="owner@irongym.com" 
+                  value={newOwnerEmail} 
+                  onChange={e => setNewOwnerEmail(e.target.value)}
+                  className="bg-zinc-900 border-zinc-800 rounded-xl text-sm"
+                  disabled={provisioning}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 items-center pt-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-zinc-300">Custom Password (Optional)</Label>
+                <Input 
+                  type="password"
+                  placeholder="Auto-generated if empty" 
+                  value={newOwnerPassword} 
+                  onChange={e => setNewOwnerPassword(e.target.value)}
+                  className="bg-zinc-900 border-zinc-800 rounded-xl text-sm"
+                  disabled={provisioning}
+                />
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 mt-5">
+                <div className="space-y-0.5">
+                  <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => setEnableMobileApp(!enableMobileApp)}>Mobile App Sync</Label>
+                  <p className="text-[10px] text-zinc-400">Sync mobile storefront.</p>
+                </div>
+                <Switch checked={enableMobileApp} onCheckedChange={setEnableMobileApp} disabled={provisioning} />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-6 gap-2 border-t border-zinc-900 pt-4">
+              <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)} disabled={provisioning} className="text-zinc-400 hover:text-white rounded-xl">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={provisioning} className="bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold gap-2">
+                {provisioning ? 'Provisioning...' : 'Provision & Activate'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
