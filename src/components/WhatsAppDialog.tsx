@@ -15,6 +15,7 @@ import { Client, InteractionOutcome } from '../types';
 import { useAppContext } from '../context';
 import { MessageSquare, Calendar, Send } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface WhatsAppDialogProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export const WhatsAppDialog: React.FC<WhatsAppDialogProps> = ({
   onSuccess,
 }) => {
   const { branding, addInteraction } = useAppContext();
+  const { t } = useLanguage();
   const gymName = branding?.companyName || 'the gym';
 
   const [selectedTemplate, setSelectedTemplate] = useState<string>('direct');
@@ -59,10 +61,10 @@ export const WhatsAppDialog: React.FC<WhatsAppDialogProps> = ({
 
   const templates = {
     direct: '',
-    greeting: `أهلاً يا كابتن ${client.name}، معاك جيم ${gymName}.. كنا حابين نعرف لو مهتم تيجي تشرفنا وتجرب حصة تجريبية مجانية؟`,
-    trial: `كابتن ${client.name}، تم تأكيد الحصة التجريبية الخاصة بحضرتك يوم ${getTrialDateStr()}. مستنيينك تشرفنا! 💪`,
-    renewal: `يا كابتن ${client.name}، صباح الخير! بنفكرك إن اشتراكك الحالي هينتهي يوم ${getExpiryDateStr()}. حابب نجددلك الاشتراك الباقة القادمة؟`,
-    missyou: `كابتن ${client.name}، وحشتنا في الجيم! لاحظنا إنك مظهرتش للتمرين بقالك فترة.. كله تمام؟ مستنيينك ترجع للتمرين قريباً! 💪`,
+    greeting: t('whatsapp.templates.greeting').replace('{name}', client.name).replace('{gymName}', gymName),
+    trial: t('whatsapp.templates.trial').replace('{name}', client.name).replace('{date}', getTrialDateStr()),
+    renewal: t('whatsapp.templates.renewal').replace('{name}', client.name).replace('{date}', getExpiryDateStr()),
+    missyou: t('whatsapp.templates.missyou').replace('{name}', client.name),
   };
 
   useEffect(() => {
@@ -123,58 +125,58 @@ export const WhatsAppDialog: React.FC<WhatsAppDialogProps> = ({
         <DialogHeader className="pb-4 border-b text-left">
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-green-500" />
-            <span>Send WhatsApp to {client.name}</span>
+            <span>{t('whatsapp.title').replace('{name}', client.name)}</span>
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground mt-1">
-            Choose a bilingual template. The interaction will be logged automatically in CRM.
+            {t('whatsapp.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4 text-sm">
           <div className="space-y-1">
-            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Select Message Template</Label>
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('whatsapp.select_template')}</Label>
             <Select value={selectedTemplate} onValueChange={(v) => setSelectedTemplate(v as string)}>
               <SelectTrigger className="w-full bg-muted/20 border-white/5 rounded-xl h-10">
-                <SelectValue placeholder="Select a template" />
+                <SelectValue placeholder={t('whatsapp.placeholder_select')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="direct">Direct Chat (No pre-filled text)</SelectItem>
-                <SelectItem value="greeting">Greeting / Inquire (New Lead)</SelectItem>
-                <SelectItem value="trial">Confirm Trial Appointment</SelectItem>
-                <SelectItem value="renewal">Renewal / Expiry Reminder</SelectItem>
-                <SelectItem value="missyou">"We Miss You" (Absent Member)</SelectItem>
+                <SelectItem value="direct">{t('whatsapp.templates_list.direct')}</SelectItem>
+                <SelectItem value="greeting">{t('whatsapp.templates_list.greeting')}</SelectItem>
+                <SelectItem value="trial">{t('whatsapp.templates_list.trial')}</SelectItem>
+                <SelectItem value="renewal">{t('whatsapp.templates_list.renewal')}</SelectItem>
+                <SelectItem value="missyou">{t('whatsapp.templates_list.missyou')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Message Text Preview</Label>
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('whatsapp.text_preview')}</Label>
             <Textarea
               className="min-h-[120px] rounded-xl bg-muted/20 border-white/5 focus:border-green-500/30 transition-all resize-none p-3 text-sm leading-relaxed"
               value={messageText}
               onChange={(e) => setMessageText(e.target.value)}
-              placeholder="Type your message here..."
+              placeholder={t('whatsapp.textarea_placeholder')}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Expected Outcome</Label>
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('whatsapp.expected_outcome')}</Label>
               <Select value={outcome} onValueChange={(v) => setOutcome(v as InteractionOutcome)}>
                 <SelectTrigger className="w-full bg-muted/20 border-white/5 rounded-xl h-10">
                   <SelectValue placeholder="Expected outcome" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Interested">Interested</SelectItem>
-                  <SelectItem value="Not Answered">Not Answered</SelectItem>
-                  <SelectItem value="Scheduled Trial">Scheduled Trial</SelectItem>
-                  <SelectItem value="Rejected">Rejected</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
+                  <SelectItem value="Interested">{t('whatsapp.outcomes.interested')}</SelectItem>
+                  <SelectItem value="Not Answered">{t('whatsapp.outcomes.not_answered')}</SelectItem>
+                  <SelectItem value="Scheduled Trial">{t('whatsapp.outcomes.scheduled_trial')}</SelectItem>
+                  <SelectItem value="Rejected">{t('whatsapp.outcomes.rejected')}</SelectItem>
+                  <SelectItem value="Other">{t('whatsapp.outcomes.other')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Follow-up Date (Optional)</Label>
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('whatsapp.followup_date')}</Label>
               <input
                 type="date"
                 className="flex h-10 w-full rounded-xl border border-white/5 bg-muted/20 px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
@@ -187,14 +189,14 @@ export const WhatsAppDialog: React.FC<WhatsAppDialogProps> = ({
 
         <DialogFooter className="pt-4 border-t flex flex-col sm:flex-row gap-2">
           <Button variant="outline" className="rounded-xl order-2 sm:order-1" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             className="rounded-xl bg-green-600 text-white hover:bg-green-700 font-bold flex items-center gap-2 order-1 sm:order-2"
             onClick={handleSendAndLog}
           >
             <Send className="h-4 w-4" />
-            <span>Send & Log</span>
+            <span>{t('whatsapp.send_and_log')}</span>
           </Button>
         </DialogFooter>
       </DialogContent>

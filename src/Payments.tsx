@@ -36,7 +36,7 @@ function toCanonical(name: string): string {
   return name.trim();
 }
 export default function Payments() {
-  const { t } = useLanguage();
+  const { t, language, isRtl } = useLanguage();
   const { clients, users, updateClient, addClient, currentUser, branding, canDeletePayments, branches, processPaymentTransaction } = useAppContext();
   const { coaches } = useCoaches();
   const { packages } = usePackages();
@@ -554,74 +554,124 @@ export default function Payments() {
       setAlertOpen(true);
       return;
     }
+
+    const isArabic = language === 'ar';
     
+    const labelBilledTo = isArabic ? 'المستلم' : 'Billed To';
+    const labelMemberId = isArabic ? 'رقم العضوية' : 'Member ID';
+    const labelBranch = isArabic ? 'الفرع' : 'Branch';
+    const labelReceiptNo = isArabic ? 'رقم الإيصال' : 'Receipt No.';
+    const labelDate = isArabic ? 'التاريخ' : 'Date';
+    const labelPaymentMethod = isArabic ? 'طريقة الدفع' : 'Payment Method';
+    const labelDescription = isArabic ? 'البيان / الباقة' : 'Description';
+    const labelAmount = isArabic ? 'القيمة' : 'Amount';
+    const labelTotalPaid = isArabic ? 'إجمالي المدفوع' : 'Total Paid';
+    const labelThankYou = isArabic ? 'شكراً لثقتكم بنا!' : 'Thank you for your business!';
+    const labelReceiptTitle = isArabic ? 'إيصال دفع' : 'Payment Receipt';
+    const labelCoachName = isArabic ? 'المدرب' : 'Coach';
+
+    // Localize payment method
+    let displayMethod = payment.method;
+    if (isArabic) {
+      switch (payment.method) {
+        case 'Cash': displayMethod = 'نقداً' as any; break;
+        case 'Credit Card': displayMethod = 'فيزا / كارت' as any; break;
+        case 'Bank Transfer': displayMethod = 'تحويل بنكي' as any; break;
+        case 'Instapay': displayMethod = 'إنستاباي' as any; break;
+        default: displayMethod = 'أخرى' as any;
+      }
+    }
+
+    const formattedDate = isArabic 
+      ? new Date(payment.date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : format(getEgyptDate(payment.date), 'MMMM d, yyyy h:mm a');
+
     win.document.write(`
-      <html>
+      <html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${language}">
         <head>
-          <title>Invoice - ${payment.id}</title>
+          <title>${isArabic ? 'فاتورة' : 'Invoice'} - ${payment.id.substring(0, 8).toUpperCase()}</title>
           <style>
-            body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; }
-            .header { border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-            .logo { font-size: 24px; font-weight: bold; color: #000; }
-            .logo img { max-height: 60px; object-fit: contain; }
-            .invoice-title { font-size: 20px; color: #666; text-transform: uppercase; letter-spacing: 2px; margin-top: 10px; }
-            .details { display: flex; justify-content: space-between; margin-bottom: 40px; }
-            .details-col { flex: 1; }
-            .label { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 5px; }
-            .value { font-size: 16px; font-weight: 500; margin-bottom: 15px; }
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&family=Inter:wght@400;500;600;700&display=swap');
+            body { 
+              font-family: ${isArabic ? "'Cairo', sans-serif" : "'Inter', 'Helvetica Neue', sans-serif"}; 
+              padding: 40px; 
+              color: #1f2937; 
+              background-color: #fff;
+            }
+            .header { 
+              display: flex; 
+              justify-content: space-between; 
+              align-items: center; 
+              border-bottom: 2px solid #f3f4f6; 
+              padding-bottom: 20px; 
+              margin-bottom: 30px; 
+              flex-direction: ${isRtl ? 'row-reverse' : 'row'};
+            }
+            .logo { font-size: 24px; font-weight: 800; color: #000; }
+            .logo img { max-height: 50px; object-fit: contain; }
+            .invoice-title { font-size: 20px; font-weight: 900; color: #111827; text-transform: uppercase; letter-spacing: 1px; }
+            .details { display: flex; justify-content: space-between; margin-bottom: 40px; flex-direction: ${isRtl ? 'row-reverse' : 'row'}; }
+            .details-col { flex: 1; text-align: ${isRtl ? 'right' : 'left'}; }
+            .details-col.align-end { text-align: ${isRtl ? 'left' : 'right'}; }
+            .label { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 4px; }
+            .value { font-size: 15px; font-weight: 600; color: #374151; margin-bottom: 15px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-            th { text-align: left; padding: 12px; border-bottom: 2px solid #ddd; color: #666; }
-            td { padding: 12px; border-bottom: 1px solid #eee; }
-            .total-row td { font-weight: bold; font-size: 18px; border-top: 2px solid #333; border-bottom: none; }
-            .footer { margin-top: 50px; text-align: center; color: #888; font-size: 14px; }
+            th { text-align: ${isRtl ? 'right' : 'left'}; padding: 12px; border-bottom: 2px solid #f3f4f6; color: #4b5563; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+            td { padding: 14px 12px; border-bottom: 1px solid #f3f4f6; font-size: 14px; color: #4b5563; text-align: ${isRtl ? 'right' : 'left'}; }
+            .total-row td { font-weight: 800; font-size: 18px; color: #111827; border-top: 2px solid #e5e7eb; border-bottom: none; }
+            .text-end { text-align: ${isRtl ? 'left' : 'right'}; }
+            .footer { margin-top: 60px; text-align: center; color: #9ca3af; font-size: 12px; font-weight: 500; }
           </style>
         </head>
         <body>
           <div class="header">
             <div class="logo"><img src="/mitrixogymcrmlogo.png" alt="${branding.companyName}" /></div>
-            <div class="invoice-title">Payment Receipt</div>
+            <div class="invoice-title">${labelReceiptTitle}</div>
           </div>
           
           <div class="details">
             <div class="details-col">
-              <div class="label">Billed To</div>
+              <div class="label">${labelBilledTo}</div>
               <div class="value">${client?.name || 'Unknown Client'}</div>
-              <div class="label">Member ID</div>
+              <div class="label">${labelMemberId}</div>
               <div class="value">${client?.memberId ? '#' + client.memberId : 'N/A'}</div>
-              <div class="label">Branch</div>
+              <div class="label">${labelBranch}</div>
               <div class="value">${client?.branch || 'N/A'}</div>
             </div>
-            <div class="details-col" style="text-align: right;">
-              <div class="label">Receipt No.</div>
+            <div class="details-col align-end">
+              <div class="label">${labelReceiptNo}</div>
               <div class="value">${payment.id.substring(0, 8).toUpperCase()}</div>
-              <div class="label">Date</div>
-              <div class="value">${format(getEgyptDate(payment.date), 'MMMM d, yyyy h:mm a')}</div>
-              <div class="label">Payment Method</div>
-              <div class="value">${payment.method} ${payment.instapayRef ? '(Ref: ' + payment.instapayRef + ')' : ''}</div>
+              <div class="label">${labelDate}</div>
+              <div class="value">${formattedDate}</div>
+              <div class="label">${labelPaymentMethod}</div>
+              <div class="value">${displayMethod} ${payment.instapayRef ? '(Ref: ' + payment.instapayRef + ')' : ''}</div>
             </div>
           </div>
           
           <table>
             <thead>
               <tr>
-                <th>Description</th>
-                <th style="text-align: right;">Amount</th>
+                <th>${labelDescription}</th>
+                <th class="text-end">${labelAmount}</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>${payment.packageType} ${payment.coachName ? `<br><span style="font-size: 12px; color: #888;">Coach: ${payment.coachName}</span>` : ''}</td>
-                <td style="text-align: right;">${payment.amount.toLocaleString()} LE</td>
+                <td>
+                  ${payment.packageType}
+                  ${payment.coachName ? `<br><span style="font-size: 12px; color: #888;">${labelCoachName}: ${payment.coachName}</span>` : ''}
+                </td>
+                <td class="text-end">${payment.amount.toLocaleString()} LE</td>
               </tr>
               <tr class="total-row">
-                <td style="text-align: right;">Total Paid</td>
-                <td style="text-align: right;">${payment.amount.toLocaleString()} LE</td>
+                <td class="text-end">${labelTotalPaid}</td>
+                <td class="text-end">${payment.amount.toLocaleString()} LE</td>
               </tr>
             </tbody>
           </table>
           
           <div class="footer">
-            Thank you for your business!<br>
+            ${labelThankYou}<br>
             ${branding.companyName}
           </div>
           

@@ -16,6 +16,7 @@ import { BrowserRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import Leads from './Leads';
 import Clients from './Clients';
+import CalendarView from './Calendar';
 import Payments from './Payments';
 import PTPackages from './PTPackages';
 import Attendance from './Attendance';
@@ -327,6 +328,7 @@ function AppContent() {
       show: (features.leads !== false) && (currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin')
     },
     { id: 'clients', label: t('nav.clients'), icon: Users, show: true },
+    { id: 'calendar', label: t('nav.calendar'), icon: CalendarIcon, show: true },
     { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: currentUser.role !== 'admin' },
     {
       id: 'payments',
@@ -766,6 +768,10 @@ function AppContent() {
 
             <TabsContent value="clients" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <Clients />
+            </TabsContent>
+
+            <TabsContent value="calendar" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <CalendarView />
             </TabsContent>
 
             {currentUser.role !== 'admin' && (

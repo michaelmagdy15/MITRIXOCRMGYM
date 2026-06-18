@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan } from 'lucide-react';
+import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan, XCircle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
@@ -17,7 +17,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const { currentUser, users } = useAppContext();
   const { clients } = useClients(currentUser);
   const { attendances, recordAttendance } = useAttendance(currentUser, clients);
-  const { t } = useLanguage();
+  const { t, language, isRtl } = useLanguage();
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -33,21 +33,151 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const [isRecording, setIsRecording] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleScanSuccess = (decodedId: string) => {
-    const member = clients.find(c => c.id === decodedId || c.memberId === decodedId);
-    if (member) {
+  const [kioskOverlay, setKioskOverlay] = useState<{
+    show: boolean;
+    type: 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    subText?: string;
+  }>({
+    show: false,
+    type: 'success',
+    title: '',
+    message: ''
+  });
+
+  const checkMemberStatus = (member: any) => {
+    const isArabic = language === 'ar';
+    if (member.membershipExpiry) {
+      const expiry = new Date(member.membershipExpiry);
+      if (expiry < new Date()) {
+        const dateStr = expiry.toLocaleDateString(isArabic ? 'ar-EG' : 'en-GB');
+        return { 
+          valid: false, 
+          reason: 'Expired', 
+          message: isArabic 
+            ? `انتهت صلاحية اشتراكك في ${dateStr}. يرجى التجديد عند الاستقبال.` 
+            : `Membership expired on ${dateStr}. Please renew with staff.` 
+        };
+      }
+    }
+    if (member.status === 'Expired') {
+      return { 
+        valid: false, 
+        reason: 'Expired', 
+        message: isArabic 
+          ? 'عضويتك منتهية الصلاحية. يرجى التجديد عند الاستقبال.' 
+          : 'Membership is expired. Please renew with staff.' 
+      };
+    }
+    if (member.status === 'Hold') {
+      return { 
+        valid: false, 
+        reason: 'Hold', 
+        message: isArabic 
+          ? 'عضويتك معلقة مؤقتاً.' 
+          : 'Membership is currently on hold.' 
+      };
+    }
+    if (typeof member.sessionsRemaining === 'number' && member.sessionsRemaining <= 0) {
+      return { 
+        valid: false, 
+        reason: 'No Sessions', 
+        message: isArabic 
+          ? 'نفدت جميع الجلسات المتبقية لديك. يرجى إعادة الشحن عند الاستقبال.' 
+          : 'No sessions remaining. Please renew your membership with staff.' 
+      };
+    }
+    return { 
+      valid: true, 
+      reason: 'Active', 
+      message: isArabic 
+        ? `مرحباً بك، ${member.name}!` 
+        : `Welcome, ${member.name}!` 
+    };
+  };
+
+  const handleScanSuccess = async (decodedId: string) => {
+    const isArabic = language === 'ar';
+    // Clear error
+    setError(null);
+
+    const member = clients.find(c => c.id === decodedId || c.memberId === decodedId || c.phone === decodedId);
+    if (!member) {
+      if (isKiosk) {
+        setKioskOverlay({
+          show: true,
+          type: 'error',
+          title: isArabic ? 'لم يتم العثور على العضو' : 'Member Not Found',
+          message: isArabic 
+            ? 'الرمز المدخل غير مسجل لدينا. يرجى مراجعة موظف الاستقبال.' 
+            : 'Member ID or phone not found. Please see reception desk.'
+        });
+        setIsScanning(false);
+        setTimeout(() => {
+          setKioskOverlay(prev => ({ ...prev, show: false }));
+          if (manualInputRef.current) manualInputRef.current.value = '';
+          setIsScanning(true);
+        }, 3000);
+      } else {
+        setError(t('attendance.no_member_found'));
+      }
+      return;
+    }
+
+    if (isKiosk) {
+      setIsScanning(false);
+      const statusCheck = checkMemberStatus(member);
+      if (statusCheck.valid) {
+        setIsRecording(true);
+        try {
+          await recordAttendance(member.id, selectedBranch);
+          setKioskOverlay({
+            show: true,
+            type: 'success',
+            title: isArabic ? 'تم تسجيل حضورك' : 'Check-in Recorded',
+            message: statusCheck.message,
+            subText: member.packageType ? `${isArabic ? 'الباقة:' : 'Package:'} ${member.packageType}` : ''
+          });
+        } catch (err: any) {
+          setKioskOverlay({
+            show: true,
+            type: 'error',
+            title: isArabic ? 'خطأ في تسجيل الحضور' : 'System Error',
+            message: err instanceof Error ? err.message : 'Error recording check-in'
+          });
+        } finally {
+          setIsRecording(false);
+        }
+      } else {
+        setKioskOverlay({
+          show: true,
+          type: statusCheck.reason === 'Hold' ? 'warning' : 'error',
+          title: statusCheck.reason === 'Hold' 
+            ? (isArabic ? 'حسابك معلق' : 'Membership on Hold') 
+            : (isArabic ? 'الاشتراك منتهٍ' : 'Membership Expired'),
+          message: statusCheck.message
+        });
+      }
+
+      setTimeout(() => {
+        setKioskOverlay(prev => ({ ...prev, show: false }));
+        if (manualInputRef.current) manualInputRef.current.value = '';
+        setIsScanning(true);
+      }, 3000);
+
+    } else {
+      // Normal admin checkin flow
       setLastScannedMember(member);
       setIsScanning(false);
       setError(null);
-    } else {
-      setError(t('attendance.no_member_found'));
     }
   };
 
   const handleScanSuccessRef = useRef(handleScanSuccess);
   useEffect(() => {
     handleScanSuccessRef.current = handleScanSuccess;
-  }, [handleScanSuccess]);
+  }, [handleScanSuccess, clients, selectedBranch, language]);
 
   // Press "/" anywhere to jump to the manual ID input (skip if already in a field)
   useEffect(() => {
@@ -397,6 +527,41 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           )}
         </div>
       </div>
+
+      {/* Kiosk Mode Fullscreen Overlay */}
+      {isKiosk && kioskOverlay.show && (
+        <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in-95 duration-300 backdrop-blur-2xl ${
+          kioskOverlay.type === 'success' 
+            ? 'bg-emerald-950/95 text-white' 
+            : kioskOverlay.type === 'warning' 
+              ? 'bg-amber-950/95 text-white' 
+              : 'bg-rose-950/95 text-white'
+        }`}>
+          <div className={`p-8 rounded-full mb-6 border-4 animate-bounce ${
+            kioskOverlay.type === 'success' 
+              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
+              : kioskOverlay.type === 'warning' 
+                ? 'bg-amber-500/20 border-amber-500 text-amber-400' 
+                : 'bg-rose-500/20 border-rose-500 text-rose-400'
+          }`}>
+            {kioskOverlay.type === 'success' && <CheckCircle className="h-24 w-24" />}
+            {kioskOverlay.type === 'warning' && <AlertCircle className="h-24 w-24" />}
+            {kioskOverlay.type === 'error' && <XCircle className="h-24 w-24" />}
+          </div>
+          
+          <h1 className="text-4xl sm:text-5xl font-black mb-4 font-sans tracking-tight uppercase">
+            {kioskOverlay.title}
+          </h1>
+          <p className="text-lg sm:text-2xl font-medium text-white/80 max-w-2xl leading-relaxed font-sans">
+            {kioskOverlay.message}
+          </p>
+          {kioskOverlay.subText && (
+            <p className="text-sm sm:text-lg font-bold text-white/60 mt-4 font-sans">
+              {kioskOverlay.subText}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

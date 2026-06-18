@@ -3,6 +3,7 @@
     "dashboard": "Dashboard",
     "leads": "Leads",
     "clients": "Members",
+    "calendar": "Calendar",
     "tasks": "Tasks",
     "payments": "Payments",
     "attendance": "Attendance",
@@ -139,7 +140,20 @@
     "all_reps": "All Representatives",
     "all_branches": "All Branches",
     "team_analytics": "Team Analytics",
-    "six_month_revenue": "6-Month Revenue Trend"
+    "six_month_revenue": "6-Month Revenue Trend",
+    "leaderboard_title": "Rep Performance Leaderboard",
+    "rank": "Rank",
+    "rep_name": "Rep Name",
+    "revenue": "Revenue",
+    "target_percent": "Target %",
+    "converted": "Converted",
+    "rate_percent": "Rate %",
+    "no_data_leaderboard": "No representative data found for this period.",
+    "goal": "Goal",
+    "leads": "leads",
+    "of": "of",
+    "total": "total",
+    "export_csv": "Export CSV"
   },
   "leads": {
     "title": "Leads Follow-up",
@@ -341,6 +355,37 @@
     "release_payment": "Release Payment from Hold",
     "delete_payment": "Delete Payment",
     "cannot_delete_held": "Cannot delete held payments"
+  },
+  "whatsapp": {
+    "title": "Send WhatsApp to {name}",
+    "description": "Choose a message template. The interaction will be logged automatically in CRM.",
+    "select_template": "Select Message Template",
+    "placeholder_select": "Select a template",
+    "text_preview": "Message Text Preview",
+    "textarea_placeholder": "Type your message here...",
+    "expected_outcome": "Expected Outcome",
+    "followup_date": "Follow-up Date (Optional)",
+    "send_and_log": "Send & Log",
+    "templates_list": {
+      "direct": "Direct Chat (No pre-filled text)",
+      "greeting": "Greeting / Inquire (New Lead)",
+      "trial": "Confirm Trial Appointment",
+      "renewal": "Renewal / Expiry Reminder",
+      "missyou": "\"We Miss You\" (Absent Member)"
+    },
+    "templates": {
+      "greeting": "Hello Capt. {name}, this is {gymName}. We wanted to check if you are interested in trying a free session with us?",
+      "trial": "Capt. {name}, your trial visit has been confirmed for {date}. We look forward to seeing you! 💪",
+      "renewal": "Hello Capt. {name}, good morning! A friendly reminder that your subscription expires on {date}. Would you like us to renew it for you?",
+      "missyou": "Capt. {name}, we miss you at the gym! We noticed you haven't been training for a while. Hope everything is fine! 💪"
+    },
+    "outcomes": {
+      "interested": "Interested",
+      "not_answered": "Not Answered",
+      "scheduled_trial": "Scheduled Trial",
+      "rejected": "Rejected",
+      "other": "Other"
+    }
   },
   "attendance": {
     "title": "Attendance Scanner",

@@ -89,7 +89,7 @@ function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], 
 
 export default function Dashboard() {
   const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, branches, clients: contextClients, payments: contextPayments, attendances } = useAppContext();
-  const { t, language } = useLanguage();
+  const { t, language, isRtl } = useLanguage();
   // Use context data directly instead of creating duplicate Firestore listeners.
   // Context 'clients' and 'payments' are already filtered for the current user's visibility.
   // For manager cross-rep analysis we need unfiltered data — but all users in context already
@@ -1133,8 +1133,8 @@ export default function Dashboard() {
                   <Trophy className="h-5 w-5 text-indigo-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-xl font-bold text-gray-900 leading-none">Rep Performance Leaderboard</CardTitle>
-                  <p className="text-sm text-muted-foreground mt-1">{format(selectedMonth, 'MMMM yyyy')} statistics</p>
+                  <CardTitle className="text-xl font-bold text-gray-900 leading-none">{t('dashboard.leaderboard_title')}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">{format(selectedMonth, 'MMMM yyyy')} {language === 'ar' ? 'الإحصائيات' : 'statistics'}</p>
                 </div>
               </div>
               <Button 
@@ -1144,38 +1144,38 @@ export default function Dashboard() {
                 className="hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all duration-200"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Export CSV
+                {t('dashboard.export_csv')}
               </Button>
             </CardHeader>
             <CardContent className="p-0">
             <div className="overflow-x-auto -mx-4 md:mx-0 scroll-touch">
-                <table className="w-full text-left border-collapse">
+                <table className={`w-full border-collapse ${isRtl ? 'text-right' : 'text-left'}`}>
                   <thead>
                     <tr className="bg-gray-50/80 border-b border-gray-100">
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Rank</th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>{t('dashboard.rank')}</th>
+                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>
                         <button onClick={() => handleSort('name')} className="flex items-center hover:text-indigo-600 transition-colors">
-                          REP NAME <ArrowUpDown className="h-3 w-3 ml-1" />
+                          {t('dashboard.rep_name')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>
                         <button onClick={() => handleSort('revenue')} className="flex items-center hover:text-indigo-600 transition-colors">
-                          REVENUE <ArrowUpDown className="h-3 w-3 ml-1" />
+                          {t('dashboard.revenue')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
                         <button onClick={() => handleSort('targetAchievement')} className="flex items-center hover:text-indigo-600 transition-colors">
-                          TARGET % <ArrowUpDown className="h-3 w-3 ml-1" />
+                          {t('dashboard.target_percent')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
                         <button onClick={() => handleSort('converted')} className="flex items-center hover:text-indigo-600 transition-colors">
-                          CONVERTED <ArrowUpDown className="h-3 w-3 ml-1" />
+                          {t('dashboard.converted')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
-                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
                         <button onClick={() => handleSort('conversionRate')} className="flex items-center hover:text-indigo-600 transition-colors">
-                          RATE % <ArrowUpDown className="h-3 w-3 ml-1" />
+                          {t('dashboard.rate_percent')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
                     </tr>
@@ -1183,7 +1183,7 @@ export default function Dashboard() {
                   <tbody>
                     {leaderboardData.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-sm text-muted-foreground italic">No representative data found for this period.</td>
+                        <td colSpan={6} className="px-6 py-12 text-center text-sm text-muted-foreground italic">{t('dashboard.no_data_leaderboard')}</td>
                       </tr>
                     ) : (
                       leaderboardData.map((rep, index) => (
@@ -1201,7 +1201,7 @@ export default function Dashboard() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="text-sm font-bold text-gray-900">{rep.revenue.toLocaleString()} <span className="text-[10px] text-muted-foreground font-normal">LE</span></div>
-                            <div className="text-[10px] text-muted-foreground">Goal: {rep.targetAmount.toLocaleString()}</div>
+                            <div className="text-[10px] text-muted-foreground">{t('dashboard.goal')}: {rep.targetAmount.toLocaleString()}</div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
@@ -1218,13 +1218,13 @@ export default function Dashboard() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
-                              {rep.converted} <span className="ml-1 text-[10px] opacity-70 font-medium">leads</span>
+                              {rep.converted} <span className={`text-[10px] opacity-70 font-medium ${isRtl ? 'mr-1' : 'ml-1'}`}>{t('dashboard.leads')}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col">
                               <span className="text-sm font-bold text-gray-900">{rep.conversionRate}%</span>
-                              <span className="text-[10px] text-muted-foreground">{rep.converted} of {rep.totalLeads} total</span>
+                              <span className="text-[10px] text-muted-foreground">{rep.converted} {t('dashboard.of')} {rep.totalLeads} {t('dashboard.total')}</span>
                             </div>
                           </td>
                         </tr>
