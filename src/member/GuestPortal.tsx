@@ -66,7 +66,7 @@ interface GuestPortalProps {
 }
 
 export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, client = null }: GuestPortalProps) {
-  const { packages, branding } = useAppContext();
+  const { packages, branding, branches, coaches } = useAppContext();
   const { logout } = useAuth();
   const { addToCart } = useCart();
   const [showPreloader, setShowPreloader] = useState(true);
@@ -107,15 +107,16 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   ).sort((a, b) => a.sessions - b.sessions);
 
   // Fallback packages if db is empty
+  const primaryBranch = branches[0] || 'Main Branch';
   const mockKidsPackages = [
-    { id: 'mock-k1', name: 'Kids Kickboxing - Maxim Compound', sessions: 12, expiryDays: 45, price: 1500, type: 'Kids' },
-    { id: 'mock-k2', name: 'Kids Boxing - Maxim Compound', sessions: 8, expiryDays: 30, price: 1100, type: 'Kids' }
+    { id: 'mock-k1', name: `Kids Kickboxing - ${primaryBranch}`, sessions: 12, expiryDays: 45, price: 1500, type: 'Kids' },
+    { id: 'mock-k2', name: `Kids Boxing - ${primaryBranch}`, sessions: 8, expiryDays: 30, price: 1100, type: 'Kids' }
   ];
 
   const mockAdultPackages = [
-    { id: 'mock-a1', name: 'IMPACT Adult Package 10', sessions: 10, expiryDays: 30, price: 1800, type: 'Adults' },
-    { id: 'mock-a2', name: 'IMPACT Adult Package 20', sessions: 20, expiryDays: 60, price: 3200, type: 'Adults' },
-    { id: 'mock-a3', name: 'IMPACT Adult Package 30', sessions: 30, expiryDays: 90, price: 4500, type: 'Adults' }
+    { id: 'mock-a1', name: `${branding.companyName} Adult Package 10`, sessions: 10, expiryDays: 30, price: 1800, type: 'Adults' },
+    { id: 'mock-a2', name: `${branding.companyName} Adult Package 20`, sessions: 20, expiryDays: 60, price: 3200, type: 'Adults' },
+    { id: 'mock-a3', name: `${branding.companyName} Adult Package 30`, sessions: 30, expiryDays: 90, price: 4500, type: 'Adults' }
   ];
 
   const displayKids = kidsPackages.length > 0 ? kidsPackages : mockKidsPackages;
@@ -132,9 +133,9 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center">
         <div className="relative flex flex-col items-center animate-pulse">
           {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt="MITRIXOGYMCRM" className="h-24 w-auto object-contain brightness-0 invert" />
+            <img src={branding.logoUrl} alt={branding.companyName || 'CRM'} className="h-24 w-auto object-contain brightness-0 invert" />
           ) : (
-            <h1 className="text-5xl font-extrabold tracking-[0.25em] text-white">MITRIXOGYMCRM</h1>
+            <h1 className="text-5xl font-extrabold tracking-[0.25em] text-white">{(branding.companyName || 'CRM').toUpperCase()}</h1>
           )}
           <p className="text-[10px] tracking-[0.4em] text-zinc-500 uppercase mt-2 font-semibold">Boxing Club</p>
           
@@ -167,9 +168,9 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt="MITRIXOGYMCRM" className="h-8 w-auto object-contain" />
+            <img src={branding.logoUrl} alt={branding.companyName || 'CRM'} className="h-8 w-auto object-contain" />
           ) : (
-            <h1 className="text-xl font-black tracking-[0.2em]">MITRIXOGYMCRM</h1>
+            <h1 className="text-xl font-black tracking-[0.2em]">{(branding.companyName || 'CRM').toUpperCase()}</h1>
           )}
         </div>
         
@@ -227,22 +228,22 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   {slideIndex === 0 && (
                     <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">
                       <Badge className="mb-2 bg-white text-black hover:bg-zinc-200">Featured</Badge>
-                      <h3 className="text-white font-black text-xl leading-tight uppercase">Elite Boxing Sparring</h3>
-                      <p className="text-white/70 text-xs mt-1 mb-3">Maxim Compound • Timings available now</p>
+                      <h3 className="text-white font-black text-xl leading-tight uppercase">Elite Fitness & Training</h3>
+                      <p className="text-white/70 text-xs mt-1 mb-3">{primaryBranch} • Timings available now</p>
                     </div>
                   )}
                   {slideIndex === 1 && (
                     <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">
                       <Badge className="mb-2 bg-primary text-primary-foreground">Popular</Badge>
-                      <h3 className="text-white font-black text-xl leading-tight uppercase">Kids Fitness & Boxing</h3>
-                      <p className="text-white/70 text-xs mt-1 mb-3">Maxim Compound branch packages</p>
+                      <h3 className="text-white font-black text-xl leading-tight uppercase">Kids & Juniors Programs</h3>
+                      <p className="text-white/70 text-xs mt-1 mb-3">Specialized youth fitness and coaching</p>
                     </div>
                   )}
                   {slideIndex === 2 && (
                     <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">
                       <Badge className="mb-2 bg-rose-600 text-white">New</Badge>
-                      <h3 className="text-white font-black text-xl leading-tight uppercase">IMPACT Conditioning</h3>
-                      <p className="text-white/70 text-xs mt-1 mb-3">Zayed & Maxim Compound sister company</p>
+                      <h3 className="text-white font-black text-xl leading-tight uppercase">Personal Coaching</h3>
+                      <p className="text-white/70 text-xs mt-1 mb-3">Certified personal trainers at {branding.companyName}</p>
                     </div>
                   )}
                   <Button size="sm" className="w-full font-bold h-10 rounded-xl bg-white text-black hover:bg-zinc-200" onClick={() => scrollToSection(kidsSectionRef)}>
@@ -256,7 +257,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             <div ref={kidsSectionRef} className="px-4 pt-2">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-black tracking-tight uppercase">Kids Packages</h2>
-                <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">Maxim Compound Branch</Badge>
+                <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
               </div>
               
               {/* Kids Category Banner */}
@@ -328,7 +329,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             <div ref={adultSectionRef} className="px-4 pt-2">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-black tracking-tight uppercase">Adult Packages</h2>
-                <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">IMPACT Conditioning</Badge>
+                <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">{branding.companyName}</Badge>
               </div>
 
               <div className="grid grid-cols-1 gap-3">
@@ -371,44 +372,28 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
           <div className="p-4 space-y-4 animate-in fade-in duration-300">
             <h2 className="text-xl font-black uppercase tracking-tight mb-2">Our Locations</h2>
             
-            <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-extrabold text-sm uppercase">Maxim Compound Branch</h3>
-                <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[9px]">Open</Badge>
+            {branches.map((branch, idx) => (
+              <div key={branch} className={`bg-card border rounded-2xl p-5 shadow-sm space-y-3 ${idx === 0 ? 'border-primary/20 bg-primary/5' : ''}`}>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-extrabold text-sm uppercase">{branch} Branch</h3>
+                  <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[9px]">Open</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Welcome to our {branch} location. Coached by certified instructors, featuring state-of-the-art facilities and equipment.
+                </p>
+                <div className="pt-2 border-t text-[11px] space-y-1 text-muted-foreground font-semibold">
+                  <p>📍 Location: {branch}, Egypt</p>
+                  <p>⏰ Timings: 6:00 AM - 11:00 PM</p>
+                  <p>📞 Contact: {branding.companyName} Reception</p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">Inside Maxim Compound, Fifth Settlement, New Cairo. Premium boxing ring, professional heavy bag frames, and expert captian coaching.</p>
-              <div className="pt-2 border-t text-[11px] space-y-1 text-muted-foreground font-semibold">
-                <p>📍 Location: New Cairo, Egypt</p>
-                <p>⏰ Timings: 6:00 AM - 11:00 PM</p>
-                <p>📞 Contact: +20 10 9988 7766</p>
+            ))}
+            
+            {branches.length === 0 && (
+              <div className="text-center p-8 text-muted-foreground text-xs font-semibold">
+                No active branches configured. Please check back later.
               </div>
-            </div>
-
-            <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-extrabold text-sm uppercase">Mivida Branch</h3>
-                <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[9px]">Open</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">Inside Mivida Compound Club, Fifth Settlement, New Cairo. Dedicated personal training zone and group fitness studios.</p>
-              <div className="pt-2 border-t text-[11px] space-y-1 text-muted-foreground font-semibold">
-                <p>📍 Location: New Cairo, Egypt</p>
-                <p>⏰ Timings: 7:00 AM - 10:00 PM</p>
-                <p>📞 Contact: +20 10 9988 7755</p>
-              </div>
-            </div>
-
-            <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-3 border-primary/20 bg-primary/5">
-              <div className="flex items-center justify-between">
-                <h3 className="font-extrabold text-sm uppercase text-primary">mitrixogymcrm IMPACT Zayed</h3>
-                <Badge className="bg-primary/20 text-primary border-primary/30 text-[9px]">Sister Gym</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">Sheikh Zayed Branch. Dedicated to advanced HIIT conditioning and high intensity strength training.</p>
-              <div className="pt-2 border-t text-[11px] space-y-1 text-muted-foreground font-semibold">
-                <p>📍 Location: Sheikh Zayed City, Giza</p>
-                <p>⏰ Timings: 6:00 AM - 11:00 PM</p>
-                <p>📞 Contact: +20 10 9988 7744</p>
-              </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -418,13 +403,22 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             <h2 className="text-xl font-black uppercase tracking-tight mb-2">Class Schedule</h2>
             
             <div className="space-y-3">
-              {[
-                { time: "09:00 AM", name: "Boxing Foundation", coach: "Coach Captain Yasser", branch: "Maxim Compound", days: "Mon / Wed" },
-                { time: "11:00 AM", name: "Strength & Conditioning", coach: "Coach Michael Mitry", branch: "Maxim Compound", days: "Sat / Mon / Wed" },
-                { time: "05:00 PM", name: "Kids Kickboxing", coach: "Coach Nour", branch: "Maxim Compound", days: "Sun / Tue" },
-                { time: "06:00 PM", name: "Advanced Boxing Sparring", coach: "Coach Captain Yasser", branch: "Mivida", days: "Tue / Thu" },
-                { time: "07:00 PM", name: "IMPACT HIIT Conditioning", coach: "Coach Dodo", branch: "mitrixogymcrm IMPACT", days: "Sat / Mon / Thu" }
-              ].map((cls, idx) => (
+              {((): any[] => {
+                const b1 = branches[0] || 'Main Branch';
+                const b2 = branches[1] || b1;
+                const coachList = coaches.filter(c => c.active);
+                const c1 = coachList[0]?.name || 'Coach Captain Yasser';
+                const c2 = coachList[1]?.name || 'Coach Michael';
+                const c3 = coachList[2]?.name || 'Coach Nour';
+
+                return [
+                  { time: "09:00 AM", name: "Fitness Foundation", coach: c1, branch: b1, days: "Mon / Wed" },
+                  { time: "11:00 AM", name: "Strength & Conditioning", coach: c2, branch: b1, days: "Sat / Mon / Wed" },
+                  { time: "05:00 PM", name: "Kids & Juniors Training", coach: c3, branch: b1, days: "Sun / Tue" },
+                  { time: "06:00 PM", name: "Advanced Conditioning", coach: c1, branch: b2, days: "Tue / Thu" },
+                  { time: "07:00 PM", name: "HIIT Sparring Session", coach: c2, branch: b2, days: "Sat / Mon / Thu" }
+                ];
+              })().map((cls, idx) => (
                 <div key={idx} className="bg-card border rounded-2xl p-4 flex justify-between items-center shadow-sm">
                   <div className="space-y-1">
                     <Badge variant="outline" className="text-[9px] font-bold border-primary/20 text-primary uppercase">{cls.days}</Badge>
@@ -451,8 +445,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 <Badge className="bg-primary/10 text-primary border-primary/20 text-[9px] font-bold uppercase">Update</Badge>
                 <span className="text-[10px] text-muted-foreground font-semibold">June 15, 2026</span>
               </div>
-              <h3 className="font-extrabold text-sm uppercase">IMPACT Adult Packages Live</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">Adult packages of 10, 20, and 30 sessions are now live on the storefront for immediate request! Access custom metabolic training coached by Coach Michael and Coach Dodo.</p>
+              <h3 className="font-extrabold text-sm uppercase">Welcome to {branding.companyName}!</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Our mobile guest portal is fully active. Check out our locations, schedules, and purchase membership packages directly from your mobile device.
+              </p>
             </div>
 
             <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-2">
@@ -460,8 +456,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 <Badge variant="outline" className="text-[9px] font-bold border-zinc-700 text-zinc-400 uppercase">Announcement</Badge>
                 <span className="text-[10px] text-muted-foreground font-semibold">June 12, 2026</span>
               </div>
-              <h3 className="font-extrabold text-sm uppercase">Maxim Compound Expansion</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">We are expanding our training space at Maxim Compound branch. Adding a dedicated parent lounge, juice bar storefront expansion, and secondary training ring.</p>
+              <h3 className="font-extrabold text-sm uppercase">{branding.companyName} Packages Live</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                We have updated our membership packages. Browse the 'Book' tab to choose your plan and complete your registration.
+              </p>
             </div>
 
             <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-2">
@@ -469,8 +467,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 <Badge variant="outline" className="text-[9px] font-bold border-zinc-700 text-zinc-400 uppercase">Billing</Badge>
                 <span className="text-[10px] text-muted-foreground font-semibold">June 10, 2026</span>
               </div>
-              <h3 className="font-extrabold text-sm uppercase">Instapay Payments Supported</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">For quick checkout processing, you can transfer directly via Instapay address <strong className="text-white">mitrixogymcrm@instapay</strong> and supply your reference number in checkout.</p>
+              <h3 className="font-extrabold text-sm uppercase">Support & Inquiries</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                For support, please contact the reception at any of our branches: {branches.join(', ') || 'our main location'}.
+              </p>
             </div>
           </div>
         )}
