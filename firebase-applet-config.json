@@ -6,5 +6,5 @@
   "storageBucket": "faa-test-guide-v2.firebasestorage.app",
   "messagingSenderId": "492280162134",
   "measurementId": "",
-  "firestoreDatabaseId": "db-test"
+  "firestoreDatabaseId": "(default)"
 }
