@@ -1,14 +1,15 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from './context';
 import { useAuth } from './contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { storage } from './firebase';
+import { storage, db } from './firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection as fbCollection, getDocs as fbGetDocs, addDoc, doc as fbDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Save, UserCircle2, Building2, Users, Package, AlertTriangle, ShieldAlert, Trash2, Dumbbell, Lock, Download, Upload, MessageSquare, Send, KeyRound, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
+import { Save, UserCircle2, Building2, Users, Package, AlertTriangle, ShieldAlert, Trash2, Dumbbell, Lock, Download, Upload, MessageSquare, Send, KeyRound, Eye, EyeOff, CheckCircle2, Megaphone } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import UsersManagement from './Users';
 import Packages from './Packages';
@@ -77,6 +78,93 @@ export default function Settings() {
   const [smsStatus, setSmsStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const canWipe = canAccessSettings || currentUser?.email === 'michaelmitry13@gmail.com';
+
+  // ── Announcements State ──
+  interface AnnouncementRecord {
+    id: string;
+    title: string;
+    body: string;
+    imageUrl: string;
+    linkUrl: string;
+    priority: number;
+    startDate: string;
+    endDate: string;
+    createdBy: string;
+  }
+  const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
+  const [announcementForm, setAnnouncementForm] = useState({
+    title: '', body: '', imageUrl: '', linkUrl: '', priority: 1,
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  });
+  const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
+
+  const fetchAnnouncements = async () => {
+    setLoadingAnnouncements(true);
+    try {
+      const snapshot = await fbGetDocs(fbCollection(db, 'announcements'));
+      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnnouncementRecord));
+      list.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+      setAnnouncements(list);
+    } catch (err) {
+      console.warn('Could not load announcements:', err);
+    } finally {
+      setLoadingAnnouncements(false);
+    }
+  };
+
+  useEffect(() => {
+    if (canAccessSettings) fetchAnnouncements();
+  }, [canAccessSettings]);
+
+  const handleSaveAnnouncement = async () => {
+    if (!announcementForm.title.trim()) return;
+    setIsSavingAnnouncement(true);
+    try {
+      const data = {
+        title: announcementForm.title.trim(),
+        body: announcementForm.body.trim(),
+        imageUrl: announcementForm.imageUrl.trim(),
+        linkUrl: announcementForm.linkUrl.trim(),
+        priority: Number(announcementForm.priority) || 1,
+        startDate: announcementForm.startDate,
+        endDate: announcementForm.endDate,
+        createdBy: currentUser?.email || 'admin',
+      };
+      if (editingAnnouncementId) {
+        await updateDoc(fbDoc(db, 'announcements', editingAnnouncementId), data);
+        setEditingAnnouncementId(null);
+      } else {
+        await addDoc(fbCollection(db, 'announcements'), data);
+      }
+      setAnnouncementForm({ title: '', body: '', imageUrl: '', linkUrl: '', priority: 1, startDate: new Date().toISOString().split('T')[0], endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] });
+      await fetchAnnouncements();
+    } catch (err) {
+      console.error('Failed to save announcement:', err);
+    } finally {
+      setIsSavingAnnouncement(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!window.confirm('Delete this announcement?')) return;
+    try {
+      await deleteDoc(fbDoc(db, 'announcements', id));
+      setAnnouncements(prev => prev.filter(a => a.id !== id));
+    } catch (err) {
+      console.error('Failed to delete announcement:', err);
+    }
+  };
+
+  const handleEditAnnouncement = (a: AnnouncementRecord) => {
+    setEditingAnnouncementId(a.id);
+    setAnnouncementForm({
+      title: a.title, body: a.body, imageUrl: a.imageUrl || '', linkUrl: a.linkUrl || '',
+      priority: a.priority || 1, startDate: a.startDate, endDate: a.endDate
+    });
+  };
 
   React.useEffect(() => {
     setCompanyName(branding.companyName);
@@ -394,6 +482,10 @@ export default function Settings() {
             <Download className="h-4 w-4" />
             Backup
           </TabsTrigger>
+          <TabsTrigger value="announcements" className="flex items-center gap-2 whitespace-nowrap">
+            <Megaphone className="h-4 w-4" />
+            Announcements
+          </TabsTrigger>
 
           {canWipe && (
             <TabsTrigger value="danger" className="flex items-center gap-2 whitespace-nowrap text-destructive data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">
@@ -701,6 +793,103 @@ export default function Settings() {
                   <p className={`text-sm font-medium ${restoreStatus.type === 'success' ? 'text-green-600' : 'text-destructive'}`}>
                     {restoreStatus.message}
                   </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── Announcements ── */}
+        <TabsContent value="announcements" className="animate-in fade-in-50 duration-500">
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Megaphone className="h-5 w-5 text-primary" />
+                  {editingAnnouncementId ? 'Edit Announcement' : 'Create Announcement'}
+                </CardTitle>
+                <CardDescription>
+                  Announcements appear as promotional banners on the Member Portal home screen.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Title *</Label>
+                  <Input value={announcementForm.title} onChange={e => setAnnouncementForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Summer Sale — 50% Off" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Body</Label>
+                  <textarea className="w-full border rounded-md p-2 text-sm min-h-[80px] bg-background" value={announcementForm.body} onChange={e => setAnnouncementForm(f => ({ ...f, body: e.target.value }))} placeholder="Promotion details..." />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Start Date</Label>
+                    <Input type="date" value={announcementForm.startDate} onChange={e => setAnnouncementForm(f => ({ ...f, startDate: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>End Date</Label>
+                    <Input type="date" value={announcementForm.endDate} onChange={e => setAnnouncementForm(f => ({ ...f, endDate: e.target.value }))} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Image URL (optional)</Label>
+                  <Input value={announcementForm.imageUrl} onChange={e => setAnnouncementForm(f => ({ ...f, imageUrl: e.target.value }))} placeholder="https://..." />
+                </div>
+                <div className="space-y-2">
+                  <Label>Link URL (optional)</Label>
+                  <Input value={announcementForm.linkUrl} onChange={e => setAnnouncementForm(f => ({ ...f, linkUrl: e.target.value }))} placeholder="https://..." />
+                </div>
+                <div className="space-y-2">
+                  <Label>Priority (higher = shown first)</Label>
+                  <Input type="number" min={1} max={10} value={announcementForm.priority} onChange={e => setAnnouncementForm(f => ({ ...f, priority: Number(e.target.value) }))} />
+                </div>
+                <div className="flex gap-2">
+                  <Button className="flex-1" onClick={handleSaveAnnouncement} disabled={isSavingAnnouncement || !announcementForm.title.trim()}>
+                    <Save className="mr-2 h-4 w-4" />
+                    {isSavingAnnouncement ? 'Saving...' : editingAnnouncementId ? 'Update' : 'Create'}
+                  </Button>
+                  {editingAnnouncementId && (
+                    <Button variant="outline" onClick={() => { setEditingAnnouncementId(null); setAnnouncementForm({ title: '', body: '', imageUrl: '', linkUrl: '', priority: 1, startDate: new Date().toISOString().split('T')[0], endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }); }}>
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-bold">Active Announcements ({announcements.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {loadingAnnouncements ? (
+                  <div className="flex justify-center py-6"><div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" /></div>
+                ) : announcements.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6 italic">No announcements yet. Create one to engage your members!</p>
+                ) : (
+                  announcements.map(a => (
+                    <div key={a.id} className="p-3 border rounded-lg bg-card/50 space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-sm">{a.title}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-2">{a.body}</p>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditAnnouncement(a)}>
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteAnnouncement(a.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex gap-2 text-[10px] text-muted-foreground">
+                        <span>Priority: {a.priority}</span>
+                        <span>•</span>
+                        <span>{a.startDate} → {a.endDate}</span>
+                      </div>
+                    </div>
+                  ))
                 )}
               </CardContent>
             </Card>
