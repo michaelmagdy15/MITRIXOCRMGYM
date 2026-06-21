@@ -25,8 +25,15 @@ try {
 } catch (e) {
   // Use default fallback configurations
 }
-const PRODUCTION_URL = config.PRODUCTION_URL;
-const APP_NAME = config.APP_NAME;
+
+// EAS build environment variables take priority over config.json
+// Each gym gets its own EAS build profile with these env vars set
+const PRODUCTION_URL = Constants?.expoConfig?.extra?.PRODUCTION_URL 
+  || process.env.PRODUCTION_URL 
+  || config.PRODUCTION_URL;
+const APP_NAME = Constants?.expoConfig?.extra?.APP_NAME 
+  || process.env.APP_NAME 
+  || config.APP_NAME;
 
 // Configure notification behavior for when the app is in the foreground
 Notifications.setNotificationHandler({

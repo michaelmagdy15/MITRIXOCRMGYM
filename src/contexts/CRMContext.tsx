@@ -276,14 +276,47 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await updateDoc(doc(db, 'importBatches', batchId), { status: 'Rolled Back' });
   };
 
+  /**
+   * WARNING: This function deletes ALL data across multiple collections.
+   * Restricted to crm_admin role only (the highest tenant-level role).
+   * Michael (platform super admin) can also invoke this.
+   * An audit log is written BEFORE the wipe so the action is always recorded.
+   */
   const clearAllData = async () => {
-    if (!isSuperUser) throw new Error("Unauthorized");
-    const collectionsToClear = ['clients', 'payments', 'sessions', 'tasks', 'packages', 'auditLogs', 'importBatches'];
+    // Only crm_admin can wipe — not manager, not admin, not regular super_admin
+    if (effectiveRole !== 'crm_admin' && !isSuperUser) {
+      throw new Error("Unauthorized: Only CRM Admin can perform a full system wipe.");
+    }
+
+    // Log the wipe event BEFORE deleting data so it's always recorded
+    try {
+      await addDoc(collection(db, 'auditLogs'), {
+        action: 'DELETE',
+        entityType: 'SYSTEM',
+        entityId: 'FULL_WIPE',
+        details: `Full system wipe initiated by ${currentUser?.name || 'Unknown'} (${currentUser?.email || 'Unknown'})`,
+        userId: currentUser?.id || 'unknown',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (auditErr) {
+      console.error('Failed to write pre-wipe audit log:', auditErr);
+    }
+
+    const collectionsToClear = ['clients', 'payments', 'sessions', 'tasks', 'packages', 'importBatches'];
     for (const collName of collectionsToClear) {
       const snapshot = await getDocs(collection(db, collName));
       let batch = writeBatch(db);
-      snapshot.docs.forEach(doc => batch.delete(doc.ref));
-      await batch.commit();
+      let opCount = 0;
+      snapshot.docs.forEach(d => {
+        batch.delete(d.ref);
+        opCount++;
+        if (opCount >= 500) {
+          batch.commit();
+          batch = writeBatch(db);
+          opCount = 0;
+        }
+      });
+      if (opCount > 0) await batch.commit();
     }
   };
 

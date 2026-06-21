@@ -1,8 +1,74 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
+
+// ===============================================================
+// Reserved subdomains — these can NEVER be provisioned as tenants
+// ===============================================================
+const RESERVED_SUBDOMAINS = new Set([
+  'strike', 'strikeboxing', 'dashboard', 'superadmin', 'admin',
+  'www', 'api', 'app', 'test', 'staging', 'dev', 'mail', 'smtp',
+  'ftp', 'cdn', 'static', 'assets', 'mitrixo', 'default', 'registry',
+]);
+
+// ===============================================================
+// Platform Super Admin Email (God Mode)
+// ===============================================================
+const PLATFORM_SUPER_ADMIN_EMAIL = 'michaelmitry13@gmail.com';
+
+// Simple in-memory rate limiter for public endpoints
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX = 5; // max 5 requests per hour per IP
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT_MAX;
+}
+
+/**
+ * Middleware: Verifies the caller is a platform super admin.
+ * Checks Firebase ID token, then looks up the user in db-registry-2.
+ * Michael's email always passes (God Mode).
+ */
+async function requirePlatformAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid Authorization header.' });
+  }
+  try {
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await admin.auth().verifyIdToken(token!);
+
+    // God mode: platform owner always passes
+    if (decodedToken.email === PLATFORM_SUPER_ADMIN_EMAIL) {
+      (req as any).platformUser = decodedToken;
+      return next();
+    }
+
+    // For other users, check db-registry-2 for platform_admin or super_admin role
+    const centralDb = getFirestore('db-registry-2');
+    const userDoc = await centralDb.collection('platform_admins').doc(decodedToken.uid).get();
+    if (userDoc.exists && userDoc.data()?.role === 'platform_admin') {
+      (req as any).platformUser = decodedToken;
+      return next();
+    }
+
+    return res.status(403).json({ error: 'Forbidden: You are not a platform administrator.' });
+  } catch (error) {
+    console.error('[Auth] Token verification failed:', error);
+    return res.status(401).json({ error: 'Unauthorized: Invalid or expired token.' });
+  }
+}
 
 // Use process.cwd() instead of __dirname to avoid ESM/CJS path resolution issues on Windows
 const __dirname = process.cwd();
@@ -170,7 +236,7 @@ async function startServer() {
   });
 
   // Provisioning endpoint for new gym onboarding
-  app.post("/api/provision", async (req, res) => {
+  app.post("/api/provision", requirePlatformAdmin, async (req, res) => {
     const { tenantId, tenantName, ownerEmail, ownerName, ownerPassword, locationId, enableMobileApp } = req.body;
     if (!tenantId || !tenantName || !ownerEmail || !ownerName) {
       return res.status(400).json({ error: "Missing required fields: tenantId, tenantName, ownerEmail, ownerName" });
@@ -194,8 +260,14 @@ async function startServer() {
     }
   });
 
-  // Public endpoint for new tenant subscription requests
+  // Public endpoint for new tenant subscription requests (rate-limited)
   app.post("/api/subscription-request", async (req, res) => {
+    // Rate limiting
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+    if (isRateLimited(clientIp)) {
+      return res.status(429).json({ error: "Too many requests. Please try again later." });
+    }
+
     const { gymName, subdomain, ownerName, ownerEmail, amountPaid, paymentMethod, transactionId } = req.body;
     
     if (!gymName || !subdomain || !ownerName || !ownerEmail) {
@@ -205,6 +277,11 @@ async function startServer() {
     // Subdomain alphanumeric check
     if (!/^[a-z0-9-]+$/.test(subdomain.trim())) {
       return res.status(400).json({ error: "Subdomain must contain only lowercase letters, numbers, and hyphens." });
+    }
+
+    // Reserved subdomain check
+    if (RESERVED_SUBDOMAINS.has(subdomain.trim().toLowerCase())) {
+      return res.status(400).json({ error: "This subdomain is reserved and cannot be used." });
     }
 
     try {
@@ -246,7 +323,7 @@ async function startServer() {
   });
 
   // Endpoint for Super Admin to approve a pending request and trigger provisioning
-  app.post("/api/approve-request", async (req, res) => {
+  app.post("/api/approve-request", requirePlatformAdmin, async (req, res) => {
     const { requestId } = req.body;
     if (!requestId) {
       return res.status(400).json({ error: "Missing required field: requestId" });

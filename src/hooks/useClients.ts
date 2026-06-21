@@ -11,7 +11,7 @@ import {
   writeBatch,
   getDocs,
 } from 'firebase/firestore';
-import { db, createFirebaseUser } from '../firebase';
+import { db, createFirebaseUser, getMemberEmail } from '../firebase';
 import { Client, CRMComment, InteractionLog, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -116,7 +116,7 @@ export const useClients = (currentUser: User | null) => {
       // Auto-create portal account
       if (finalData.memberId) {
         try {
-          const email = `member-${finalData.memberId.toLowerCase()}@mitrixogymcrm-member.local`;
+          const email = getMemberEmail(finalData.memberId);
           const uid = await createFirebaseUser(email, '12345678');
           const newUser: User = {
             id: uid,
@@ -216,7 +216,7 @@ export const useClients = (currentUser: User | null) => {
         // Auto-create portal account in bulk
         if (finalClient.memberId) {
           try {
-            const email = `member-${finalClient.memberId.toLowerCase()}@mitrixogymcrm-member.local`;
+            const email = getMemberEmail(finalClient.memberId);
             const uid = await createFirebaseUser(email, '12345678');
             const newUser: User = {
               id: uid,
@@ -275,7 +275,7 @@ export const useClients = (currentUser: User | null) => {
 
       if (hasNoPortal && memberId) {
         try {
-          const email = `member-${memberId.toLowerCase()}@mitrixogymcrm-member.local`;
+          const email = getMemberEmail(memberId);
           const uid = await createFirebaseUser(email, '12345678');
           const newUser: User = {
             id: uid,

@@ -5,6 +5,34 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import nodemailer from 'nodemailer';
 
+// ===============================================================
+// Reserved tenant IDs — these can NEVER be provisioned
+// ===============================================================
+const RESERVED_TENANT_IDS = new Set([
+  'strike', 'strikeboxing', 'dashboard', 'superadmin', 'admin',
+  'www', 'api', 'app', 'test', 'staging', 'dev', 'mail', 'smtp',
+  'ftp', 'cdn', 'static', 'assets', 'mitrixo', 'default', 'registry',
+  'registry-2', 'test', 'testrules', 'gyma', 'inzanathletics',
+]);
+
+// ===============================================================
+// Package tier → feature flags mapping
+// ===============================================================
+const TIER_FEATURES: Record<string, Record<string, boolean>> = {
+  starter: {
+    leads: false, ptPackages: false, payments: true, attendance: true,
+    reports: true, quotes: false, operations: false, mobileApp: false,
+  },
+  professional: {
+    leads: true, ptPackages: true, payments: true, attendance: true,
+    reports: true, quotes: true, operations: false, mobileApp: false,
+  },
+  premium: {
+    leads: true, ptPackages: true, payments: true, attendance: true,
+    reports: true, quotes: true, operations: true, mobileApp: true,
+  },
+};
+
 // Get default project ID from config
 const defaultConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
 let defaultProjectId = 'faa-test-guide-v2';
@@ -50,6 +78,7 @@ interface ProvisionDetails {
   ownerPassword?: string; // e.g. "temporary-password"
   locationId?: string;   // e.g. "europe-west1"
   enableMobileApp?: boolean;
+  packageTier?: 'starter' | 'professional' | 'premium'; // Subscription tier
 }
 
 /**
@@ -95,11 +124,19 @@ export async function createFirestoreDatabase(projectId: string, databaseId: str
 export async function deployFirestoreRules(projectId: string, databaseId: string, accessToken: string) {
   console.log(`[Provisioning] Deploying Firestore security rules to "${databaseId}"...`);
   
-  const rulesPath = path.join(process.cwd(), 'firestore.rules');
-  if (!fs.existsSync(rulesPath)) {
-    throw new Error(`Rules file not found at: ${rulesPath}`);
+  let rulesContent: string;
+  const tenantRulesPath = path.join(process.cwd(), 'firestore-tenant.rules');
+  if (fs.existsSync(tenantRulesPath)) {
+    rulesContent = fs.readFileSync(tenantRulesPath, 'utf8');
+  } else {
+    // Fallback to the original rules if tenant rules file doesn't exist yet
+    const fallbackPath = path.join(process.cwd(), 'firestore.rules');
+    if (!fs.existsSync(fallbackPath)) {
+      throw new Error(`Neither firestore-tenant.rules nor firestore.rules found at: ${process.cwd()}`);
+    }
+    console.log(`[Provisioning] firestore-tenant.rules not found, using firestore.rules as fallback.`);
+    rulesContent = fs.readFileSync(fallbackPath, 'utf8');
   }
-  const rulesContent = fs.readFileSync(rulesPath, 'utf8');
   
   // 1. Create Ruleset
   const rulesetUrl = `https://firebaserules.googleapis.com/v1/projects/${projectId}/rulesets`;
@@ -198,16 +235,21 @@ export async function seedTenantDatabase(databaseId: string, details: ProvisionD
     logoUrl: '', // empty to use dynamic text-based branding
   });
   
-  // 1.5 Seed settings/features
+  // 1.5 Seed settings/features based on package tier
+  const tier = details.packageTier || 'premium'; // Default to premium if not specified
+  const tierFeatures = TIER_FEATURES[tier] ?? TIER_FEATURES.premium!;
   await db.collection('settings').doc('features').set({
-    leads: true,
-    ptPackages: true,
-    payments: true,
-    attendance: true,
-    reports: true,
-    quotes: true,
-    operations: true,
-    mobileApp: !!details.enableMobileApp,
+    ...tierFeatures,
+    mobileApp: !!details.enableMobileApp || tierFeatures.mobileApp,
+  });
+
+  // 1.6 Seed settings/subscription for tier tracking
+  await db.collection('settings').doc('subscription').set({
+    tier: tier,
+    startDate: new Date().toISOString(),
+    renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // +30 days
+    status: 'active',
+    paymentMethod: 'pending',
   });
   
   // 2. Seed settings/branches
@@ -274,6 +316,25 @@ export async function seedTenantDatabase(databaseId: string, details: ProvisionD
 export async function provisionNewGym(details: ProvisionDetails) {
   const projectId = admin.instanceId().app.options.projectId || 'faa-test-guide-v2';
   const databaseId = `db-${details.tenantId}`;
+  
+  // ========== SAFETY GUARDS ==========
+  
+  // Guard 1: Prevent provisioning reserved tenant IDs
+  if (RESERVED_TENANT_IDS.has(details.tenantId.toLowerCase())) {
+    throw new Error(`BLOCKED: Tenant ID "${details.tenantId}" is reserved and cannot be provisioned.`);
+  }
+  
+  // Guard 2: NEVER allow provisioning to (default) database — that's Strike's DB
+  if (databaseId === '(default)' || details.tenantId === 'default' || details.tenantId === '(default)') {
+    throw new Error('BLOCKED: Cannot provision to the (default) database. This would overwrite Strike\'s data.');
+  }
+  
+  // Guard 3: Validate tenant ID format (alphanumeric + hyphens only)
+  if (!/^[a-z0-9-]+$/.test(details.tenantId)) {
+    throw new Error(`Invalid tenant ID "${details.tenantId}". Must contain only lowercase letters, numbers, and hyphens.`);
+  }
+  
+  console.log(`[Provisioning] ✅ Safety checks passed for tenant "${details.tenantId}" → database "${databaseId}"`);
   
   try {
     // Get OAuth2 Access Token first

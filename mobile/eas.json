@@ -10,7 +10,23 @@
     "preview": {
       "distribution": "internal"
     },
-    "production": {}
+    "production": {},
+    "production-strike": {
+      "extends": "production",
+      "env": {
+        "GYM_SUBDOMAIN": "strike",
+        "APP_NAME": "Strike Boxing",
+        "PRODUCTION_URL": "https://dashboard.strikeboxing-eg.pro"
+      }
+    },
+    "production-strikeboxing": {
+      "extends": "production",
+      "env": {
+        "GYM_SUBDOMAIN": "strikeboxing",
+        "APP_NAME": "Strike Boxing",
+        "PRODUCTION_URL": "https://strikeboxing.mitrixo.com"
+      }
+    }
   },
   "submit": {
     "production": {}

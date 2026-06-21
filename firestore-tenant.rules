@@ -1,0 +1,434 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // MITRIXO PLATFORM — TENANT DATABASE SECURITY RULES
+    // ===============================================================
+    // This file is deployed ONLY to new tenant gym databases (e.g. db-golds-gym).
+    // It does NOT contain Matchmaking, ATPL, or Gamén rules.
+    //
+    // The original firestore.rules file remains untouched and serves the
+    // (default) database where Strike, Matchmaking, ATPL, and Gamén live.
+    // ===============================================================
+
+    // ===============================================================
+    // Global Auth Helpers
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ===============================================================
+    // Platform Super Admin — Michael Mitry (God Mode)
+    // This email ALWAYS has full access across ALL tenant databases.
+    // ===============================================================
+
+    function isPlatformSuperAdmin() {
+      return isAuthenticated() &&
+        request.auth.token.email == "michaelmitry13@gmail.com";
+    }
+
+    // ===============================================================
+    // Tenant Auth Helpers
+    // Checks roles from the local users collection in THIS database.
+    // No hardcoded tenant-specific emails — only the platform super admin above.
+    // ===============================================================
+
+    function userExists() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isTenantAdmin() {
+      return isPlatformSuperAdmin() || (
+        isAuthenticated() && userExists() &&
+        getUserRole() in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager']
+      );
+    }
+
+    function isTenantSuperAdmin() {
+      return isPlatformSuperAdmin() || (
+        isAuthenticated() && userExists() &&
+        getUserRole() in ['super_admin', 'crm_admin']
+      );
+    }
+
+    function isTenantStaff() {
+      return isTenantAdmin() || (userExists() && getUserRole() in ['rep', 'sales_rep', 'coach']);
+    }
+
+    function isOwnClientRecord(clientId) {
+      return isAuthenticated() && (
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId == clientId ||
+            (
+              'clientDocId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && (
+                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId == clientId ||
+                (
+                  exists(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)) &&
+                  'linkedClientIds' in get(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)).data &&
+                  clientId in get(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)).data.linkedClientIds
+                )
+              )
+            )
+          )
+        ) ||
+        (
+          exists(/databases/$(database)/documents/clients/$(clientId)) && 
+          get(/databases/$(database)/documents/clients/$(clientId)).data.portalUserId == request.auth.uid
+        )
+      );
+    }
+
+    function isSafeClientSelfEdit() {
+      let allowed = ['name', 'phone', 'portalUserId'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
+             (!('portalUserId' in request.resource.data) || request.resource.data.portalUserId == request.auth.uid) &&
+             (!('portalUserId' in resource.data) || resource.data.portalUserId == request.auth.uid);
+    }
+
+    function canDeletePayments() {
+      return isPlatformSuperAdmin() || (
+        isAuthenticated() && userExists() && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'] ||
+          (
+            'can_delete_payments' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.can_delete_payments == true
+          )
+        )
+      );
+    }
+
+    function canAccessSettings() {
+      return isPlatformSuperAdmin() || (
+        isAuthenticated() && userExists() && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'] ||
+          (
+            'can_access_settings_and_history' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.can_access_settings_and_history == true
+          )
+        )
+      );
+    }
+
+    function canViewGlobalDashboard() {
+      return isPlatformSuperAdmin() || (
+        isAuthenticated() && userExists() && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'] ||
+          (
+            'can_view_global_dashboard' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.can_view_global_dashboard == true
+          )
+        )
+      );
+    }
+
+    function isSalesRep() {
+      return userExists() && (getUserRole() == 'sales_rep' || getUserRole() == 'rep');
+    }
+
+    // ===============================================================
+    // General Validation Helpers
+    // ===============================================================
+
+    function isNonEmptyString(val) {
+      return val is string && val.size() > 0;
+    }
+
+    function isValidBranding(data) {
+      return data.keys().hasAny(['companyName', 'logoUrl', 'kioskPin', 'dailyCheckinPin']) &&
+             (!('companyName' in data) || isNonEmptyString(data.companyName)) &&
+             (!('logoUrl' in data) || data.logoUrl is string);
+    }
+
+    function isSafeUserSelfEdit() {
+      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
+    // ===============================================================
+    // Entity Validators
+    // ===============================================================
+
+    function isValidRole(role) {
+      return role in ['rep', 'manager', 'admin', 'super_admin', 'crm_admin'];
+    }
+
+    function isValidClient(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.phone is string && data.phone.size() >= 7 &&
+             data.status in ["Lead", "Active", "Nearly Expired", "Expired", "Hold"];
+    }
+
+    function isValidPaymentCreate(data) {
+      return data.clientId is string &&
+             data.amount_paid is number && data.amount_paid >= 0 &&
+             data.sales_rep_id is string;
+    }
+
+    function paymentImmutableFieldsUnchanged() {
+      let immutable = ['clientId', 'client_name', 'amount', 'sales_rep_id', 'created_at', 'package_category_type'];
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(immutable);
+    }
+
+    function isValidSession(data) {
+      return isNonEmptyString(data.clientId) &&
+             data.status in ['Scheduled', 'Attended', 'No Show', 'Cancelled'];
+    }
+
+    function isValidInteraction(data) {
+      return isNonEmptyString(data.date) &&
+             data.type in ['Call', 'WhatsApp', 'Email', 'Visit'] &&
+             data.outcome in ['Interested', 'Not Answered', 'Scheduled Trial', 'Rejected', 'Other'] &&
+             isNonEmptyString(data.author);
+    }
+
+    function isValidAttendance(data) {
+      return isNonEmptyString(data.clientId) &&
+             isNonEmptyString(data.branch) &&
+             isNonEmptyString(data.date) &&
+             isNonEmptyString(data.recordedBy);
+    }
+
+    function isValidTask(data) {
+      return isNonEmptyString(data.title) &&
+             isNonEmptyString(data.dueDate) &&
+             data.status in ['Pending', 'In Progress', 'Completed'] &&
+             data.priority in ['Low', 'Medium', 'High'] &&
+             data.assignedTo is string &&
+             isNonEmptyString(data.createdBy) &&
+             isNonEmptyString(data.createdAt);
+    }
+
+    function isTaskCreator() {
+      return isAuthenticated() &&
+             resource != null &&
+             resource.data.createdBy == request.auth.uid;
+    }
+
+    function isValidPackage(data) {
+      return isNonEmptyString(data.name) &&
+             data.price is number && data.price >= 0 &&
+             data.sessions is number && data.sessions >= 0 &&
+             data.expiryDays is number && data.expiryDays >= 0 &&
+             data.type in ['Private', 'Group', 'Other'];
+    }
+
+    function isValidCoach(data) {
+      return isNonEmptyString(data.name) &&
+             data.active is bool;
+    }
+
+    function isValidTarget(data) {
+      return isNonEmptyString(data.userId) &&
+             data.targetAmount is number && data.targetAmount >= 0 &&
+             isNonEmptyString(data.month) &&
+             data.month.matches('^[0-9]{4}-[0-9]{2}$');
+    }
+
+    function isValidAuditLog(data) {
+      return isNonEmptyString(data.userId) &&
+             data.action in ['CREATE', 'UPDATE', 'DELETE'] &&
+             data.entityType in ['CLIENT', 'PAYMENT', 'PACKAGE_RECORD', 'LEAD',
+                                 'TARGET', 'ATTENDANCE', 'COACH', 'SYSTEM', 'BRANCH', 'SESSION'] &&
+             isNonEmptyString(data.entityId) &&
+             isNonEmptyString(data.timestamp);
+    }
+
+    // ===============================================================
+    // Collection Group Rules
+    // ===============================================================
+
+    match /{path=**}/comments/{commentId} {
+      allow read, create: if isTenantStaff();
+      allow delete: if isTenantAdmin();
+    }
+
+    match /clients/{clientId}/comments/{commentId} {
+      allow read, write: if isTenantStaff();
+    }
+
+    match /clients/{clientId}/interactions/{interactionId} {
+      allow read, write: if isTenantStaff();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow write: if isTenantStaff() && isValidAttendance(request.resource.data);
+    }
+
+    // ===============================================================
+    // GYM CRM COLLECTIONS
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isTenantAdmin() || (isOwner(userId) && request.resource.data.role in ['client', 'coach']);
+      allow update: if isTenantAdmin() || (isOwner(userId) && isSafeUserSelfEdit());
+      allow delete: if isTenantSuperAdmin();
+    }
+
+    match /targets/{targetId} {
+      allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
+      allow list: if canViewGlobalDashboard() || isSalesRep();
+      allow write: if canViewGlobalDashboard();
+    }
+
+    match /userTargets/{targetId} {
+      allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.userId == request.auth.uid);
+      allow list: if canViewGlobalDashboard() || isSalesRep();
+      allow write: if canViewGlobalDashboard();
+    }
+
+    match /payments/{paymentId} {
+      allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
+      allow list: if canViewGlobalDashboard() || isSalesRep();
+      allow create: if isAuthenticated() && isValidPaymentCreate(request.resource.data);
+      allow update, delete: if canDeletePayments();
+    }
+
+    match /settings/{settingId} {
+      allow read: if (settingId == 'branding') || (settingId == 'features') || canAccessSettings();
+      allow write: if canAccessSettings() && (settingId != 'branding' || isValidBranding(request.resource.data));
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if canAccessSettings();
+      allow create: if isAuthenticated();
+      allow delete: if canAccessSettings();
+    }
+
+    match /mail/{mailId} {
+      allow create: if true;
+      allow read, update, delete: if isTenantStaff();
+    }
+
+    match /clients/{clientId} {
+      allow get: if isTenantStaff() || isOwnClientRecord(clientId);
+      allow list: if isTenantStaff() || (isAuthenticated() && (
+        resource.data.portalUserId == request.auth.uid ||
+        resource.data.memberId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId ||
+        (
+          'clientDocId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && (
+            resource.data.id == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId ||
+            (
+              exists(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)) &&
+              'linkedClientIds' in get(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)).data &&
+              resource.data.id in get(/databases/$(database)/documents/clients/$(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientDocId)).data.linkedClientIds
+            )
+          )
+        )
+      ));
+      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.portalUserId == request.auth.uid);
+      allow update: if isTenantStaff() || (isOwnClientRecord(clientId) && isSafeClientSelfEdit());
+      allow delete: if isTenantAdmin();
+    }
+
+    match /packages/{packageId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantAdmin();
+    }
+
+    match /coaches/{coachId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantAdmin();
+    }
+
+    match /coachSchedules/{coachId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(coachId) || isTenantAdmin();
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId));
+      allow update: if isTenantStaff() || (
+        isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) &&
+        request.resource.data.clientId == resource.data.clientId
+      );
+      allow delete: if isTenantAdmin();
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) || resource.data.assignedTo == request.auth.uid));
+      allow create: if isAuthenticated();
+      allow update: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow delete: if isTenantAdmin();
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /importBatches/{batchId} {
+      allow read, write: if isTenantAdmin();
+    }
+
+    match /juiceBarOrders/{orderId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId);
+      allow update: if isTenantStaff() || (
+        isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) &&
+        request.resource.data.status == 'Cancelled' &&
+        resource.data.status == 'Pending'
+      );
+      allow delete: if isTenantAdmin();
+    }
+
+    match /lockers/{lockerId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.assignedTo != null && isOwnClientRecord(resource.data.assignedTo));
+      allow write: if isTenantStaff();
+    }
+
+    match /lockerRequests/{requestId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId);
+      allow update, delete: if isTenantStaff();
+    }
+
+    match /guestInvites/{inviteId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.hostId != null && isOwnClientRecord(resource.data.hostId));
+      allow create: if isAuthenticated() && request.resource.data.hostId != null && isOwnClientRecord(request.resource.data.hostId);
+      allow update, delete: if isTenantStaff();
+    }
+
+    match /clientPerformance/{performanceId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow write: if isTenantStaff();
+    }
+
+    match /subscriptionRequests/{requestId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId);
+      allow update, delete: if isTenantStaff();
+    }
+
+    match /pendingAccounts/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isTenantAdmin();
+    }
+
+    match /passwordResetRequests/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isTenantAdmin();
+    }
+
+    // ===============================================================
+    // Platform Super Admin Bypass (Michael Mitry — God Mode)
+    // Ensures platform owner always has full access in every tenant DB.
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if isPlatformSuperAdmin();
+    }
+  }
+}

@@ -3,12 +3,37 @@ const path = require('path');
 const { GoogleAuth } = require('google-auth-library');
 
 const PROJECT_ID = 'faa-test-guide-v2';
+
+// ===============================================================
+// Database → Rules file mapping
+// ===============================================================
+// The (default) database uses firestore.rules (contains Strike + Matchmaking + ATPL + Gamén rules)
+// All tenant databases use firestore-tenant.rules (clean gym-only rules)
+// The db-registry-2 database uses the main firestore.rules (admin access)
+const DEFAULT_RULES_DATABASES = new Set(['(default)', 'db-registry-2']);
+
+// All known databases to deploy rules to
 const DATABASES = ['(default)', 'db-test', 'db-testrules', 'db-gyma', 'db-inzanathletics', 'db-registry-2'];
 
+function getRulesFileForDatabase(databaseId) {
+  if (DEFAULT_RULES_DATABASES.has(databaseId)) {
+    return 'firestore.rules'; // Original rules with Strike + Matchmaking + ATPL + Gamén
+  }
+  // All other databases get the clean tenant-only rules
+  const tenantRulesPath = path.join(__dirname, 'firestore-tenant.rules');
+  if (fs.existsSync(tenantRulesPath)) {
+    return 'firestore-tenant.rules';
+  }
+  // Fallback to original rules if tenant rules don't exist yet
+  console.warn(`[Rules Deploy] firestore-tenant.rules not found, falling back to firestore.rules for "${databaseId}"`);
+  return 'firestore.rules';
+}
+
 async function deployFirestoreRules(projectId, databaseId, accessToken) {
-  console.log(`[Rules Deploy] Deploying rules to "${databaseId}"...`);
+  const rulesFile = getRulesFileForDatabase(databaseId);
+  console.log(`[Rules Deploy] Deploying "${rulesFile}" to database "${databaseId}"...`);
   
-  const rulesPath = path.join(__dirname, 'firestore.rules');
+  const rulesPath = path.join(__dirname, rulesFile);
   if (!fs.existsSync(rulesPath)) {
     throw new Error(`Rules file not found at: ${rulesPath}`);
   }
@@ -84,13 +109,13 @@ async function deployFirestoreRules(projectId, databaseId, accessToken) {
         const patchErr = await patchRes.text();
         throw new Error(`Failed to update release: ${patchErr}`);
       }
-      console.log(`[Rules Deploy] Rules release updated successfully for "${databaseId}".`);
+      console.log(`[Rules Deploy] Rules release updated successfully for "${databaseId}" (using ${rulesFile}).`);
       return;
     }
     throw new Error(`Failed to create release: ${errText}`);
   }
   
-  console.log(`[Rules Deploy] Rules release created successfully for "${databaseId}".`);
+  console.log(`[Rules Deploy] Rules release created successfully for "${databaseId}" (using ${rulesFile}).`);
 }
 
 async function main() {
@@ -106,6 +131,11 @@ async function main() {
       throw new Error('Failed to retrieve GCP access token.');
     }
     
+    console.log(`[Rules Deploy] Starting deployment across ${DATABASES.length} databases...`);
+    console.log(`[Rules Deploy] (default) + db-registry-2 → firestore.rules (Strike/Matchmaking/ATPL/Gamén)`);
+    console.log(`[Rules Deploy] All other DBs → firestore-tenant.rules (clean gym-only rules)`);
+    console.log('');
+
     for (const dbId of DATABASES) {
       try {
         await deployFirestoreRules(PROJECT_ID, dbId, accessToken);
