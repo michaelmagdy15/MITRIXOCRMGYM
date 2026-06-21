@@ -23,6 +23,7 @@ import MemberJuiceBar from './MemberJuiceBar';
 import MemberInvites from './MemberInvites';
 import GuestPortal from './GuestPortal';
 import CartDrawer from './CartDrawer';
+import MemberNotificationBell from './MemberNotificationBell';
 
 type MemberTab = 'home' | 'booking' | 'juicebar' | 'locker' | 'invites' | 'profile';
 
@@ -227,9 +228,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
           <CartDrawer />
 
-          <Button variant="ghost" size="icon" onClick={() => {}} title="Notifications" className="h-8 w-8 relative text-zinc-400 hover:text-white">
-            <Bell className="h-4 w-4" />
-          </Button>
+          <MemberNotificationBell clientId={activeClient?.id} />
 
           <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
