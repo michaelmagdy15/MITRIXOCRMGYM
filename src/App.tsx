@@ -52,7 +52,7 @@ const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.c
 function AppContent() {
   const { currentUser: authUser } = useAuth();
   const canUseQuoteGenerator = QUOTE_GENERATOR_EMAILS.includes((authUser?.email || '').toLowerCase());
-  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features } = useAppContext();
+  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features } = useAppContext();
   const { theme, toggleTheme } = useTheme();
   const { t, language, toggleLanguage, isRtl } = useLanguage();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
@@ -332,11 +332,11 @@ function AppContent() {
       id: 'leads',
       label: t('nav.leads'),
       icon: UserPlus,
-      show: (features.leads !== false) && (currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin')
+      show: (features.leads !== false) && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
     },
     { id: 'clients', label: t('nav.clients'), icon: Users, show: true },
     { id: 'calendar', label: t('nav.calendar'), icon: CalendarIcon, show: true },
-    { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: currentUser.role !== 'admin' },
+    { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: effectiveRole !== 'admin' },
     {
       id: 'payments',
       label: t('nav.payments'),
@@ -378,13 +378,13 @@ function AppContent() {
       id: 'operations',
       label: t('nav.operations'),
       icon: Coffee,
-      show: (features.operations !== false) && (currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin')
+      show: (features.operations !== false) && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
     },
     {
       id: 'admin-hub',
       label: t('nav.admin-hub'),
       icon: ShieldAlert,
-      show: isManagerOrSama && currentUser.role !== 'admin'
+      show: isManagerOrSama && effectiveRole !== 'admin'
     }
   ];
 
@@ -392,6 +392,21 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex font-sans overflow-x-hidden">
+      {/* Floating Exit Preview Banner — ALWAYS visible when preview is active */}
+      {previewRole && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-bottom-4 duration-300">
+          <button
+            onClick={() => setPreviewRole(null)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-black font-bold text-sm rounded-full shadow-lg shadow-amber-500/30 transition-colors"
+          >
+            <Eye className="h-4 w-4" />
+            Previewing: {previewRole.replace('_', ' ').toUpperCase()}
+            <span className="mx-1">·</span>
+            <X className="h-4 w-4" />
+            Exit Preview
+          </button>
+        </div>
+      )}
       <div className="flex-1 flex w-full">
         {/* Desktop Collapsible Sidebar */}
         <aside className={`hidden md:flex flex-col bg-card border-e border-border h-screen sticky top-0 z-40 sidebar-transition flex-shrink-0 ${isSidebarCollapsed ? 'w-16' : 'w-64'}`}>

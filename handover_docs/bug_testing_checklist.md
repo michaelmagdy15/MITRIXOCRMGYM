@@ -20,11 +20,11 @@ Go through each section in order. Each test has a specific action and expected r
 ## 🔐 SECTION 1: Authentication & Login (15 tests)
 
 ### 1.1 Login Page
-- [ ] **T001**: Open the dashboard URL → Login page loads with gym branding (logo or company name)
-- [ ] **T002**: Enter wrong email/password → Error message appears, login is blocked
-- [ ] **T003**: Enter correct admin credentials → Redirected to Dashboard
-- [ ] **T004**: Login page is responsive on mobile browser (resize window to 375px wide)
-- [ ] **T005**: Arabic toggle works on login page (if language switcher exists)
+- [✅ ] **T001**: Open the dashboard URL → Login page loads with gym branding (logo or company name)
+- [ ✅] **T002**: Enter wrong email/password → Error message appears, login is blocked
+- [✅ ] **T003**: Enter correct admin credentials → Redirected to Dashboard
+- [ ✅] **T004**: Login page is responsive on mobile browser (resize window to 375px wide)
+- [ langauge toggle is not in the login page onlly when you login to the dashb **T005**: Arabic toggle works on login page (if language switcher exists)
 
 ### 1.2 Role-Based Login
 - [ ] **T006**: Login as **CRM Admin** → See all navigation tabs (Dashboard, Clients, Leads, Payments, Settings, etc.)

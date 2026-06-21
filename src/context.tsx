@@ -101,6 +101,7 @@ export interface AppContextType {
   updateFeatures: (updates: Partial<FeatureFlags>) => Promise<void>;
   previewRole: UserRole | null;
   setPreviewRole: (role: UserRole | null) => void;
+  effectiveRole: UserRole | undefined;
   attendances: Attendance[];
   recordAttendance: (clientId: string, branch: Branch) => Promise<void>;
   deletePayment: (id: string) => Promise<void>;
@@ -537,6 +538,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateFeatures,
     previewRole,
     setPreviewRole,
+    effectiveRole,
     attendances,
     recordAttendance,
     deletePayment,

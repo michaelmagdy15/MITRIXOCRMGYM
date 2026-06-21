@@ -714,7 +714,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const memoizedCurrentUser = useMemo(() => {
-    return currentUser ? { ...currentUser, role: effectiveRole || currentUser.role } : null;
+    if (!currentUser) return null;
+    // IMPORTANT: Keep the REAL role on currentUser so admin checks (preview dropdown)
+    // always work. Use effectiveRole for nav/permissions through the context.
+    return { ...currentUser };
   }, [currentUser, effectiveRole]);
 
   const value = useMemo(() => ({
