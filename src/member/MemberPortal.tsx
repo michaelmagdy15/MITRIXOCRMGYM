@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell } from 'lucide-react';
+import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, where, doc, documentId, getDoc, getDocs } from 'firebase/firestore';
 import { Client } from '../types';
@@ -24,13 +24,15 @@ import MemberInvites from './MemberInvites';
 import GuestPortal from './GuestPortal';
 import CartDrawer from './CartDrawer';
 import MemberNotificationBell from './MemberNotificationBell';
+import MemberWallet from './MemberWallet';
 
-type MemberTab = 'home' | 'booking' | 'juicebar' | 'locker' | 'invites' | 'profile';
+type MemberTab = 'home' | 'booking' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'profile';
 
 const NAV_ITEMS: { tab: MemberTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Pass',       icon: <QrCode className="h-5 w-5" /> },
   { tab: 'booking',  label: 'Bookings',   icon: <Calendar className="h-5 w-5" /> },
   { tab: 'juicebar', label: 'Juice Bar',  icon: <Globe className="h-5 w-5" /> },
+  { tab: 'wallet',   label: 'Wallet',     icon: <Coins className="h-5 w-5" /> },
   { tab: 'locker',   label: 'Locker',     icon: <Lock className="h-5 w-5" /> },
   { tab: 'invites',  label: 'Invites',    icon: <UserPlus className="h-5 w-5" /> },
   { tab: 'profile',  label: 'Profile',    icon: <User className="h-5 w-5" /> },
@@ -72,6 +74,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       setActiveTab('profile');
       setProfileSubTab('attendance');
     } else if (target === 'juicebar') setActiveTab('juicebar');
+    else if (target === 'wallet') setActiveTab('wallet');
     else if (target === 'locker') setActiveTab('locker');
     else if (target === 'invites') setActiveTab('invites');
   };
@@ -264,6 +267,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         )}
 
         {activeTab === 'juicebar' && <MemberJuiceBar client={activeClient} />}
+        {activeTab === 'wallet' && <MemberWallet client={activeClient} />}
         {activeTab === 'locker' && <MemberLocker client={activeClient} />}
         {activeTab === 'invites' && <MemberInvites client={activeClient} />}
         

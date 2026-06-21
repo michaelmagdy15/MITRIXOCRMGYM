@@ -10,7 +10,7 @@ import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fn
 import { 
   Sparkles, Calendar, CheckCircle2, Trophy, Activity, Dumbbell, Award, Users, 
   ShoppingBag, Bell, Clock, Flame, ChevronRight, MapPin, Zap, User, 
-  TrendingUp, Star, Timer, Target
+  TrendingUp, Star, Timer, Target, Coins
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -282,6 +282,12 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
       label: 'Shop', 
       action: () => onSwitchToStore?.(),
       color: 'bg-orange-500/10 text-orange-500'
+    },
+    { 
+      icon: <Coins className="h-6 w-6" />, 
+      label: 'Wallet', 
+      action: () => onNavigate?.('wallet'),
+      color: 'bg-amber-500/10 text-amber-500'
     },
     { 
       icon: <Trophy className="h-6 w-6" />, 
