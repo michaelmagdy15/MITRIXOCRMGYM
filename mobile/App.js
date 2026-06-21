@@ -17,8 +17,8 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
 let config = {
-  PRODUCTION_URL: 'https://dashboard.mitrixogymcrmboxing-eg.pro/',
-  APP_NAME: 'MITRIXOGYMCRM'
+  PRODUCTION_URL: 'https://strike.mitrixo.com/',
+  APP_NAME: 'StrikeEG'
 };
 try {
   config = require('./config.json');

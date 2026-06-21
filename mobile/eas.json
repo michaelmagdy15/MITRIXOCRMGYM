@@ -15,16 +15,16 @@
       "extends": "production",
       "env": {
         "GYM_SUBDOMAIN": "strike",
-        "APP_NAME": "Strike Boxing",
-        "PRODUCTION_URL": "https://dashboard.strikeboxing-eg.pro"
+        "APP_NAME": "StrikeEG",
+        "PRODUCTION_URL": "https://strike.mitrixo.com"
       }
     },
     "production-strikeboxing": {
       "extends": "production",
       "env": {
         "GYM_SUBDOMAIN": "strikeboxing",
-        "APP_NAME": "Strike Boxing",
-        "PRODUCTION_URL": "https://strikeboxing.mitrixo.com"
+        "APP_NAME": "StrikeEG",
+        "PRODUCTION_URL": "https://strike.mitrixo.com"
       }
     }
   },
