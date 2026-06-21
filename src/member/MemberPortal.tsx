@@ -26,6 +26,8 @@ import CartDrawer from './CartDrawer';
 import MemberNotificationBell from './MemberNotificationBell';
 import MemberWallet from './MemberWallet';
 import MemberBadges from './MemberBadges';
+import MemberRewards from './MemberRewards';
+
 
 type MemberTab = 'home' | 'booking' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'profile';
 
@@ -59,7 +61,8 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   // Booking and Profile Sub-tabs state
   const [bookingSubTab, setBookingSubTab] = useState<'pt' | 'group'>('pt');
-  const [profileSubTab, setProfileSubTab] = useState<'settings' | 'progress' | 'membership' | 'attendance' | 'badges'>('settings');
+  const [profileSubTab, setProfileSubTab] = useState<'settings' | 'progress' | 'membership' | 'attendance' | 'badges' | 'rewards'>('settings');
+
 
   // Navigation handler for quick shortcuts from MemberHome
   const handleNavigate = (target: string) => {
@@ -274,7 +277,8 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         
         {activeTab === 'profile' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-5 p-1 bg-muted/60 rounded-xl border">
+            <div className="grid grid-cols-3 p-1 bg-muted/60 rounded-xl border gap-0.5">
+
               <button 
                 onClick={() => setProfileSubTab('settings')} 
                 className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === 'settings' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
@@ -305,7 +309,14 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
               >
                 Badges
               </button>
+              <button 
+                onClick={() => setProfileSubTab('rewards')} 
+                className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === 'rewards' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+              >
+                Rewards
+              </button>
             </div>
+
             {profileSubTab === 'settings' && <MemberProfile client={activeClient} />}
             {profileSubTab === 'progress' && <MemberProgress client={activeClient} />}
             {profileSubTab === 'membership' && (
@@ -316,6 +327,8 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             )}
             {profileSubTab === 'attendance' && <MemberAttendance client={activeClient} />}
             {profileSubTab === 'badges' && <MemberBadges client={activeClient} />}
+            {profileSubTab === 'rewards' && <MemberRewards client={activeClient} />}
+
           </div>
         )}
       </main>
