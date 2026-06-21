@@ -359,6 +359,12 @@ service cloud.firestore {
       allow delete: if isTenantAdmin();
     }
 
+    match /classes/{classId} {
+      allow read: if true;
+      allow create, delete: if isTenantStaff();
+      allow update: if isTenantStaff() || isAuthenticated();
+    }
+
     match /tasks/{taskId} {
       allow read: if isTenantStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) || resource.data.assignedTo == request.auth.uid));
       allow create: if isAuthenticated();
