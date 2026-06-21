@@ -46,7 +46,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     reports: true,
     quotes: true,
     operations: true,
-    mobileApp: false
+    mobileApp: false,
+    juiceBar: true,
+    locker: true,
+    qrCheckin: true,
+    pointsSystem: true,
+    wallet: true
   });
 
   // Storefront CMS config

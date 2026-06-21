@@ -356,6 +356,11 @@ export interface FeatureFlags {
   quotes?: boolean;
   operations?: boolean;
   mobileApp?: boolean;
+  juiceBar?: boolean;
+  locker?: boolean;
+  qrCheckin?: boolean;
+  pointsSystem?: boolean;
+  wallet?: boolean;
 }
 
 export interface Tenant {

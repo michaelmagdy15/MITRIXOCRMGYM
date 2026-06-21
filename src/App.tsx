@@ -378,7 +378,7 @@ function AppContent() {
       id: 'operations',
       label: t('nav.operations'),
       icon: Coffee,
-      show: (features.operations !== false) && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: (features.operations !== false) && (features.juiceBar !== false || features.locker !== false) && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
     },
     {
       id: 'admin-hub',

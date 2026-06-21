@@ -98,7 +98,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
   onNavigate?: (tab: string) => void;
 }) {
   const { theme } = useTheme();
-  const { branding } = useSettings();
+  const { branding, features } = useSettings();
   const [lastCheckIn, setLastCheckIn] = useState<string | null>(null);
   const [totalCheckIns, setTotalCheckIns] = useState(0);
   const [streak, setStreak] = useState({ current: 0, best: 0 });
@@ -270,38 +270,47 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
   const memberQrValue = client.memberId || client.id;
 
   // ─── Quick Shortcuts ───
-  const shortcuts: QuickShortcut[] = [
-    { 
-      icon: <Calendar className="h-6 w-6" />, 
-      label: 'Bookings', 
-      action: () => onNavigate?.('booking'),
-      color: 'bg-blue-500/10 text-blue-500'
-    },
-    { 
-      icon: <ShoppingBag className="h-6 w-6" />, 
-      label: 'Shop', 
-      action: () => onSwitchToStore?.(),
-      color: 'bg-orange-500/10 text-orange-500'
-    },
-    { 
-      icon: <Coins className="h-6 w-6" />, 
-      label: 'Wallet', 
-      action: () => onNavigate?.('wallet'),
-      color: 'bg-amber-500/10 text-amber-500'
-    },
-    { 
-      icon: <Trophy className="h-6 w-6" />, 
-      label: 'Progress', 
-      action: () => onNavigate?.('profile-progress'),
-      color: 'bg-purple-500/10 text-purple-500'
-    },
-    { 
-      icon: <User className="h-6 w-6" />, 
-      label: 'Profile', 
-      action: () => onNavigate?.('profile'),
-      color: 'bg-emerald-500/10 text-emerald-500'
-    },
-  ];
+  const shortcuts = useMemo(() => {
+    const list = [
+      { 
+        icon: <Calendar className="h-6 w-6" />, 
+        label: 'Bookings', 
+        action: () => onNavigate?.('booking'),
+        color: 'bg-blue-500/10 text-blue-500'
+      },
+      { 
+        icon: <ShoppingBag className="h-6 w-6" />, 
+        label: 'Shop', 
+        action: () => onSwitchToStore?.(),
+        color: 'bg-orange-500/10 text-orange-500'
+      },
+      { 
+        icon: <Coins className="h-6 w-6" />, 
+        label: 'Wallet', 
+        action: () => onNavigate?.('wallet'),
+        color: 'bg-amber-500/10 text-amber-500',
+        walletRequired: true
+      },
+      { 
+        icon: <Trophy className="h-6 w-6" />, 
+        label: 'Progress', 
+        action: () => onNavigate?.('profile-progress'),
+        color: 'bg-purple-500/10 text-purple-500',
+        pointsRequired: true
+      },
+      { 
+        icon: <User className="h-6 w-6" />, 
+        label: 'Profile', 
+        action: () => onNavigate?.('profile'),
+        color: 'bg-emerald-500/10 text-emerald-500'
+      },
+    ];
+    return list.filter(item => {
+      if (item.walletRequired && features.wallet === false) return false;
+      if (item.pointsRequired && features.pointsSystem === false) return false;
+      return true;
+    });
+  }, [features, onNavigate, onSwitchToStore]);
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -384,7 +393,9 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
       {/* ─── Quick Shortcuts (BeFit-style) ─── */}
       <div>
         <h3 className="text-sm font-bold mb-3">Quick Shortcuts</h3>
-        <div className="grid grid-cols-4 gap-3">
+        <div className={`grid gap-3 ${
+          shortcuts.length === 3 ? 'grid-cols-3' : shortcuts.length === 4 ? 'grid-cols-4' : 'grid-cols-5'
+        }`}>
           {shortcuts.map((s, idx) => (
             <button
               key={idx}

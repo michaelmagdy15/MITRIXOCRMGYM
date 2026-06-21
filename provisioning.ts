@@ -22,14 +22,17 @@ const TIER_FEATURES: Record<string, Record<string, boolean>> = {
   starter: {
     leads: false, ptPackages: false, payments: true, attendance: true,
     reports: true, quotes: false, operations: false, mobileApp: false,
+    juiceBar: false, locker: false, qrCheckin: true, pointsSystem: false, wallet: false
   },
   professional: {
     leads: true, ptPackages: true, payments: true, attendance: true,
     reports: true, quotes: true, operations: false, mobileApp: false,
+    juiceBar: false, locker: false, qrCheckin: true, pointsSystem: false, wallet: false
   },
   premium: {
     leads: true, ptPackages: true, payments: true, attendance: true,
     reports: true, quotes: true, operations: true, mobileApp: true,
+    juiceBar: true, locker: true, qrCheckin: true, pointsSystem: true, wallet: true
   },
 };
 

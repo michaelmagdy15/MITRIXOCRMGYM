@@ -191,7 +191,7 @@
 
   /* Full-screen bottom sheet for dialogs on mobile */
   @media (max-width: 767px) {
-    [data-radix-dialog-content] {
+    [data-slot="dialog-content"] {
       position: fixed !important;
       inset: 0 !important;
       top: auto !important;

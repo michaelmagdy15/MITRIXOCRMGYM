@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { 
   Shield, Search, RefreshCw, Power, PowerOff, Globe, Database, 
   Calendar, Users, Sliders, CheckCircle2, UserPlus, CreditCard, 
-  Scan, BarChart3, FileText, Package, Smartphone, Plus, Mail, User, Building, Loader2, Clock
+  Scan, BarChart3, FileText, Package, Smartphone, Plus, Mail, User, Building, Loader2, Clock,
+  Coffee, Lock, QrCode, Trophy, Coins
 } from 'lucide-react';
 import { Tenant } from './types';
 
@@ -28,6 +29,7 @@ interface SubscriptionRequest {
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
   approvedAt?: string;
+  plan?: string;
 }
 
 export default function SuperAdminHub() {
@@ -54,7 +56,12 @@ export default function SuperAdminHub() {
     reports: true,
     quotes: true,
     operations: true,
-    mobileApp: false
+    mobileApp: false,
+    juiceBar: true,
+    locker: true,
+    qrCheckin: true,
+    pointsSystem: true,
+    wallet: true
   });
   const [loadingFeatures, setLoadingFeatures] = useState(false);
   const [savingFeatures, setSavingFeatures] = useState(false);
@@ -69,6 +76,7 @@ export default function SuperAdminHub() {
   const [newOwnerEmail, setNewOwnerEmail] = useState('');
   const [newOwnerPassword, setNewOwnerPassword] = useState('');
   const [enableMobileApp, setEnableMobileApp] = useState(false);
+  const [packageTier, setPackageTier] = useState<'starter' | 'professional' | 'premium'>('professional');
   const [provisioning, setProvisioning] = useState(false);
   const [provisionSuccess, setProvisionSuccess] = useState(false);
   const [provisionError, setProvisionError] = useState('');
@@ -108,6 +116,7 @@ export default function SuperAdminHub() {
           ownerName: newOwnerName.trim(),
           ownerPassword: newOwnerPassword.trim() || undefined,
           enableMobileApp,
+          packageTier,
         }),
       });
 
@@ -130,6 +139,7 @@ export default function SuperAdminHub() {
       setNewOwnerEmail('');
       setNewOwnerPassword('');
       setEnableMobileApp(false);
+      setPackageTier('professional');
     } catch (err: any) {
       setProvisionError(err.message || 'An error occurred during provisioning.');
     } finally {
@@ -252,7 +262,12 @@ export default function SuperAdminHub() {
           reports: data.reports !== false,
           quotes: data.quotes !== false,
           operations: data.operations !== false,
-          mobileApp: data.mobileApp === true
+          mobileApp: data.mobileApp === true,
+          juiceBar: data.juiceBar !== false,
+          locker: data.locker !== false,
+          qrCheckin: data.qrCheckin !== false,
+          pointsSystem: data.pointsSystem !== false,
+          wallet: data.wallet !== false
         });
       } else {
         // Fallback default configurations
@@ -264,7 +279,12 @@ export default function SuperAdminHub() {
           reports: true,
           quotes: true,
           operations: true,
-          mobileApp: false
+          mobileApp: false,
+          juiceBar: true,
+          locker: true,
+          qrCheckin: true,
+          pointsSystem: true,
+          wallet: true
         });
       }
     } catch (err: any) {
@@ -598,7 +618,7 @@ export default function SuperAdminHub() {
                         <td className="px-6 py-4">
                           <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                             <CreditCard className="h-3.5 w-3.5" />
-                            ${req.amountPaid} ({req.paymentMethod})
+                            {req.amountPaid.toLocaleString()} EGP ({req.plan ? req.plan.toUpperCase() : 'PROFESSIONAL'})
                           </div>
                           <div className="text-[10px] text-zinc-500 font-mono mt-0.5">
                             TX: {req.transactionId}
@@ -804,6 +824,76 @@ export default function SuperAdminHub() {
                   </div>
                   <Switch checked={features.mobileApp} onCheckedChange={() => toggleFeature('mobileApp')} disabled={savingFeatures} />
                 </div>
+
+                {/* Juice Bar */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Coffee className="h-3.5 w-3.5 text-amber-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('juiceBar')}>Juice Bar Orders</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Enable juice bar pre-orders.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.juiceBar} onCheckedChange={() => toggleFeature('juiceBar')} disabled={savingFeatures} />
+                </div>
+
+                {/* Lockers */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Lock className="h-3.5 w-3.5 text-blue-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('locker')}>Smart Lockers</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Manage digital locker assignments.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.locker} onCheckedChange={() => toggleFeature('locker')} disabled={savingFeatures} />
+                </div>
+
+                {/* QR Check-in */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg shrink-0 mt-0.5">
+                      <QrCode className="h-3.5 w-3.5 text-emerald-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('qrCheckin')}>QR Check-in Pass</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Display client digital entry passes.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.qrCheckin} onCheckedChange={() => toggleFeature('qrCheckin')} disabled={savingFeatures} />
+                </div>
+
+                {/* Points System */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Trophy className="h-3.5 w-3.5 text-rose-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('pointsSystem')}>Points & Gamification</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Streaks, badges, & reward items.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.pointsSystem} onCheckedChange={() => toggleFeature('pointsSystem')} disabled={savingFeatures} />
+                </div>
+
+                {/* Member Wallet */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Coins className="h-3.5 w-3.5 text-indigo-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('wallet')}>Member Wallet</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Allow pre-funded balance features.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.wallet} onCheckedChange={() => toggleFeature('wallet')} disabled={savingFeatures} />
+                </div>
               </div>
 
               <DialogFooter className="mt-4 gap-2">
@@ -909,9 +999,7 @@ export default function SuperAdminHub() {
                   required
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 items-center pt-2">
+            </div>            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-zinc-300">Custom Password (Optional)</Label>
                 <Input 
@@ -923,7 +1011,28 @@ export default function SuperAdminHub() {
                   disabled={provisioning}
                 />
               </div>
-              <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 mt-5">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-zinc-300">Subscription Package Tier</Label>
+                <select
+                  value={packageTier}
+                  onChange={e => {
+                    const tier = e.target.value as 'starter' | 'professional' | 'premium';
+                    setPackageTier(tier);
+                    if (tier === 'premium') setEnableMobileApp(true);
+                    else setEnableMobileApp(false);
+                  }}
+                  className="w-full h-10 px-3 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-white focus:outline-none focus:ring-1 focus:ring-rose-500"
+                  disabled={provisioning}
+                >
+                  <option value="starter">Starter Plan (2,500 EGP/mo)</option>
+                  <option value="professional">Professional Plan (5,000 EGP/mo)</option>
+                  <option value="premium">Premium+ Plan (9,000 EGP/mo)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40">
                 <div className="space-y-0.5">
                   <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => setEnableMobileApp(!enableMobileApp)}>Mobile App Sync</Label>
                   <p className="text-[10px] text-zinc-400">Sync mobile storefront.</p>

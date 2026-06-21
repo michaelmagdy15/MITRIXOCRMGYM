@@ -237,7 +237,7 @@ async function startServer() {
 
   // Provisioning endpoint for new gym onboarding
   app.post("/api/provision", requirePlatformAdmin, async (req, res) => {
-    const { tenantId, tenantName, ownerEmail, ownerName, ownerPassword, locationId, enableMobileApp } = req.body;
+    const { tenantId, tenantName, ownerEmail, ownerName, ownerPassword, locationId, enableMobileApp, packageTier } = req.body;
     if (!tenantId || !tenantName || !ownerEmail || !ownerName) {
       return res.status(400).json({ error: "Missing required fields: tenantId, tenantName, ownerEmail, ownerName" });
     }
@@ -252,6 +252,7 @@ async function startServer() {
         ownerPassword,
         locationId,
         enableMobileApp,
+        packageTier,
       });
       return res.json(result);
     } catch (error) {
@@ -268,7 +269,7 @@ async function startServer() {
       return res.status(429).json({ error: "Too many requests. Please try again later." });
     }
 
-    const { gymName, subdomain, ownerName, ownerEmail, amountPaid, paymentMethod, transactionId } = req.body;
+    const { gymName, subdomain, ownerName, ownerEmail, amountPaid, paymentMethod, transactionId, plan } = req.body;
     
     if (!gymName || !subdomain || !ownerName || !ownerEmail) {
       return res.status(400).json({ error: "Missing required fields: gymName, subdomain, ownerName, ownerEmail" });
@@ -310,7 +311,8 @@ async function startServer() {
         paymentMethod: paymentMethod || 'Mock checkout',
         transactionId: transactionId || `TX-${Math.random().toString(36).substring(2, 12).toUpperCase()}`,
         status: 'pending',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        plan: plan || 'professional'
       };
 
       await centralDb.collection('requests').doc(requestId).set(newRequest);
@@ -355,7 +357,8 @@ async function startServer() {
         tenantName: requestData.gymName,
         ownerEmail: requestData.ownerEmail,
         ownerName: requestData.ownerName,
-        enableMobileApp: true // Default to true for premium signups
+        enableMobileApp: requestData.plan === 'premium',
+        packageTier: requestData.plan as any // starter, professional, premium
       });
 
       // Update request status to approved

@@ -27,11 +27,76 @@ export default function SubscriptionCheckout() {
   const { language, toggleLanguage, isRtl } = useLanguage();
   const { theme, toggleTheme } = useTheme();
 
+  const plans = {
+    starter: {
+      name: "Starter Plan",
+      nameAr: "الباقة المبتدئة",
+      price: "2,500",
+      features: [
+        "Complete Member & Kiosk Management",
+        "Attendance QR Scanning & Kiosk Access",
+        "Cloud Dashboard & 2 Staff Accounts",
+        "Payments (Cash/Instapay) Tracking",
+        "Basic Reports & Analytics"
+      ],
+      featuresAr: [
+        "إدارة كاملة للأعضاء والخدمة الذاتية",
+        "تسجيل الحضور عبر مسح الرمز QR",
+        "لوحة تحكم سحابية وحسابين للموظفين",
+        "تتبع المدفوعات (نقدي / إنستاباي)",
+        "تقارير وتحليلات أساسية"
+      ]
+    },
+    professional: {
+      name: "Professional Plan",
+      nameAr: "الباقة الاحترافية",
+      price: "5,000",
+      features: [
+        "All Starter Features Included",
+        "Complete Lead Tracking & CRM Pipeline",
+        "PT & Private Sessions Deduction",
+        "Coach Scheduling & 5 Staff Accounts",
+        "Quotes Generator & CSV Import",
+        "Advanced Reports & Audit Trail"
+      ],
+      featuresAr: [
+        "جميع مزايا الباقة المبتدئة",
+        "إدارة كاملة للعملاء المحتملين والمبيعات",
+        "جلسات التدريب الشخصي (PT) والخصم",
+        "جدولة مواعيد المدربين و5 حسابات موظفين",
+        "مستخرج عروض الأسعار واستيراد البيانات CSV",
+        "تقارير متقدمة وسجل العمليات التدقيقية"
+      ]
+    },
+    premium: {
+      name: "Premium+ Plan",
+      nameAr: "باقة بريميوم+",
+      price: "9,000",
+      features: [
+        "All Professional Features Included",
+        "Custom Domain Setup (gym.yourname.com)",
+        "Club Operations (Lockers, Juice Bar, Invites)",
+        "Custom Mobile App (iOS & Android)",
+        "Unlimited Staff Accounts & Multi-Branch",
+        "Dedicated WhatsApp & Phone Support"
+      ],
+      featuresAr: [
+        "جميع مزايا الباقة الاحترافية",
+        "إعداد نطاق مخصص (gym.yourname.com)",
+        "عمليات النادي (الخزائن، عصير البار، الدعوات)",
+        "تطبيق موبايل مخصص (iOS وأندرويد)",
+        "حسابات موظفين غير محدودة وفروع متعددة",
+        "دعم فني مخصص عبر الهاتف والواتساب"
+      ]
+    }
+  };
+
   // Form states
   const [gymName, setGymName] = useState('');
   const [subdomain, setSubdomain] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState<'starter' | 'professional' | 'premium'>('professional');
   
   // Card states
   const [cardNumber, setCardNumber] = useState('');
@@ -196,6 +261,7 @@ export default function SubscriptionCheckout() {
     setIsSubmitting(true);
 
     try {
+      const amountPaid = selectedPlan === 'starter' ? 2500 : selectedPlan === 'professional' ? 5000 : 9000;
       const response = await fetch('/api/subscription-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,9 +270,10 @@ export default function SubscriptionCheckout() {
           subdomain,
           ownerName,
           ownerEmail,
-          amountPaid: 99,
+          amountPaid,
           paymentMethod: 'Credit Card (Simulated)',
-          transactionId: `TX-${Math.random().toString(36).substring(2, 12).toUpperCase()}`
+          transactionId: `TX-${Math.random().toString(36).substring(2, 12).toUpperCase()}`,
+          plan: selectedPlan
         })
       });
 
@@ -256,7 +323,13 @@ export default function SubscriptionCheckout() {
               </div>
               <div className="flex justify-between items-center text-sm border-b border-border/30 pb-2">
                 <span className="text-muted-foreground font-semibold">{t('successSubdomain')}</span>
-                <span className="font-bold text-primary">{successData.subdomain}.mitrixogymcrm.com</span>
+                <span className="font-bold text-primary">{successData.subdomain}.mitrixo.com</span>
+              </div>
+              <div className="flex justify-between items-center text-sm border-b border-border/30 pb-2">
+                <span className="text-muted-foreground font-semibold">{isRtl ? 'الباقة المختارة' : 'Selected Plan'}</span>
+                <span className="font-bold text-foreground">
+                  {selectedPlan === 'starter' ? (isRtl ? 'الباقة المبتدئة' : 'Starter Plan') : selectedPlan === 'professional' ? (isRtl ? 'الباقة الاحترافية' : 'Professional Plan') : (isRtl ? 'باقة بريميوم+' : 'Premium+ Plan')}
+                </span>
               </div>
               <div className="flex justify-between items-center text-sm border-b border-border/30 pb-2">
                 <span className="text-muted-foreground font-semibold">{t('successEmail')}</span>
@@ -344,35 +417,28 @@ export default function SubscriptionCheckout() {
                 <div className="flex justify-between items-start">
                   <div>
                     <Badge className="bg-primary text-primary-foreground font-bold mb-2 text-xs">
-                      PREMIUM PLAN
+                      {selectedPlan === 'premium' ? 'PREMIUM+' : selectedPlan === 'professional' ? 'PROFESSIONAL' : 'STARTER'}
                     </Badge>
                     <CardTitle className="text-xl font-bold text-foreground">
-                      {t('premiumPlan')}
+                      {isRtl ? plans[selectedPlan].nameAr : plans[selectedPlan].name}
                     </CardTitle>
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-black text-foreground">
-                      ${t('premiumPrice').split(' ')[0]}
+                      {plans[selectedPlan].price} EGP
                     </div>
                     <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
-                      /{t('premiumPrice').split(' ')[2]}
+                      /{isRtl ? 'شهرياً' : 'Month'}
                     </div>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-6 space-y-5">
                 <h4 className="text-sm font-bold text-foreground">
-                  {t('featuresTitle')}
+                  {isRtl ? 'المزايا المضمنة:' : 'Included Features:'}
                 </h4>
                 <ul className="space-y-3.5 text-xs text-muted-foreground">
-                  {[
-                    t('feature1'),
-                    t('feature2'),
-                    t('feature3'),
-                    t('feature4'),
-                    t('feature5'),
-                    t('feature6')
-                  ].map((feat, idx) => (
+                  {(isRtl ? plans[selectedPlan].featuresAr : plans[selectedPlan].features).map((feat, idx) => (
                     <li key={idx} className="flex items-start gap-3">
                       <div className="h-4 w-4 rounded-full bg-primary/10 text-primary flex items-center justify-center mt-0.5 flex-shrink-0">
                         <Check className="h-3 w-3" />
@@ -388,6 +454,39 @@ export default function SubscriptionCheckout() {
           {/* Checkout & Form Column (Left Column on desktop) */}
           <div className="lg:col-span-7 lg:order-1">
             <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Plan Selection Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                {(Object.keys(plans) as Array<keyof typeof plans>).map((planKey) => {
+                  const plan = plans[planKey];
+                  const isSelected = selectedPlan === planKey;
+                  return (
+                    <div
+                      key={planKey}
+                      onClick={() => setSelectedPlan(planKey)}
+                      className={`cursor-pointer rounded-2xl border p-4 transition-all duration-200 flex flex-col justify-between ${
+                        isSelected 
+                          ? 'border-primary bg-primary/5 shadow-md scale-[1.02]' 
+                          : 'border-border bg-card/40 hover:bg-card/70'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex justify-between items-center mb-2">
+                          <Badge className={`${isSelected ? 'bg-primary text-primary-foreground border-none' : 'bg-muted text-zinc-450 border-none'} text-[9px] font-bold uppercase px-1.5 py-0.5`}>
+                            {planKey === 'premium' ? (isRtl ? 'الأفضل قيمة' : 'Best Value') : planKey === 'professional' ? (isRtl ? 'الأكثر طلباً' : 'Popular') : (isRtl ? 'أساسي' : 'Basic')}
+                          </Badge>
+                          {isSelected && <Check className="h-4 w-4 text-primary" />}
+                        </div>
+                        <h4 className="font-extrabold text-xs text-foreground uppercase">{isRtl ? plan.nameAr : plan.name}</h4>
+                      </div>
+                      <div className="mt-4 text-left">
+                        <span className="text-lg font-black text-foreground">{plan.price}</span>
+                        <span className="text-[10px] text-muted-foreground ml-1">{isRtl ? 'ج.م' : 'EGP'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               {/* Workspace Details */}
               <Card className="border-border bg-card/60 backdrop-blur-md shadow-lg rounded-3xl">
                 <CardHeader>

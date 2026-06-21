@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -50,9 +50,20 @@ interface MemberPortalProps {
 
 export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchToStore }: MemberPortalProps = {}) {
   const { currentUser, logout } = useAuth();
-  const { branding } = useSettings();
+  const { branding, features } = useSettings();
   const { theme, toggleTheme } = useTheme();
   
+  const filteredNavItems = useMemo(() => {
+    return NAV_ITEMS.filter((item) => {
+      if (item.tab === 'home' && features.qrCheckin === false) return false;
+      if (item.tab === 'juicebar' && features.juiceBar === false) return false;
+      if (item.tab === 'wallet' && features.wallet === false) return false;
+      if (item.tab === 'locker' && features.locker === false) return false;
+      if (item.tab === 'invites' && features.operations === false) return false;
+      return true;
+    });
+  }, [features]);
+
   const [activeTab, setActiveTab] = useState<MemberTab>('home');
   const [primaryClient, setPrimaryClient] = useState<Client | null>(null);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
@@ -62,26 +73,60 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   // Booking and Profile Sub-tabs state
   const [bookingSubTab, setBookingSubTab] = useState<'pt' | 'group'>('pt');
+  
+  const profileSubTabsList = useMemo(() => {
+    const list = [
+      { id: 'settings', label: 'Settings' },
+      { id: 'progress', label: 'Progress', pointSystemRequired: true },
+      { id: 'membership', label: 'Membership' },
+      { id: 'attendance', label: 'History' },
+      { id: 'badges', label: 'Badges', pointSystemRequired: true },
+      { id: 'rewards', label: 'Rewards', pointSystemRequired: true },
+    ];
+    return list.filter(tab => !tab.pointSystemRequired || features.pointsSystem !== false);
+  }, [features.pointsSystem]);
+
   const [profileSubTab, setProfileSubTab] = useState<'settings' | 'progress' | 'membership' | 'attendance' | 'badges' | 'rewards'>('settings');
 
+  // Ensure active tab resets if current active tab gets disabled
+  useEffect(() => {
+    if (features.qrCheckin === false && activeTab === 'home') {
+      setActiveTab('booking');
+    }
+  }, [features.qrCheckin, activeTab]);
+
+  // Ensure profile sub-tab resets if current subtab gets disabled
+  useEffect(() => {
+    const isAllowed = profileSubTabsList.some(tab => tab.id === profileSubTab);
+    if (!isAllowed) {
+      setProfileSubTab('settings');
+    }
+  }, [profileSubTabsList, profileSubTab]);
 
   // Navigation handler for quick shortcuts from MemberHome
   const handleNavigate = (target: string) => {
     if (target === 'booking') setActiveTab('booking');
     else if (target === 'profile') setActiveTab('profile');
     else if (target === 'profile-progress') {
-      setActiveTab('profile');
-      setProfileSubTab('progress');
+      if (features.pointsSystem !== false) {
+        setActiveTab('profile');
+        setProfileSubTab('progress');
+      }
     } else if (target === 'profile-membership') {
       setActiveTab('profile');
       setProfileSubTab('membership');
     } else if (target === 'profile-attendance') {
       setActiveTab('profile');
       setProfileSubTab('attendance');
-    } else if (target === 'juicebar') setActiveTab('juicebar');
-    else if (target === 'wallet') setActiveTab('wallet');
-    else if (target === 'locker') setActiveTab('locker');
-    else if (target === 'invites') setActiveTab('invites');
+    } else if (target === 'juicebar') {
+      if (features.juiceBar !== false) setActiveTab('juicebar');
+    } else if (target === 'wallet') {
+      if (features.wallet !== false) setActiveTab('wallet');
+    } else if (target === 'locker') {
+      if (features.locker !== false) setActiveTab('locker');
+    } else if (target === 'invites') {
+      if (features.operations !== false) setActiveTab('invites');
+    }
   };
 
   // 1. Fetch primary client record
@@ -284,43 +329,15 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         {activeTab === 'profile' && (
           <div className="space-y-4">
             <div className="grid grid-cols-3 p-1 bg-muted/60 rounded-xl border gap-0.5">
-
-              <button 
-                onClick={() => setProfileSubTab('settings')} 
-                className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === 'settings' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
-              >
-                Settings
-              </button>
-              <button 
-                onClick={() => setProfileSubTab('progress')} 
-                className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === 'progress' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
-              >
-                Progress
-              </button>
-              <button 
-                onClick={() => setProfileSubTab('membership')} 
-                className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === 'membership' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
-              >
-                Membership
-              </button>
-              <button 
-                onClick={() => setProfileSubTab('attendance')} 
-                className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === 'attendance' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
-              >
-                History
-              </button>
-              <button 
-                onClick={() => setProfileSubTab('badges')} 
-                className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === 'badges' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
-              >
-                Badges
-              </button>
-              <button 
-                onClick={() => setProfileSubTab('rewards')} 
-                className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === 'rewards' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
-              >
-                Rewards
-              </button>
+              {profileSubTabsList.map((tab) => (
+                <button 
+                  key={tab.id}
+                  onClick={() => setProfileSubTab(tab.id as any)}
+                  className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === tab.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
             {profileSubTab === 'settings' && <MemberProfile client={activeClient} />}
@@ -345,7 +362,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1.5 shadow-lg backdrop-blur-md bg-opacity-90">
-        {NAV_ITEMS.map(({ tab, label, icon }) => (
+        {filteredNavItems.map(({ tab, label, icon }) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}

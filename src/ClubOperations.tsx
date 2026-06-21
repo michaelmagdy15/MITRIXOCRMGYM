@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { db } from './firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, getDocs } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,14 +10,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Coffee, Lock, UserCheck, Search, Plus, Key, RefreshCw, XCircle, CheckCircle2, AlertCircle, Trash2, MapPin } from 'lucide-react';
 import { JuiceBarOrder, Locker, LockerRequest, GuestInvite } from './types';
+import { useSettings } from './contexts/SettingsContext';
 
 const BRANCHES = ['Heliopolis', 'Fifth Settlement', 'Zamalek', 'Sheikh Zayed'];
 
 export default function ClubOperations() {
-  const [activeTab, setActiveTab] = useState<'juicebar' | 'lockers' | 'guests'>('juicebar');
+  const { features } = useSettings();
 
   // --- Earth's Kitchen Juice Bar State ---
   const [juiceOrders, setJuiceOrders] = useState<JuiceBarOrder[]>([]);
+
+  const operationsTabs = useMemo(() => {
+    const list = [
+      { id: 'juicebar', label: "Earth's Kitchen Orders", count: juiceOrders.length, icon: <Coffee className="h-4 w-4" />, requiredFeature: features.juiceBar },
+      { id: 'lockers', label: 'Lockers & Smart Locks', icon: <Lock className="h-4 w-4" />, requiredFeature: features.locker },
+      { id: 'guests', label: 'Guest Invites & Leads', icon: <UserCheck className="h-4 w-4" /> },
+    ];
+    return list.filter(t => t.requiredFeature !== false);
+  }, [features, juiceOrders.length]);
+
+  const [activeTab, setActiveTab] = useState<'juicebar' | 'lockers' | 'guests'>('juicebar');
+
+  // Auto-transition if activeTab is disabled
+  useEffect(() => {
+    const isAllowed = operationsTabs.some(t => t.id === activeTab);
+    if (!isAllowed && operationsTabs.length > 0) {
+      setActiveTab(operationsTabs[0].id as any);
+    }
+  }, [operationsTabs, activeTab]);
   const [loadingJuice, setLoadingJuice] = useState(true);
 
   // --- Lockers State ---
@@ -356,24 +376,15 @@ export default function ClubOperations() {
 
       {/* Main Tab bar */}
       <div className="flex gap-2 border-b border-zinc-800 pb-px">
-        <button
-          onClick={() => setActiveTab('juicebar')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'juicebar' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-        >
-          <Coffee className="h-4 w-4" /> Earth's Kitchen Orders ({juiceOrders.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('lockers')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'lockers' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-        >
-          <Lock className="h-4 w-4" /> Lockers & Smart Locks
-        </button>
-        <button
-          onClick={() => setActiveTab('guests')}
-          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold border-b-2 transition-colors ${activeTab === 'guests' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-        >
-          <UserCheck className="h-4 w-4" /> Guest Invites & Leads
-        </button>
+        {operationsTabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold border-b-2 transition-colors ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+          >
+            {tab.icon} {tab.label} {'count' in tab ? `(${tab.count})` : ''}
+          </button>
+        ))}
       </div>
 
       {/* Earth's Kitchen orders tab */}

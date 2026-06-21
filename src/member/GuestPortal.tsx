@@ -302,7 +302,22 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
               <div className="grid grid-cols-1 gap-3">
                 {displayKids.map(pkg => (
-                  <div key={pkg.id} onClick={() => setSelectedPackage(pkg)} className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger">
+                  <div 
+                    key={pkg.id} 
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest('button')) return;
+                      setSelectedPackage(pkg);
+                    }} 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        if ((e.target as HTMLElement).closest('button')) return;
+                        setSelectedPackage(pkg);
+                      }
+                    }}
+                    className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
                     <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
                       <img 
                         src={getPackageImage(pkg.name, pkg.sessions)} 
@@ -371,7 +386,22 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
               <div className="grid grid-cols-1 gap-3">
                 {displayAdults.map(pkg => (
-                  <div key={pkg.id} onClick={() => setSelectedPackage(pkg)} className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm hover:border-primary/30 transition-all items-center cursor-pointer active:scale-[0.98] sf-card-stagger">
+                  <div 
+                    key={pkg.id} 
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest('button')) return;
+                      setSelectedPackage(pkg);
+                    }} 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        if ((e.target as HTMLElement).closest('button')) return;
+                        setSelectedPackage(pkg);
+                      }
+                    }}
+                    className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all items-center cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
                     <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
                       <img 
                         src={getPackageImage(pkg.name, pkg.sessions)} 
@@ -421,7 +451,22 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               </div>
               <div className="grid grid-cols-1 gap-3">
                 {corporatePackages.map(pkg => (
-                  <div key={pkg.id} onClick={() => setSelectedPackage(pkg)} className="bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-2xl p-4 flex gap-4 shadow-sm hover:border-primary/40 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger">
+                  <div 
+                    key={pkg.id} 
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      if ((e.target as HTMLElement).closest('button')) return;
+                      setSelectedPackage(pkg);
+                    }} 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        if ((e.target as HTMLElement).closest('button')) return;
+                        setSelectedPackage(pkg);
+                      }
+                    }}
+                    className="bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/40 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
                     <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                       <Building2 className="h-6 w-6 text-primary" />
                     </div>
@@ -641,10 +686,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             
             {/* Close button */}
             <button 
-              className="absolute top-3 right-4 p-1.5 rounded-full bg-muted/80 hover:bg-muted"
+              className="absolute top-3 right-4 h-11 w-11 flex items-center justify-center rounded-full bg-muted/80 hover:bg-muted text-foreground/80"
               onClick={() => setSelectedPackage(null)}
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </button>
 
             {/* Package Image */}
