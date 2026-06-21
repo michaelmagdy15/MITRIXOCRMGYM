@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Client } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db } from '../firebase';
 import { doc, updateDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
-import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users } from 'lucide-react';
+import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Flame, Trophy } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { format, parseISO, differenceInDays } from 'date-fns';
 
 export default function MemberProfile({ client }: { client: Client | null }) {
   const { currentUser, changeMyPassword } = useAuth();
@@ -35,6 +37,36 @@ export default function MemberProfile({ client }: { client: Client | null }) {
   const [isLinking, setIsLinking] = useState(false);
   const [linkSuccess, setLinkSuccess] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
+
+  // Attendance stats for hero card
+  const [totalCheckins, setTotalCheckins] = useState(0);
+  const [currentStreak, setCurrentStreak] = useState(0);
+
+  useEffect(() => {
+    if (!client?.id) return;
+    const q = query(collection(db, 'attendance'), where('clientId', '==', client.id));
+    getDocs(q).then(snap => {
+      setTotalCheckins(snap.size);
+      const dates = snap.docs.map(d => (d.data() as any).date as string).filter(Boolean).sort().reverse();
+      const uniqueDates = [...new Set(dates)];
+      let streak = 0;
+      const today = new Date();
+      for (let i = 0; i < uniqueDates.length; i++) {
+        try {
+          const d = parseISO(uniqueDates[i]!);
+          const diff = differenceInDays(today, d);
+          if (diff <= i + 1) streak++;
+          else break;
+        } catch { break; }
+      }
+      setCurrentStreak(streak);
+    }).catch(() => {});
+  }, [client?.id]);
+
+  const initials = (client?.name || 'U').split(' ').map(n => n[0] || '').slice(0, 2).join('').toUpperCase();
+  const joinDateStr = client?.startDate || client?.createdAt;
+  const memberSince = joinDateStr ? (() => { try { return format(parseISO(joinDateStr), 'MMM yyyy'); } catch { return '—'; } })() : '—';
+  const daysAsMember = joinDateStr ? (() => { try { return differenceInDays(new Date(), parseISO(joinDateStr)); } catch { return 0; } })() : 0;
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,6 +214,46 @@ export default function MemberProfile({ client }: { client: Client | null }) {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+      {/* ─── BeFit-Style Avatar Hero Card ─── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border p-5">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-8 translate-x-8" />
+        <div className="flex items-center gap-4">
+          {/* Avatar Circle */}
+          <div className="h-16 w-16 rounded-2xl bg-primary/20 border-2 border-primary/30 flex items-center justify-center text-xl font-extrabold text-primary shrink-0">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-extrabold tracking-tight truncate">{client?.name || 'Member'}</h2>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <Badge variant="outline" className="text-[9px] font-mono bg-card/50">{client?.memberId || 'N/A'}</Badge>
+              <Badge className={`text-[9px] ${client?.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' : 'bg-zinc-500/10 text-zinc-500 border-zinc-200/50'}`}>
+                {client?.status || 'Unknown'}
+              </Badge>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+              <CalendarDays className="h-3 w-3" /> Member since {memberSince} · {daysAsMember} days
+            </p>
+          </div>
+        </div>
+        {/* Quick Stats Row */}
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          <div className="text-center p-2 bg-card/50 rounded-xl border">
+            <p className="text-lg font-extrabold font-mono text-primary">{totalCheckins}</p>
+            <p className="text-[9px] text-muted-foreground font-bold">Check-ins</p>
+          </div>
+          <div className="text-center p-2 bg-card/50 rounded-xl border">
+            <p className="text-lg font-extrabold font-mono text-orange-500 flex items-center justify-center gap-0.5">
+              <Flame className="h-4 w-4" />{currentStreak}
+            </p>
+            <p className="text-[9px] text-muted-foreground font-bold">Streak</p>
+          </div>
+          <div className="text-center p-2 bg-card/50 rounded-xl border">
+            <p className="text-lg font-extrabold font-mono text-primary">{client?.branch || '—'}</p>
+            <p className="text-[9px] text-muted-foreground font-bold">Branch</p>
+          </div>
+        </div>
+      </div>
+
       <div>
         <h2 className="text-xl font-bold tracking-tight">Account Settings</h2>
         <p className="text-xs text-muted-foreground mt-0.5">Manage your password, theme preferences, and contact information.</p>
