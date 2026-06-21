@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useSettings } from './contexts/SettingsContext';
+import { sendPasswordReset } from './firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { UserRole } from './types';
-import { Eye, EyeOff, ShieldCheck, Dumbbell, Users, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck, Dumbbell, Users, ArrowLeft, CheckCircle2, Globe } from 'lucide-react';
+import { useLanguage } from './contexts/LanguageContext';
 import SignupWizard from './SignupWizard';
 
 type View = 'login' | 'signup' | 'signup-success';
@@ -25,6 +27,7 @@ interface LoginProps {
 export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: LoginProps = {}) {
   const { loginWithEmail, loginWithCoachId, loginWithMemberId, submitSignUpRequest, submitPasswordResetRequest, submitMemberPasswordResetRequest, isAuthReady, authError, setAuthError } = useAuth();
   const { branding } = useSettings();
+  const { language, toggleLanguage } = useLanguage();
 
   const [view, setView] = useState<View>('login');
 
@@ -55,10 +58,11 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   const [forgotName, setForgotName] = useState('');
   const [forgotSubmitted, setForgotSubmitted] = useState(false);
 
-  // Forgot password dialog (member — ID + phone based)
+  // Forgot password dialog (member — ID + phone + real email)
   const [memberForgotOpen, setMemberForgotOpen] = useState(false);
   const [memberForgotId, setMemberForgotId] = useState('');
   const [memberForgotPhone, setMemberForgotPhone] = useState('');
+  const [memberForgotEmail, setMemberForgotEmail] = useState('');
   const [memberForgotSubmitted, setMemberForgotSubmitted] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -121,31 +125,53 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
     }
   };
 
+  // Staff/Coach: Send Firebase reset email DIRECTLY — no admin approval
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail) return;
     setIsLoading(true);
     setError('');
     try {
-      await submitPasswordResetRequest(forgotEmail, forgotName);
+      await sendPasswordReset(forgotEmail.trim());
       setForgotSubmitted(true);
-    } catch (err) {
-      setError((err as Error)?.message || 'Failed to submit request.');
+    } catch (err: any) {
+      if (err?.code === 'auth/user-not-found') {
+        // Don't reveal if email exists (security best practice)
+        setForgotSubmitted(true);
+      } else {
+        setError(err?.message || 'Failed to send reset email. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Member: Verify identity via server, then send Firebase reset email to their real email
   const handleMemberForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!memberForgotId || !memberForgotPhone) return;
+    if (!memberForgotId || !memberForgotPhone || !memberForgotEmail) return;
     setIsLoading(true);
     setError('');
     try {
-      await submitMemberPasswordResetRequest(memberForgotId, memberForgotPhone);
+      // Step 1: Server verifies identity (ID + Phone) and updates auth email
+      const resp = await fetch('/api/self-reset-member-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          memberId: memberForgotId.trim(), 
+          phone: memberForgotPhone.trim(),
+          realEmail: memberForgotEmail.trim()
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error || 'Verification failed.');
+      }
+      // Step 2: Now that auth email is updated, send Firebase reset email
+      await sendPasswordReset(memberForgotEmail.trim());
       setMemberForgotSubmitted(true);
     } catch (err) {
-      setError((err as Error)?.message || 'Failed to submit request.');
+      setError((err as Error)?.message || 'Failed to reset password. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -283,6 +309,18 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   // ── Main login view ──
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 md:p-12 font-sans relative overflow-y-auto">
+      {/* Language toggle — top-right corner */}
+      <div className="absolute top-4 right-4 z-10">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={toggleLanguage}
+          className="h-9 px-3 text-xs font-bold flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted/30 hover:bg-muted text-foreground backdrop-blur-sm"
+        >
+          <Globe className="h-3.5 w-3.5" />
+          <span>{language === 'en' ? 'العربية' : 'English'}</span>
+        </Button>
+      </div>
       <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* Logo */}
         <Logo />
@@ -475,7 +513,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
         </div>
 
       {/* ── Forgot Password Dialog (Staff / Coach — email) ── */}
-      <Dialog open={forgotOpen} onOpenChange={open => { setForgotOpen(open); if (!open) setForgotSubmitted(false); }}>
+      <Dialog open={forgotOpen} onOpenChange={open => { setForgotOpen(open); if (!open) { setForgotSubmitted(false); setError(''); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
@@ -483,26 +521,22 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
           {forgotSubmitted ? (
             <div className="flex flex-col items-center gap-4 py-4 text-center">
               <CheckCircle2 className="h-12 w-12 text-green-500" />
-              <p className="font-semibold">Request Submitted</p>
-              <p className="text-sm text-muted-foreground">An admin will review your request and send a reset email to <strong>{forgotEmail}</strong>.</p>
+              <p className="font-semibold">Reset Email Sent!</p>
+              <p className="text-sm text-muted-foreground">If an account exists for <strong>{forgotEmail}</strong>, you'll receive a password reset link in your inbox. Check your spam folder too.</p>
               <Button onClick={() => setForgotOpen(false)}>Close</Button>
             </div>
           ) : (
             <form onSubmit={handleForgotPassword} className="space-y-4 py-2">
               {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
               <div className="space-y-2">
-                <Label>Your Name</Label>
-                <Input placeholder="Full name" value={forgotName} onChange={e => setForgotName(e.target.value)} />
-              </div>
-              <div className="space-y-2">
                 <Label>Email Address</Label>
                 <Input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required />
               </div>
-              <p className="text-xs text-muted-foreground">An admin will approve your request and send you a password reset link.</p>
+              <p className="text-xs text-muted-foreground">We'll send a password reset link directly to your email — no waiting required.</p>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setForgotOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={isLoading || !forgotEmail}>
-                  {isLoading ? 'Submitting...' : 'Submit Request'}
+                  {isLoading ? 'Sending...' : 'Send Reset Link'}
                 </Button>
               </DialogFooter>
             </form>
@@ -510,8 +544,8 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
         </DialogContent>
       </Dialog>
 
-      {/* ── Forgot Password Dialog (Member — ID + Phone) ── */}
-      <Dialog open={memberForgotOpen} onOpenChange={open => { setMemberForgotOpen(open); if (!open) { setMemberForgotSubmitted(false); setError(''); } }}>
+      {/* ── Forgot Password Dialog (Member — ID + Phone + Email) ── */}
+      <Dialog open={memberForgotOpen} onOpenChange={open => { setMemberForgotOpen(open); if (!open) { setMemberForgotSubmitted(false); setError(''); setMemberForgotEmail(''); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset Member Password</DialogTitle>
@@ -519,17 +553,18 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
           {memberForgotSubmitted ? (
             <div className="flex flex-col items-center gap-4 py-4 text-center">
               <CheckCircle2 className="h-12 w-12 text-green-500" />
-              <p className="font-semibold">Request Submitted</p>
+              <p className="font-semibold">Reset Link Sent!</p>
               <p className="text-sm text-muted-foreground">
-                An admin will review and reset your password. Your new temporary password will be <strong>12345678</strong> — you'll be asked to change it on first login.
+                A password reset link has been sent to <strong>{memberForgotEmail}</strong>. Click the link in the email to set your new password.
               </p>
-              <Button onClick={() => setMemberForgotOpen(false)}>Close</Button>
+              <p className="text-xs text-muted-foreground">Don't see it? Check your spam/junk folder.</p>
+              <Button onClick={() => setMemberForgotOpen(false)}>Got it</Button>
             </div>
           ) : (
             <form onSubmit={handleMemberForgotPassword} className="space-y-4 py-2">
               {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
               <p className="text-sm text-muted-foreground">
-                Enter your <strong>Member ID</strong> and the <strong>phone number</strong> registered with your account.
+                Verify your identity, then we'll send a password reset link to your email.
               </p>
               <div className="space-y-2">
                 <Label>Member ID</Label>
@@ -542,7 +577,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                 />
               </div>
               <div className="space-y-2">
-                <Label>Phone Number</Label>
+                <Label>Phone Number (on file)</Label>
                 <Input
                   type="tel"
                   placeholder="e.g. 01012345678"
@@ -551,11 +586,21 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                   required
                 />
               </div>
-              <p className="text-xs text-muted-foreground">An admin will verify your identity and reset your password.</p>
+              <div className="space-y-2">
+                <Label>Your Email Address</Label>
+                <Input
+                  type="email"
+                  placeholder="you@gmail.com"
+                  value={memberForgotEmail}
+                  onChange={e => setMemberForgotEmail(e.target.value)}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">We'll send the reset link here and save this email to your profile.</p>
+              </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setMemberForgotOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={isLoading || !memberForgotId || !memberForgotPhone}>
-                  {isLoading ? 'Submitting...' : 'Submit Request'}
+                <Button type="submit" disabled={isLoading || !memberForgotId || !memberForgotPhone || !memberForgotEmail}>
+                  {isLoading ? 'Verifying...' : 'Send Reset Link'}
                 </Button>
               </DialogFooter>
             </form>

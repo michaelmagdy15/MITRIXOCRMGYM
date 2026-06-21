@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag } from 'lucide-react';
+import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, where, doc, documentId, getDoc, getDocs } from 'firebase/firestore';
 import { Client } from '../types';
@@ -56,6 +56,24 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   // Booking and Profile Sub-tabs state
   const [bookingSubTab, setBookingSubTab] = useState<'pt' | 'group'>('pt');
   const [profileSubTab, setProfileSubTab] = useState<'settings' | 'progress' | 'membership' | 'attendance'>('settings');
+
+  // Navigation handler for quick shortcuts from MemberHome
+  const handleNavigate = (target: string) => {
+    if (target === 'booking') setActiveTab('booking');
+    else if (target === 'profile') setActiveTab('profile');
+    else if (target === 'profile-progress') {
+      setActiveTab('profile');
+      setProfileSubTab('progress');
+    } else if (target === 'profile-membership') {
+      setActiveTab('profile');
+      setProfileSubTab('membership');
+    } else if (target === 'profile-attendance') {
+      setActiveTab('profile');
+      setProfileSubTab('attendance');
+    } else if (target === 'juicebar') setActiveTab('juicebar');
+    else if (target === 'locker') setActiveTab('locker');
+    else if (target === 'invites') setActiveTab('invites');
+  };
 
   // 1. Fetch primary client record
   useEffect(() => {
@@ -209,6 +227,10 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
           <CartDrawer />
 
+          <Button variant="ghost" size="icon" onClick={() => {}} title="Notifications" className="h-8 w-8 relative text-zinc-400 hover:text-white">
+            <Bell className="h-4 w-4" />
+          </Button>
+
           <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
@@ -220,7 +242,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 pb-24 max-w-md">
-        {activeTab === 'home' && <MemberHome client={activeClient} onSwitchToStore={onSwitchToStore} />}
+        {activeTab === 'home' && <MemberHome client={activeClient} onSwitchToStore={onSwitchToStore} onNavigate={handleNavigate} />}
         
         {activeTab === 'booking' && (
           <div className="space-y-4">

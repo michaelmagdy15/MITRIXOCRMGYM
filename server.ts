@@ -377,6 +377,140 @@ async function startServer() {
     }
   });
 
+  // Admin endpoint to force-reset a user's Firebase Auth password
+  // Uses Firebase Admin SDK — the ONLY way to reset synthetic email passwords
+  app.post("/api/admin/reset-password", requirePlatformAdmin, async (req, res) => {
+    const { uid, email } = req.body;
+    const DEFAULT_PASSWORD = '12345678';
+    
+    if (!uid && !email) {
+      return res.status(400).json({ error: "Missing required field: uid or email" });
+    }
+
+    try {
+      let targetUid = uid;
+      
+      // If only email was provided, look up the UID
+      if (!targetUid && email) {
+        try {
+          const userRecord = await admin.auth().getUserByEmail(email);
+          targetUid = userRecord.uid;
+        } catch (lookupErr: any) {
+          return res.status(404).json({ error: `No Firebase Auth user found for email: ${email}` });
+        }
+      }
+      
+      // Reset the password using Admin SDK
+      await admin.auth().updateUser(targetUid, { password: DEFAULT_PASSWORD });
+      
+      console.log(`[Server] Password reset to default for user: ${targetUid}`);
+      return res.json({ success: true, message: 'Password has been reset to the default temporary password.' });
+    } catch (error) {
+      console.error("[Server] Password reset error:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // ─── PUBLIC Self-Service Password Reset for Members ───
+  // Flow: Member enters ID + Phone (identity verification) + Real Email
+  // Server: Verifies identity → Updates auth email to real email → Saves email to profiles
+  // Client: Calls sendPasswordResetEmail(realEmail) → Firebase sends reset link
+  // Bonus: We collect real member emails for future communications!
+  app.post("/api/self-reset-member-password", async (req, res) => {
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+    if (isRateLimited(clientIp)) {
+      return res.status(429).json({ error: "Too many attempts. Please try again in an hour." });
+    }
+
+    const { memberId, phone, realEmail } = req.body;
+
+    if (!memberId || !phone || !realEmail) {
+      return res.status(400).json({ error: "Please provide your Member ID, phone number, and email address." });
+    }
+
+    const trimmedId = memberId.trim();
+    const trimmedPhone = phone.trim().replace(/\s/g, '');
+    const trimmedEmail = realEmail.trim().toLowerCase();
+
+    // Basic email format check
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      return res.status(400).json({ error: "Please enter a valid email address." });
+    }
+
+    try {
+      const defaultDb = getFirestore();
+
+      // 1. Look up the client record by memberId
+      const clientsSnap = await defaultDb.collection('clients')
+        .where('memberId', '==', trimmedId)
+        .limit(1)
+        .get();
+
+      if (clientsSnap.empty) {
+        return res.status(404).json({ error: "Member ID not found. Please check and try again." });
+      }
+
+      const clientDoc = clientsSnap.docs[0]!;
+      const clientData = clientDoc.data();
+      const storedPhone = (clientData.phone || '').replace(/\s/g, '');
+
+      // 2. Verify phone number matches
+      if (!storedPhone || storedPhone !== trimmedPhone) {
+        return res.status(403).json({ error: "Phone number does not match our records." });
+      }
+
+      // 3. Find the Firebase Auth user linked to this member
+      const usersSnap = await defaultDb.collection('users')
+        .where('clientRecordId', '==', trimmedId)
+        .limit(1)
+        .get();
+
+      if (usersSnap.empty) {
+        return res.status(404).json({ error: "No portal account found for this Member ID." });
+      }
+
+      const userDoc = usersSnap.docs[0]!;
+      const userUid = userDoc.id;
+
+      // 4. Check if another Firebase Auth user already has this real email
+      try {
+        const existingUser = await admin.auth().getUserByEmail(trimmedEmail);
+        // If a DIFFERENT user has this email, block it
+        if (existingUser.uid !== userUid) {
+          return res.status(409).json({ error: "This email is already associated with another account." });
+        }
+      } catch (lookupErr: any) {
+        // auth/user-not-found = email is available, which is what we want
+        if (lookupErr?.code !== 'auth/user-not-found') {
+          throw lookupErr;
+        }
+      }
+
+      // 5. Update the Firebase Auth email to the real email
+      await admin.auth().updateUser(userUid, { email: trimmedEmail });
+
+      // 6. Save the real email to the user profile AND client record
+      await defaultDb.collection('users').doc(userUid).update({ 
+        email: trimmedEmail,
+        personalEmail: trimmedEmail,
+        mustChangePassword: true 
+      });
+      await defaultDb.collection('clients').doc(clientDoc.id).update({ 
+        personalEmail: trimmedEmail 
+      });
+
+      console.log(`[Server] Member ${trimmedId} email updated to ${trimmedEmail}, ready for reset`);
+      return res.json({ 
+        success: true, 
+        email: trimmedEmail,
+        message: 'Identity verified! A password reset link will be sent to your email.' 
+      });
+    } catch (error) {
+      console.error("[Server] Self-service reset error:", error);
+      return res.status(500).json({ error: "Something went wrong. Please try again or contact support." });
+    }
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

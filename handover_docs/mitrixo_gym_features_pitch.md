@@ -196,6 +196,41 @@ Fine-grained permissions can be toggled per user:
 
 ---
 
+## 🔮 Coming Soon (v2.0 Roadmap)
+
+### 💎 Points & Digital Wallet
+- Members buy **Points bundles** (e.g., 10 Points = 2,000 EGP)
+- Use Points to purchase memberships, PT packages, or class drop-ins
+- **Dual pricing** on everything: "6,000 EGP **or** 30 Points"
+- **Mixed checkout**: Pay partially with Points, remainder with cash/Instapay
+- Full transaction history and wallet dashboard
+
+### 🏅 Gamification: Badges, Streaks & Rewards
+- **Attendance streaks** with milestone rewards (7, 14, 30, 60, 90 days)
+- **Achievement badges**: "30-Day Warrior", "Early Bird", "Loyal Member"
+- **Coins** earned through streaks and badges — a separate reward currency
+- **Rewards marketplace**: Redeem Coins for partner discounts or gym perks
+
+### 🔔 Notification Center
+- In-app notification feed with unread badges
+- **Push notifications** (mobile): Payment reminders, expiry alerts, class changes
+- Admin-composed announcements to member segments
+
+### 📅 Enhanced Class Schedule
+- **Calendar ribbon** with weekly date picker
+- **Time-slot grouped** class listing with coach photos
+- **Real-time capacity**: "3 Spots Left" indicator
+- **One-tap booking** with cancellation policy display
+
+### 🤝 Partner & Sponsor System
+- **Admin-configurable** partner promotions with banner ads
+- **Reward redemptions** at partner businesses using Coins
+- Partner logo grid on member home screen
+
+> *All v2.0 features are designed per-tenant — each gym configures their own loyalty program, badges, and partner deals independently.*
+
+---
+
 *Mitrixo GYM CRM — Your gym. Your data. Your growth.*
 
 **Contact**: info@mitrixo.com | mitrixo.com
