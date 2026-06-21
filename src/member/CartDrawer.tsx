@@ -31,7 +31,7 @@ export default function CartDrawer() {
             )}
           </Button>
         } />
-        <DialogContent className="w-full sm:max-w-md flex flex-col p-0 h-[85vh] sm:h-auto max-h-[90vh]">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md flex flex-col p-0 h-[85vh] sm:h-auto max-h-[90vh]">
           <DialogHeader className="p-6 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5" />
