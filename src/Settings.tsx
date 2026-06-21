@@ -9,7 +9,7 @@ import { collection as fbCollection, getDocs as fbGetDocs, addDoc, doc as fbDoc,
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Save, UserCircle2, Building2, Users, Package, AlertTriangle, ShieldAlert, Trash2, Dumbbell, Lock, Download, Upload, MessageSquare, Send, KeyRound, Eye, EyeOff, CheckCircle2, Megaphone, Coins } from 'lucide-react';
+import { Save, UserCircle2, Building2, Users, Package, AlertTriangle, ShieldAlert, Trash2, Dumbbell, Lock, Download, Upload, MessageSquare, Send, KeyRound, Eye, EyeOff, CheckCircle2, Megaphone, Coins, Activity } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import UsersManagement from './Users';
 import Packages from './Packages';
@@ -22,6 +22,7 @@ import { Branch } from './types';
 import { exportDatabaseToJson, restoreDatabaseFromJson } from './services/backupService';
 import type { BackupProgressCallback } from './services/backupService';
 import AdminPointsManager from './components/AdminPointsManager';
+import AdminActivityFeed from './components/AdminActivityFeed';
 
 export default function Settings() {
   const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches } = useAppContext();
@@ -491,6 +492,11 @@ export default function Settings() {
             <Coins className="h-4 w-4" />
             Points
           </TabsTrigger>
+          <TabsTrigger value="activity" className="flex items-center gap-2 whitespace-nowrap">
+            <Activity className="h-4 w-4" />
+            Activity
+          </TabsTrigger>
+
 
           {canWipe && (
             <TabsTrigger value="danger" className="flex items-center gap-2 whitespace-nowrap text-destructive data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">
@@ -906,6 +912,12 @@ export default function Settings() {
         <TabsContent value="points" className="animate-in fade-in-50 duration-500">
           <AdminPointsManager />
         </TabsContent>
+
+        {/* ── Activity Feed ── */}
+        <TabsContent value="activity" className="animate-in fade-in-50 duration-500">
+          <AdminActivityFeed />
+        </TabsContent>
+
 
         {/* ── Danger Zone ── */}
         {canWipe && (

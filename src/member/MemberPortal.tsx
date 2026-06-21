@@ -27,6 +27,7 @@ import MemberNotificationBell from './MemberNotificationBell';
 import MemberWallet from './MemberWallet';
 import MemberBadges from './MemberBadges';
 import MemberRewards from './MemberRewards';
+import MemberBodyTracker from './MemberBodyTracker';
 
 
 type MemberTab = 'home' | 'booking' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'profile';
@@ -318,7 +319,12 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             </div>
 
             {profileSubTab === 'settings' && <MemberProfile client={activeClient} />}
-            {profileSubTab === 'progress' && <MemberProgress client={activeClient} />}
+            {profileSubTab === 'progress' && (
+              <div className="space-y-6">
+                <MemberProgress client={activeClient} />
+                <MemberBodyTracker client={activeClient} />
+              </div>
+            )}
             {profileSubTab === 'membership' && (
               <div className="space-y-6 animate-in fade-in">
                 <MemberPackages client={activeClient} onSwitchToStore={onSwitchToStore} />
