@@ -27,18 +27,18 @@ Go through each section in order. Each test has a specific action and expected r
 - [ langauge toggle is not in the login page onlly when you login to the dashb **T005**: Arabic toggle works on login page (if language switcher exists)
 
 ### 1.2 Role-Based Login
-- [ ] **T006**: Login as **CRM Admin** → See all navigation tabs (Dashboard, Clients, Leads, Payments, Settings, etc.)
-- [ ] **T007**: Login as **Sales Rep** → Only see assigned clients/leads, no Settings tab
-- [ ] **T008**: Login as **Coach** → Only see assigned clients and coach schedule
-- [ ] **T009**: Login as **Member (portal)** → Only see own profile, attendance, subscription status
+- [ ✅] **T006**: Login as **CRM Admin** → See all navigation tabs (Dashboard, Clients, Leads, Payments, Settings, etc.)
+- [ ✅] **T007**: Login as **Sales Rep** → Only see assigned clients/leads, no Settings tab
+- [✅ ] **T008**: Login as **Coach** → Only see assigned clients and coach schedule
+- [ ✅] **T009**: Login as **Member (portal)** → Only see own profile, attendance, subscription status
 
 ### 1.3 Session & Security
-- [ ] **T010**: Refresh the page after login → Stay logged in (session persists)
-- [ ] **T011**: Open a new tab to the same URL → Auto-logged in (multi-tab support)
-- [ ] **T012**: Click Logout → Redirected to login page
-- [ ] **T013**: After logout, press browser Back button → Should NOT return to dashboard (session cleared)
-- [ ] **T014**: Try accessing `/settings` URL directly without login → Redirected to login
-- [ ] **T015**: Password change flow works for `mustChangePassword` accounts
+- [✅ ] **T010**: Refresh the page after login → Stay logged in (session persists)
+- [✅ ] **T011**: Open a new tab to the same URL → Auto-logged in (multi-tab support)
+- [✅ ] **T012**: Click Logout → Redirected to login page
+- [✅ ] **T013**: After logout, press browser Back button → Should NOT return to dashboard (session cleared)
+- [✅ ] **T014**: Try accessing `/settings` URL directly without login → Redirected to login
+- [yes but the password reset is not working properly the only way is me loggin in with my god mode account and force reseting the password  ] **T015**: Password change flow works for `mustChangePassword` accounts
 
 ---
 
