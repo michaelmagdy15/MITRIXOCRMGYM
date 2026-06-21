@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Client } from '../types';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc, addDoc, getDocs, writeBatch } from 'firebase/firestore';
@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar, Clock, MapPin, Users as UsersIcon, CheckCircle2, AlertTriangle, Sparkles } from 'lucide-react';
-import { format, addDays, parseISO } from 'date-fns';
+import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-fns';
 
 interface GymClass {
   id: string;
@@ -25,12 +25,17 @@ export default function MemberClasses({ client }: { client: Client | null }) {
   const [classes, setClasses] = useState<GymClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
+  const dateScrollRef = useRef<HTMLDivElement>(null);
+
+  // Generate date range: 7 days before and 14 days after today
+  const dateRange = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i - 7));
 
   // Seed default classes/events if the database is empty
   const seedDemoClasses = async () => {
     const ref = collection(db, 'classes');
     const snap = await getDocs(ref);
-    if (!snap.empty) return; // Already seeded or has custom data
+    if (!snap.empty) return;
 
     console.log("Seeding group classes and events...");
     const batch = writeBatch(db);
@@ -95,7 +100,6 @@ export default function MemberClasses({ client }: { client: Client | null }) {
       return;
     }
 
-    // Run seed checking
     seedDemoClasses().then(() => {
       const q = collection(db, 'classes');
       const unsub = onSnapshot(q, (snapshot) => {
@@ -103,7 +107,6 @@ export default function MemberClasses({ client }: { client: Client | null }) {
           id: doc.id,
           ...doc.data()
         } as GymClass));
-        // Sort by date then time
         list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
         setClasses(list);
         setLoading(false);
@@ -115,6 +118,17 @@ export default function MemberClasses({ client }: { client: Client | null }) {
     });
   }, [client?.id, client?.branch]);
 
+  // Scroll to today on mount
+  useEffect(() => {
+    const el = dateScrollRef.current;
+    if (el) {
+      const todayBtn = el.querySelector('[data-today="true"]');
+      if (todayBtn) {
+        todayBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    }
+  }, []);
+
   const handleToggleBooking = async (gymClass: GymClass) => {
     if (!client || !client.id) return;
     setActionClassId(gymClass.id);
@@ -124,10 +138,8 @@ export default function MemberClasses({ client }: { client: Client | null }) {
       let updatedAttendees = [...gymClass.attendees];
 
       if (isBooked) {
-        // Leave class
         updatedAttendees = updatedAttendees.filter(id => id !== client.id);
       } else {
-        // Join class
         if (gymClass.attendees.length >= gymClass.capacity) {
           alert("This class is fully booked!");
           return;
@@ -138,7 +150,6 @@ export default function MemberClasses({ client }: { client: Client | null }) {
       await updateDoc(doc(db, 'classes', gymClass.id), {
         attendees: updatedAttendees
       });
-
     } catch (err) {
       console.error("Failed to update booking status:", err);
       alert("Failed to update booking. Please try again.");
@@ -146,6 +157,20 @@ export default function MemberClasses({ client }: { client: Client | null }) {
       setActionClassId(null);
     }
   };
+
+  // Filter classes for selected date
+  const filteredClasses = classes.filter(c => {
+    try {
+      return isSameDay(parseISO(c.date), selectedDate);
+    } catch { return false; }
+  });
+
+  // Count classes per date for dot indicators
+  const classCountByDate = new Map<string, number>();
+  classes.forEach(c => {
+    const key = c.date;
+    classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);
+  });
 
   if (loading) {
     return (
@@ -155,32 +180,83 @@ export default function MemberClasses({ client }: { client: Client | null }) {
     );
   }
 
-  const formatClassDate = (dateStr: string) => {
-    try {
-      return format(parseISO(dateStr), 'EEEE, dd MMM');
-    } catch {
-      return dateStr;
-    }
-  };
-
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div>
         <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-primary" /> Gym Classes & Events
+          <Calendar className="h-5 w-5 text-primary" /> Classes & Events
         </h2>
-        <p className="text-xs text-muted-foreground mt-0.5">Explore group boxing sessions, masterclasses, and club events.</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Swipe to browse upcoming sessions and events.</p>
       </div>
 
-      <div className="space-y-4">
-        {classes.length === 0 ? (
+      {/* ─── BeFit-Style Horizontal Date Ribbon ─── */}
+      <div className="relative">
+        <div
+          ref={dateScrollRef}
+          className="flex gap-1 overflow-x-auto no-scrollbar py-1 px-0.5"
+        >
+          {dateRange.map((date, idx) => {
+            const dateKey = format(date, 'yyyy-MM-dd');
+            const isSelected = isSameDay(date, selectedDate);
+            const today = isToday(date);
+            const hasClasses = (classCountByDate.get(dateKey) || 0) > 0;
+
+            return (
+              <button
+                key={idx}
+                data-today={today ? 'true' : undefined}
+                onClick={() => setSelectedDate(startOfDay(date))}
+                className={`flex flex-col items-center min-w-[48px] py-2 px-1 rounded-xl transition-all duration-200 shrink-0 ${
+                  isSelected
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105'
+                    : today
+                    ? 'bg-primary/10 text-primary border border-primary/20'
+                    : 'text-muted-foreground hover:bg-muted/50'
+                }`}
+              >
+                <span className="text-[9px] font-bold uppercase tracking-wider">
+                  {format(date, 'EEE')}
+                </span>
+                <span className="text-lg font-bold leading-none mt-0.5">
+                  {format(date, 'd')}
+                </span>
+                <span className="text-[8px] font-medium mt-0.5 uppercase">
+                  {format(date, 'MMM')}
+                </span>
+                {/* Activity dot */}
+                {hasClasses && (
+                  <div className={`h-1 w-1 rounded-full mt-1 ${
+                    isSelected ? 'bg-primary-foreground' : 'bg-primary'
+                  }`} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ─── Selected Date Header ─── */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-bold">
+          {isToday(selectedDate) ? 'Today' : format(selectedDate, 'EEEE, dd MMM')}
+          <span className="text-muted-foreground font-normal ml-2">
+            {filteredClasses.length} {filteredClasses.length === 1 ? 'session' : 'sessions'}
+          </span>
+        </p>
+      </div>
+
+      {/* ─── Class Cards ─── */}
+      <div className="space-y-3">
+        {filteredClasses.length === 0 ? (
           <Card className="border-dashed bg-muted/20">
-            <CardContent className="py-12 text-center text-muted-foreground text-xs italic">
-              No upcoming classes or events scheduled. Please check back later.
+            <CardContent className="py-10 text-center text-muted-foreground text-xs italic">
+              <Calendar className="h-8 w-8 mx-auto opacity-20 mb-2" />
+              No sessions scheduled for {isToday(selectedDate) ? 'today' : format(selectedDate, 'dd MMM')}.
+              <br />Try selecting a different date above.
             </CardContent>
           </Card>
         ) : (
-          classes.map(gymClass => {
+          filteredClasses.map(gymClass => {
             const isBooked = client ? gymClass.attendees.includes(client.id) : false;
             const isFull = gymClass.attendees.length >= gymClass.capacity;
             const spotsLeft = Math.max(0, gymClass.capacity - gymClass.attendees.length);
@@ -203,8 +279,10 @@ export default function MemberClasses({ client }: { client: Client | null }) {
                     </div>
 
                     <div className="text-right flex flex-col items-end">
-                      <span className="text-xs font-bold font-mono">{formatClassDate(gymClass.date)}</span>
-                      <span className="text-[10px] text-muted-foreground font-mono mt-0.5">{gymClass.time}</span>
+                      <div className="flex items-center gap-1 text-xs font-mono font-bold">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        {gymClass.time}
+                      </div>
                     </div>
                   </div>
 
