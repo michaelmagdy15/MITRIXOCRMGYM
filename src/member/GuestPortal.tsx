@@ -67,7 +67,10 @@ interface GuestPortalProps {
 
 export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, client = null }: GuestPortalProps) {
   const { packages, branding, branches, coaches } = useAppContext();
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
+  // Detect if user is logged in (either passed as prop or via auth context)
+  const isLoggedIn = !!(client || currentUser);
+  const displayName = client?.name || currentUser?.name || '';
   const { addToCart } = useCart();
   const [showPreloader, setShowPreloader] = useState(true);
   const [activeTab, setActiveTab] = useState<'book' | 'locations' | 'schedule' | 'announcements'>('book');
@@ -96,31 +99,24 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
     return () => clearInterval(interval);
   }, [activeTab]);
 
-  // Filter packages based on the user's requirements
-  const kidsPackages = packages.filter(p => p.name.toLowerCase().includes('kid') || p.name.toLowerCase().includes('junior'));
-  
-  // Example for adult packages 10, 20, 30
-  const adultPackages = packages.filter(p => 
-    !p.name.toLowerCase().includes('kid') && 
-    !p.name.toLowerCase().includes('junior') &&
-    (p.sessions === 10 || p.sessions === 20 || p.sessions === 30)
-  ).sort((a, b) => a.sessions - b.sessions);
-
-  // Fallback packages if db is empty
+  // ─── Show ALL packages from the database, grouped by category ───
   const primaryBranch = branches[0] || 'Main Branch';
-  const mockKidsPackages = [
-    { id: 'mock-k1', name: `Kids Kickboxing - ${primaryBranch}`, sessions: 12, expiryDays: 45, price: 1500, type: 'Kids' },
-    { id: 'mock-k2', name: `Kids Boxing - ${primaryBranch}`, sessions: 8, expiryDays: 30, price: 1100, type: 'Kids' }
-  ];
 
-  const mockAdultPackages = [
-    { id: 'mock-a1', name: `${branding.companyName} Adult Package 10`, sessions: 10, expiryDays: 30, price: 1800, type: 'Adults' },
-    { id: 'mock-a2', name: `${branding.companyName} Adult Package 20`, sessions: 20, expiryDays: 60, price: 3200, type: 'Adults' },
-    { id: 'mock-a3', name: `${branding.companyName} Adult Package 30`, sessions: 30, expiryDays: 90, price: 4500, type: 'Adults' }
-  ];
+  // Kids/Juniors = name contains 'kid' or 'junior'
+  const kidsPackages = packages.filter(p => {
+    const n = p.name.toLowerCase();
+    return n.includes('kid') || n.includes('junior');
+  }).sort((a, b) => a.sessions - b.sessions);
 
-  const displayKids = kidsPackages.length > 0 ? kidsPackages : mockKidsPackages;
-  const displayAdults = adultPackages.length > 0 ? adultPackages : mockAdultPackages;
+  // Adults = everything else
+  const adultPackages = packages.filter(p => {
+    const n = p.name.toLowerCase();
+    return !n.includes('kid') && !n.includes('junior');
+  }).sort((a, b) => a.sessions - b.sessions);
+
+  // Use real data only — no mock fallbacks
+  const displayKids = kidsPackages;
+  const displayAdults = adultPackages;
 
   const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>) => {
     if (ref.current) {
@@ -175,9 +171,9 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         </div>
         
         <div className="flex items-center gap-2">
-          {client && (
-            <div className="text-[11px] font-black text-muted-foreground mr-1 truncate max-w-[120px] bg-muted/40 px-2.5 py-1 rounded-full border border-border">
-              👤 {client.name.split(' ')[0]}
+          {isLoggedIn && displayName && (
+            <div className="text-[11px] font-black text-muted-foreground mr-1 truncate max-w-[120px] bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 text-primary">
+              👤 {displayName.split(' ')[0]}
             </div>
           )}
           <CartDrawer />
@@ -254,6 +250,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             </div>
 
             {/* 2. KIDS PACKAGES SECTION (MAXIM COMPOUND) */}
+            {displayKids.length > 0 && (
             <div ref={kidsSectionRef} className="px-4 pt-2">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-black tracking-tight uppercase">Kids Packages</h2>
@@ -301,6 +298,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 ))}
               </div>
             </div>
+            )}
 
             {/* 3. IMPACT SISTER COMPANY */}
             <div className="px-4 my-6">
@@ -325,7 +323,8 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               </div>
             </div>
 
-            {/* 4. ADULT PACKAGES (10, 20, 30 SESSIONS) */}
+            {/* 4. ADULT PACKAGES */}
+            {displayAdults.length > 0 && (
             <div ref={adultSectionRef} className="px-4 pt-2">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-black tracking-tight uppercase">Adult Packages</h2>
@@ -363,6 +362,16 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 ))}
               </div>
             </div>
+            )}
+
+            {/* EMPTY STATE - No packages at all */}
+            {packages.length === 0 && (
+              <div className="px-4 py-12 text-center">
+                <Dumbbell className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                <h3 className="text-sm font-bold text-muted-foreground">Packages Coming Soon</h3>
+                <p className="text-xs text-muted-foreground/60 mt-1">Our membership packages are being set up. Check back soon!</p>
+              </div>
+            )}
 
           </div>
         )}
@@ -479,14 +488,15 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
       {/* ── BOTTOM ACTION BAR ── */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent z-40 flex flex-col items-center gap-2">
-        {client ? (
+        {isLoggedIn ? (
           <div className="flex gap-2 w-[90vw] max-w-sm">
             <Button 
               variant="outline" 
-              className="flex-1 rounded-full shadow-xl bg-background/90 backdrop-blur-md border-border/50 text-xs font-bold h-12"
+              className="flex-1 rounded-full shadow-xl bg-background/90 backdrop-blur-md border-primary/30 text-xs font-bold h-12"
               onClick={onSwitchToCRM}
             >
-              Portal Panel
+              <Dumbbell className="h-4 w-4 mr-2" />
+              My Portal
             </Button>
             <Button 
               variant="destructive" 
