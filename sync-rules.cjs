@@ -9,8 +9,8 @@ const FILENAME = 'firestore.rules';
 const projectDefinitions = [
   {
     name: 'Strike CRM',
-    absolute: 'C:/Users/Mi5a/strike-boxing-crm2',
-    relative: '../strike-boxing-crm2'
+    absolute: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform',
+    relative: '../MitrixoGYMCRMPlatform'
   },
   {
     name: 'ATPL Vector',
