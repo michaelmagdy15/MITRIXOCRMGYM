@@ -372,8 +372,13 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read: if (settingId == 'branding') || (settingId == 'features') || canmitrixogymcrmAccessSettings();
+      allow read: if (settingId == 'branding') || (settingId == 'features') || (settingId == 'storefront') || canmitrixogymcrmAccessSettings();
       allow write: if canmitrixogymcrmAccessSettings() && (settingId != 'branding' || isValidBranding(request.resource.data));
+    }
+
+    match /announcements/{annId} {
+      allow read: if true;
+      allow write: if ismitrixogymcrmAdmin();
     }
 
     match /auditLogs/{logId} {
@@ -410,17 +415,17 @@ service cloud.firestore {
     }
 
     match /packages/{packageId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if ismitrixogymcrmAdmin();
     }
 
     match /coaches/{coachId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if ismitrixogymcrmAdmin();
     }
 
     match /coachSchedules/{coachId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isOwner(coachId) || ismitrixogymcrmAdmin();
     }
 

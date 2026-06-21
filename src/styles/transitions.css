@@ -1,0 +1,115 @@
+/* ── Storefront & Mobile App Transitions ── */
+
+/* Tab content slide-in */
+@keyframes tabSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Fade-in from bottom (for cards, list items) */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Page slide left (store → portal) */
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Page slide right (portal → store) */
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Hero crossfade */
+@keyframes crossfadeIn {
+  from { opacity: 0; transform: scale(1.05); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Bottom sheet slide up */
+@keyframes sheetUp {
+  from { opacity: 0; transform: translateY(100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Scale pop (for badges, buttons on tap) */
+@keyframes scalePop {
+  0%   { transform: scale(0.85); opacity: 0; }
+  60%  { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Subtle pulse (for CTAs) */
+@keyframes subtlePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--primary-rgb, 59, 130, 246), 0.3); }
+  50%      { box-shadow: 0 0 0 8px rgba(var(--primary-rgb, 59, 130, 246), 0); }
+}
+
+/* ── Utility Classes ── */
+
+.sf-tab-enter {
+  animation: tabSlideIn 0.3s ease-out;
+}
+
+.sf-card-stagger {
+  animation: fadeInUp 0.4s ease-out backwards;
+}
+.sf-card-stagger:nth-child(1)  { animation-delay: 0.03s; }
+.sf-card-stagger:nth-child(2)  { animation-delay: 0.06s; }
+.sf-card-stagger:nth-child(3)  { animation-delay: 0.09s; }
+.sf-card-stagger:nth-child(4)  { animation-delay: 0.12s; }
+.sf-card-stagger:nth-child(5)  { animation-delay: 0.15s; }
+.sf-card-stagger:nth-child(6)  { animation-delay: 0.18s; }
+.sf-card-stagger:nth-child(7)  { animation-delay: 0.21s; }
+.sf-card-stagger:nth-child(8)  { animation-delay: 0.24s; }
+.sf-card-stagger:nth-child(9)  { animation-delay: 0.27s; }
+.sf-card-stagger:nth-child(10) { animation-delay: 0.30s; }
+
+.sf-hero-enter {
+  animation: crossfadeIn 0.6s ease-in-out;
+}
+
+.sf-page-slide-left {
+  animation: slideLeft 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sf-page-slide-right {
+  animation: slideRight 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sf-sheet-enter {
+  animation: sheetUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sf-scale-pop {
+  animation: scalePop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.sf-skeleton {
+  background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--muted-foreground) / 0.08) 50%, hsl(var(--muted)) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+.sf-cta-pulse {
+  animation: subtlePulse 2s infinite;
+}
+
+/* Smooth transitions for interactive elements */
+.sf-interactive {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.sf-interactive:active {
+  transform: scale(0.97);
+}

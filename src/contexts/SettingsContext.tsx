@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
-import { BrandingSettings, SalesTarget, Branch, FeatureFlags } from '../types';
+import { BrandingSettings, SalesTarget, Branch, FeatureFlags, StorefrontConfig } from '../types';
 import { db } from '../firebase';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { addAuditLog } from '../services/auditService';
@@ -18,6 +18,8 @@ interface SettingsContextType {
   updateCommissionRates: (rates: { ptRate: number; groupRate: number }) => Promise<void>;
   features: FeatureFlags;
   updateFeatures: (updates: Partial<FeatureFlags>) => Promise<void>;
+  storefrontConfig: StorefrontConfig;
+  updateStorefrontConfig: (config: Partial<StorefrontConfig>) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -46,6 +48,34 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     operations: true,
     mobileApp: false
   });
+
+  // Storefront CMS config
+  const DEFAULT_STOREFRONT: StorefrontConfig = {
+    heroSlides: [
+      { id: 'default-1', title: 'Elite Fitness & Training', subtitle: 'Timings available now', badgeText: 'Featured', badgeColor: 'white', imageUrl: '', ctaText: 'Book Now!', enabled: true, order: 0 },
+      { id: 'default-2', title: 'Kids & Juniors Programs', subtitle: 'Specialized youth fitness and coaching', badgeText: 'Popular', badgeColor: 'primary', imageUrl: '', ctaText: 'Book Now!', enabled: true, order: 1 },
+      { id: 'default-3', title: 'Personal Coaching', subtitle: 'Certified personal trainers', badgeText: 'New', badgeColor: 'red', imageUrl: '', ctaText: 'Book Now!', enabled: true, order: 2 },
+    ],
+    sections: [
+      { id: 'sec-kids', type: 'packages-kids', title: 'Kids Packages', enabled: true, order: 0 },
+      { id: 'sec-banner', type: 'banner', title: 'IMPACT', subtitle: 'Our premium sister company', imageUrl: '', enabled: true, order: 1 },
+      { id: 'sec-adults', type: 'packages-adults', title: 'Adult Packages', enabled: true, order: 2 },
+    ],
+    tabs: { book: true, locations: true, schedule: true, announcements: true },
+    schedule: [],
+    offers: [],
+    packageDisplay: {
+      showPrices: true,
+      showSessionCount: true,
+      showExpiryDays: true,
+      allowAddToCart: true,
+      groupBy: 'category',
+      categoryLabels: { kids: 'Kids Packages', adults: 'Adult Packages' },
+    },
+    ctaText: 'Member / Staff Login',
+    ctaTextMember: 'My Portal',
+  };
+  const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>(DEFAULT_STOREFRONT);
 
   // Branding — load or subscribe to branding settings
   useEffect(() => {
@@ -88,6 +118,26 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       (error) => console.warn('Firestore Error (features):', error.message)
     );
     return () => { unsubFeatures(); };
+  }, [role, isAuthenticated]);
+
+  // Storefront config — load for everyone, real-time for admins
+  useEffect(() => {
+    if (!isAuthenticated || role === 'client' || role === 'coach') {
+      getDoc(doc(db, 'settings', 'storefront'))
+        .then((snapshot) => {
+          if (snapshot.exists()) setStorefrontConfig(prev => ({ ...prev, ...snapshot.data() as Partial<StorefrontConfig> }));
+        })
+        .catch((err) => console.warn('Could not load storefront config:', err.code || err.message));
+      return;
+    }
+    const unsubStorefront = onSnapshot(
+      doc(db, 'settings', 'storefront'),
+      (snapshot) => {
+        if (snapshot.exists()) setStorefrontConfig(prev => ({ ...prev, ...snapshot.data() as Partial<StorefrontConfig> }));
+      },
+      (error) => console.warn('Firestore Error (storefront):', error.code || error.message)
+    );
+    return () => { unsubStorefront(); };
   }, [role, isAuthenticated]);
 
   // Auth-required settings — only subscribe when a privileged user is logged in to avoid permission errors
@@ -154,6 +204,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     await addAuditLog('UPDATE', 'SYSTEM', 'features', `Updated system feature flags`);
   }, []);
 
+  const updateStorefrontConfig = useCallback(async (updates: Partial<StorefrontConfig>) => {
+    await setDoc(doc(db, 'settings', 'storefront'), updates, { merge: true });
+    setStorefrontConfig(prev => ({ ...prev, ...updates }));
+    await addAuditLog('UPDATE', 'SYSTEM', 'storefront', `Updated storefront configuration`);
+  }, []);
+
   const value = useMemo(() => ({
     branding,
     updateBranding,
@@ -168,7 +224,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     updateCommissionRates,
     features,
     updateFeatures,
-  }), [branding, searchQuery, salesTarget, branches, commissionRates, features, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates, updateFeatures]);
+    storefrontConfig,
+    updateStorefrontConfig,
+  }), [branding, searchQuery, salesTarget, branches, commissionRates, features, storefrontConfig, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates, updateFeatures, updateStorefrontConfig]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 };

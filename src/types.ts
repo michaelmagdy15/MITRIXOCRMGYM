@@ -368,5 +368,70 @@ export interface Tenant {
   createdAt: string;
 }
 
+// ── Storefront CMS Types ──
 
+export interface HeroSlide {
+  id: string;
+  title: string;
+  subtitle: string;
+  badgeText: string;
+  badgeColor: 'white' | 'primary' | 'red' | 'green' | 'gold';
+  imageUrl: string;
+  ctaText: string;
+  enabled: boolean;
+  order: number;
+}
 
+export interface StorefrontSection {
+  id: string;
+  type: 'packages-kids' | 'packages-adults' | 'packages-all' | 'banner';
+  title: string;
+  subtitle?: string;
+  imageUrl?: string;
+  enabled: boolean;
+  order: number;
+}
+
+export interface ScheduleEntry {
+  id: string;
+  className: string;
+  coach: string;
+  branch: string;
+  days: string;
+  time: string;
+  enabled: boolean;
+}
+
+export interface OfferEntry {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl?: string;
+  badgeText?: string;
+  validUntil?: string;
+  enabled: boolean;
+  order: number;
+}
+
+export interface StorefrontConfig {
+  heroSlides: HeroSlide[];
+  sections: StorefrontSection[];
+  tabs: {
+    book: boolean;
+    locations: boolean;
+    schedule: boolean;
+    announcements: boolean;
+  };
+  schedule: ScheduleEntry[];
+  offers: OfferEntry[];
+  packageDisplay: {
+    showPrices: boolean;
+    showSessionCount: boolean;
+    showExpiryDays: boolean;
+    allowAddToCart: boolean;
+    groupBy: 'category' | 'branch' | 'none';
+    categoryLabels: { kids: string; adults: string };
+  };
+  ctaText: string;
+  ctaTextMember: string;
+}

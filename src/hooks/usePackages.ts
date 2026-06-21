@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Package } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
@@ -14,16 +14,33 @@ export const usePackages = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Guests (not logged in) — one-time public read of packages
     if (!currentUser) {
-      setPackages([]);
-      setLoading(false);
+      getDocs(collection(db, 'packages'))
+        .then((snapshot) => {
+          setPackages(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Package)));
+        })
+        .catch((err) => {
+          console.warn('Could not load packages for guest:', err.code || err.message);
+        })
+        .finally(() => setLoading(false));
       return;
     }
-    // Members/coaches can't list all packages — skip the global listener
+
+    // Members/coaches — one-time read (no real-time listener to save reads)
     if (effectiveRole === 'client' || effectiveRole === 'coach') {
-      setLoading(false);
+      getDocs(collection(db, 'packages'))
+        .then((snapshot) => {
+          setPackages(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Package)));
+        })
+        .catch((err) => {
+          console.warn('Could not load packages for member:', err.code || err.message);
+        })
+        .finally(() => setLoading(false));
       return;
     }
+
+    // Admins/managers — real-time listener
     const unsub = onSnapshot(collection(db, 'packages'), (snapshot) => {
       setPackages(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Package)));
       setLoading(false);

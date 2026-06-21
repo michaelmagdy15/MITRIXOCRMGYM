@@ -5,8 +5,9 @@ import CartDrawer from './CartDrawer';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../contexts/AuthContext';
-import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight } from 'lucide-react';
-import { Client } from '../types';
+import { useSettings } from '../contexts/SettingsContext';
+import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift } from 'lucide-react';
+import { Client, Package } from '../types';
 
 export function getPackageImage(packageName: string, sessions: number): string {
   const lowerName = packageName.toLowerCase();
@@ -68,12 +69,14 @@ interface GuestPortalProps {
 export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, client = null }: GuestPortalProps) {
   const { packages, branding, branches, coaches } = useAppContext();
   const { currentUser, logout } = useAuth();
+  const { storefrontConfig } = useSettings();
   // Detect if user is logged in (either passed as prop or via auth context)
   const isLoggedIn = !!(client || currentUser);
   const displayName = client?.name || currentUser?.name || '';
   const { addToCart } = useCart();
   const [showPreloader, setShowPreloader] = useState(true);
   const [activeTab, setActiveTab] = useState<'book' | 'locations' | 'schedule' | 'announcements'>('book');
+  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   
   // Slide index state for slideshow
   const [slideIndex, setSlideIndex] = useState(0);
@@ -82,13 +85,25 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const kidsSectionRef = useRef<HTMLDivElement>(null);
   const adultSectionRef = useRef<HTMLDivElement>(null);
 
-  // Preloader timer
+  // Preloader: wait for logo image to load (cached for subsequent renders)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowPreloader(false);
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, []);
+    let cancelled = false;
+    const minDelay = new Promise(r => setTimeout(r, 2000));
+    
+    const logoLoad = branding.logoUrl
+      ? new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve();
+          img.onerror = () => resolve(); // Don't block on error
+          img.src = branding.logoUrl;
+        })
+      : Promise.resolve();
+
+    Promise.all([minDelay, logoLoad]).then(() => {
+      if (!cancelled) setShowPreloader(false);
+    });
+    return () => { cancelled = true; };
+  }, [branding.logoUrl]);
 
   // Slideshow auto-advance
   useEffect(() => {
@@ -117,6 +132,18 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   // Use real data only — no mock fallbacks
   const displayKids = kidsPackages;
   const displayAdults = adultPackages;
+
+  // Corporate packages (type 'Group' or name contains 'corporate')
+  const corporatePackages = packages.filter(p => {
+    const n = p.name.toLowerCase();
+    return n.includes('corporate') || n.includes('company') || p.type === 'Group';
+  }).sort((a, b) => a.sessions - b.sessions);
+
+  // Active offers from storefront config
+  const activeOffers = storefrontConfig.offers.filter(o => o.enabled).sort((a, b) => a.order - b.order);
+
+  // Price per session calculator
+  const pricePerSession = (pkg: Package) => Math.round(pkg.price / pkg.sessions);
 
   const scrollToSection = (ref: React.RefObject<HTMLDivElement | null>) => {
     if (ref.current) {
@@ -191,7 +218,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-xs font-bold transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-xs font-bold transition-all sf-interactive ${
               activeTab === tab.id 
                 ? 'bg-primary text-primary-foreground shadow-md' 
                 : 'bg-muted/80 text-muted-foreground hover:bg-muted'
@@ -208,7 +235,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         
         {/* ── TABS Content ── */}
         {activeTab === 'book' && (
-          <div className="space-y-8 py-6">
+          <div className="space-y-8 py-6 sf-tab-enter">
             
             {/* 1. SLIDESHOW HERO */}
             <div className="px-4">
@@ -272,7 +299,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
               <div className="grid grid-cols-1 gap-3">
                 {displayKids.map(pkg => (
-                  <div key={pkg.id} className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm hover:border-primary/30 transition-all">
+                  <div key={pkg.id} onClick={() => setSelectedPackage(pkg)} className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger">
                     <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
                       <img 
                         src={getPackageImage(pkg.name, pkg.sessions)} 
@@ -287,10 +314,18 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                         <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} EGP</span>
                         <Button 
                           size="sm" 
-                          onClick={() => addToCart(pkg as any)} 
+                          variant="ghost"
+                          onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                          className="h-8 px-3 text-xs font-bold rounded-xl text-muted-foreground"
+                        >
+                          <Info className="h-3 w-3 mr-1" /> Details
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          onClick={(e) => { e.stopPropagation(); addToCart(pkg as any); }} 
                           className="h-8 px-4 text-xs font-bold rounded-xl"
                         >
-                          Add to Basket
+                          <ShoppingCart className="h-3 w-3 mr-1" /> Add to Cart
                         </Button>
                       </div>
                     </div>
@@ -333,7 +368,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
               <div className="grid grid-cols-1 gap-3">
                 {displayAdults.map(pkg => (
-                  <div key={pkg.id} className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm hover:border-primary/30 transition-all items-center">
+                  <div key={pkg.id} onClick={() => setSelectedPackage(pkg)} className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm hover:border-primary/30 transition-all items-center cursor-pointer active:scale-[0.98] sf-card-stagger">
                     <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
                       <img 
                         src={getPackageImage(pkg.name, pkg.sessions)} 
@@ -351,15 +386,117 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                         <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} EGP</span>
                         <Button 
                           size="sm" 
-                          onClick={() => addToCart(pkg as any)} 
+                          variant="ghost"
+                          onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                          className="h-8 px-3 text-xs font-bold rounded-xl text-muted-foreground"
+                        >
+                          <Info className="h-3 w-3 mr-1" /> Details
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          onClick={(e) => { e.stopPropagation(); addToCart(pkg as any); }} 
                           className="h-8 px-4 text-xs font-bold rounded-xl"
                         >
-                          Add to Basket
+                          <ShoppingCart className="h-3 w-3 mr-1" /> Add to Cart
                         </Button>
                       </div>
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+            )}
+
+            {/* 5. CORPORATE / GROUP PACKAGES */}
+            {corporatePackages.length > 0 && (
+            <div className="px-4 pt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-black tracking-tight uppercase flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-primary" /> Corporate
+                </h2>
+                <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">GROUP</Badge>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {corporatePackages.map(pkg => (
+                  <div key={pkg.id} onClick={() => setSelectedPackage(pkg)} className="bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-2xl p-4 flex gap-4 shadow-sm hover:border-primary/40 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger">
+                    <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <Building2 className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1 flex flex-col justify-center min-w-0">
+                      <h3 className="font-extrabold text-xs text-foreground uppercase truncate">{pkg.name}</h3>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days</p>
+                      <div className="mt-2 flex items-center justify-between">
+                        <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} EGP</span>
+                        <Button size="sm" onClick={(e) => { e.stopPropagation(); addToCart(pkg as any); }} className="h-7 px-3 text-[10px] font-bold rounded-xl">
+                          <ShoppingCart className="h-3 w-3 mr-1" /> Add to Cart
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            )}
+
+            {/* 6. OFFERS & DISCOUNTS SECTION */}
+            {activeOffers.length > 0 && (
+            <div className="px-4 pt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-black tracking-tight uppercase flex items-center gap-2">
+                  <Gift className="h-5 w-5 text-amber-500" /> Offers & Discounts
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                {activeOffers.map(offer => (
+                  <div key={offer.id} className="relative overflow-hidden bg-gradient-to-br from-amber-500/10 via-transparent to-primary/5 border border-amber-500/20 rounded-2xl p-4 shadow-sm sf-card-stagger">
+                    {offer.badgeText && (
+                      <Badge className="absolute top-3 right-3 bg-amber-500 text-black text-[9px] font-black px-2">{offer.badgeText}</Badge>
+                    )}
+                    <div className="flex items-start gap-3">
+                      {offer.imageUrl ? (
+                        <div className="h-16 w-16 rounded-xl overflow-hidden shrink-0 border">
+                          <img src={offer.imageUrl} alt={offer.title} className="h-full w-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="h-14 w-14 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                          <Tag className="h-6 w-6 text-amber-500" />
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <h3 className="font-extrabold text-sm uppercase">{offer.title}</h3>
+                        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{offer.description}</p>
+                        {offer.validUntil && (
+                          <p className="text-[10px] text-amber-500 font-bold mt-2">Valid until {new Date(offer.validUntil).toLocaleDateString()}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            )}
+
+            {/* 7. MEMBER RENEW / UPGRADE SECTION (only for logged-in members) */}
+            {isLoggedIn && (
+            <div className="px-4 pt-4">
+              <div className="bg-gradient-to-r from-primary/10 to-transparent border border-primary/20 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Star className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm uppercase">Manage Membership</h3>
+                    <p className="text-[10px] text-muted-foreground">Renew, upgrade, or switch your plan</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="flex-1 h-10 text-xs font-bold rounded-xl gap-1" onClick={onSwitchToCRM}>
+                    <RefreshCcw className="h-3 w-3" /> Renew
+                  </Button>
+                  <Button size="sm" className="flex-1 h-10 text-xs font-bold rounded-xl gap-1" onClick={onSwitchToCRM}>
+                    <ArrowUpRight className="h-3 w-3" /> Upgrade
+                  </Button>
+                </div>
               </div>
             </div>
             )}
@@ -378,11 +515,11 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
         {/* ── LOCATIONS TAB ── */}
         {activeTab === 'locations' && (
-          <div className="p-4 space-y-4 animate-in fade-in duration-300">
+          <div className="p-4 space-y-4 sf-tab-enter">
             <h2 className="text-xl font-black uppercase tracking-tight mb-2">Our Locations</h2>
             
             {branches.map((branch, idx) => (
-              <div key={branch} className={`bg-card border rounded-2xl p-5 shadow-sm space-y-3 ${idx === 0 ? 'border-primary/20 bg-primary/5' : ''}`}>
+              <div key={branch} className={`bg-card border rounded-2xl p-5 shadow-sm space-y-3 sf-card-stagger ${idx === 0 ? 'border-primary/20 bg-primary/5' : ''}`}>
                 <div className="flex items-center justify-between">
                   <h3 className="font-extrabold text-sm uppercase">{branch} Branch</h3>
                   <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[9px]">Open</Badge>
@@ -408,7 +545,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
         {/* ── SCHEDULE TAB ── */}
         {activeTab === 'schedule' && (
-          <div className="p-4 space-y-4 animate-in fade-in duration-300">
+          <div className="p-4 space-y-4 sf-tab-enter">
             <h2 className="text-xl font-black uppercase tracking-tight mb-2">Class Schedule</h2>
             
             <div className="space-y-3">
@@ -428,7 +565,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   { time: "07:00 PM", name: "HIIT Sparring Session", coach: c2, branch: b2, days: "Sat / Mon / Thu" }
                 ];
               })().map((cls, idx) => (
-                <div key={idx} className="bg-card border rounded-2xl p-4 flex justify-between items-center shadow-sm">
+                <div key={idx} className="bg-card border rounded-2xl p-4 flex justify-between items-center shadow-sm sf-card-stagger">
                   <div className="space-y-1">
                     <Badge variant="outline" className="text-[9px] font-bold border-primary/20 text-primary uppercase">{cls.days}</Badge>
                     <h3 className="font-extrabold text-xs uppercase text-foreground">{cls.name}</h3>
@@ -446,7 +583,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
         {/* ── ANNOUNCEMENTS TAB ── */}
         {activeTab === 'announcements' && (
-          <div className="p-4 space-y-4 animate-in fade-in duration-300">
+          <div className="p-4 space-y-4 sf-tab-enter">
             <h2 className="text-xl font-black uppercase tracking-tight mb-2">Club News</h2>
             
             <div className="bg-card border rounded-2xl p-5 shadow-sm space-y-2">
@@ -486,13 +623,111 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
       </main>
 
+      {/* ── PACKAGE DETAIL DRAWER ── */}
+      {selectedPackage && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setSelectedPackage(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div 
+            className="relative w-full max-w-md bg-background rounded-t-3xl shadow-2xl border-t sf-tab-enter"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
+            </div>
+            
+            {/* Close button */}
+            <button 
+              className="absolute top-3 right-4 p-1.5 rounded-full bg-muted/80 hover:bg-muted"
+              onClick={() => setSelectedPackage(null)}
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            {/* Package Image */}
+            <div className="px-5 pt-2">
+              <div className="h-48 rounded-2xl overflow-hidden border bg-zinc-900">
+                <img 
+                  src={getPackageImage(selectedPackage.name, selectedPackage.sessions)} 
+                  alt={selectedPackage.name} 
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
+
+            {/* Package Info */}
+            <div className="px-5 pt-4 pb-2 space-y-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="outline" className="text-[8px] font-bold border-primary/20 text-primary uppercase">{selectedPackage.type || 'Package'}</Badge>
+                  {selectedPackage.branch !== 'ALL' && (
+                    <Badge variant="outline" className="text-[8px] font-bold border-zinc-700 text-zinc-400 uppercase">{selectedPackage.branch}</Badge>
+                  )}
+                </div>
+                <h2 className="text-xl font-black tracking-tight uppercase">{selectedPackage.name}</h2>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-muted/50 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase">Sessions</p>
+                  <p className="text-lg font-black text-foreground">{selectedPackage.sessions}</p>
+                </div>
+                <div className="bg-muted/50 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase">Validity</p>
+                  <p className="text-lg font-black text-foreground">{selectedPackage.expiryDays}<span className="text-xs"> days</span></p>
+                </div>
+                <div className="bg-muted/50 rounded-xl p-3 text-center">
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase">Per Session</p>
+                  <p className="text-lg font-black text-primary">{pricePerSession(selectedPackage)}<span className="text-[10px]"> EGP</span></p>
+                </div>
+              </div>
+
+              {/* Features List */}
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center shrink-0"><span className="text-green-500 text-[10px]">✓</span></div>
+                  {selectedPackage.sessions} training sessions included
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center shrink-0"><span className="text-green-500 text-[10px]">✓</span></div>
+                  Valid for {selectedPackage.expiryDays} days from activation
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center shrink-0"><span className="text-green-500 text-[10px]">✓</span></div>
+                  {selectedPackage.branch === 'ALL' ? 'Access to all branches' : `Available at ${selectedPackage.branch} branch`}
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center shrink-0"><span className="text-green-500 text-[10px]">✓</span></div>
+                  {selectedPackage.type === 'Private' ? 'Private 1-on-1 training' : 'Group class access'}
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="px-5 pb-8 pt-2 flex gap-2">
+              <div className="flex-1">
+                <p className="text-[10px] text-muted-foreground font-semibold mb-1">Total Price</p>
+                <p className="text-2xl font-black text-primary">{selectedPackage.price.toLocaleString()} <span className="text-sm">EGP</span></p>
+              </div>
+              <Button 
+                className="h-12 px-6 rounded-xl text-sm font-bold gap-2 sf-interactive"
+                onClick={() => { addToCart(selectedPackage as any); setSelectedPackage(null); }}
+              >
+                <ShoppingCart className="h-4 w-4" /> Add to Cart
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── BOTTOM ACTION BAR ── */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent z-40 flex flex-col items-center gap-2">
         {isLoggedIn ? (
           <div className="flex gap-2 w-[90vw] max-w-sm">
             <Button 
               variant="outline" 
-              className="flex-1 rounded-full shadow-xl bg-background/90 backdrop-blur-md border-primary/30 text-xs font-bold h-12"
+              className="flex-1 rounded-full shadow-xl bg-background/90 backdrop-blur-md border-primary/30 text-xs font-bold h-12 sf-interactive"
               onClick={onSwitchToCRM}
             >
               <Dumbbell className="h-4 w-4 mr-2" />
@@ -509,7 +744,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         ) : (
           <Button 
             variant="outline" 
-            className="w-[90vw] max-w-sm rounded-full shadow-xl bg-background/90 backdrop-blur-md border-border/50 text-xs font-bold h-12"
+            className="w-[90vw] max-w-sm rounded-full shadow-xl bg-background/90 backdrop-blur-md border-border/50 text-xs font-bold h-12 sf-interactive"
             onClick={onSwitchToCRM}
           >
             <LogIn className="h-4 w-4 mr-2" />

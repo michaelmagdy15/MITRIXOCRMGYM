@@ -9,7 +9,7 @@ import { collection as fbCollection, getDocs as fbGetDocs, addDoc, doc as fbDoc,
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Save, UserCircle2, Building2, Users, Package, AlertTriangle, ShieldAlert, Trash2, Dumbbell, Lock, Download, Upload, MessageSquare, Send, KeyRound, Eye, EyeOff, CheckCircle2, Megaphone, Coins, Activity } from 'lucide-react';
+import { Save, UserCircle2, Building2, Users, Package, AlertTriangle, ShieldAlert, Trash2, Dumbbell, Lock, Download, Upload, MessageSquare, Send, KeyRound, Eye, EyeOff, CheckCircle2, Megaphone, Coins, Activity, Smartphone } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import UsersManagement from './Users';
 import Packages from './Packages';
@@ -24,6 +24,7 @@ import type { BackupProgressCallback } from './services/backupService';
 import AdminPointsManager from './components/AdminPointsManager';
 import AdminActivityFeed from './components/AdminActivityFeed';
 import AdminGamificationManager from './components/AdminGamificationManager';
+import AdminStorefrontManager from './components/AdminStorefrontManager';
 
 export default function Settings() {
   const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches } = useAppContext();
@@ -501,6 +502,10 @@ export default function Settings() {
             <Trophy className="h-4 w-4" />
             Gamification
           </TabsTrigger>
+          <TabsTrigger value="storefront" className="flex items-center gap-2 whitespace-nowrap">
+            <Smartphone className="h-4 w-4" />
+            Storefront
+          </TabsTrigger>
 
 
           {canWipe && (
@@ -926,6 +931,11 @@ export default function Settings() {
         {/* ── Gamification Manager ── */}
         <TabsContent value="gamification" className="animate-in fade-in-50 duration-500">
           <AdminGamificationManager />
+        </TabsContent>
+
+        {/* ── Storefront Manager ── */}
+        <TabsContent value="storefront" className="animate-in fade-in-50 duration-500">
+          <AdminStorefrontManager />
         </TabsContent>
 
 
