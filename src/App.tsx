@@ -412,9 +412,12 @@ function AppContent() {
         <aside className={`hidden md:flex flex-col bg-card border-e border-border h-screen sticky top-0 z-40 sidebar-transition flex-shrink-0 ${isSidebarCollapsed ? 'w-16' : 'w-64'}`}>
           <div className="p-4 flex items-center justify-center border-b h-16 relative overflow-hidden flex-shrink-0">
             {/* Logo/Branding with transition */}
-            <div className={`flex items-center space-x-2 transition-all duration-300 absolute start-4 top-4 ${
-              isSidebarCollapsed ? 'opacity-0 ltr:-translate-x-4 rtl:translate-x-4 pointer-events-none' : 'opacity-100 translate-x-0'
-            }`}>
+            <div 
+              className={`flex items-center space-x-2 transition-all duration-300 absolute start-4 top-4 cursor-pointer hover:opacity-85 transition-opacity ${
+                isSidebarCollapsed ? 'opacity-0 ltr:-translate-x-4 rtl:translate-x-4 pointer-events-none' : 'opacity-100 translate-x-0'
+              }`}
+              onClick={() => setActiveTab('dashboard')}
+            >
               {branding.logoUrl ? (
                 <img 
                   src={branding.logoUrl} 
@@ -431,9 +434,12 @@ function AppContent() {
             
             {/* Collapsed Logo */}
             {branding.logoUrl && (
-              <div className={`transition-all duration-300 absolute left-1/2 -translate-x-1/2 top-4 ${
-                isSidebarCollapsed ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
-              }`}>
+              <div 
+                className={`transition-all duration-300 absolute left-1/2 -translate-x-1/2 top-4 cursor-pointer hover:opacity-85 transition-opacity ${
+                  isSidebarCollapsed ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
+                }`}
+                onClick={() => setActiveTab('dashboard')}
+              >
                 <img 
                   src={branding.logoUrl} 
                   alt="Logo" 
@@ -543,7 +549,13 @@ function AppContent() {
         {/* Mobile Left Drawer Sidebar Panel */}
         <aside className={`fixed inset-y-0 start-0 w-72 bg-card border-e border-border z-50 md:hidden flex flex-col p-4 shadow-2xl transition-transform duration-300 transform ${isMobileSidebarOpen ? 'translate-x-0' : 'ltr:-translate-x-full rtl:translate-x-full'}`}>
           <div className="flex items-center justify-between mb-6 pb-4 border-b">
-            <div className="flex items-center space-x-2">
+            <div 
+              className="flex items-center space-x-2 cursor-pointer hover:opacity-85 transition-opacity"
+              onClick={() => {
+                setActiveTab('dashboard');
+                setIsMobileSidebarOpen(false);
+              }}
+            >
               {branding.logoUrl ? (
                 <img 
                   src={branding.logoUrl} 
@@ -658,7 +670,10 @@ function AppContent() {
               </Button>
               
               {/* Show branding on mobile header only */}
-              <div className="md:hidden flex items-center space-x-2">
+              <div 
+                className="md:hidden flex items-center space-x-2 cursor-pointer hover:opacity-85 transition-opacity"
+                onClick={() => setActiveTab('dashboard')}
+              >
                 {branding.logoUrl ? (
                   <img 
                     src={branding.logoUrl} 

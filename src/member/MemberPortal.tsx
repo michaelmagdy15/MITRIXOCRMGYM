@@ -189,11 +189,16 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     <div className="min-h-screen bg-background flex flex-col font-sans">
       <header className="border-b bg-card shadow-sm h-16 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
-          {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt={branding.companyName} className="h-8 w-auto object-contain" referrerPolicy="no-referrer" />
-          ) : (
-            <h1 className="text-lg font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
-          )}
+          <div 
+            className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity"
+            onClick={() => setActiveTab('home')}
+          >
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.companyName} className="h-8 w-auto object-contain" referrerPolicy="no-referrer" />
+            ) : (
+              <h1 className="text-lg font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
+            )}
+          </div>
           <Badge variant="outline" className="text-[10px] font-bold tracking-widest uppercase text-primary border-primary/30 hidden sm:inline-flex">
             Member
           </Badge>

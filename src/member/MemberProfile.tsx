@@ -464,6 +464,50 @@ export default function MemberProfile({ client }: { client: Client | null }) {
           </form>
         </CardContent>
       </Card>
+
+      {/* Account Deletion Request Card (Apple App Store Review Compliance Guideline 5.1.1) */}
+      <Card className="border border-destructive/20 bg-destructive/5 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-bold flex items-center gap-2 text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            Delete Account
+          </CardTitle>
+          <CardDescription className="text-[11px] text-zinc-400">
+            Request permanent deletion of your profile data and memberships.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-muted-foreground mb-4">
+            Under Apple App Store guidelines, you can request full deletion of your gym membership record and login credentials. This action is irreversible and requires staff approval.
+          </p>
+          <Button 
+            variant="destructive" 
+            className="w-full font-bold bg-destructive/10 hover:bg-destructive text-destructive hover:text-white"
+            onClick={async () => {
+              if (window.confirm("Are you absolutely sure you want to submit a request to delete your account? This will terminate all active memberships and delete your data permanently.")) {
+                try {
+                  await addDoc(collection(db, 'passwordResetRequests'), {
+                    type: 'ACCOUNT_DELETION',
+                    clientId: client?.id || '',
+                    clientName: client?.name || '',
+                    memberId: client?.memberId || '',
+                    email: currentUser?.email || '',
+                    phone: client?.phone || '',
+                    status: 'pending',
+                    requestedAt: new Date().toISOString()
+                  });
+                  alert("Your account deletion request has been submitted successfully. A staff member will process it shortly.");
+                } catch (err) {
+                  console.error("Error submitting account deletion request:", err);
+                  alert("Failed to submit request. Please try again or contact the front desk.");
+                }
+              }
+            }}
+          >
+            Request Account Deletion
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 }

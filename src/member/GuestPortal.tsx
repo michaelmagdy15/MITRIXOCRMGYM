@@ -189,7 +189,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
       {/* ── HEADER ── */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b px-4 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div 
+          className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+          onClick={() => setActiveTab('book')}
+        >
           {branding.logoUrl ? (
             <img src={branding.logoUrl} alt={branding.companyName || 'CRM'} className="h-8 w-auto object-contain" />
           ) : (
