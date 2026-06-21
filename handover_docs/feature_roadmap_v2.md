@@ -255,12 +255,16 @@ rewardRedemptions: {
 9. **Self-service password reset** (just built)
 10. **Mobile-responsive** design
 
-### What to PITCH (coming soon):
-1. **Points & Digital Wallet** — "Members can buy Points bundles and use them for any package"
-2. **Gamification** — "Streaks, badges, and reward coins to boost member retention by 40%+"
-3. **Push Notifications** — "Automated reminders for expiry, payment, and class changes"
-4. **Monthly Schedule View** — "Beautiful class calendar with real-time booking"
-5. **Partner Rewards** — "Connect with local businesses for member perks"
+### What to PITCH (NOW LIVE ✅):
+1. **Points & Digital Wallet** ✅ — "Members can buy Points bundles and track their balance"
+2. **Gamification** ✅ — "10 achievement badges, streak tracking, and coins rewards boost retention"
+3. **Rewards Marketplace** ✅ — "Members spend coins on protein shakes, guest passes, discounts"
+4. **Admin Points Panel** ✅ — "Credit/debit points, manage bundles, view transaction history"
+
+### What to PITCH (coming next sprint):
+1. **Push Notifications** — "Automated reminders for expiry, payment, and class changes"
+2. **Monthly Schedule View** — "Beautiful class calendar with real-time booking"
+3. **Admin Analytics Dashboard** — "KPI cards, member engagement, revenue trends"
 
 ### Key Selling Points:
 - "Each gym gets their own **private database** — your data is YOURS, never mixed"
@@ -273,14 +277,14 @@ rewardRedemptions: {
 
 ## ⏱ Sprint Timeline
 
-| Sprint | Timeframe | Focus | Deliverables |
+| Sprint | Status | Focus | Deliverables |
 |---|---|---|---|
-| **Sprint 1** | Week 1-2 | Member Experience | Enhanced home, schedule view, notifications |
-| **Sprint 2** | Week 3-4 | Points Economy | Wallet, transactions, dual pricing, admin tools |
-| **Sprint 3** | Week 5-6 | Gamification | Coins, badges, streaks, rewards marketplace |
-| **Sprint 4** | Week 7-8 | Advanced Features | Facility directory, tiered PT, campaigns, P2P |
+| **Sprint 1** | ✅ DONE (June 21) | Member Experience | Enhanced home, date ribbon, notifications, announcements, password reset |
+| **Sprint 2** | ✅ DONE (June 21) | Points Economy | Wallet, buy bundles, transaction history, admin credit/debit, bundle CRUD |
+| **Sprint 3** | ✅ DONE (June 21) | Gamification | 10 badges, auto-progress, coins wallet, streaks, rewards marketplace |
+| **Sprint 4** | 📋 NEXT | Advanced Features | Facility directory, tiered PT, campaigns, admin analytics dashboard |
 
-**Total timeline: ~8 weeks for full v2.0 feature parity with BeFit**
+**Sprints 1-3 delivered in a single session!** Sprint 4 targets advanced features and analytics.
 
 ---
 
