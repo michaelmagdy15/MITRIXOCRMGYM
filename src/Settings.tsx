@@ -16,13 +16,14 @@ import Packages from './Packages';
 import Coaches from './Coaches';
 import MyProfile from './components/MyProfile';
 import CommissionReport from './components/CommissionReport';
-import { BadgePercent, QrCode, Printer, MapPin, Plus } from 'lucide-react';
+import { BadgePercent, QrCode, Printer, MapPin, Plus, Trophy } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Branch } from './types';
 import { exportDatabaseToJson, restoreDatabaseFromJson } from './services/backupService';
 import type { BackupProgressCallback } from './services/backupService';
 import AdminPointsManager from './components/AdminPointsManager';
 import AdminActivityFeed from './components/AdminActivityFeed';
+import AdminGamificationManager from './components/AdminGamificationManager';
 
 export default function Settings() {
   const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches } = useAppContext();
@@ -496,6 +497,10 @@ export default function Settings() {
             <Activity className="h-4 w-4" />
             Activity
           </TabsTrigger>
+          <TabsTrigger value="gamification" className="flex items-center gap-2 whitespace-nowrap">
+            <Trophy className="h-4 w-4" />
+            Gamification
+          </TabsTrigger>
 
 
           {canWipe && (
@@ -916,6 +921,11 @@ export default function Settings() {
         {/* ── Activity Feed ── */}
         <TabsContent value="activity" className="animate-in fade-in-50 duration-500">
           <AdminActivityFeed />
+        </TabsContent>
+
+        {/* ── Gamification Manager ── */}
+        <TabsContent value="gamification" className="animate-in fade-in-50 duration-500">
+          <AdminGamificationManager />
         </TabsContent>
 
 
