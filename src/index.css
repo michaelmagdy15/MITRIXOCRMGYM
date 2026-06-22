@@ -207,6 +207,8 @@
       border-top-left-radius: 1.5rem !important;
       border-top-right-radius: 1.5rem !important;
       transform: none !important;
+      translate: none !important;
+      scale: none !important;
       margin: 0 !important;
       overflow-y: auto !important;
       -webkit-overflow-scrolling: touch !important;
