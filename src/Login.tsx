@@ -571,7 +571,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                       Forgot password?
                     </button>
                     <button className="text-primary hover:text-primary/80 font-semibold underline-offset-4 hover:underline" onClick={() => { setView('signup'); setError(''); }}>
-                      Join for Free
+                      Sign Up
                     </button>
                   </div>
                 </TabsContent>
