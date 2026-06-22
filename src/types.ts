@@ -249,7 +249,7 @@ export interface ClientPackage {
   endDate?: string;
   sessionsTotal?: number;
   sessionsRemaining?: number;
-  status: 'Active' | 'Expired' | 'Cancelled' | 'Pending';
+  status: 'Active' | 'Expired' | 'Cancelled' | 'Pending' | 'Hold';
   isOnHold?: boolean; // True if package is temporarily paused
   holdReason?: string; // Reason for holding the package
   holdDate?: string; // ISO string - when the hold was placed

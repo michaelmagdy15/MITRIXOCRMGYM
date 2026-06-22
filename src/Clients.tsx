@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity } from 'lucide-react';
-import { Client, InteractionType, InteractionOutcome } from './types';
+import { Client, InteractionType, InteractionOutcome, AuditLog, ClientPackage } from './types';
 import { format, parseISO, isAfter, isBefore, addDays, subDays, differenceInDays } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
@@ -55,8 +55,9 @@ const migratePackageData = (client: Client, systemPackages: any[]): Partial<Clie
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId } = useAppContext();
+  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, auditLogs } = useAppContext();
   const { packages } = usePackages();
+  const activeClient = activeClientId ? clients.find(c => c.id === activeClientId) : null;
   const [activeTab, setActiveTab] = useState('active');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   
@@ -290,12 +291,15 @@ export default function Clients() {
         const packagesCopy = [...(activeClient.packages || [])];
         const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
         if (activePkgIdx !== -1) {
-          const sessionsRemaining = packagesCopy[activePkgIdx].sessionsRemaining;
-          packagesCopy[activePkgIdx] = {
-            ...packagesCopy[activePkgIdx],
-            sessionsRemaining: typeof sessionsRemaining === 'number' ? sessionsRemaining + 1 : 1
-          };
-          await updateClient(activeClient.id, { points: newPoints, packages: packagesCopy });
+          const activePkg = packagesCopy[activePkgIdx];
+          if (activePkg) {
+            const sessionsRemaining = activePkg.sessionsRemaining;
+            packagesCopy[activePkgIdx] = {
+              ...activePkg,
+              sessionsRemaining: typeof sessionsRemaining === 'number' ? sessionsRemaining + 1 : 1
+            };
+            await updateClient(activeClient.id, { points: newPoints, packages: packagesCopy });
+          }
         } else {
           const sessionsRemaining = activeClient.sessionsRemaining;
           await updateClient(activeClient.id, { 
@@ -345,8 +349,13 @@ export default function Clients() {
     }
 
     try {
+      const pkg = packagesCopy[pkgIdx];
+      if (!pkg) {
+        alert("Selected package not found.");
+        return;
+      }
       packagesCopy[pkgIdx] = {
-        ...packagesCopy[pkgIdx],
+        ...pkg,
         status: 'Hold',
         isOnHold: true,
         holdReason: `${freezeType} Freeze: ${freezeReason || 'No details provided'}`,
@@ -365,7 +374,7 @@ export default function Clients() {
         action: 'UPDATE',
         entityType: 'client',
         entityId: activeClient.id,
-        details: `Placed package "${packagesCopy[pkgIdx].packageName}" on Hold (${freezeType} Freeze) from ${freezeStartDate} to ${freezeEndDate}.`,
+        details: `Placed package "${pkg.packageName}" on Hold (${freezeType} Freeze) from ${freezeStartDate} to ${freezeEndDate}.`,
         timestamp: new Date().toISOString(),
         userId: currentUser?.id || 'staff',
         userName: currentUser?.name || 'Staff'
@@ -389,8 +398,10 @@ export default function Clients() {
     if (pkgIdx === -1) return;
 
     try {
+      const pkg = packagesCopy[pkgIdx];
+      if (!pkg) return;
       packagesCopy[pkgIdx] = {
-        ...packagesCopy[pkgIdx],
+        ...pkg,
         status: 'Active',
         isOnHold: false,
         holdReason: '',
@@ -407,7 +418,7 @@ export default function Clients() {
         action: 'UPDATE',
         entityType: 'client',
         entityId: activeClient.id,
-        details: `Resumed/unfroze package "${packagesCopy[pkgIdx].packageName}". Status set back to Active.`,
+        details: `Resumed/unfroze package "${pkg.packageName}". Status set back to Active.`,
         timestamp: new Date().toISOString(),
         userId: currentUser?.id || 'staff',
         userName: currentUser?.name || 'Staff'
@@ -486,6 +497,10 @@ export default function Clients() {
 
     try {
       const transferPkg = sourcePkgs[pkgIdx];
+      if (!transferPkg) {
+        alert("Package not found.");
+        return;
+      }
       const updatedSourcePkgs = sourcePkgs.filter(p => p.id !== transferPackageId);
       const recipientPkgs = [...(recipient.packages || []), { ...transferPkg, status: 'Active' as const }];
 
