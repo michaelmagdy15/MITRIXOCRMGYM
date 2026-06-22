@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { CheckCircle2, Eye, EyeOff, Dumbbell, Flame, Target, Activity, Key, Phone, Mail, ShieldAlert } from 'lucide-react';
 import { addDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -19,6 +20,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
   const { t } = useLanguage();
   const { items, totalPrice, clearCart } = useCart();
   const { currentUser, loginWithEmail, loginWithMemberId, registerFreeUser } = useAuth();
+  const { branding } = useSettings();
 
   // Dialog Navigation steps
   // If not logged in, we start at 'auth'. Otherwise, we go straight to 'details' or 'payment'.
@@ -144,8 +146,16 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
 
     try {
       const clientId = clientDocId || currentUser?.clientDocId || currentUser?.clientRecordId || 'GUEST-LEAD';
-      const description = items.map(i => `${i.quantity}x ${i.pkg.name}`).join('\n') + 
-        `\n\nPayment Method: ${paymentMethod}` + 
+      const companyName = (branding?.companyName && branding.companyName !== 'mitrixogymcrm') ? branding.companyName : 'STRIKE';
+      let logoUrlToUse = branding?.logoUrl || '';
+      if (!logoUrlToUse || logoUrlToUse === '/mitrixogymcrmlogo.png') {
+        logoUrlToUse = `${window.location.origin}/strikelogo.png`;
+      }
+      const signatureTeamName = companyName.toUpperCase().includes('STRIKE') ? 'Strike Team' : `${companyName} Team`;
+
+      const description = items.map(i => `${i.quantity}x ${i.pkg.name} (${(i.pkg.price * i.quantity).toLocaleString()} EGP)`).join('\n') + 
+        `\n\nTotal Price: ${totalPrice.toLocaleString()} EGP` +
+        `\nPayment Method: ${paymentMethod}` + 
         (paymentMethod === 'Instapay' ? `\nInstapay Ref: ${instapayRef}` : '');
 
       // Create a pending purchase task directly in Firestore (bypass context hook to avoid member permission issues)
@@ -168,21 +178,29 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
           await addDoc(collection(db, 'mail'), {
             to: buyerEmail,
             message: {
-              subject: "Your MITRIXOGYMCRM Session Request Received",
-              from: "info@mitrixogymcrm-egy.com",
+              subject: `Your ${companyName} Booking Request Received`,
+              from: `"${companyName}" <info@mitrixogymcrm-egy.com>`,
               html: `
                 <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 600px; margin: auto; background-color: #ffffff; border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
                   <div style="background-color: #000000; padding: 30px; text-align: center;">
-                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 2px;">MITRIXOGYMCRM</h1>
+                    ${logoUrlToUse
+                      ? `<img src="${logoUrlToUse}" alt="${companyName}" style="max-height: 80px; max-width: 240px; object-fit: contain;" />`
+                      : `<h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;">${companyName}</h1>`
+                    }
                     <p style="color: #a3a3a3; margin: 5px 0 0 0; font-size: 14px; letter-spacing: 1px; text-transform: uppercase;">Boxing Club</p>
                   </div>
                   <div style="padding: 40px 30px;">
                     <h2 style="color: #000000; margin-top: 0; font-size: 22px;">Thank you for your request, ${name}!</h2>
-                    <p style="color: #555555; font-size: 16px; line-height: 1.6;">Your session request has been successfully received and is currently pending activation.</p>
+                    <p style="color: #555555; font-size: 16px; line-height: 1.6;">Your booking request has been successfully received and is currently pending activation.</p>
+                    <p style="color: #555555; font-size: 16px; line-height: 1.6; font-weight: bold;">One of our representatives will contact you shortly to confirm your booking.</p>
                     
                     <div style="background-color: #f9f9f9; border-left: 4px solid #000000; padding: 20px; margin: 30px 0;">
                       <h3 style="color: #000000; margin-top: 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px;">Order Summary</h3>
-                      <p style="color: #333333; font-size: 15px; white-space: pre-wrap; margin-bottom: 0;">${description}</p>
+                      <p style="color: #333333; font-size: 15px; white-space: pre-wrap; margin-bottom: 10px;">${description}</p>
+                      <div style="border-top: 1px solid #e5e5e5; margin-top: 15px; padding-top: 15px; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold; color: #000000; font-size: 15px;">Total Amount:</span>
+                        <span style="font-weight: 900; color: #e11d48; font-size: 17px;">${totalPrice.toLocaleString()} EGP</span>
+                      </div>
                     </div>
                     
                     <h3 style="color: #000000; font-size: 18px; margin-bottom: 10px;">Next Steps</h3>
@@ -193,10 +211,10 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
                     </ul>
                     
                     <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 40px 0 30px 0;" />
-                    <p style="color: #777777; font-size: 14px; margin: 0;">Stay sharp,<br/><strong style="color: #000000;">The MITRIXOGYMCRM Team</strong></p>
+                    <p style="color: #777777; font-size: 14px; margin: 0;">Stay sharp,<br/><strong style="color: #000000;">${signatureTeamName}</strong></p>
                   </div>
                   <div style="background-color: #f5f5f5; padding: 20px; text-align: center; font-size: 12px; color: #999999;">
-                    <p style="margin: 0;">© ${new Date().getFullYear()} MITRIXOGYMCRM. All rights reserved.</p>
+                    <p style="margin: 0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
                   </div>
                 </div>
               `

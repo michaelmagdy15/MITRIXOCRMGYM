@@ -23,17 +23,22 @@ async function getBranding() {
     const docSnap = await docRef.get();
     if (docSnap.exists) {
       const data = docSnap.data();
+      const companyName = data?.companyName || "mitrixogymcrm";
+      const logoUrl = data?.logoUrl || "";
+      const isDefault = companyName === "mitrixogymcrm";
       return {
-        companyName: data?.companyName || "mitrixogymcrm",
-        logoUrl: data?.logoUrl || "",
+        companyName: isDefault ? "STRIKE" : companyName,
+        logoUrl: (isDefault || !logoUrl || logoUrl === "/mitrixogymcrmlogo.png") 
+          ? "https://strike-egy.com/strikelogo.png" 
+          : logoUrl,
       };
     }
   } catch (error) {
     logger.error("Error fetching branding settings:", error);
   }
   return {
-    companyName: "mitrixogymcrm",
-    logoUrl: "",
+    companyName: "STRIKE",
+    logoUrl: "https://strike-egy.com/strikelogo.png",
   };
 }
 
@@ -160,11 +165,11 @@ export async function sendLeadReplyEmail(recipientEmail: string, leadName: strin
       </div>
       <h2 style="color: #333; margin-top: 0; font-size: 20px;">Hello ${leadName},</h2>
       <p>Thank you for reaching out to <strong>${companyName}</strong>. We are pleased to receive your request.</p>
-      <p>One of our representatives will contact you shortly to confirm your attendance and finalize the details.</p>
+      <p>One of our representatives will contact you shortly to confirm your booking.</p>
       <p>If you have any questions in the meantime, please feel free to contact us.</p>
       <br />
-      <p style="margin: 0; font-weight: bold; color: #333;">Best regards,</p>
-      <p style="margin: 5px 0 0 0; color: #555;">The ${companyName} Team</p>
+      <p style="margin: 0; color: #777777;">Stay sharp,</p>
+      <p style="margin: 5px 0 0 0; font-weight: bold; color: #333;">${companyName.toUpperCase().includes('STRIKE') ? 'Strike Team' : `${companyName} Team`}</p>
       <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
       <p style="color: #999; font-size: 11px; text-align: center; margin: 0;">This is an automated confirmation email. Please do not reply directly to this message.</p>
     </div>

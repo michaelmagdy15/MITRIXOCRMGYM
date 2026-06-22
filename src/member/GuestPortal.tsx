@@ -503,18 +503,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                         </div>
                         <Button 
                           size="sm" 
-                          variant="ghost"
                           onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                          className="h-8 px-3 text-xs font-bold rounded-xl text-muted-foreground"
+                          className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
                         >
-                          <Info className="h-3 w-3 mr-1" /> Details
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={(e) => { e.stopPropagation(); addToCart(pkg as any); }} 
-                          className="h-8 px-4 text-xs font-bold rounded-xl"
-                        >
-                          <ShoppingCart className="h-3 w-3 mr-1" /> Add to Cart
+                          <Info className="h-3 w-3 mr-1" /> View Details
                         </Button>
                       </div>
                     </div>
@@ -597,18 +589,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                         </div>
                         <Button 
                           size="sm" 
-                          variant="ghost"
                           onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                          className="h-8 px-3 text-xs font-bold rounded-xl text-muted-foreground"
+                          className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
                         >
-                          <Info className="h-3 w-3 mr-1" /> Details
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={(e) => { e.stopPropagation(); addToCart(pkg as any); }} 
-                          className="h-8 px-4 text-xs font-bold rounded-xl"
-                        >
-                          <ShoppingCart className="h-3 w-3 mr-1" /> Add to Cart
+                          <Info className="h-3 w-3 mr-1" /> View Details
                         </Button>
                       </div>
                     </div>
@@ -660,8 +644,12 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                             </Badge>
                           )}
                         </div>
-                        <Button size="sm" onClick={(e) => { e.stopPropagation(); addToCart(pkg as any); }} className="h-7 px-3 text-[10px] font-bold rounded-xl">
-                          <ShoppingCart className="h-3 w-3 mr-1" /> Add to Cart
+                        <Button 
+                          size="sm" 
+                          onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                          className="h-7 px-3 text-[10px] font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
+                        >
+                          <Info className="h-3 w-3 mr-1" /> View Details
                         </Button>
                       </div>
                     </div>
