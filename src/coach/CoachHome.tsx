@@ -108,37 +108,30 @@ export default function CoachHome({ onNavigate }: { onNavigate: (tab: CoachTab) 
 
       {/* ─── Stats Grid ─── */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/15 text-center">
-          <div className="p-2 bg-blue-500/10 rounded-lg w-fit mx-auto mb-2">
-            <Users className="h-5 w-5 text-blue-500" />
+        {[
+          { label: 'My Clients', count: stats.totalClients, color: 'text-blue-500', glow: '#3B82F6', icon: <Users className="h-5 w-5 text-white" /> },
+          { label: "Today's Sessions", count: stats.sessionsToday, color: 'text-emerald-500', glow: '#10B981', icon: <Activity className="h-5 w-5 text-white" /> },
+          { label: 'This Week', count: stats.sessionsThisWeek, color: 'text-amber-500', glow: '#F59E0B', icon: <Flame className="h-5 w-5 text-white" /> },
+          { label: 'All Time', count: stats.totalSessionsAllTime, color: 'text-purple-500', glow: '#8B5CF6', icon: <Award className="h-5 w-5 text-white" /> }
+        ].map((item, idx) => (
+          <div key={idx} className="p-4 rounded-2xl bg-card border border-border/40 text-center shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+            {/* Background glow behind icon */}
+            <div className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden mx-auto mb-2 relative">
+              <div 
+                className="absolute inset-0.5 rounded-full opacity-50 blur-[3px] group-hover:opacity-75 transition-opacity"
+                style={{ backgroundColor: item.glow }}
+              />
+              <div 
+                className="absolute inset-0 bg-gradient-to-tr from-white/10 to-white/20 border border-white/30 rounded-full flex items-center justify-center pointer-events-none"
+                style={{ boxShadow: `inset 0 1px 2px rgba(255,255,255,0.4), 0 4px 12px ${item.glow}4D` }}
+              >
+                {item.icon}
+              </div>
+            </div>
+            <p className={`text-2xl font-black ${item.color} mt-1`}>{item.count}</p>
+            <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider mt-0.5">{item.label}</p>
           </div>
-          <p className="text-2xl font-black text-blue-500">{stats.totalClients}</p>
-          <p className="text-[9px] text-muted-foreground font-bold uppercase">My Clients</p>
-        </div>
-        
-        <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-center">
-          <div className="p-2 bg-emerald-500/10 rounded-lg w-fit mx-auto mb-2">
-            <Activity className="h-5 w-5 text-emerald-500" />
-          </div>
-          <p className="text-2xl font-black text-emerald-500">{stats.sessionsToday}</p>
-          <p className="text-[9px] text-muted-foreground font-bold uppercase">Today's Sessions</p>
-        </div>
-        
-        <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 text-center">
-          <div className="p-2 bg-amber-500/10 rounded-lg w-fit mx-auto mb-2">
-            <Flame className="h-5 w-5 text-amber-500" />
-          </div>
-          <p className="text-2xl font-black text-amber-500">{stats.sessionsThisWeek}</p>
-          <p className="text-[9px] text-muted-foreground font-bold uppercase">This Week</p>
-        </div>
-        
-        <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/15 text-center">
-          <div className="p-2 bg-purple-500/10 rounded-lg w-fit mx-auto mb-2">
-            <Award className="h-5 w-5 text-purple-500" />
-          </div>
-          <p className="text-2xl font-black text-purple-500">{stats.totalSessionsAllTime}</p>
-          <p className="text-[9px] text-muted-foreground font-bold uppercase">All Time</p>
-        </div>
+        ))}
       </div>
 
       {/* ─── Quick Actions ─── */}
@@ -147,22 +140,34 @@ export default function CoachHome({ onNavigate }: { onNavigate: (tab: CoachTab) 
         
         <div className="space-y-2">
           {[
-            { icon: <Calendar className="h-5 w-5 text-blue-500" />, label: 'My Schedule', desc: 'Manage your availability & time slots', tab: 'schedule' as CoachTab, color: 'bg-blue-500/5 border-blue-500/15' },
-            { icon: <Dumbbell className="h-5 w-5 text-emerald-500" />, label: 'Sessions', desc: 'View upcoming & past PT sessions', tab: 'sessions' as CoachTab, color: 'bg-emerald-500/5 border-emerald-500/15' },
-            { icon: <Users className="h-5 w-5 text-amber-500" />, label: 'My Members', desc: 'Check your assigned clients', tab: 'members' as CoachTab, color: 'bg-amber-500/5 border-amber-500/15' },
-            { icon: <User className="h-5 w-5 text-purple-500" />, label: 'Profile', desc: 'Update your details & password', tab: 'profile' as CoachTab, color: 'bg-purple-500/5 border-purple-500/15' },
+            { icon: <Calendar className="h-5 w-5 text-white" />, label: 'My Schedule', desc: 'Manage your availability & time slots', tab: 'schedule' as CoachTab, glow: '#3B82F6', cardBg: 'bg-blue-500/[0.02] border-blue-500/10 hover:bg-blue-500/[0.04]' },
+            { icon: <Dumbbell className="h-5 w-5 text-white" />, label: 'Sessions', desc: 'View upcoming & past PT sessions', tab: 'sessions' as CoachTab, glow: '#10B981', cardBg: 'bg-emerald-500/[0.02] border-emerald-500/10 hover:bg-emerald-500/[0.04]' },
+            { icon: <Users className="h-5 w-5 text-white" />, label: 'My Members', desc: 'Check your assigned clients', tab: 'members' as CoachTab, glow: '#F59E0B', cardBg: 'bg-amber-500/[0.02] border-amber-500/10 hover:bg-amber-500/[0.04]' },
+            { icon: <User className="h-5 w-5 text-white" />, label: 'Profile', desc: 'Update your details & password', tab: 'profile' as CoachTab, glow: '#8B5CF6', cardBg: 'bg-purple-500/[0.02] border-purple-500/10 hover:bg-purple-500/[0.04]' },
           ].map(action => (
             <button
               key={action.tab}
               onClick={() => onNavigate(action.tab)}
-              className={`w-full flex items-center gap-3 p-3.5 rounded-xl border transition-all hover:shadow-sm active:scale-[0.98] ${action.color}`}
+              className={`w-full flex items-center gap-4 p-3 rounded-2xl border transition-all active:scale-[0.98] ${action.cardBg} group`}
             >
-              <div className="p-2 rounded-lg bg-card shadow-sm">{action.icon}</div>
-              <div className="flex-1 text-left">
-                <p className="text-sm font-bold">{action.label}</p>
-                <p className="text-[10px] text-muted-foreground">{action.desc}</p>
+              {/* Glassmorphic Icon Badge */}
+              <div className="relative w-11 h-11 rounded-full flex items-center justify-center overflow-hidden shrink-0">
+                <div 
+                  className="absolute inset-0.5 rounded-full opacity-50 blur-[3px] group-hover:opacity-75 transition-opacity" 
+                  style={{ backgroundColor: action.glow }}
+                />
+                <div 
+                  className="absolute inset-0 bg-gradient-to-tr from-white/10 to-white/20 border border-white/30 rounded-full flex items-center justify-center pointer-events-none"
+                  style={{ boxShadow: `inset 0 1px 2px rgba(255,255,255,0.4), 0 4px 12px ${action.glow}33` }}
+                >
+                  {action.icon}
+                </div>
               </div>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              <div className="flex-1 text-left">
+                <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">{action.label}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{action.desc}</p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
             </button>
           ))}
         </div>

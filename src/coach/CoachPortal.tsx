@@ -64,19 +64,38 @@ export default function CoachPortal() {
         {activeTab === 'profile'  && <CoachProfile />}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1">
-        {NAV_ITEMS.map(({ tab, label, icon }) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex flex-col items-center gap-0.5 px-3 py-2 min-w-[52px] transition-colors ${
-              activeTab === tab ? 'text-primary' : 'text-muted-foreground'
-            }`}
-          >
-            {icon}
-            <span className="text-[10px] font-semibold tracking-wide">{label}</span>
-          </button>
-        ))}
+      <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1.5 shadow-lg backdrop-blur-md bg-opacity-90">
+        {NAV_ITEMS.map(({ tab, label, icon }) => {
+          const isActive = activeTab === tab;
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex flex-col items-center justify-center gap-1 px-3 py-1 min-w-[56px] transition-all relative ${
+                isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <div className="relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300">
+                {isActive && (
+                  <>
+                    {/* Glowing background */}
+                    <div className="absolute inset-0 bg-primary/10 rounded-xl blur-[1px]" />
+                    {/* Glass border and inner shadows */}
+                    <div className="absolute inset-0 rounded-xl border border-primary/20 bg-gradient-to-tr from-primary/5 to-primary/15 shadow-[inset_0_1px_2px_rgba(255,255,255,0.15)] pointer-events-none" />
+                  </>
+                )}
+                <div className={`relative z-10 transition-transform ${isActive ? 'scale-110' : 'scale-100'}`}>
+                  {icon}
+                </div>
+              </div>
+              <span className={`text-[9px] font-bold tracking-wide transition-all ${
+                isActive ? 'text-primary font-black scale-105' : 'text-muted-foreground'
+              }`}>
+                {label}
+              </span>
+            </button>
+          );
+        })}
       </nav>
     </div>
   );

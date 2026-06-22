@@ -847,7 +847,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
       {/* ── PACKAGE DETAIL DRAWER ── */}
       {selectedPackage && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setSelectedPackage(null)}>
+        <div className="fixed inset-0 z-[60] flex items-end justify-center" onClick={() => setSelectedPackage(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <div 
             className="relative w-full max-w-md bg-background rounded-t-3xl shadow-2xl border-t sf-tab-enter"
