@@ -161,7 +161,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               'mitrixogymcrm.egyptt@gmail.com',
               'shadyyoussef305@gmail.com',
             ];
-            let role: UserRole = 'rep';
+            let role: UserRole = 'client';
             if (firebaseUser.email === "michaelmitry13@gmail.com") {
               role = 'crm_admin';
             } else if (OWNER_EMAILS_NEW.includes(firebaseUser.email || '')) {
@@ -169,22 +169,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else if (firebaseUser.email) {
               const emailLower = firebaseUser.email.toLowerCase();
               const emailsToSearch = [...new Set([firebaseUser.email, emailLower])];
-              const q = query(collection(db, 'users'), where('email', 'in', emailsToSearch));
-              const querySnapshot = await getDocs(q);
-              if (!querySnapshot.empty) {
-                role = querySnapshot.docs[0]!.data()['role'] as UserRole;
-                const batch = writeBatch(db);
-                querySnapshot.docs.forEach(d => batch.delete(d.ref));
-                await batch.commit();
-              } else {
-                const allUsersSnap = await getDocs(collection(db, 'users'));
-                const match = allUsersSnap.docs.find(d => (d.data().email || '').toLowerCase() === emailLower);
-                if (match) {
-                  role = match.data()['role'] as UserRole;
+              try {
+                const q = query(collection(db, 'users'), where('email', 'in', emailsToSearch));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                  role = querySnapshot.docs[0]!.data()['role'] as UserRole;
                   const batch = writeBatch(db);
-                  allUsersSnap.docs.filter(d => (d.data().email || '').toLowerCase() === emailLower).forEach(d => batch.delete(d.ref));
+                  querySnapshot.docs.forEach(d => batch.delete(d.ref));
                   await batch.commit();
+                } else {
+                  try {
+                    const allUsersSnap = await getDocs(collection(db, 'users'));
+                    const match = allUsersSnap.docs.find(d => (d.data().email || '').toLowerCase() === emailLower);
+                    if (match) {
+                      role = match.data()['role'] as UserRole;
+                      const batch = writeBatch(db);
+                      allUsersSnap.docs.filter(d => (d.data().email || '').toLowerCase() === emailLower).forEach(d => batch.delete(d.ref));
+                      await batch.commit();
+                    }
+                  } catch (allUsersErr) {
+                    console.warn("Could not fetch all users snap for fallback matching:", allUsersErr);
+                  }
                 }
+              } catch (qErr) {
+                console.warn("Error querying users collection:", qErr);
               }
             }
 
