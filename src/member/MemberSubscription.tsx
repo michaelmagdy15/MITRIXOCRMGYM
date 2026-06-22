@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CreditCard, ShieldAlert, CheckCircle2, History, Send } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface SubscriptionRequest {
   id: string;
@@ -24,6 +25,7 @@ interface SubscriptionRequest {
 }
 
 export default function MemberSubscription({ client }: { client: Client | null }) {
+  const { t } = useLanguage();
   const [availablePackages, setAvailablePackages] = useState<Package[]>([]);
   const [requestsHistory, setRequestsHistory] = useState<SubscriptionRequest[]>([]);
   const [selectedPackageName, setSelectedPackageName] = useState<string>('');
@@ -190,7 +192,7 @@ export default function MemberSubscription({ client }: { client: Client | null }
                 <SelectContent>
                   {availablePackages.map(pkg => (
                     <SelectItem key={pkg.id} value={pkg.name}>
-                      {pkg.name} — EGP {pkg.price} ({pkg.type} Package)
+                      {pkg.name} — {t('payments.currency_le')} {pkg.price} ({pkg.type} Package)
                     </SelectItem>
                   ))}
                 </SelectContent>

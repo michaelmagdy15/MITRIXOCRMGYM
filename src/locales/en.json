@@ -13,7 +13,9 @@
     "qrcode": "App QR",
     "quotes": "Quotes",
     "operations": "Operations",
-    "admin-hub": "Admin Hub"
+    "admin-hub": "Admin Hub",
+    "debtors": "Debtors",
+    "unconfirmed-memberships": "Unconfirmed Queue"
   },
   "header": {
     "search_placeholder": "Search by name, phone, or ID...",

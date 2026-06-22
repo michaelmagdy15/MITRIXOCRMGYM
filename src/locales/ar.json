@@ -13,7 +13,9 @@
     "qrcode": "رمز التطبيق",
     "quotes": "عروض الأسعار",
     "operations": "العمليات",
-    "admin-hub": "مركز الإدارة"
+    "admin-hub": "مركز الإدارة",
+    "debtors": "المدينون",
+    "unconfirmed-memberships": "الاشتراكات المعلقة"
   },
   "header": {
     "search_placeholder": "البحث بالاسم، الهاتف، أو الرقم التعريفي...",

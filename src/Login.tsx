@@ -178,9 +178,172 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   };
 
   if (!isAuthReady) {
+    const companyName = branding?.companyName || 'CRM';
+    const logoUrl = branding?.logoUrl;
+
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans">
+        {/* Radial light source glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(244,63,94,0.08)_0%,transparent_60%)] pointer-events-none animate-[pulse_4s_infinite_ease-in-out]" />
+        
+        <div className="relative flex flex-col items-center z-10 scale-95 animate-[fadeIn_0.8s_ease-out_forwards]">
+          <div className="relative flex items-center justify-center mb-6">
+            {logoUrl ? (
+              <div className="relative w-72 h-28 flex items-center justify-center">
+                {/* Layer 1: Silhouette (faint outline) */}
+                <img 
+                  src={logoUrl} 
+                  alt="Logo Silhouette" 
+                  className="absolute inset-0 w-full h-full object-contain opacity-10 filter brightness-0 invert" 
+                />
+
+                {/* Layer 2: Animated mask container (glow & shine) */}
+                <div 
+                  className="absolute inset-0 w-full h-full filter drop-shadow-[0_0_15px_rgba(255,255,255,0.7)]"
+                  style={{
+                    maskImage: `url(${logoUrl})`,
+                    WebkitMaskImage: `url(${logoUrl})`,
+                    maskSize: 'contain',
+                    WebkitMaskSize: 'contain',
+                    maskRepeat: 'no-repeat',
+                    WebkitMaskRepeat: 'no-repeat',
+                    maskPosition: 'center',
+                    WebkitMaskPosition: 'center',
+                  }}
+                >
+                  {/* White reveal sweep */}
+                  <div 
+                    className="absolute inset-0 bg-white"
+                    style={{
+                      maskImage: 'linear-gradient(to right, white 40%, transparent 60%)',
+                      WebkitMaskImage: 'linear-gradient(to right, white 40%, transparent 60%)',
+                      maskSize: '200% 100%',
+                      WebkitMaskSize: '200% 100%',
+                      animation: 'revealLogo 3s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+                    }}
+                  />
+
+                  {/* Sweeping shine */}
+                  <div 
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/90 to-transparent"
+                    style={{
+                      backgroundSize: '200% 100%',
+                      animation: 'sweepShine 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite'
+                    }}
+                  />
+                </div>
+
+                {/* Layer 3: Full color logo resolving on top */}
+                <img 
+                  src={logoUrl} 
+                  alt={companyName} 
+                  className="absolute inset-0 w-full h-full object-contain opacity-0" 
+                  style={{
+                    animation: 'resolveColor 3s cubic-bezier(0.4, 0, 0.2, 1) 0.5s forwards'
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="relative text-center flex flex-col items-center mb-6">
+                {/* Layer 1: Silhouette / background text */}
+                <h1 className="text-5xl font-black tracking-[0.25em] text-white/10 uppercase font-sans">
+                  {companyName}
+                </h1>
+
+                {/* Layer 2: White reveal sweep text */}
+                <h1 
+                  className="absolute inset-0 text-5xl font-black tracking-[0.25em] text-white uppercase font-sans select-none pointer-events-none filter drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]"
+                  style={{
+                    maskImage: 'linear-gradient(to right, white 40%, transparent 60%)',
+                    WebkitMaskImage: 'linear-gradient(to right, white 40%, transparent 60%)',
+                    maskSize: '200% 100%',
+                    WebkitMaskSize: '200% 100%',
+                    animation: 'revealLogo 3s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+                  }}
+                >
+                  {companyName}
+                </h1>
+
+                {/* Layer 3: Sweeping shine on text */}
+                <h1 
+                  className="absolute inset-0 text-5xl font-black tracking-[0.25em] text-transparent uppercase font-sans select-none pointer-events-none"
+                  style={{
+                    backgroundImage: 'linear-gradient(to right, transparent 30%, white 50%, transparent 70%)',
+                    backgroundSize: '200% 100%',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    animation: 'sweepShine 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite'
+                  }}
+                >
+                  {companyName}
+                </h1>
+                
+                <p className="text-[10px] tracking-[0.4em] text-zinc-500 uppercase mt-2 font-semibold">Boxing Club</p>
+              </div>
+            )}
+          </div>
+          
+          {/* Glowing loader bar */}
+          <div className="h-1 w-28 bg-zinc-900 mt-10 rounded-full overflow-hidden border border-white/5 relative">
+            <div className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full animate-[slide_1.5s_infinite_ease-in-out] shadow-[0_0_10px_#f43f5e]" />
+          </div>
+          <p className="text-[10px] tracking-[0.3em] text-zinc-500 uppercase mt-4 font-semibold animate-pulse">Initializing CRM Portal...</p>
+        </div>
+
+        <style>{`
+          @keyframes slide {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+          }
+          @keyframes fadeIn {
+            0% { opacity: 0; transform: scale(0.95); filter: blur(5px); }
+            100% { opacity: 1; transform: scale(1); filter: blur(0); }
+          }
+          @keyframes revealLogo {
+            0% {
+              mask-position: 100% 0;
+              -webkit-mask-position: 100% 0;
+            }
+            60% {
+              mask-position: 0% 0;
+              -webkit-mask-position: 0% 0;
+            }
+            100% {
+              mask-position: 0% 0;
+              -webkit-mask-position: 0% 0;
+            }
+          }
+          @keyframes sweepShine {
+            0% {
+              background-position: 200% 0;
+            }
+            70% {
+              background-position: -200% 0;
+            }
+            100% {
+              background-position: -200% 0;
+            }
+          }
+          @keyframes resolveColor {
+            0% {
+              opacity: 0;
+              filter: drop-shadow(0 0 0px rgba(255,255,255,0));
+            }
+            40% {
+              opacity: 0;
+              filter: drop-shadow(0 0 0px rgba(255,255,255,0));
+            }
+            80% {
+              opacity: 1;
+              filter: drop-shadow(0 0 15px rgba(255,255,255,0.4));
+            }
+            100% {
+              opacity: 1;
+              filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
+            }
+          }
+        `}</style>
       </div>
     );
   }

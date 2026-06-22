@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import Checkout from './Checkout';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function CartDrawer() {
+  const { t } = useLanguage();
   const { 
     items, 
     updateQuantity, 
@@ -55,7 +57,7 @@ export default function CartDrawer() {
                         {item.pkg.sessions} Sessions • {item.pkg.expiryDays} Days
                       </p>
                     </div>
-                    <p className="font-bold text-primary">{item.pkg.price.toLocaleString()} EGP</p>
+                    <p className="font-bold text-primary">{item.pkg.price.toLocaleString()} {t('payments.currency_le')}</p>
                   </div>
                   
                   <div className="flex items-center justify-between pt-2 border-t border-border/50">
@@ -96,7 +98,7 @@ export default function CartDrawer() {
             <div className="p-6 border-t bg-card mt-auto shrink-0 space-y-4">
               <div className="flex justify-between items-center font-bold text-lg">
                 <span>Total</span>
-                <span className="text-primary">{totalPrice.toLocaleString()} EGP</span>
+                <span className="text-primary">{totalPrice.toLocaleString()} {t('payments.currency_le')}</span>
               </div>
               <Button 
                 className="w-full h-12 text-md font-bold"

@@ -37,7 +37,7 @@ function toCanonical(name: string): string {
 }
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
-  const { clients, users, updateClient, addClient, currentUser, branding, canDeletePayments, branches, processPaymentTransaction } = useAppContext();
+  const { clients, users, updateClient, addClient, currentUser, branding, canDeletePayments, branches, processPaymentTransaction, setActiveTab, setActiveClientId } = useAppContext();
   const { coaches } = useCoaches();
   const { packages } = usePackages();
   const { payments, addPayment, deletePayment, updatePayment } = usePayments({ currentUser, clients, canDeletePayments });
@@ -1443,7 +1443,20 @@ export default function Payments() {
                         <TableCell className="font-medium text-xs sm:text-sm">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
-                              <span>{client?.name || t('payments.table.unknown_client')}</span>
+                              {client ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveTab('clients');
+                                    setActiveClientId(client.id);
+                                  }}
+                                  className="text-primary hover:underline font-semibold text-xs sm:text-sm text-left"
+                                >
+                                  {client.name}
+                                </button>
+                              ) : (
+                                <span>{t('payments.table.unknown_client')}</span>
+                              )}
                               {payment.isOnHold && (
                                 <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px]" title={payment.holdReason || t('payments.hold')}>
                                   {t('payments.hold')}

@@ -46,6 +46,11 @@ export default function ImportData({ type }: ImportDataProps) {
     { key: 'branch', label: 'Branch' },
     { key: 'salesName', label: 'Sales Name' },
     { key: 'source', label: 'Source' },
+    { key: 'nationalId', label: 'National ID' },
+    { key: 'email', label: 'Email' },
+    { key: 'backupPhone', label: 'Backup Mobile' },
+    { key: 'advertisingSource', label: 'Advertising Source / Come From' },
+    { key: 'isBlacklisted', label: 'Is Blacklisted' },
   ];
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,6 +124,11 @@ export default function ImportData({ type }: ImportDataProps) {
       salesName: ['sales name', 'sales', 'rep', 'assigned to', 'agent', 'مبيعات'],
       paid: ['payment', 'paid', 'is paid', 'status paid', 'دفع'],
       source: ['source', 'how did you hear', 'referral', 'origin', 'مصدر'],
+      nationalId: ['national id', 'national_id', 'nationalid', 'national'],
+      email: ['email', 'e-mail', 'email address'],
+      backupPhone: ['backup mobile', 'backup phone', 'secondary mobile'],
+      advertisingSource: ['come from', 'source', 'advertising source', 'ad source'],
+      isBlacklisted: ['blacklist', 'black list', 'black-list'],
     };
 
     fields.forEach(field => {
@@ -187,6 +197,11 @@ export default function ImportData({ type }: ImportDataProps) {
             salesName: ['sales name', 'sales', 'rep', 'assigned to', 'agent', 'مبيعات'],
             paid: ['payment', 'paid', 'is paid', 'status paid', 'دفع'],
             source: ['source', 'how did you hear', 'referral', 'origin', 'مصدر'],
+            nationalId: ['national id', 'national_id', 'nationalid', 'national'],
+            email: ['email', 'e-mail', 'email address'],
+            backupPhone: ['backup mobile', 'backup phone', 'secondary mobile'],
+            advertisingSource: ['come from', 'source', 'advertising source', 'ad source'],
+            isBlacklisted: ['blacklist', 'black list', 'black-list'],
           };
 
           fields.forEach(field => {
@@ -255,6 +270,13 @@ export default function ImportData({ type }: ImportDataProps) {
         let paidRaw = row[importMapping['paid'] || ''];
         let typeOfClient = (row[importMapping['typeOfClient'] || ''] || '').toString().trim();
         let salesName = (row[importMapping['salesName'] || ''] || '').toString().trim();
+
+        let nationalId = importMapping['nationalId'] ? (row[importMapping['nationalId']] || '').toString().trim() : undefined;
+        let email = importMapping['email'] ? (row[importMapping['email']] || '').toString().trim() : undefined;
+        let backupPhone = importMapping['backupPhone'] ? (row[importMapping['backupPhone']] || '').toString().replace(/[^\d+]/g, '') : undefined;
+        let advertisingSource = importMapping['advertisingSource'] ? (row[importMapping['advertisingSource']] || '').toString().trim() : undefined;
+        let isBlacklistedRaw = importMapping['isBlacklisted'] ? (row[importMapping['isBlacklisted']] || '').toString().toLowerCase().trim() : '';
+        let isBlacklisted = isBlacklistedRaw === 'yes' || isBlacklistedRaw === 'true' || isBlacklistedRaw === '1' || isBlacklistedRaw === 'black-list' || isBlacklistedRaw === 'blacklist';
 
 
         if (!name || !phone) {
@@ -407,7 +429,12 @@ export default function ImportData({ type }: ImportDataProps) {
           comments: [], lastContactDate: now.toISOString(),
           assignedTo: finalAssignedTo,
           importBatchId: batchId,
-          paid: paid
+          paid: paid,
+          nationalId,
+          email,
+          backupPhone,
+          advertisingSource,
+          isBlacklisted
         });
 
         if (paidAmount > 0) {

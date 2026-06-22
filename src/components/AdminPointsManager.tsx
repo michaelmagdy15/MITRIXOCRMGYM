@@ -17,7 +17,7 @@ import {
 import { format, parseISO } from 'date-fns';
 
 export default function AdminPointsManager() {
-  const { currentUser } = useAppContext();
+  const { currentUser, branding } = useAppContext();
   const [activeTab, setActiveTab] = useState<'credit' | 'bundles' | 'ledger'>('credit');
 
   // Credit/Debit state
@@ -326,7 +326,7 @@ export default function AdminPointsManager() {
                   <Input type="number" min={1} value={bundleForm.pointsAmount || ''} onChange={e => setBundleForm(f => ({ ...f, pointsAmount: Number(e.target.value) }))} />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Price (EGP) *</Label>
+                  <Label className="text-xs">Price ({branding.currencySymbol || 'LE'}) *</Label>
                   <Input type="number" min={0} value={bundleForm.priceEGP || ''} onChange={e => setBundleForm(f => ({ ...f, priceEGP: Number(e.target.value) }))} />
                 </div>
               </div>
@@ -370,7 +370,7 @@ export default function AdminPointsManager() {
                         {!b.active && <Badge variant="outline" className="text-[8px]">Inactive</Badge>}
                       </div>
                       <p className="text-[10px] text-muted-foreground">
-                        {b.pointsAmount} pts · {b.priceEGP.toLocaleString()} EGP
+                        {b.pointsAmount} pts · {b.priceEGP.toLocaleString()} {branding.currencySymbol || 'LE'}
                         {b.bonusPoints > 0 ? ` · +${b.bonusPoints} bonus` : ''}
                       </p>
                     </div>

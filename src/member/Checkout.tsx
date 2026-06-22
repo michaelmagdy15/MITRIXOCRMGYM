@@ -13,8 +13,10 @@ import { Client } from '../types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function Checkout({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+  const { t } = useLanguage();
   const { items, totalPrice, clearCart } = useCart();
   const { currentUser, loginWithEmail, loginWithMemberId, registerFreeUser } = useAuth();
 
@@ -342,7 +344,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
                 <p className="text-xs text-muted-foreground font-semibold uppercase">Selected Packages</p>
                 <p className="text-sm font-bold mt-0.5">{items.length} Package(s) in cart</p>
               </div>
-              <p className="text-lg font-black text-primary">{totalPrice.toLocaleString()} EGP</p>
+              <p className="text-lg font-black text-primary">{totalPrice.toLocaleString()} {t('payments.currency_le')}</p>
             </div>
 
             <div className="space-y-3">
@@ -369,7 +371,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
           <div className="space-y-4 py-4">
             <div className="bg-muted/50 p-4 rounded-xl flex justify-between items-center border">
               <span className="font-bold text-sm">Total Price</span>
-              <span className="text-xl font-black text-primary">{totalPrice.toLocaleString()} EGP</span>
+              <span className="text-xl font-black text-primary">{totalPrice.toLocaleString()} {t('payments.currency_le')}</span>
             </div>
 
             <div className="space-y-2">
@@ -388,7 +390,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
             {paymentMethod === 'Instapay' && (
               <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="bg-blue-500/10 text-blue-500 text-xs p-3.5 rounded-xl border border-blue-500/20 leading-relaxed">
-                  Please transfer <strong>{totalPrice.toLocaleString()} EGP</strong> to Instapay Address: <strong className="select-all text-white">mitrixogymcrm@instapay</strong>, then input your 12-digit transaction reference number below.
+                  Please transfer <strong>{totalPrice.toLocaleString()} {t('payments.currency_le')}</strong> to Instapay Address: <strong className="select-all text-white">mitrixogymcrm@instapay</strong>, then input your 12-digit transaction reference number below.
                 </div>
                 <div className="space-y-1.5">
                   <Label>12-Digit Instapay Reference Number</Label>
@@ -405,7 +407,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
 
             {paymentMethod === 'Cash' && (
               <div className="bg-primary/10 text-primary text-xs p-3.5 rounded-xl border border-primary/20 leading-relaxed">
-                You will need to pay the total amount of <strong>{totalPrice.toLocaleString()} EGP</strong> at the Maxim Compound branch to activate your membership and receive your Member ID.
+                You will need to pay the total amount of <strong>{totalPrice.toLocaleString()} {t('payments.currency_le')}</strong> at the Maxim Compound branch to activate your membership and receive your Member ID.
               </div>
             )}
 

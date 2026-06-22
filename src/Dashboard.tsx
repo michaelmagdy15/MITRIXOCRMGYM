@@ -43,7 +43,7 @@ export const isGroupPackage = (pkg: string) => {
   const lower = pkg.toLowerCase().trim();
   return GROUP_PACKAGES.includes(lower) || lower.includes('group') || lower.includes('gt');
 };
-import { Target, Users, CalendarDays, AlertTriangle, Gift, Settings, ChevronLeft, ChevronRight, Trophy, Download, ArrowUpDown, UserCheck, UserPlus } from 'lucide-react';
+import { Target, Users, CalendarDays, AlertTriangle, Gift, Settings, ChevronLeft, ChevronRight, Trophy, Download, ArrowUpDown, UserCheck, UserPlus, Snowflake, Clock } from 'lucide-react';
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import OnlineUsers from './components/OnlineUsers';
 
@@ -88,7 +88,7 @@ function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], 
 }
 
 export default function Dashboard() {
-  const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, branches, clients: contextClients, payments: contextPayments, attendances } = useAppContext();
+  const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, branches, clients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId } = useAppContext();
   const { t, language, isRtl } = useLanguage();
   // Use context data directly instead of creating duplicate Firestore listeners.
   // Context 'clients' and 'payments' are already filtered for the current user's visibility.
@@ -96,6 +96,51 @@ export default function Dashboard() {
   // receive the full dataset when canViewGlobalDashboard is true. For reps, they only see their own.
   const allClients = contextClients;
   const allPayments = contextPayments;
+
+  const pendingConfirmationCount = React.useMemo(() => {
+    let count = 0;
+    allClients.forEach(client => {
+      if (client.packages) {
+        client.packages.forEach(pkg => {
+          if (pkg.isPendingConfirmation === true) {
+            count++;
+          }
+        });
+      }
+    });
+    return count;
+  }, [allClients]);
+
+  const frozenCount = React.useMemo(() => {
+    return allClients.filter(c => c.status === 'Hold').length;
+  }, [allClients]);
+
+  const frozenMembers = React.useMemo(() => {
+    return allClients.filter(c => c.status === 'Hold');
+  }, [allClients]);
+
+  const handleUnfreeze = async (clientId: string, clientName: string) => {
+    try {
+      const heldPayments = contextPayments.filter(p => p.clientId === clientId && p.isOnHold === true);
+      const { releasePayment } = await import('./utils/holdUtils');
+      
+      if (heldPayments.length > 0) {
+        for (const payment of heldPayments) {
+          await releasePayment(payment.id, clientId, clientName, currentUser?.id || 'system', currentUser?.name || 'Staff');
+        }
+      } else {
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const { db } = await import('./firebase');
+        await updateDoc(doc(db, 'clients', clientId), {
+          status: 'Active'
+        });
+      }
+      alert(`Successfully unfrozen ${clientName}`);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to unfreeze member.');
+    }
+  };
   const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
   const [newTarget, setNewTarget] = useState(salesTarget.targetAmount.toString());
   const [selectedRepId, setSelectedRepId] = useState<string>('all');
@@ -805,6 +850,37 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {features?.frozenMembers === true && (
+          <Card className="cursor-pointer hover:border-primary/50 transition-all" onClick={() => {
+            const el = document.getElementById('frozen-members-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Frozen Members</CardTitle>
+              <Snowflake className="h-4 w-4 text-sky-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-sky-600">{frozenCount}</div>
+              <p className="text-xs text-muted-foreground">Currently paused packages</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {features?.unconfirmedMemberships === true && (
+          <Card className="cursor-pointer hover:border-primary/50 transition-all" onClick={() => {
+            setActiveTab('unconfirmed-memberships');
+          }}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Unconfirmed Queue</CardTitle>
+              <Clock className="h-4 w-4 text-amber-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-amber-600">{pendingConfirmationCount}</div>
+              <p className="text-xs text-muted-foreground">Pending confirmation</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Branch Attendance Heatmap */}
@@ -889,7 +965,15 @@ export default function Dashboard() {
                     renderItem={(client) => (
                       <div key={client.id} className="flex items-center justify-between p-2 border border-red-200 bg-red-50 dark:bg-red-900/10 rounded-md">
                         <div>
-                          <p className="font-medium text-sm">{client.name}</p>
+                          <button
+                            onClick={() => {
+                              setActiveTab('clients');
+                              setActiveClientId(client.id);
+                            }}
+                            className="text-primary hover:underline font-semibold text-sm text-left block"
+                          >
+                            {client.name}
+                          </button>
                           <p className="text-xs text-muted-foreground">{client.packageType}</p>
                         </div>
                         <Badge variant="destructive">{client.sessionsRemaining} {t('dashboard.packages')}</Badge>
@@ -909,7 +993,15 @@ export default function Dashboard() {
                     renderItem={(client) => (
                       <div key={client.id} className="flex items-center justify-between p-2 border border-amber-200 bg-amber-50 dark:bg-amber-900/10 rounded-md">
                         <div>
-                          <p className="font-medium text-sm">{client.name}</p>
+                          <button
+                            onClick={() => {
+                              setActiveTab('clients');
+                              setActiveClientId(client.id);
+                            }}
+                            className="text-primary hover:underline font-semibold text-sm text-left block"
+                          >
+                            {client.name}
+                          </button>
                           <p className="text-xs text-muted-foreground">{client.packageType}</p>
                         </div>
                         <Badge variant="outline" className="text-amber-600 border-amber-600">{t('dashboard.no_attendance')}</Badge>
@@ -929,7 +1021,15 @@ export default function Dashboard() {
                     renderItem={(client) => (
                       <div key={client.id} className="flex items-center justify-between p-2 border border-red-200 bg-red-50 dark:bg-red-900/10 rounded-md">
                         <div>
-                          <p className="font-medium text-sm">{client.name}</p>
+                          <button
+                            onClick={() => {
+                              setActiveTab('clients');
+                              setActiveClientId(client.id);
+                            }}
+                            className="text-primary hover:underline font-semibold text-sm text-left block"
+                          >
+                            {client.name}
+                          </button>
                           <p className="text-xs text-muted-foreground">{t('members.table.expiry_date') || 'Expired'}: {client.membershipExpiry ? new Date(client.membershipExpiry).toLocaleDateString() : 'Unknown'}</p>
                         </div>
                         <Badge variant="destructive">{t('members.tabs.expired') || 'Expired'}</Badge>
@@ -962,7 +1062,15 @@ export default function Dashboard() {
                     renderItem={(client) => (
                       <div key={client.id} className="flex items-center justify-between p-2 border rounded-md">
                         <div>
-                          <p className="font-medium text-sm">{client.name}</p>
+                          <button
+                            onClick={() => {
+                              setActiveTab('clients');
+                              setActiveClientId(client.id);
+                            }}
+                            className="text-primary hover:underline font-semibold text-sm text-left block"
+                          >
+                            {client.name}
+                          </button>
                           <p className="text-xs text-muted-foreground">{t('dashboard.expected_visit')}: {new Date(client.expectedVisitDate!).toLocaleDateString()}</p>
                         </div>
                       </div>
@@ -981,7 +1089,15 @@ export default function Dashboard() {
                     renderItem={(client) => (
                       <div key={client.id} className="flex items-center justify-between p-2 border border-amber-200 bg-amber-50 dark:bg-amber-900/10 rounded-md">
                         <div>
-                          <p className="font-medium text-sm">{client.name}</p>
+                          <button
+                            onClick={() => {
+                              setActiveTab('clients');
+                              setActiveClientId(client.id);
+                            }}
+                            className="text-primary hover:underline font-semibold text-sm text-left block"
+                          >
+                            {client.name}
+                          </button>
                           <p className="text-xs text-muted-foreground">{t('members.table.expiry_date') || 'Expires'}: {client.membershipExpiry ? new Date(client.membershipExpiry).toLocaleDateString() : 'Unknown'}</p>
                         </div>
                       </div>
@@ -1000,7 +1116,15 @@ export default function Dashboard() {
                     renderItem={(client) => (
                       <div key={client.id} className="flex items-center justify-between p-2 border border-purple-200 bg-purple-50 dark:bg-purple-900/10 rounded-md">
                         <div>
-                          <p className="font-medium text-sm">{client.name}</p>
+                          <button
+                            onClick={() => {
+                              setActiveTab('clients');
+                              setActiveClientId(client.id);
+                            }}
+                            className="text-primary hover:underline font-semibold text-sm text-left block"
+                          >
+                            {client.name}
+                          </button>
                           <p className="text-xs text-muted-foreground">{t('dashboard.last_comment')} {differenceInDays(now, parseISO(client.comments.reduce((latest: any, current: any) => isAfter(parseISO(current.date), parseISO(latest.date)) ? current : latest, client.comments[0]).date))} {t('dashboard.days_ago')}</p>
                         </div>
                       </div>
@@ -1256,6 +1380,71 @@ export default function Dashboard() {
                   <Bar dataKey="Target" name={t('dashboard.sales_target') || 'Target'} fill="#e2e8f0" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {features?.frozenMembers === true && (
+        <div id="frozen-members-section" className="mt-8 space-y-4">
+          <h3 className="text-lg font-bold tracking-tight flex items-center gap-2">
+            <Snowflake className="h-5 w-5 text-sky-500" />
+            Frozen Members List
+          </h3>
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="p-4 font-semibold">Member</th>
+                      <th className="p-4 font-semibold">Phone</th>
+                      <th className="p-4 font-semibold">Branch</th>
+                      <th className="p-4 font-semibold">Package</th>
+                      <th className="p-4 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {frozenMembers.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-muted-foreground italic">
+                          No currently frozen members.
+                        </td>
+                      </tr>
+                    ) : (
+                      frozenMembers.map(member => (
+                        <tr key={member.id} className="border-b hover:bg-muted/30 transition-colors">
+                          <td className="p-4 font-medium">
+                            <button
+                              onClick={() => {
+                                setActiveTab('clients');
+                                setActiveClientId(member.id);
+                              }}
+                              className="text-primary hover:underline font-semibold"
+                            >
+                              {member.name}
+                            </button>
+                            <span className="text-xs text-muted-foreground block">ID: {member.memberId || 'N/A'}</span>
+                          </td>
+                          <td className="p-4">{member.phone}</td>
+                          <td className="p-4">{member.branch || 'N/A'}</td>
+                          <td className="p-4">{member.packageType || 'N/A'}</td>
+                          <td className="p-4 text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUnfreeze(member.id, member.name)}
+                              className="border-sky-500/20 text-sky-500 hover:bg-sky-500/10 hover:text-sky-600"
+                            >
+                              Unfreeze
+                            </Button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         </div>

@@ -27,7 +27,10 @@ import Login from './Login';
 import Reports from './Reports';
 import MemberCheckin from './MemberCheckin';
 import HelpPage from './HelpPage';
-import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
+import Debtors from './Debtors';
+import UnconfirmedMemberships from './UnconfirmedMemberships';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,7 +55,7 @@ const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.c
 function AppContent() {
   const { currentUser: authUser } = useAuth();
   const canUseQuoteGenerator = QUOTE_GENERATOR_EMAILS.includes((authUser?.email || '').toLowerCase());
-  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features } = useAppContext();
+  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features, clients, activeTab, setActiveTab, activeClientId, setActiveClientId, setPrefilledLeadData } = useAppContext();
   const { theme, toggleTheme } = useTheme();
   const { t, language, toggleLanguage, isRtl } = useLanguage();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
@@ -62,7 +65,7 @@ function AppContent() {
   const [kioskAuthenticated, setKioskAuthenticated] = React.useState(false);
   const [pinInput, setPinInput] = React.useState('');
   const [pinError, setPinError] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState('dashboard');
+  const [searchFallbackOpen, setSearchFallbackOpen] = React.useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(() => {
     return localStorage.getItem('sidebar_collapsed') === 'true';
   });
@@ -77,6 +80,32 @@ function AppContent() {
       localStorage.setItem('sidebar_collapsed', String(next));
       return next;
     });
+  };
+
+  const handleSearchSubmit = () => {
+    if (!searchQuery.trim()) return;
+    const q = searchQuery.toLowerCase().trim();
+    
+    const matches = clients.filter(c => 
+      c.name.toLowerCase().includes(q) || 
+      c.phone.includes(q) || 
+      (c.memberId && c.memberId.toLowerCase().includes(q)) ||
+      (c.startDate && c.startDate.includes(q)) ||
+      (c.membershipExpiry && c.membershipExpiry.includes(q))
+    );
+
+    if (matches.length === 1) {
+      const match = matches[0];
+      if (match) {
+        setActiveTab('clients');
+        setActiveClientId(match.id);
+      }
+    } else if (matches.length > 1) {
+      setActiveTab('clients');
+      setActiveClientId(null);
+    } else {
+      setSearchFallbackOpen(true);
+    }
   };
 
   // Monitor URL changes for kiosk mode
@@ -280,9 +309,172 @@ function AppContent() {
   }
 
   if (!isAuthReady) {
+    const companyName = branding?.companyName || 'CRM';
+    const logoUrl = branding?.logoUrl;
+
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans">
+        {/* Radial light source glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(244,63,94,0.08)_0%,transparent_60%)] pointer-events-none animate-[pulse_4s_infinite_ease-in-out]" />
+        
+        <div className="relative flex flex-col items-center z-10 scale-95 animate-[fadeIn_0.8s_ease-out_forwards]">
+          <div className="relative flex items-center justify-center mb-6">
+            {logoUrl ? (
+              <div className="relative w-72 h-28 flex items-center justify-center">
+                {/* Layer 1: Silhouette (faint outline) */}
+                <img 
+                  src={logoUrl} 
+                  alt="Logo Silhouette" 
+                  className="absolute inset-0 w-full h-full object-contain opacity-10 filter brightness-0 invert" 
+                />
+
+                {/* Layer 2: Animated mask container (glow & shine) */}
+                <div 
+                  className="absolute inset-0 w-full h-full filter drop-shadow-[0_0_15px_rgba(255,255,255,0.7)]"
+                  style={{
+                    maskImage: `url(${logoUrl})`,
+                    WebkitMaskImage: `url(${logoUrl})`,
+                    maskSize: 'contain',
+                    WebkitMaskSize: 'contain',
+                    maskRepeat: 'no-repeat',
+                    WebkitMaskRepeat: 'no-repeat',
+                    maskPosition: 'center',
+                    WebkitMaskPosition: 'center',
+                  }}
+                >
+                  {/* White reveal sweep */}
+                  <div 
+                    className="absolute inset-0 bg-white"
+                    style={{
+                      maskImage: 'linear-gradient(to right, white 40%, transparent 60%)',
+                      WebkitMaskImage: 'linear-gradient(to right, white 40%, transparent 60%)',
+                      maskSize: '200% 100%',
+                      WebkitMaskSize: '200% 100%',
+                      animation: 'revealLogo 3s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+                    }}
+                  />
+
+                  {/* Sweeping shine */}
+                  <div 
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/90 to-transparent"
+                    style={{
+                      backgroundSize: '200% 100%',
+                      animation: 'sweepShine 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite'
+                    }}
+                  />
+                </div>
+
+                {/* Layer 3: Full color logo resolving on top */}
+                <img 
+                  src={logoUrl} 
+                  alt={companyName} 
+                  className="absolute inset-0 w-full h-full object-contain opacity-0" 
+                  style={{
+                    animation: 'resolveColor 3s cubic-bezier(0.4, 0, 0.2, 1) 0.5s forwards'
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="relative text-center flex flex-col items-center mb-6">
+                {/* Layer 1: Silhouette / background text */}
+                <h1 className="text-5xl font-black tracking-[0.25em] text-white/10 uppercase font-sans">
+                  {companyName}
+                </h1>
+
+                {/* Layer 2: White reveal sweep text */}
+                <h1 
+                  className="absolute inset-0 text-5xl font-black tracking-[0.25em] text-white uppercase font-sans select-none pointer-events-none filter drop-shadow-[0_0_15px_rgba(255,255,255,0.8)]"
+                  style={{
+                    maskImage: 'linear-gradient(to right, white 40%, transparent 60%)',
+                    WebkitMaskImage: 'linear-gradient(to right, white 40%, transparent 60%)',
+                    maskSize: '200% 100%',
+                    WebkitMaskSize: '200% 100%',
+                    animation: 'revealLogo 3s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+                  }}
+                >
+                  {companyName}
+                </h1>
+
+                {/* Layer 3: Sweeping shine on text */}
+                <h1 
+                  className="absolute inset-0 text-5xl font-black tracking-[0.25em] text-transparent uppercase font-sans select-none pointer-events-none"
+                  style={{
+                    backgroundImage: 'linear-gradient(to right, transparent 30%, white 50%, transparent 70%)',
+                    backgroundSize: '200% 100%',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    animation: 'sweepShine 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite'
+                  }}
+                >
+                  {companyName}
+                </h1>
+                
+                <p className="text-[10px] tracking-[0.4em] text-zinc-500 uppercase mt-2 font-semibold">Boxing Club</p>
+              </div>
+            )}
+          </div>
+          
+          {/* Glowing loader bar */}
+          <div className="h-1 w-28 bg-zinc-900 mt-10 rounded-full overflow-hidden border border-white/5 relative">
+            <div className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full animate-[slide_1.5s_infinite_ease-in-out] shadow-[0_0_10px_#f43f5e]" />
+          </div>
+          <p className="text-[10px] tracking-[0.3em] text-zinc-500 uppercase mt-4 font-semibold animate-pulse">Initializing CRM Portal...</p>
+        </div>
+
+        <style>{`
+          @keyframes slide {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+          }
+          @keyframes fadeIn {
+            0% { opacity: 0; transform: scale(0.95); filter: blur(5px); }
+            100% { opacity: 1; transform: scale(1); filter: blur(0); }
+          }
+          @keyframes revealLogo {
+            0% {
+              mask-position: 100% 0;
+              -webkit-mask-position: 100% 0;
+            }
+            60% {
+              mask-position: 0% 0;
+              -webkit-mask-position: 0% 0;
+            }
+            100% {
+              mask-position: 0% 0;
+              -webkit-mask-position: 0% 0;
+            }
+          }
+          @keyframes sweepShine {
+            0% {
+              background-position: 200% 0;
+            }
+            70% {
+              background-position: -200% 0;
+            }
+            100% {
+              background-position: -200% 0;
+            }
+          }
+          @keyframes resolveColor {
+            0% {
+              opacity: 0;
+              filter: drop-shadow(0 0 0px rgba(255,255,255,0));
+            }
+            40% {
+              opacity: 0;
+              filter: drop-shadow(0 0 0px rgba(255,255,255,0));
+            }
+            80% {
+              opacity: 1;
+              filter: drop-shadow(0 0 15px rgba(255,255,255,0.4));
+            }
+            100% {
+              opacity: 1;
+              filter: drop-shadow(0 0 10px rgba(255,255,255,0.2));
+            }
+          }
+        `}</style>
       </div>
     );
   }
@@ -697,6 +889,7 @@ function AppContent() {
                   className="w-full ps-9 bg-muted/50 border-none"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearchSubmit(); }}
                 />
               </div>
 
@@ -786,6 +979,7 @@ function AppContent() {
                 className="w-full ps-9 bg-muted/50 border-none"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearchSubmit(); }}
               />
             </div>
           </div>
@@ -826,6 +1020,18 @@ function AppContent() {
             <TabsContent value="attendance" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <Attendance />
             </TabsContent>
+
+            {features.debtors === true && (
+              <TabsContent value="debtors" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <Debtors />
+              </TabsContent>
+            )}
+
+            {features.unconfirmedMemberships === true && (
+              <TabsContent value="unconfirmed-memberships" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <UnconfirmedMemberships />
+              </TabsContent>
+            )}
 
             {isManagerOrSama && (
               <TabsContent value="reports" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
@@ -871,6 +1077,43 @@ function AppContent() {
           </main>
         </div>
       </div>
+
+      {/* Global Search Fallback Dialog */}
+      <Dialog open={searchFallbackOpen} onOpenChange={setSearchFallbackOpen}>
+        <DialogContent className="sm:max-w-md border-border/80 bg-card backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-primary" />
+              Member Not Found
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground pt-2">
+              No member or lead was found matching "{searchQuery}". Would you like to create a new lead with this information?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setSearchFallbackOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                const isNumeric = /^\d+$/.test(searchQuery.trim());
+                setPrefilledLeadData({
+                  name: isNumeric ? '' : searchQuery.trim(),
+                  phone: isNumeric ? searchQuery.trim() : ''
+                });
+                setActiveTab('leads');
+                setSearchFallbackOpen(false);
+              }}
+            >
+              Add New Lead
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

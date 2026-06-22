@@ -1,7 +1,7 @@
 export type ClientStatus = 'Lead' | 'Active' | 'Nearly Expired' | 'Expired' | 'Hold';
 export type LeadInterest = 'Interested' | 'Not Interested' | 'Pending';
 export type LeadCategory = 'Out of area zone' | 'Social class' | 'Price' | 'No answer' | 'Ladies only' | 'Morning session' | 'Other' | 'None';
-export type LeadSource = 'Instagram' | 'WhatsApp' | 'Walk-in' | 'TikTok' | 'Other';
+export type LeadSource = 'Call in' | 'Walk-in' | 'Word Of Mouth' | 'Instagram' | 'ADS' | 'Facebook' | 'Website' | 'Google' | 'WhatsApp' | 'TikTok' | 'Other';
 export type LeadStage = 'New' | 'Trial' | 'Follow Up' | 'Converted' | 'Lost';
 export type PackageType = 'Private' | 'Group';
 export type UserRole = 'manager' | 'rep' | 'admin' | 'super_admin' | 'crm_admin' | 'coach' | 'client';
@@ -158,6 +158,8 @@ export interface Payment {
   heldBy?: string; // userId - who placed the hold
   created_at: string; // ISO string
   deleted_at?: string | null; // ISO string (soft delete)
+  currency?: string;
+  receiptSerial?: string;
 }
 
 export type Gender = 'Male' | 'Female' | 'Other' | 'Prefer not to say';
@@ -215,6 +217,29 @@ export interface Client {
   nextReminderDate?: string; // ISO string
   paid?: boolean;
   createdAt?: string; // ISO string — set on creation, used for sorting
+  nationalId?: string;
+  email?: string;
+  backupPhone?: string;
+  isBlacklisted?: boolean;
+  photoURL?: string;
+  advertisingSource?: string;
+  country?: string;
+  city?: string;
+  address?: string;
+  homePhone?: string;
+  nationality?: string;
+  jobTitle?: string;
+  guestSerial?: string;
+  civilianOrMilitary?: 'None' | 'Civilian' | 'Military';
+  referredByName?: string;
+  documents?: ClientDocument[];
+}
+
+export interface ClientDocument {
+  id: string;
+  name: string;
+  url: string;
+  uploadDate: string;
 }
 
 export interface ClientPackage {
@@ -228,6 +253,8 @@ export interface ClientPackage {
   isOnHold?: boolean; // True if package is temporarily paused
   holdReason?: string; // Reason for holding the package
   holdDate?: string; // ISO string - when the hold was placed
+  subscriptionType?: 'new' | 'renew' | 'upgrade' | 'wrongentry';
+  isPendingConfirmation?: boolean;
 }
 
 export interface Attendance {
@@ -283,6 +310,8 @@ export interface BrandingSettings {
   logoUrl: string;
   kioskPin?: string;
   dailyCheckinPin?: string;
+  currencyCode?: string;
+  currencySymbol?: string;
 }
 
 export type UserId = string;
@@ -361,6 +390,9 @@ export interface FeatureFlags {
   qrCheckin?: boolean;
   pointsSystem?: boolean;
   wallet?: boolean;
+  debtors?: boolean;
+  unconfirmedMemberships?: boolean;
+  frozenMembers?: boolean;
 }
 
 export interface Tenant {

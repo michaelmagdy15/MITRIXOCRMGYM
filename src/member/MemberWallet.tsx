@@ -9,8 +9,10 @@ import {
   getOrCreateWallet, getTransactionHistory, getActiveBundles,
   type PointsWallet, type PointsTransaction, type PointsBundle
 } from '../services/pointsService';
+import { useLanguage } from '../contexts/LanguageContext';
 
 export default function MemberWallet({ client }: { client: Client | null }) {
+  const { t } = useLanguage();
   const [wallet, setWallet] = useState<PointsWallet | null>(null);
   const [transactions, setTransactions] = useState<PointsTransaction[]>([]);
   const [bundles, setBundles] = useState<PointsBundle[]>([]);
@@ -222,7 +224,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-extrabold font-mono">{bundle.priceEGP.toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground font-bold">EGP</p>
+                        <p className="text-[10px] text-muted-foreground font-bold">{t('payments.currency_le')}</p>
                       </div>
                     </div>
                     
@@ -230,7 +232,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
                       <span className="text-[10px] text-muted-foreground">
                         {bundle.bonusPoints > 0
                           ? `You get ${bundle.pointsAmount + bundle.bonusPoints} total points`
-                          : `${(bundle.priceEGP / bundle.pointsAmount).toFixed(0)} EGP per point`}
+                          : `${(bundle.priceEGP / bundle.pointsAmount).toFixed(0)} ${t('payments.currency_le')} per point`}
                       </span>
                       <Button size="sm" className="h-8 text-xs font-bold px-4">
                         Buy Now

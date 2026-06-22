@@ -13,7 +13,7 @@ import {
   Shield, Search, RefreshCw, Power, PowerOff, Globe, Database, 
   Calendar, Users, Sliders, CheckCircle2, UserPlus, CreditCard, 
   Scan, BarChart3, FileText, Package, Smartphone, Plus, Mail, User, Building, Loader2, Clock,
-  Coffee, Lock, QrCode, Trophy, Coins
+  Coffee, Lock, QrCode, Trophy, Coins, AlertCircle, Snowflake
 } from 'lucide-react';
 import { Tenant } from './types';
 
@@ -61,7 +61,10 @@ export default function SuperAdminHub() {
     locker: true,
     qrCheckin: true,
     pointsSystem: true,
-    wallet: true
+    wallet: true,
+    debtors: false,
+    unconfirmedMemberships: false,
+    frozenMembers: false
   });
   const [loadingFeatures, setLoadingFeatures] = useState(false);
   const [savingFeatures, setSavingFeatures] = useState(false);
@@ -267,7 +270,10 @@ export default function SuperAdminHub() {
           locker: data.locker !== false,
           qrCheckin: data.qrCheckin !== false,
           pointsSystem: data.pointsSystem !== false,
-          wallet: data.wallet !== false
+          wallet: data.wallet !== false,
+          debtors: data.debtors === true,
+          unconfirmedMemberships: data.unconfirmedMemberships === true,
+          frozenMembers: data.frozenMembers === true
         });
       } else {
         // Fallback default configurations
@@ -284,7 +290,10 @@ export default function SuperAdminHub() {
           locker: true,
           qrCheckin: true,
           pointsSystem: true,
-          wallet: true
+          wallet: true,
+          debtors: false,
+          unconfirmedMemberships: false,
+          frozenMembers: false
         });
       }
     } catch (err: any) {
@@ -893,6 +902,48 @@ export default function SuperAdminHub() {
                     </div>
                   </div>
                   <Switch checked={features.wallet} onCheckedChange={() => toggleFeature('wallet')} disabled={savingFeatures} />
+                </div>
+
+                {/* Debtors Module */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-red-500/10 border border-red-500/20 rounded-lg shrink-0 mt-0.5">
+                      <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('debtors')}>Debtors Module</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Enable Debtors tracking and quick payments.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.debtors} onCheckedChange={() => toggleFeature('debtors')} disabled={savingFeatures} />
+                </div>
+
+                {/* Unconfirmed Memberships */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Clock className="h-3.5 w-3.5 text-amber-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('unconfirmedMemberships')}>Unconfirmed Memberships</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Track and approve package subscriptions queue.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.unconfirmedMemberships} onCheckedChange={() => toggleFeature('unconfirmedMemberships')} disabled={savingFeatures} />
+                </div>
+
+                {/* Frozen Members */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-sky-500/10 border border-sky-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Snowflake className="h-3.5 w-3.5 text-sky-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('frozenMembers')}>Frozen Members</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Manage and view frozen membership list and dashboard KPI.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.frozenMembers} onCheckedChange={() => toggleFeature('frozenMembers')} disabled={savingFeatures} />
                 </div>
               </div>
 

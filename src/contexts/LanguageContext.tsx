@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import enTranslations from '../locales/en.json';
 import arTranslations from '../locales/ar.json';
+import { useSettings } from './SettingsContext';
 
 type Language = 'en' | 'ar';
 
@@ -15,6 +16,7 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
+  const { branding } = useSettings();
   const [language, setLanguageState] = useState<Language>(() => {
     const saved = localStorage.getItem('language');
     if (saved === 'en' || saved === 'ar') return saved;
@@ -47,6 +49,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   // Nested key translation helper (e.g. t('nav.dashboard'))
   const t = (keyPath: string): string => {
+    if (keyPath === 'payments.currency_le') {
+      return branding.currencySymbol || (language === 'ar' ? 'ج.م' : 'LE');
+    }
     const dictionary = language === 'ar' ? arTranslations : enTranslations;
     const value = keyPath.split('.').reduce((acc: any, key) => {
       return acc && acc[key] !== undefined ? acc[key] : undefined;

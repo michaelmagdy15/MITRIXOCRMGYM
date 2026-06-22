@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Globe, ShoppingCart, Plus, Minus, Clock, CheckCircle2, AlertCircle, Trash2, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const MENU_ITEMS = [
   { id: 'shake-whey', name: 'Whey Protein Shake', category: 'Shakes', price: 85, description: 'Premium grass-fed whey, almond milk, banana, honey.' },
@@ -29,6 +30,7 @@ const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
 };
 
 export default function MemberJuiceBar({ client }: { client: Client | null }) {
+  const { t } = useLanguage();
   const [orders, setOrders] = useState<JuiceBarOrder[]>([]);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [pickupTime, setPickupTime] = useState<string>('In 15 mins');
@@ -120,7 +122,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
         action: 'CREATE',
         entityType: 'SYSTEM',
         entityId: client.id,
-        details: `Member ${client.name} pre-ordered from Earth's Kitchen. Total: EGP ${cartTotal}. Pickup: ${pickupTime}`,
+        details: `Member ${client.name} pre-ordered from Earth's Kitchen. Total: ${t('payments.currency_le')} ${cartTotal}. Pickup: ${pickupTime}`,
         timestamp: new Date().toISOString(),
         userId: client.portalUserId || client.id,
         userName: client.name,
@@ -202,7 +204,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                       <div className="space-y-1 flex-1">
                         <div className="flex justify-between items-baseline">
                           <span className="text-xs font-bold text-foreground">{item.name}</span>
-                          <span className="text-xs font-mono font-bold text-primary">EGP {item.price}</span>
+                          <span className="text-xs font-mono font-bold text-primary">{t('payments.currency_le')} {item.price}</span>
                         </div>
                         <p className="text-[10px] text-muted-foreground leading-normal pr-2">
                           {item.description}
@@ -283,10 +285,10 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                   <div className="space-y-0.5">
                     <span className="font-semibold">{item!.name}</span>
                     <span className="text-[10px] text-zinc-400 font-mono block">
-                      {qty} x EGP {item!.price}
+                      {qty} x {t('payments.currency_le')} {item!.price}
                     </span>
                   </div>
-                  <strong className="font-mono font-bold text-primary">EGP {subtotal}</strong>
+                  <strong className="font-mono font-bold text-primary">{t('payments.currency_le')} {subtotal}</strong>
                 </div>
               ))}
             </div>
@@ -310,7 +312,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                 </div>
                 <div className="text-right pb-1">
                   <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Total Amount</span>
-                  <strong className="text-lg font-mono font-extrabold text-white">EGP {cartTotal}</strong>
+                  <strong className="text-lg font-mono font-extrabold text-white">{t('payments.currency_le')} {cartTotal}</strong>
                 </div>
               </div>
 
@@ -359,7 +361,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                       </div>
                       <div className="text-right">
                         <strong className="text-sm font-mono font-extrabold text-foreground block">
-                          EGP {order.totalAmount}
+                          {t('payments.currency_le')} {order.totalAmount}
                         </strong>
                         <span className="text-[9px] text-zinc-400 font-medium block">
                           Pickup: {order.pickupTime}
@@ -369,10 +371,10 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
 
                     {/* Items list */}
                     <div className="space-y-1 text-xs">
-                      {order.items.map((it, idx) => (
+                      {order.items.map((it: any, idx: number) => (
                         <div key={idx} className="flex justify-between text-muted-foreground">
                           <span>{it.name} <span className="text-[10px] text-zinc-500">x{it.quantity}</span></span>
-                          <span className="font-mono text-[11px]">EGP {it.price * it.quantity}</span>
+                          <span className="font-mono text-[11px]">{t('payments.currency_le')} {it.price * it.quantity}</span>
                         </div>
                       ))}
                     </div>

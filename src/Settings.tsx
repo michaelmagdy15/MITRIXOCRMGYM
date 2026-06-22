@@ -31,6 +31,8 @@ export default function Settings() {
   const { changeMyPassword, runExistingUsersMigration } = useAuth();
   const [companyName, setCompanyName] = useState(branding.companyName);
   const [logoUrl, setLogoUrl] = useState(branding.logoUrl);
+  const [currencyCode, setCurrencyCode] = useState(branding.currencyCode || 'EGP');
+  const [currencySymbol, setCurrencySymbol] = useState(branding.currencySymbol || 'LE');
   const logoFileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoUploadStatus, setLogoUploadStatus] = useState<string | null>(null);
@@ -175,6 +177,8 @@ export default function Settings() {
     setLogoUrl(branding.logoUrl);
     setKioskPin(branding.kioskPin || '');
     setDailyPin(branding.dailyCheckinPin || '');
+    setCurrencyCode(branding.currencyCode || 'EGP');
+    setCurrencySymbol(branding.currencySymbol || 'LE');
   }, [branding]);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -210,7 +214,7 @@ export default function Settings() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await updateBranding({ companyName, logoUrl });
+      await updateBranding({ companyName, logoUrl, currencyCode, currencySymbol });
     } finally {
       setIsSaving(false);
     }
@@ -544,6 +548,26 @@ export default function Settings() {
                       onChange={(e) => setCompanyName(e.target.value)}
                       placeholder="Enter company name"
                     />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="currencyCode">Currency Code</Label>
+                      <Input
+                        id="currencyCode"
+                        value={currencyCode}
+                        onChange={(e) => setCurrencyCode(e.target.value)}
+                        placeholder="e.g. EGP, USD, EUR"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="currencySymbol">Currency Symbol</Label>
+                      <Input
+                        id="currencySymbol"
+                        value={currencySymbol}
+                        onChange={(e) => setCurrencySymbol(e.target.value)}
+                        placeholder="e.g. LE, $, €"
+                      />
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="logoUrl">Logo URL / Upload</Label>

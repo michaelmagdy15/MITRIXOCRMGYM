@@ -15,7 +15,7 @@ import { useSettings } from './contexts/SettingsContext';
 const BRANCHES = ['Heliopolis', 'Fifth Settlement', 'Zamalek', 'Sheikh Zayed'];
 
 export default function ClubOperations() {
-  const { features } = useSettings();
+  const { features, branding } = useSettings();
 
   // --- Earth's Kitchen Juice Bar State ---
   const [juiceOrders, setJuiceOrders] = useState<JuiceBarOrder[]>([]);
@@ -35,7 +35,7 @@ export default function ClubOperations() {
   useEffect(() => {
     const isAllowed = operationsTabs.some(t => t.id === activeTab);
     if (!isAllowed && operationsTabs.length > 0) {
-      setActiveTab(operationsTabs[0].id as any);
+      setActiveTab(operationsTabs[0]?.id as any);
     }
   }, [operationsTabs, activeTab]);
   const [loadingJuice, setLoadingJuice] = useState(true);
@@ -420,7 +420,7 @@ export default function ClubOperations() {
                         {order.items.map((it, idx) => (
                           <div key={idx} className="flex justify-between text-muted-foreground">
                             <span>{it.name} <strong className="text-primary font-bold">x{it.quantity}</strong></span>
-                            <span className="font-mono text-[10px]">EGP {it.price * it.quantity}</span>
+                            <span className="font-mono text-[10px]">{branding.currencySymbol || 'LE'} {it.price * it.quantity}</span>
                           </div>
                         ))}
                       </div>

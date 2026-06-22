@@ -14,7 +14,7 @@ import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
-  const { currentUser, users } = useAppContext();
+  const { currentUser, users, setActiveTab, setActiveClientId } = useAppContext();
   const { clients } = useClients(currentUser);
   const { attendances, recordAttendance } = useAttendance(currentUser, clients);
   const { t, language, isRtl } = useLanguage();
@@ -505,7 +505,20 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       return (
                         <div key={a.id} className="p-3 border-b last:border-0 flex items-center justify-between hover:bg-muted/30 transition-colors">
                           <div className="space-y-0.5">
-                            <p className="text-sm font-bold">{client?.name || t('attendance.unknown')}</p>
+                            {client ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveTab('clients');
+                                  setActiveClientId(client.id);
+                                }}
+                                className="text-primary hover:underline font-bold text-sm text-left block"
+                              >
+                                {client.name}
+                              </button>
+                            ) : (
+                              <p className="text-sm font-bold">{t('attendance.unknown')}</p>
+                            )}
                             <p className="text-[10px] text-muted-foreground flex items-center">
                               <MapPin className="h-3 w-3 me-1" /> {a.branch} · {format(parseISO(a.date), 'h:mm a')}
                             </p>

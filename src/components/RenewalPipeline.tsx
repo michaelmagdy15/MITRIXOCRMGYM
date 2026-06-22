@@ -22,7 +22,8 @@ export default function RenewalPipeline() {
     addComment,
     currentUser,
     addPayment,
-    users
+    users,
+    branding
   } = useAppContext();
   const { coaches } = useCoaches();
   const { packages } = usePackages();
@@ -336,7 +337,7 @@ export default function RenewalPipeline() {
                 <SelectContent>
                   {packages.map((pkg) => (
                     <SelectItem key={pkg.id} value={pkg.name}>
-                      {pkg.name} ({pkg.price} EGP)
+                      {pkg.name} ({pkg.price} {branding.currencySymbol || 'LE'})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -345,7 +346,7 @@ export default function RenewalPipeline() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="amount">Amount (EGP)</Label>
+                <Label htmlFor="amount">Amount ({branding.currencySymbol || 'LE'})</Label>
                 <Input 
                   id="amount" 
                   value={amount} 

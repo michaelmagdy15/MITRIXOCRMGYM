@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format, parseISO, isBefore, addDays, differenceInDays } from 'date-fns';
-import { Client, LeadCategory, LeadInterest, LeadSource, LeadStage, Branch, InteractionType, InteractionOutcome } from './types';
+import { Client, LeadCategory, LeadInterest, LeadSource, LeadStage, Branch, InteractionType, InteractionOutcome, Gender } from './types';
 import { Phone, Calendar, MessageSquare, Plus, FileSpreadsheet, Download, UserCheck, ArrowRight } from 'lucide-react';
 import ImportData from './ImportData';
 import ImportHistory from './ImportHistory';
@@ -32,7 +32,8 @@ export default function Leads() {
     canAssignLeads,
     canDeleteRecords,
     fetchClientDetails,
-    clients, addClient, updateClient, deleteMultipleClients, deleteClient, addComment, addInteraction
+    clients, addClient, updateClient, deleteMultipleClients, deleteClient, addComment, addInteraction,
+    prefilledLeadData, setPrefilledLeadData
   } = useAppContext();
   const { t } = useLanguage();
 
@@ -108,6 +109,16 @@ export default function Leads() {
     currentUser?.role === 'rep' ? currentUser.id : ''
   );
   const [newLeadLinked, setNewLeadLinked] = useState(false);
+  const [newLeadGender, setNewLeadGender] = useState<Gender>('Male');
+
+  React.useEffect(() => {
+    if (prefilledLeadData) {
+      if (prefilledLeadData.name) setNewLeadName(prefilledLeadData.name);
+      if (prefilledLeadData.phone) setNewLeadPhone(prefilledLeadData.phone);
+      setIsNewLeadOpen(true);
+      setPrefilledLeadData(null);
+    }
+  }, [prefilledLeadData, setPrefilledLeadData]);
 
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const [leadToConvert, setLeadToConvert] = useState<Client | null>(null);
@@ -450,6 +461,7 @@ export default function Leads() {
       phone: newLeadPhone.trim(),
       status: 'Lead',
       source: newLeadSource,
+      gender: newLeadGender,
       branch: newLeadBranch || undefined,
       stage: 'New',
       comments: [],
@@ -464,6 +476,7 @@ export default function Leads() {
     setNewLeadName('');
     setNewLeadPhone('');
     setNewLeadSource('Instagram');
+    setNewLeadGender('Male');
     setNewLeadBranch('');
     setNewLeadAssignedTo('');
     setNewLeadLinked(false);
@@ -1239,11 +1252,29 @@ export default function Leads() {
                       <SelectValue placeholder="Select source" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Instagram">Instagram</SelectItem>
-                      <SelectItem value="WhatsApp">WhatsApp</SelectItem>
+                      <SelectItem value="Call in">Call in</SelectItem>
                       <SelectItem value="Walk-in">Walk-in</SelectItem>
-                      <SelectItem value="TikTok">TikTok</SelectItem>
+                      <SelectItem value="Word Of Mouth">Word Of Mouth</SelectItem>
+                      <SelectItem value="Instagram">Instagram</SelectItem>
+                      <SelectItem value="ADS">ADS</SelectItem>
+                      <SelectItem value="Facebook">Facebook</SelectItem>
+                      <SelectItem value="Website">Website</SelectItem>
+                      <SelectItem value="Google">Google</SelectItem>
                       <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Gender</Label>
+                  <Select value={newLeadGender} onValueChange={(v) => setNewLeadGender(v as Gender)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                      <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

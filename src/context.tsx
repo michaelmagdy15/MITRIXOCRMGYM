@@ -68,6 +68,12 @@ export interface AppContextType {
   userTargets: UserSalesTarget[];
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  activeClientId: string | null;
+  setActiveClientId: (id: string | null) => void;
+  prefilledLeadData: { name?: string; phone?: string } | null;
+  setPrefilledLeadData: (data: { name?: string; phone?: string } | null) => void;
   addClient: (client: Client) => Promise<void>;
   bulkAddClients: (clients: Client[]) => Promise<{success: number, failed: number, errors: {row: number, reason: string}[]}>;
   updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
@@ -105,6 +111,7 @@ export interface AppContextType {
   attendances: Attendance[];
   recordAttendance: (clientId: string, branch: Branch) => Promise<void>;
   deletePayment: (id: string) => Promise<void>;
+  updatePayment: (id: string, updates: Partial<Payment>) => Promise<void>;
   wipeSystem: () => Promise<void>;
   bulkAddPayments: (payments: Payment[]) => Promise<void>;
   canDeletePayments: boolean;
@@ -173,7 +180,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     payments, 
     loading: loadingPayments, 
     addPayment, 
-    deletePayment 
+    deletePayment,
+    updatePayment
   } = usePayments({ 
     currentUser, 
     clients, 
@@ -226,6 +234,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const { ptPackageRecords, addPTPackageRecord, updatePTPackageRecord } = usePTSessions(currentUser, clients);
   const { userTargets, updateUserTarget } = useUserTargets(currentUser);
+
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeClientId, setActiveClientId] = useState<string | null>(null);
+  const [prefilledLeadData, setPrefilledLeadData] = useState<{ name?: string; phone?: string } | null>(null);
 
   const isManagerOrSama = useMemo(() => {
     if (!currentUser) return false;
@@ -505,6 +517,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     userTargets,
     searchQuery,
     setSearchQuery,
+    activeTab,
+    setActiveTab,
+    activeClientId,
+    setActiveClientId,
+    prefilledLeadData,
+    setPrefilledLeadData,
     addClient,
     bulkAddClients,
     updateClient,
@@ -542,6 +560,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     attendances,
     recordAttendance,
     deletePayment,
+    updatePayment,
     wipeSystem,
     bulkAddPayments,
     canDeletePayments,
@@ -563,10 +582,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentUser, effectiveRole, users, visibleClients, loadingClients,
     salesStats, visiblePayments, loadingPayments, ptPackageRecords,
     auditLogs, visibleTasks, allTasks, packages, loadingPackages,
-    coaches, importBatches, userTargets, searchQuery, isAuthReady, branding,
+    coaches, importBatches, userTargets, searchQuery, activeTab, activeClientId, prefilledLeadData, isAuthReady, branding,
     features, updateFeatures, previewRole, attendances, canDeletePayments, canAccessSettings,
     canViewGlobalDashboard, canDeleteRecords, canAssignLeads,
-    commissionRates, isManagerOrSama, branches, fetchClientDetails, createClientAccount
+    commissionRates, isManagerOrSama, branches, fetchClientDetails, createClientAccount,
+    updatePayment
   ]);
 
   return (

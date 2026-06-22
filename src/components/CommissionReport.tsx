@@ -19,7 +19,7 @@ import { SALES_NAME_MAPPING, SALES_MEMBERS } from '../constants';
 
 
 const CommissionReport: React.FC = () => {
-  const { commissionRates, updateCommissionRates, users } = useAppContext();
+  const { commissionRates, updateCommissionRates, users, branding } = useAppContext();
   const { currentUser } = useAuth();
   const { clients } = useClients(currentUser);
   const { payments } = usePayments({ currentUser, clients, canDeletePayments: false });
@@ -185,7 +185,7 @@ const CommissionReport: React.FC = () => {
           </div>
           <div>
             <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Month Revenue</p>
-            <p className="text-2xl font-bold text-slate-900">{totalMonthRevenue.toLocaleString()} EGP</p>
+            <p className="text-2xl font-bold text-slate-900">{totalMonthRevenue.toLocaleString()} {branding.currencySymbol || 'LE'}</p>
           </div>
         </div>
         
@@ -195,7 +195,7 @@ const CommissionReport: React.FC = () => {
           </div>
           <div>
             <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Total Commission</p>
-            <p className="text-2xl font-bold text-slate-900">{totalMonthCommission.toLocaleString()} EGP</p>
+            <p className="text-2xl font-bold text-slate-900">{totalMonthCommission.toLocaleString()} {branding.currencySymbol || 'LE'}</p>
           </div>
         </div>
 
@@ -328,7 +328,7 @@ const CommissionReport: React.FC = () => {
                     <td className="px-6 py-4 text-right font-bold text-slate-900">{rep.totalRevenue.toLocaleString()}</td>
                     <td className="px-6 py-4 text-right">
                       <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-sm font-bold border border-emerald-100">
-                        {rep.commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EGP
+                        {rep.commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {branding.currencySymbol || 'LE'}
                       </span>
                     </td>
                   </tr>
@@ -351,7 +351,7 @@ const CommissionReport: React.FC = () => {
                   <td className="px-6 py-4 text-right font-bold text-slate-900">{reportData.reduce((s, r) => s + r.privateRevenue, 0).toLocaleString()}</td>
                   <td className="px-6 py-4 text-right font-bold text-slate-900">{reportData.reduce((s, r) => s + r.groupRevenue, 0).toLocaleString()}</td>
                   <td className="px-6 py-4 text-right font-bold text-blue-600">{totalMonthRevenue.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-bold text-emerald-600">{totalMonthCommission.toLocaleString()} EGP</td>
+                  <td className="px-6 py-4 text-right font-bold text-emerald-600">{totalMonthCommission.toLocaleString()} {branding.currencySymbol || 'LE'}</td>
                 </tr>
               </tfoot>
             )}
