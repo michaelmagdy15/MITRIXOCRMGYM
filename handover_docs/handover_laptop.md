@@ -38,6 +38,8 @@ When you pull this repository on your laptop, you can copy these folders to your
 ## 📋 Latest Commit History Reference
 
 Here are the most recent changes in the repository for reference:
+- `9fb4a35` fix: implement branding and logo image preloading to prevent unbranded UI flash.
+- `ee148a4` fix: resolve mobile dialog offset bug & add laptop handover docs with custom skills.
 - `5d601a4` config: add `ascAppId` and submit profiles to `eas.json` for App Store builds.
 - `03fac98` bump: build number 5 -> 6 for App Store resubmission.
 - `8b8e62f` feat: add App Store marketing assets and device mockups for iOS app submission.
@@ -50,6 +52,7 @@ Here are the most recent changes in the repository for reference:
 ## 🤝 Meeting Notes & Next Steps (In 30 mins)
 
 - **App Store Submission Readiness**: Build number is bumped to `6` with branding adjusted to `StrikeEG`. The marketing assets and mockups are checked in.
-- **Production URL**: Live at `https://strike.mitrixo.com`.
+- **Production URL**: Live at `https://strike.mitrixo.com` (successfully rebuilt and deployed to Google Cloud Run).
 - **Privacy Policy**: Static policy added at `/privacy.html` as required by Apple.
-- **Cart Drawer Layout**: Fixed the mobile translation shift so you can confidently demo the storefront and cart flow on a mobile device or responsive simulator.
+- **Cart Drawer Layout**: Fixed the mobile translation/scale shift so you can confidently demo the storefront and cart flow on a mobile device or responsive simulator.
+- **White-label Branding & Preloading**: Implemented an async logo preloader. The web app now displays a clean theme-aware spinner on load until the Firestore configurations and logo image are fully cached. It never flashes "MITRIXOGYMCRM" anymore.
