@@ -188,7 +188,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
                         ? `<img src="${logoUrlToUse}" alt="${companyName}" style="max-height: 80px; max-width: 240px; object-fit: contain;" />`
                         : `<h1 style="color: #0f172a; margin: 0; font-size: 30px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase;">${companyName}</h1>`
                       }
-                      <p style="color: #64748b; margin: 8px 0 0 0; font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Boxing Club</p>
+                      <p style="color: #64748b; margin: 8px 0 0 0; font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Kickboxing & Functional Training</p>
                     </div>
                     <div style="padding: 40px 35px;">
                       <h2 style="color: #0f172a; margin-top: 0; margin-bottom: 16px; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">Thank you for your request, ${name}!</h2>
