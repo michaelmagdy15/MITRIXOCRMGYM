@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins } from 'lucide-react';
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 import { collection, query, where, doc, documentId, getDoc, getDocs } from 'firebase/firestore';
 import { Client } from '../types';
 
@@ -52,17 +52,37 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   const { currentUser, logout } = useAuth();
   const { branding, features } = useSettings();
   const { theme, toggleTheme } = useTheme();
+
+  const isStrike = useMemo(() => {
+    const tenantId = getTenantId();
+    return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
+  }, [branding?.companyName]);
+
+  const isMobile = useMemo(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM/i.test(navigator.userAgent) || window.innerWidth < 768;
+  }, []);
   
   const filteredNavItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => {
       if (item.tab === 'home' && features.qrCheckin === false) return false;
-      if (item.tab === 'juicebar' && features.juiceBar === false) return false;
+      if (item.tab === 'juicebar') {
+        if (isStrike && isMobile) return false;
+        if (features.juiceBar === false) return false;
+      }
+      if (item.tab === 'locker') {
+        if (isStrike && isMobile) return false;
+        if (features.locker === false) return false;
+      }
       if (item.tab === 'wallet' && features.wallet === false) return false;
-      if (item.tab === 'locker' && features.locker === false) return false;
       if (item.tab === 'invites' && features.operations === false) return false;
       return true;
+    }).map(item => {
+      if (item.tab === 'home' && isStrike && isMobile) {
+        return { ...item, label: 'Home Screen' };
+      }
+      return item;
     });
-  }, [features]);
+  }, [features, isStrike, isMobile]);
 
   const [activeTab, setActiveTab] = useState<MemberTab>('home');
   const [primaryClient, setPrimaryClient] = useState<Client | null>(null);

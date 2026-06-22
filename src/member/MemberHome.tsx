@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { QRCodeSVG } from 'qrcode.react';
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fns';
 import { 
@@ -249,10 +249,58 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
     } catch { return null; }
   }, [client?.membershipExpiry]);
 
+  const isStrike = useMemo(() => {
+    const tenantId = getTenantId();
+    return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
+  }, [branding?.companyName]);
+
   const formatOptionalDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
     try { return format(parseISO(dateStr), 'dd MMM yyyy'); } catch { return 'N/A'; }
   };
+
+  // ─── Quick Shortcuts ───
+  const shortcuts = useMemo(() => {
+    const list = [
+      { 
+        icon: <Calendar className="h-6 w-6" />, 
+        label: 'Bookings', 
+        action: () => onNavigate?.('booking'),
+        color: isStrike ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'
+      },
+      { 
+        icon: <ShoppingBag className="h-6 w-6" />, 
+        label: 'Shop', 
+        action: () => onSwitchToStore?.(),
+        color: isStrike ? 'bg-amber-500/10 text-amber-500' : 'bg-orange-500/10 text-orange-500'
+      },
+      { 
+        icon: <Coins className="h-6 w-6" />, 
+        label: 'Wallet', 
+        action: () => onNavigate?.('wallet'),
+        color: 'bg-amber-500/10 text-amber-500',
+        walletRequired: true
+      },
+      { 
+        icon: <Trophy className="h-6 w-6" />, 
+        label: 'Progress', 
+        action: () => onNavigate?.('profile-progress'),
+        color: isStrike ? 'bg-emerald-600/10 text-emerald-600' : 'bg-purple-500/10 text-purple-500',
+        pointsRequired: true
+      },
+      { 
+        icon: <User className="h-6 w-6" />, 
+        label: 'Profile', 
+        action: () => onNavigate?.('profile'),
+        color: 'bg-emerald-500/10 text-emerald-500'
+      },
+    ];
+    return list.filter(item => {
+      if (item.walletRequired && features.wallet === false) return false;
+      if (item.pointsRequired && features.pointsSystem === false) return false;
+      return true;
+    });
+  }, [features, onNavigate, onSwitchToStore, isStrike]);
 
   if (!client) {
     return (
@@ -269,48 +317,13 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
 
   const memberQrValue = client.memberId || client.id;
 
-  // ─── Quick Shortcuts ───
-  const shortcuts = useMemo(() => {
-    const list = [
-      { 
-        icon: <Calendar className="h-6 w-6" />, 
-        label: 'Bookings', 
-        action: () => onNavigate?.('booking'),
-        color: 'bg-blue-500/10 text-blue-500'
-      },
-      { 
-        icon: <ShoppingBag className="h-6 w-6" />, 
-        label: 'Shop', 
-        action: () => onSwitchToStore?.(),
-        color: 'bg-orange-500/10 text-orange-500'
-      },
-      { 
-        icon: <Coins className="h-6 w-6" />, 
-        label: 'Wallet', 
-        action: () => onNavigate?.('wallet'),
-        color: 'bg-amber-500/10 text-amber-500',
-        walletRequired: true
-      },
-      { 
-        icon: <Trophy className="h-6 w-6" />, 
-        label: 'Progress', 
-        action: () => onNavigate?.('profile-progress'),
-        color: 'bg-purple-500/10 text-purple-500',
-        pointsRequired: true
-      },
-      { 
-        icon: <User className="h-6 w-6" />, 
-        label: 'Profile', 
-        action: () => onNavigate?.('profile'),
-        color: 'bg-emerald-500/10 text-emerald-500'
-      },
-    ];
-    return list.filter(item => {
-      if (item.walletRequired && features.wallet === false) return false;
-      if (item.pointsRequired && features.pointsSystem === false) return false;
-      return true;
-    });
-  }, [features, onNavigate, onSwitchToStore]);
+  const checkinsBadgeColor = isStrike 
+    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+    : 'bg-blue-500/10 border-blue-500/20 text-blue-500';
+
+  const bestStreakBadgeColor = isStrike 
+    ? 'bg-amber-500/10 border-amber-500/20 text-amber-500'
+    : 'bg-purple-500/10 border-purple-500/20 text-purple-500';
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -328,12 +341,12 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
           <Flame className="h-4 w-4" />
           <span className="text-xs font-bold">{streak.current} Day Streak</span>
         </div>
-        <div className="flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 text-blue-500 px-3 py-1.5 rounded-full">
+        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${checkinsBadgeColor}`}>
           <Activity className="h-4 w-4" />
           <span className="text-xs font-bold">{totalCheckIns} Check-ins</span>
         </div>
         {streak.best > 0 && (
-          <div className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-500 px-3 py-1.5 rounded-full">
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${bestStreakBadgeColor}`}>
             <Star className="h-4 w-4" />
             <span className="text-xs font-bold">Best: {streak.best}</span>
           </div>
@@ -591,7 +604,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
                       borderRadius: '8px',
                       fontSize: '10px'
                     }}
-                    formatter={(value) => [`${value} check-ins`, 'Volume']}
+                    formatter={(value: any) => [`${value} check-ins`, 'Volume']}
                   />
                   <Bar dataKey="count" fill={theme === 'dark' ? '#ffffff' : '#09090b'} radius={[4, 4, 0, 0]} />
                 </BarChart>

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone } from 'lucide-react';
+import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus } from 'lucide-react';
 import { Client, Package } from '../types';
 import { getTenantId } from '../firebase';
 
@@ -91,6 +91,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   
   const tenantId = getTenantId();
   const isStrike = tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM/i.test(navigator.userAgent) || window.innerWidth < 768;
   const { addToCart } = useCart();
   const [preloaderState, setPreloaderState] = useState<'loading' | 'exiting' | 'hidden'>('hidden');
   const [activeTab, setActiveTab] = useState<'book' | 'locations' | 'schedule' | 'announcements'>('book');
@@ -105,6 +106,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
   // Preloader: wait for logo image to load (cached for subsequent renders)
   useEffect(() => {
+    if (preloaderState !== 'loading') return;
     let cancelled = false;
     const minDelay = new Promise(r => setTimeout(r, 2000));
     
@@ -258,27 +260,29 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       </header>
 
       {/* ── TABS ── */}
-      <div className="bg-card border-b px-2 flex overflow-x-auto no-scrollbar py-2 gap-2 sticky top-16 z-30">
-        {[
-          { id: 'book', label: 'Book', icon: <Calendar className="h-4 w-4" /> },
-          { id: 'locations', label: 'Locations', icon: <MapPin className="h-4 w-4" /> },
-          { id: 'schedule', label: 'Schedule', icon: <Clock className="h-4 w-4" /> },
-          { id: 'announcements', label: 'Announcements', icon: <Bell className="h-4 w-4" /> }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-xs font-bold transition-all sf-interactive ${
-              activeTab === tab.id 
-                ? 'bg-primary text-primary-foreground shadow-md' 
-                : 'bg-muted/80 text-muted-foreground hover:bg-muted'
-            }`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {(!isStrike || !isMobile) && (
+        <div className="bg-card border-b px-2 flex overflow-x-auto no-scrollbar py-2 gap-2 sticky top-16 z-30">
+          {[
+            { id: 'book', label: 'Book', icon: <Calendar className="h-4 w-4" /> },
+            { id: 'locations', label: 'Locations', icon: <MapPin className="h-4 w-4" /> },
+            { id: 'schedule', label: 'Schedule', icon: <Clock className="h-4 w-4" /> },
+            { id: 'announcements', label: 'Announcements', icon: <Bell className="h-4 w-4" /> }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-xs font-bold transition-all sf-interactive ${
+                activeTab === tab.id 
+                  ? 'bg-primary text-primary-foreground shadow-md' 
+                  : 'bg-muted/80 text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── MAIN STOREFRONT CONTENT ── */}
       <main className="flex-1 overflow-y-auto">
@@ -405,7 +409,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               <div className="relative h-52 rounded-3xl overflow-hidden shadow-xl border">
                 <div className="absolute inset-0 bg-gradient-to-tr from-black/95 via-black/40 to-transparent z-10" />
                 <img 
-                  src="/mitrixogymcrm_sessions_slide.png" 
+                  src={isStrike ? "/strike_slide_outdoor.png" : "/mitrixogymcrm_sessions_slide.png"} 
                   alt="mitrixogymcrm Sessions" 
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 ease-out scale-105"
                 />
@@ -454,7 +458,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   <p className="text-white/60 text-[10px] mt-0.5">Build confidence, discipline, and stamina.</p>
                 </div>
                 <img 
-                  src="/mitrixogymcrm_kids_boxing.png" 
+                  src={isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png"} 
                   alt="Kids Boxing" 
                   className="w-full h-full object-cover"
                 />
@@ -489,7 +493,14 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                       <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                       <div className="mt-2 flex items-center justify-between">
-                        <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                          {isStrike && (
+                            <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                              +{Math.floor(pkg.price / 100)} Pts
+                            </Badge>
+                          )}
+                        </div>
                         <Button 
                           size="sm" 
                           variant="ghost"
@@ -518,7 +529,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               <div className="rounded-3xl overflow-hidden relative shadow-xl border">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10" />
                 <img 
-                  src="/impact_sister_company.png" 
+                  src={isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png"} 
                   alt="IMPACT Sister Company" 
                   className="w-full h-56 object-cover"
                 />
@@ -576,7 +587,14 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                       <h3 className="font-extrabold text-xs text-foreground uppercase mt-1 truncate">{pkg.name}</h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                       <div className="mt-2 flex items-center justify-between">
-                        <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                          {isStrike && (
+                            <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                              +{Math.floor(pkg.price / 100)} Pts
+                            </Badge>
+                          )}
+                        </div>
                         <Button 
                           size="sm" 
                           variant="ghost"
@@ -634,7 +652,14 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                       <h3 className="font-extrabold text-xs text-foreground uppercase truncate">{pkg.name}</h3>
                       <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days</p>
                       <div className="mt-2 flex items-center justify-between">
-                        <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                          {isStrike && (
+                            <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                              +{Math.floor(pkg.price / 100)} Pts
+                            </Badge>
+                          )}
+                        </div>
                         <Button size="sm" onClick={(e) => { e.stopPropagation(); addToCart(pkg as any); }} className="h-7 px-3 text-[10px] font-bold rounded-xl">
                           <ShoppingCart className="h-3 w-3 mr-1" /> Add to Cart
                         </Button>
@@ -961,6 +986,32 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
           </Button>
         )}
       </div>
+
+      {isStrike && isMobile && (
+        <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1.5 shadow-lg backdrop-blur-md bg-opacity-90">
+          {[
+            { id: 'signup', label: 'Sign Up', icon: <UserPlus className="h-5 w-5" />, action: onSwitchToCRM },
+            { id: 'book', label: 'Book', icon: <Calendar className="h-5 w-5" />, action: () => setActiveTab('book') },
+            { id: 'locations', label: 'Locations', icon: <MapPin className="h-5 w-5" />, action: () => setActiveTab('locations') },
+            { id: 'schedule', label: 'Schedule', icon: <Clock className="h-5 w-5" />, action: () => setActiveTab('schedule') },
+            { id: 'announcements', label: 'Announcements', icon: <Bell className="h-5 w-5" />, action: () => setActiveTab('announcements') }
+          ].map((item) => {
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={item.action}
+                className={`flex flex-col items-center gap-0.5 px-2.5 py-1.5 min-w-[56px] transition-colors rounded-xl ${
+                  isActive ? 'text-primary font-bold' : 'text-muted-foreground font-semibold'
+                }`}
+              >
+                {item.icon}
+                <span className="text-[9px] tracking-wide">{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
     </div>
   );

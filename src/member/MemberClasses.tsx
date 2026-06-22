@@ -33,65 +33,69 @@ export default function MemberClasses({ client }: { client: Client | null }) {
 
   // Seed default classes/events if the database is empty
   const seedDemoClasses = async () => {
-    const ref = collection(db, 'classes');
-    const snap = await getDocs(ref);
-    if (!snap.empty) return;
+    try {
+      const ref = collection(db, 'classes');
+      const snap = await getDocs(ref);
+      if (!snap.empty) return;
 
-    console.log("Seeding group classes and events...");
-    const batch = writeBatch(db);
-    const demoData: Omit<GymClass, 'id'>[] = [
-      {
-        name: "Boxing Fundamentals",
-        coachName: "SHADY YOUSSEF",
-        date: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-        time: "18:00 - 19:15",
-        branch: client?.branch || "Maadi",
-        capacity: 15,
-        attendees: [],
-        type: "Class",
-        description: "Learn basic stances, punches, and movements. Recommended for beginners."
-      },
-      {
-        name: "Conditioning & Sparring",
-        coachName: "MAHMOUD ALI",
-        date: format(addDays(new Date(), 2), 'yyyy-MM-dd'),
-        time: "19:30 - 21:00",
-        branch: client?.branch || "Maadi",
-        capacity: 12,
-        attendees: [],
-        type: "Class",
-        description: "Heavy conditioning drill followed by supervised light sparring sessions."
-      },
-      {
-        name: "mitrixogymcrm Tournament 2026",
-        coachName: "ALL COACHES",
-        date: format(addDays(new Date(), 5), 'yyyy-MM-dd'),
-        time: "16:00 - 22:00",
-        branch: client?.branch || "Maadi",
-        capacity: 100,
-        attendees: [],
-        type: "Event",
-        description: "Annual amateur boxing cup. Join us for food, music, and epic matches!"
-      },
-      {
-        name: "Ladies Only Boxing Kickoff",
-        coachName: "SARA AHMED",
-        date: format(addDays(new Date(), 3), 'yyyy-MM-dd'),
-        time: "11:00 - 12:30",
-        branch: client?.branch || "Maadi",
-        capacity: 20,
-        attendees: [],
-        type: "Class",
-        description: "Exclusive women-only training focusing on cardiorespiratory endurance."
-      }
-    ];
+      console.log("Seeding group classes and events...");
+      const batch = writeBatch(db);
+      const demoData: Omit<GymClass, 'id'>[] = [
+        {
+          name: "Boxing Fundamentals",
+          coachName: "SHADY YOUSSEF",
+          date: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
+          time: "18:00 - 19:15",
+          branch: client?.branch || "Maadi",
+          capacity: 15,
+          attendees: [],
+          type: "Class",
+          description: "Learn basic stances, punches, and movements. Recommended for beginners."
+        },
+        {
+          name: "Conditioning & Sparring",
+          coachName: "MAHMOUD ALI",
+          date: format(addDays(new Date(), 2), 'yyyy-MM-dd'),
+          time: "19:30 - 21:00",
+          branch: client?.branch || "Maadi",
+          capacity: 12,
+          attendees: [],
+          type: "Class",
+          description: "Heavy conditioning drill followed by supervised light sparring sessions."
+        },
+        {
+          name: "mitrixogymcrm Tournament 2026",
+          coachName: "ALL COACHES",
+          date: format(addDays(new Date(), 5), 'yyyy-MM-dd'),
+          time: "16:00 - 22:00",
+          branch: client?.branch || "Maadi",
+          capacity: 100,
+          attendees: [],
+          type: "Event",
+          description: "Annual amateur boxing cup. Join us for food, music, and epic matches!"
+        },
+        {
+          name: "Ladies Only Boxing Kickoff",
+          coachName: "SARA AHMED",
+          date: format(addDays(new Date(), 3), 'yyyy-MM-dd'),
+          time: "11:00 - 12:30",
+          branch: client?.branch || "Maadi",
+          capacity: 20,
+          attendees: [],
+          type: "Class",
+          description: "Exclusive women-only training focusing on cardiorespiratory endurance."
+        }
+      ];
 
-    demoData.forEach(item => {
-      const newDocRef = doc(collection(db, 'classes'));
-      batch.set(newDocRef, item);
-    });
+      demoData.forEach(item => {
+        const newDocRef = doc(collection(db, 'classes'));
+        batch.set(newDocRef, item);
+      });
 
-    await batch.commit();
+      await batch.commit();
+    } catch (err) {
+      console.warn("Seeding classes skipped (likely lack of write permissions):", err);
+    }
   };
 
   useEffect(() => {
@@ -100,9 +104,12 @@ export default function MemberClasses({ client }: { client: Client | null }) {
       return;
     }
 
-    seedDemoClasses().then(() => {
+    let unsub: (() => void) | undefined;
+
+    const init = async () => {
+      await seedDemoClasses();
       const q = collection(db, 'classes');
-      const unsub = onSnapshot(q, (snapshot) => {
+      unsub = onSnapshot(q, (snapshot) => {
         const list = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -114,8 +121,16 @@ export default function MemberClasses({ client }: { client: Client | null }) {
         console.error("Error loading classes:", err);
         setLoading(false);
       });
-      return unsub;
+    };
+
+    init().catch(err => {
+      console.error("Failed to initialize MemberClasses:", err);
+      setLoading(false);
     });
+
+    return () => {
+      if (unsub) unsub();
+    };
   }, [client?.id, client?.branch]);
 
   // Scroll to today on mount

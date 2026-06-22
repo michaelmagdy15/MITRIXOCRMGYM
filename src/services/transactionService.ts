@@ -226,6 +226,49 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       clientUpdate.stage = 'Converted';
     }
 
+    // Award points on package purchase! (1 Point per 100 LE/EGP spent)
+    const pointsEarned = Math.floor(params.amount / 100);
+    if (pointsEarned > 0) {
+      const currentPoints = clientData.points || 0;
+      clientUpdate.points = currentPoints + pointsEarned;
+
+      // Update pointsWallet doc
+      const walletRef = doc(db, 'pointsWallets', params.clientId);
+      const walletSnap = await transaction.get(walletRef);
+      let walletData: any;
+      if (walletSnap.exists()) {
+        walletData = walletSnap.data();
+        transaction.update(walletRef, {
+          balance: (walletData.balance || 0) + pointsEarned,
+          totalEarned: (walletData.totalEarned || 0) + pointsEarned,
+          lastUpdated: new Date().toISOString()
+        });
+      } else {
+        walletData = {
+          memberId: params.clientId,
+          balance: pointsEarned,
+          totalEarned: pointsEarned,
+          totalSpent: 0,
+          lastUpdated: new Date().toISOString()
+        };
+        transaction.set(walletRef, walletData);
+      }
+
+      // Log pointsTransaction
+      const txnRef = doc(collection(db, 'pointsTransactions'));
+      transaction.set(txnRef, {
+        memberId: params.clientId,
+        type: 'credit',
+        amount: pointsEarned,
+        reason: 'purchase',
+        description: `Earned from package purchase: ${params.packageType}`,
+        balanceBefore: walletSnap.exists() ? (walletData.balance || 0) : 0,
+        balanceAfter: (walletSnap.exists() ? (walletData.balance || 0) : 0) + pointsEarned,
+        createdBy: params.recordedByName || 'System',
+        createdAt: new Date().toISOString()
+      });
+    }
+
     transaction.update(clientRef, cleanData(clientUpdate));
 
     // E. Comment Document
