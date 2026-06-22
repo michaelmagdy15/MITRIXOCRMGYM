@@ -29,6 +29,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     companyName: 'mitrixogymcrm',
     logoUrl: ''
   });
+  const [isBrandingLoaded, setIsBrandingLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [salesTarget, setSalesTarget] = useState<SalesTarget>({
     targetAmount: 50000,
@@ -82,27 +83,75 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   };
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>(DEFAULT_STOREFRONT);
 
+  // Helper to preload image before setting loaded state
+  const preloadBrandingLogo = useCallback((data: BrandingSettings, onComplete: () => void) => {
+    if (data.companyName) {
+      document.title = data.companyName;
+    }
+    if (data.logoUrl) {
+      const img = new Image();
+      img.src = data.logoUrl;
+      img.onload = () => {
+        setBranding(data);
+        onComplete();
+      };
+      img.onerror = () => {
+        setBranding(data);
+        onComplete();
+      };
+    } else {
+      setBranding(data);
+      onComplete();
+    }
+  }, []);
+
   // Branding — load or subscribe to branding settings
   useEffect(() => {
+    let active = true;
     if (!isAuthenticated || role === 'client' || role === 'coach') {
       // One-time read for unauthenticated/members/coaches
       getDoc(doc(db, 'settings', 'branding'))
         .then((snapshot) => {
-          if (snapshot.exists()) setBranding(snapshot.data() as BrandingSettings);
+          if (active) {
+            if (snapshot.exists()) {
+              preloadBrandingLogo(snapshot.data() as BrandingSettings, () => {
+                if (active) setIsBrandingLoaded(true);
+              });
+            } else {
+              setIsBrandingLoaded(true);
+            }
+          }
         })
-        .catch((err) => console.warn('Could not load branding:', err.code || err.message));
-      return;
+        .catch((err) => {
+          console.warn('Could not load branding:', err.code || err.message);
+          if (active) setIsBrandingLoaded(true);
+        });
+      return () => { active = false; };
     }
     // Real-time listener for staff/admin
     const unsubBranding = onSnapshot(
       doc(db, 'settings', 'branding'),
       (snapshot) => {
-        if (snapshot.exists()) setBranding(snapshot.data() as BrandingSettings);
+        if (active) {
+          if (snapshot.exists()) {
+            preloadBrandingLogo(snapshot.data() as BrandingSettings, () => {
+              if (active) setIsBrandingLoaded(true);
+            });
+          } else {
+            setIsBrandingLoaded(true);
+          }
+        }
       },
-      (error) => console.warn('Firestore Error (branding):', error.code || error.message)
+      (error) => {
+        console.warn('Firestore Error (branding):', error.code || error.message);
+        if (active) setIsBrandingLoaded(true);
+      }
     );
-    return () => { unsubBranding(); };
-  }, [role, isAuthenticated]);
+    return () => {
+      active = false;
+      unsubBranding();
+    };
+  }, [role, isAuthenticated, preloadBrandingLogo]);
 
   // Features — load or subscribe to feature flags
   useEffect(() => {
@@ -232,6 +281,19 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     storefrontConfig,
     updateStorefrontConfig,
   }), [branding, searchQuery, salesTarget, branches, commissionRates, features, storefrontConfig, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates, updateFeatures, updateStorefrontConfig]);
+
+  if (!isBrandingLoaded) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative h-10 w-10">
+            <div className="absolute inset-0 rounded-full border-2 border-muted-foreground/10"></div>
+            <div className="absolute inset-0 rounded-full border-t-2 border-primary animate-spin"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 };
