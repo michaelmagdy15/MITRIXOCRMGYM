@@ -93,6 +93,14 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     const clientPackages = clientData.packages || [];
     const legacyStartDate = clientData.startDate || params.startDate;
 
+    // Fetch wallet details inside transaction before any writes to satisfy Firestore rules
+    const pointsEarned = Math.floor(params.amount / 100);
+    const walletRef = doc(db, 'pointsWallets', params.clientId);
+    let walletSnap: any = null;
+    if (pointsEarned > 0) {
+      walletSnap = await transaction.get(walletRef);
+    }
+
     // A. Validation: Prevent duplicate active packages if not an upgrade payment
     if (!params.isUpgradePayment) {
       const existingActivePackage = clientPackages.find((p: any) => p.status === 'Active' && p.packageName === params.packageType);
@@ -227,14 +235,11 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     }
 
     // Award points on package purchase! (1 Point per 100 LE/EGP spent)
-    const pointsEarned = Math.floor(params.amount / 100);
-    if (pointsEarned > 0) {
+    if (pointsEarned > 0 && walletSnap) {
       const currentPoints = clientData.points || 0;
       clientUpdate.points = currentPoints + pointsEarned;
 
       // Update pointsWallet doc
-      const walletRef = doc(db, 'pointsWallets', params.clientId);
-      const walletSnap = await transaction.get(walletRef);
       let walletData: any;
       if (walletSnap.exists()) {
         walletData = walletSnap.data();
