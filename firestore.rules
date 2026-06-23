@@ -371,6 +371,15 @@ service cloud.firestore {
       allow update, delete: if canmitrixogymcrmDeletePayments();
     }
 
+    match /pointsWallets/{walletId} {
+      allow read, write: if ismitrixogymcrmStaff() || isOwnClientRecord(walletId);
+    }
+
+    match /pointsTransactions/{txnId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow write: if ismitrixogymcrmStaff();
+    }
+
     match /settings/{settingId} {
       allow read: if (settingId == 'branding') || (settingId == 'features') || (settingId == 'storefront') || canmitrixogymcrmAccessSettings();
       allow write: if canmitrixogymcrmAccessSettings() && (settingId != 'branding' || isValidBranding(request.resource.data));
