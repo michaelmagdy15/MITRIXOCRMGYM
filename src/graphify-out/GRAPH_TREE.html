@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Strike Boxing CRM — graphify tree viewer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+      color: #333;
+    }
+    h1 {
+      margin: 20px 0 0 24px;
+      font-size: 2.2rem;
+      font-weight: bold;
+      color: #1e3a56;
+    }
+    .controls {
+      margin: 20px 0 15px 24px;
+    }
+    button {
+      margin-right: 10px;
+      padding: 8px 18px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s ease-in-out;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:active {
+      background: #004085;
+    }
+    #tree-container {
+      width: calc(100vw - 48px); /* Adjust for body margin/padding */
+      height: 85vh;
+      overflow: auto;
+      border-radius: 8px;
+      background: #fff;
+      margin-left: 24px;
+      margin-right: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border: 1px solid #ddd;
+    }
+    svg {
+      background: #fff;
+      border-radius: 8px;
+      display: block; /* Important for D3 */
+    }
+    .node circle {
+      stroke-width: 2.5px;
+    }
+    .node text { /* Base style for the <text> container */
+      font: 13px 'Segoe UI', sans-serif;
+      paint-order: stroke fill; /* Ensures text is readable over lines */
+      stroke: #fff; /* White halo */
+      stroke-width: 3px; /* Halo thickness */
+      stroke-linejoin: round;
+      stroke-opacity: 0.85; /* Halo opacity */
+    }
+    .link {
+      fill: none;
+      stroke-opacity: 0.7;
+      stroke-width: 2px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Strike Boxing CRM — Knowledge Graph</h1>
+  <div class="controls">
+    <button onclick="expandAll()">Expand All</button>
+    <button onclick="collapseAll()">Collapse All</button>
+    <button onclick="resetView()">Reset View</button>
+  </div>
+  <div id="tree-container">
+    <svg id="tree-svg" width="6000" height="8000"></svg>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    const initialJsonData = {"name":"Strike Boxing CRM","total_count":396,"children":[{"name":"AdminHub.tsx","total_count":1,"children":[{"name":"AdminHub()","total_count":1,"children":[]}]},{"name":"App.tsx","total_count":4,"children":[{"name":"App()","total_count":1,"children":[]},{"name":"AppContent()","total_count":1,"children":[]},{"name":"AuthAwareSettingsProvider()","total_count":1,"children":[]},{"name":"QUOTE_GENERATOR_EMAILS","total_count":1,"children":[]}]},{"name":"Attendance.tsx","total_count":1,"children":[{"name":"Attendance()","total_count":1,"children":[]}]},{"name":"AuditLogs.tsx","total_count":7,"children":[{"name":"AuditLogs()","total_count":1,"children":[]},{"name":"deleteLogsFromFirestore()","total_count":1,"children":[]},{"name":"downloadJSON()","total_count":1,"children":[]},{"name":"fetchAndArchiveOldLogs()","total_count":1,"children":[]},{"name":"getActionBadge()","total_count":1,"children":[]},{"name":"getEntityBadge()","total_count":1,"children":[]},{"name":"OWNER_EMAILS","total_count":1,"children":[]}]},{"name":"buildInfo.ts","total_count":1,"children":[{"name":"buildInfo","total_count":1,"children":[]}]},{"name":"Calendar.tsx","total_count":2,"children":[{"name":"CalendarView()","total_count":1,"children":[]},{"name":"GymClass","total_count":1,"children":[]}]},{"name":"Clients.tsx","total_count":2,"children":[{"name":"Clients()","total_count":1,"children":[]},{"name":"migratePackageData()","total_count":1,"children":[]}]},{"name":"ClubOperations.tsx","total_count":2,"children":[{"name":"BRANCHES","total_count":1,"children":[]},{"name":"ClubOperations()","total_count":1,"children":[]}]},{"name":"coach","total_count":14,"children":[{"name":"CoachClients.tsx","total_count":1,"children":[{"name":"CoachClients()","total_count":1,"children":[]}]},{"name":"CoachHome.tsx","total_count":3,"children":[{"name":"CoachHome()","total_count":1,"children":[]},{"name":"CoachStats","total_count":1,"children":[]},{"name":"CoachTab","total_count":1,"children":[]}]},{"name":"CoachPortal.tsx","total_count":3,"children":[{"name":"CoachPortal()","total_count":1,"children":[]},{"name":"CoachTab","total_count":1,"children":[]},{"name":"NAV_ITEMS","total_count":1,"children":[]}]},{"name":"CoachProfile.tsx","total_count":1,"children":[{"name":"CoachProfile()","total_count":1,"children":[]}]},{"name":"CoachSchedule.tsx","total_count":3,"children":[{"name":"CoachSchedule()","total_count":1,"children":[]},{"name":"DAYS","total_count":1,"children":[]},{"name":"DEFAULT_SCHEDULE","total_count":1,"children":[]}]},{"name":"CoachSessions.tsx","total_count":3,"children":[{"name":"CoachSessions()","total_count":1,"children":[]},{"name":"STATUS_STYLES","total_count":1,"children":[]},{"name":"StatusFilter","total_count":1,"children":[]}]}]},{"name":"Coaches.tsx","total_count":1,"children":[{"name":"Coaches()","total_count":1,"children":[]}]},{"name":"components","total_count":71,"children":[{"name":"AdminActivityFeed.tsx","total_count":2,"children":[{"name":"ActivityItem","total_count":1,"children":[]},{"name":"AdminActivityFeed()","total_count":1,"children":[]}]},{"name":"AdminGamificationManager.tsx","total_count":3,"children":[{"name":"AdminGamificationManager()","total_count":1,"children":[]},{"name":"BadgeConfig","total_count":1,"children":[]},{"name":"RewardItem","total_count":1,"children":[]}]},{"name":"AdminPointsManager.tsx","total_count":1,"children":[{"name":"AdminPointsManager()","total_count":1,"children":[]}]},{"name":"AdminStorefrontManager.tsx","total_count":1,"children":[{"name":"AdminStorefrontManager()","total_count":1,"children":[]}]},{"name":"AlertDialog.tsx","total_count":2,"children":[{"name":"AlertDialog()","total_count":1,"children":[]},{"name":"AlertDialogProps","total_count":1,"children":[]}]},{"name":"BuildVersionFooter.tsx","total_count":1,"children":[{"name":"BuildVersionFooter()","total_count":1,"children":[]}]},{"name":"CommissionReport.tsx","total_count":1,"children":[{"name":"CommissionReport()","total_count":1,"children":[]}]},{"name":"ConfirmDialog.tsx","total_count":2,"children":[{"name":"ConfirmDialog()","total_count":1,"children":[]},{"name":"ConfirmDialogProps","total_count":1,"children":[]}]},{"name":"ConversionFunnel.tsx","total_count":3,"children":[{"name":"ConversionFunnel()","total_count":1,"children":[]},{"name":"ConversionFunnelProps","total_count":1,"children":[]},{"name":"STAGES","total_count":1,"children":[]}]},{"name":"dashboard","total_count":8,"children":[{"name":"ConversionFunnel.tsx","total_count":3,"children":[{"name":"ConversionFunnel()","total_count":1,"children":[]},{"name":"ConversionFunnelProps","total_count":1,"children":[]},{"name":"CustomTooltip()","total_count":1,"children":[]}]},{"name":"KPICard.tsx","total_count":2,"children":[{"name":"KPICard()","total_count":1,"children":[]},{"name":"KPICardProps","total_count":1,"children":[]}]},{"name":"RevenueChart.tsx","total_count":3,"children":[{"name":"CustomTooltip()","total_count":1,"children":[]},{"name":"RevenueChart()","total_count":1,"children":[]},{"name":"RevenueChartProps","total_count":1,"children":[]}]}]},{"name":"ErrorBoundary.tsx","total_count":7,"children":[{"name":".componentDidCatch()","total_count":1,"children":[]},{"name":".constructor()","total_count":1,"children":[]},{"name":".getDerivedStateFromError()","total_count":1,"children":[]},{"name":".render()","total_count":1,"children":[]},{"name":"ErrorBoundary","total_count":1,"children":[]},{"name":"Props","total_count":1,"children":[]},{"name":"State","total_count":1,"children":[]}]},{"name":"ForcePasswordChangeDialog.tsx","total_count":1,"children":[{"name":"ForcePasswordChangeDialog()","total_count":1,"children":[]}]},{"name":"import","total_count":8,"children":[{"name":"ColumnMapper.tsx","total_count":3,"children":[{"name":"cn()","total_count":1,"children":[]},{"name":"ColumnMapper()","total_count":1,"children":[]},{"name":"ColumnMapperProps","total_count":1,"children":[]}]},{"name":"FileUploader.tsx","total_count":2,"children":[{"name":"FileUploader()","total_count":1,"children":[]},{"name":"FileUploaderProps","total_count":1,"children":[]}]},{"name":"ImportStatus.tsx","total_count":3,"children":[{"name":"ImportProgress()","total_count":1,"children":[]},{"name":"ImportSummary()","total_count":1,"children":[]},{"name":"ImportSummaryProps","total_count":1,"children":[]}]}]},{"name":"MyProfile.tsx","total_count":2,"children":[{"name":"compressImage()","total_count":1,"children":[]},{"name":"MyProfile()","total_count":1,"children":[]}]},{"name":"NotificationCenter.tsx","total_count":3,"children":[{"name":"AppNotification","total_count":1,"children":[]},{"name":"NotificationCenter()","total_count":1,"children":[]},{"name":"NotificationType","total_count":1,"children":[]}]},{"name":"OnlineUsers.tsx","total_count":1,"children":[{"name":"OnlineUsers()","total_count":1,"children":[]}]},{"name":"PWAInstallBanner.tsx","total_count":6,"children":[{"name":"BeforeInstallPromptEvent","total_count":1,"children":[]},{"name":"detectPlatform()","total_count":1,"children":[]},{"name":"isInStandaloneMode()","total_count":1,"children":[]},{"name":"Platform","total_count":1,"children":[]},{"name":"PWAInstallBanner()","total_count":1,"children":[]},{"name":"Step()","total_count":1,"children":[]}]},{"name":"QRCodePage.tsx","total_count":2,"children":[{"name":"PlatformStep()","total_count":1,"children":[]},{"name":"QRCodePage()","total_count":1,"children":[]}]},{"name":"RenewalPipeline.tsx","total_count":1,"children":[{"name":"RenewalPipeline()","total_count":1,"children":[]}]},{"name":"ResyncAssignments.tsx","total_count":3,"children":[{"name":"MatchResult","total_count":1,"children":[]},{"name":"ResyncAssignments()","total_count":1,"children":[]},{"name":"ResyncAssignmentsProps","total_count":1,"children":[]}]},{"name":"ResyncPayments.tsx","total_count":5,"children":[{"name":"canonicalize()","total_count":1,"children":[]},{"name":"RepairItem","total_count":1,"children":[]},{"name":"resolveRepUser()","total_count":1,"children":[]},{"name":"ResyncPayments()","total_count":1,"children":[]},{"name":"ResyncPaymentsProps","total_count":1,"children":[]}]},{"name":"UserPerformanceDialog.tsx","total_count":6,"children":[{"name":"GROUP_PACKAGES","total_count":1,"children":[]},{"name":"isGroupPackage()","total_count":1,"children":[]},{"name":"isPrivatePackage()","total_count":1,"children":[]},{"name":"PRIVATE_PACKAGES","total_count":1,"children":[]},{"name":"UserPerformanceDialog()","total_count":1,"children":[]},{"name":"UserPerformanceDialogProps","total_count":1,"children":[]}]},{"name":"WhatsAppDialog.tsx","total_count":2,"children":[{"name":"WhatsAppDialog()","total_count":1,"children":[]},{"name":"WhatsAppDialogProps","total_count":1,"children":[]}]}]},{"name":"constants.ts","total_count":4,"children":[{"name":"ASSIGNABLE_ROLES","total_count":1,"children":[]},{"name":"PACKAGES","total_count":1,"children":[]},{"name":"SALES_MEMBERS","total_count":1,"children":[]},{"name":"SALES_NAME_MAPPING","total_count":1,"children":[]}]},{"name":"context.tsx","total_count":4,"children":[{"name":"AppContext","total_count":1,"children":[]},{"name":"AppContextType","total_count":1,"children":[]},{"name":"AppProvider()","total_count":1,"children":[]},{"name":"useAppContext()","total_count":1,"children":[]}]},{"name":"contexts","total_count":25,"children":[{"name":"AuthContext.tsx","total_count":5,"children":[{"name":"AuthContext","total_count":1,"children":[]},{"name":"AuthContextType","total_count":1,"children":[]},{"name":"AuthProvider()","total_count":1,"children":[]},{"name":"generateCoachId()","total_count":1,"children":[]},{"name":"useAuth()","total_count":1,"children":[]}]},{"name":"CRMContext.tsx","total_count":4,"children":[{"name":"CRMContext","total_count":1,"children":[]},{"name":"CRMContextType","total_count":1,"children":[]},{"name":"CRMProvider()","total_count":1,"children":[]},{"name":"useCRMData()","total_count":1,"children":[]}]},{"name":"LanguageContext.tsx","total_count":5,"children":[{"name":"Language","total_count":1,"children":[]},{"name":"LanguageContext","total_count":1,"children":[]},{"name":"LanguageContextType","total_count":1,"children":[]},{"name":"LanguageProvider()","total_count":1,"children":[]},{"name":"useLanguage()","total_count":1,"children":[]}]},{"name":"SettingsContext.tsx","total_count":4,"children":[{"name":"SettingsContext","total_count":1,"children":[]},{"name":"SettingsContextType","total_count":1,"children":[]},{"name":"SettingsProvider()","total_count":1,"children":[]},{"name":"useSettings()","total_count":1,"children":[]}]},{"name":"ThemeContext.tsx","total_count":7,"children":[{"name":"applyTheme()","total_count":1,"children":[]},{"name":"getInitialTheme()","total_count":1,"children":[]},{"name":"Theme","total_count":1,"children":[]},{"name":"ThemeContext","total_count":1,"children":[]},{"name":"ThemeContextType","total_count":1,"children":[]},{"name":"ThemeProvider()","total_count":1,"children":[]},{"name":"useTheme()","total_count":1,"children":[]}]}]},{"name":"Dashboard.tsx","total_count":6,"children":[{"name":"Dashboard()","total_count":1,"children":[]},{"name":"GROUP_PACKAGES","total_count":1,"children":[]},{"name":"isGroupPackage()","total_count":1,"children":[]},{"name":"isPrivatePackage()","total_count":1,"children":[]},{"name":"PaginatedList()","total_count":1,"children":[]},{"name":"PRIVATE_PACKAGES","total_count":1,"children":[]}]},{"name":"data.ts","total_count":4,"children":[{"name":"mockClients","total_count":1,"children":[]},{"name":"mockSalesTarget","total_count":1,"children":[]},{"name":"mockUsers","total_count":1,"children":[]},{"name":"now","total_count":1,"children":[]}]},{"name":"Debtors.tsx","total_count":2,"children":[{"name":"Debtors()","total_count":1,"children":[]},{"name":"LOCALES","total_count":1,"children":[]}]},{"name":"firebase.ts","total_count":14,"children":[{"name":"activeConfig","total_count":1,"children":[]},{"name":"app","total_count":1,"children":[]},{"name":"auth","total_count":1,"children":[]},{"name":"checkSignInMethods()","total_count":1,"children":[]},{"name":"createFirebaseUser()","total_count":1,"children":[]},{"name":"db","total_count":1,"children":[]},{"name":"getActiveConfig()","total_count":1,"children":[]},{"name":"getExistingUserUID()","total_count":1,"children":[]},{"name":"getMemberEmail()","total_count":1,"children":[]},{"name":"getTenantId()","total_count":1,"children":[]},{"name":"logOut()","total_count":1,"children":[]},{"name":"sendPasswordReset()","total_count":1,"children":[]},{"name":"signInWithEmail()","total_count":1,"children":[]},{"name":"storage","total_count":1,"children":[]}]},{"name":"HelpPage.tsx","total_count":1,"children":[{"name":"HelpPage()","total_count":1,"children":[]}]},{"name":"hooks","total_count":13,"children":[{"name":"useAttendance.ts","total_count":1,"children":[{"name":"useAttendance()","total_count":1,"children":[]}]},{"name":"useAuditLogs.ts","total_count":3,"children":[{"name":"AuditLogQueryParams","total_count":1,"children":[]},{"name":"PRIVILEGED_ROLES","total_count":1,"children":[]},{"name":"useAuditLogs()","total_count":1,"children":[]}]},{"name":"useClients.ts","total_count":1,"children":[{"name":"useClients()","total_count":1,"children":[]}]},{"name":"useCoaches.ts","total_count":1,"children":[{"name":"useCoaches()","total_count":1,"children":[]}]},{"name":"useImportBatches.ts","total_count":1,"children":[{"name":"useImportBatches()","total_count":1,"children":[]}]},{"name":"usePackages.ts","total_count":1,"children":[{"name":"usePackages()","total_count":1,"children":[]}]},{"name":"usePayments.ts","total_count":2,"children":[{"name":"usePayments()","total_count":1,"children":[]},{"name":"UsePaymentsOptions","total_count":1,"children":[]}]},{"name":"usePTSessions.ts","total_count":1,"children":[{"name":"usePTSessions()","total_count":1,"children":[]}]},{"name":"useTasks.ts","total_count":1,"children":[{"name":"useTasks()","total_count":1,"children":[]}]},{"name":"useUserTargets.ts","total_count":1,"children":[{"name":"useUserTargets()","total_count":1,"children":[]}]}]},{"name":"ImportData.tsx","total_count":2,"children":[{"name":"ImportData()","total_count":1,"children":[]},{"name":"ImportDataProps","total_count":1,"children":[]}]},{"name":"ImportHistory.tsx","total_count":1,"children":[{"name":"ImportHistory()","total_count":1,"children":[]}]},{"name":"Leads.tsx","total_count":1,"children":[{"name":"Leads()","total_count":1,"children":[]}]},{"name":"Login.tsx","total_count":3,"children":[{"name":"Login()","total_count":1,"children":[]},{"name":"LoginProps","total_count":1,"children":[]},{"name":"View","total_count":1,"children":[]}]},{"name":"member","total_count":52,"children":[{"name":"CartContext.tsx","total_count":5,"children":[{"name":"CartContext","total_count":1,"children":[]},{"name":"CartContextProps","total_count":1,"children":[]},{"name":"CartItem","total_count":1,"children":[]},{"name":"CartProvider()","total_count":1,"children":[]},{"name":"useCart()","total_count":1,"children":[]}]},{"name":"CartDrawer.tsx","total_count":1,"children":[{"name":"CartDrawer()","total_count":1,"children":[]}]},{"name":"Checkout.tsx","total_count":1,"children":[{"name":"Checkout()","total_count":1,"children":[]}]},{"name":"GuestPortal.tsx","total_count":4,"children":[{"name":"BoxingGlovesIcon()","total_count":1,"children":[]},{"name":"getPackageImage()","total_count":1,"children":[]},{"name":"GuestPortal()","total_count":1,"children":[]},{"name":"GuestPortalProps","total_count":1,"children":[]}]},{"name":"MemberAttendance.tsx","total_count":1,"children":[{"name":"MemberAttendance()","total_count":1,"children":[]}]},{"name":"MemberBadges.tsx","total_count":2,"children":[{"name":"BadgeCard()","total_count":1,"children":[]},{"name":"MemberBadges()","total_count":1,"children":[]}]},{"name":"MemberBodyTracker.tsx","total_count":2,"children":[{"name":"BodyRecord","total_count":1,"children":[]},{"name":"MemberBodyTracker()","total_count":1,"children":[]}]},{"name":"MemberClasses.tsx","total_count":2,"children":[{"name":"GymClass","total_count":1,"children":[]},{"name":"MemberClasses()","total_count":1,"children":[]}]},{"name":"MemberHome.tsx","total_count":6,"children":[{"name":"Announcement","total_count":1,"children":[]},{"name":"BoxingGlovesIcon()","total_count":1,"children":[]},{"name":"calculateStreak()","total_count":1,"children":[]},{"name":"getGreeting()","total_count":1,"children":[]},{"name":"MemberHome()","total_count":1,"children":[]},{"name":"QuickShortcut","total_count":1,"children":[]}]},{"name":"MemberInvites.tsx","total_count":2,"children":[{"name":"MemberInvites()","total_count":1,"children":[]},{"name":"STATUS_STYLES","total_count":1,"children":[]}]},{"name":"MemberJuiceBar.tsx","total_count":3,"children":[{"name":"MemberJuiceBar()","total_count":1,"children":[]},{"name":"MENU_ITEMS","total_count":1,"children":[]},{"name":"STATUS_STYLES","total_count":1,"children":[]}]},{"name":"MemberLocker.tsx","total_count":1,"children":[{"name":"MemberLocker()","total_count":1,"children":[]}]},{"name":"MemberNotificationBell.tsx","total_count":4,"children":[{"name":"MemberNotification","total_count":1,"children":[]},{"name":"MemberNotificationBell()","total_count":1,"children":[]},{"name":"MemberNotificationBellProps","total_count":1,"children":[]},{"name":"typeIcons","total_count":1,"children":[]}]},{"name":"MemberPackages.tsx","total_count":1,"children":[{"name":"MemberPackages()","total_count":1,"children":[]}]},{"name":"MemberPortal.tsx","total_count":4,"children":[{"name":"MemberPortal()","total_count":1,"children":[]},{"name":"MemberPortalProps","total_count":1,"children":[]},{"name":"MemberTab","total_count":1,"children":[]},{"name":"NAV_ITEMS","total_count":1,"children":[]}]},{"name":"MemberProfile.tsx","total_count":1,"children":[{"name":"MemberProfile()","total_count":1,"children":[]}]},{"name":"MemberProgress.tsx","total_count":1,"children":[{"name":"MemberProgress()","total_count":1,"children":[]}]},{"name":"MemberRewards.tsx","total_count":4,"children":[{"name":"DEFAULT_REWARDS","total_count":1,"children":[]},{"name":"MemberRewards()","total_count":1,"children":[]},{"name":"Redemption","total_count":1,"children":[]},{"name":"Reward","total_count":1,"children":[]}]},{"name":"MemberSessions.tsx","total_count":3,"children":[{"name":"DAYS_ORDER","total_count":1,"children":[]},{"name":"MemberSessions()","total_count":1,"children":[]},{"name":"STATUS_STYLES","total_count":1,"children":[]}]},{"name":"MemberSubscription.tsx","total_count":2,"children":[{"name":"MemberSubscription()","total_count":1,"children":[]},{"name":"SubscriptionRequest","total_count":1,"children":[]}]},{"name":"MemberWallet.tsx","total_count":1,"children":[{"name":"MemberWallet()","total_count":1,"children":[]}]},{"name":"SubscriptionCheckout.tsx","total_count":1,"children":[{"name":"SubscriptionCheckout()","total_count":1,"children":[]}]}]},{"name":"MemberCheckin.tsx","total_count":2,"children":[{"name":"MemberCheckin()","total_count":1,"children":[]},{"name":"UserIcon()","total_count":1,"children":[]}]},{"name":"OnboardingWizard.tsx","total_count":1,"children":[{"name":"OnboardingWizard()","total_count":1,"children":[]}]},{"name":"Packages.tsx","total_count":1,"children":[{"name":"Packages()","total_count":1,"children":[]}]},{"name":"Payments.tsx","total_count":2,"children":[{"name":"Payments()","total_count":1,"children":[]},{"name":"toCanonical()","total_count":1,"children":[]}]},{"name":"PrivateSessions.tsx","total_count":1,"children":[{"name":"PrivateSessions()","total_count":1,"children":[]}]},{"name":"PTPackages.tsx","total_count":1,"children":[{"name":"PTPackages()","total_count":1,"children":[]}]},{"name":"QuoteGenerator.tsx","total_count":2,"children":[{"name":"QUOTE_GENERATOR_ALLOWED_EMAILS","total_count":1,"children":[]},{"name":"QuoteGenerator()","total_count":1,"children":[]}]},{"name":"Reports.tsx","total_count":5,"children":[{"name":"CustomTooltipRetention()","total_count":1,"children":[]},{"name":"CustomTooltipRevenue()","total_count":1,"children":[]},{"name":"KPICard()","total_count":1,"children":[]},{"name":"Reports()","total_count":1,"children":[]},{"name":"SOURCE_COLORS","total_count":1,"children":[]}]},{"name":"services","total_count":54,"children":[{"name":"auditService.ts","total_count":1,"children":[{"name":"addAuditLog()","total_count":1,"children":[]}]},{"name":"backupService.ts","total_count":4,"children":[{"name":"BackupProgressCallback","total_count":1,"children":[]},{"name":"exportDatabaseToJson()","total_count":1,"children":[]},{"name":"restoreDatabaseFromJson()","total_count":1,"children":[]},{"name":"ROOT_COLLECTIONS","total_count":1,"children":[]}]},{"name":"clientService.ts","total_count":8,"children":[{"name":"addClient()","total_count":1,"children":[]},{"name":"addComment()","total_count":1,"children":[]},{"name":"bulkAddClients()","total_count":1,"children":[]},{"name":"deleteClient()","total_count":1,"children":[]},{"name":"deleteMultipleClients()","total_count":1,"children":[]},{"name":"generateMemberId()","total_count":1,"children":[]},{"name":"recordSessionAttendance()","total_count":1,"children":[]},{"name":"updateClient()","total_count":1,"children":[]}]},{"name":"gamificationService.ts","total_count":14,"children":[{"name":"BadgeDefinition","total_count":1,"children":[]},{"name":"CoinsTransaction","total_count":1,"children":[]},{"name":"CoinsWallet","total_count":1,"children":[]},{"name":"creditCoins()","total_count":1,"children":[]},{"name":"DEFAULT_BADGES","total_count":1,"children":[]},{"name":"getAllBadgeDefinitions()","total_count":1,"children":[]},{"name":"getMemberBadges()","total_count":1,"children":[]},{"name":"getOrCreateCoinsWallet()","total_count":1,"children":[]},{"name":"getOrCreateStreak()","total_count":1,"children":[]},{"name":"MemberBadge","total_count":1,"children":[]},{"name":"seedBadgeDefinitions()","total_count":1,"children":[]},{"name":"StreakRecord","total_count":1,"children":[]},{"name":"updateBadgeProgress()","total_count":1,"children":[]},{"name":"updateStreak()","total_count":1,"children":[]}]},{"name":"pointsService.ts","total_count":11,"children":[{"name":"creditPoints()","total_count":1,"children":[]},{"name":"debitPoints()","total_count":1,"children":[]},{"name":"getActiveBundles()","total_count":1,"children":[]},{"name":"getAllBundles()","total_count":1,"children":[]},{"name":"getOrCreateWallet()","total_count":1,"children":[]},{"name":"getTransactionHistory()","total_count":1,"children":[]},{"name":"PointsBundle","total_count":1,"children":[]},{"name":"PointsTransaction","total_count":1,"children":[]},{"name":"PointsWallet","total_count":1,"children":[]},{"name":"saveBundle()","total_count":1,"children":[]},{"name":"seedDefaultBundles()","total_count":1,"children":[]}]},{"name":"sharedServices.ts","total_count":10,"children":[{"name":"addPackage()","total_count":1,"children":[]},{"name":"addPayment()","total_count":1,"children":[]},{"name":"addPrivateSession()","total_count":1,"children":[]},{"name":"addTask()","total_count":1,"children":[]},{"name":"deletePackage()","total_count":1,"children":[]},{"name":"deletePayment()","total_count":1,"children":[]},{"name":"deleteTask()","total_count":1,"children":[]},{"name":"updatePackage()","total_count":1,"children":[]},{"name":"updatePrivateSession()","total_count":1,"children":[]},{"name":"updateTask()","total_count":1,"children":[]}]},{"name":"transactionService.ts","total_count":2,"children":[{"name":"PaymentTransactionParams","total_count":1,"children":[]},{"name":"processPaymentTransaction()","total_count":1,"children":[]}]},{"name":"userService.ts","total_count":4,"children":[{"name":"activatePendingUser()","total_count":1,"children":[]},{"name":"deleteUser()","total_count":1,"children":[]},{"name":"inviteUser()","total_count":1,"children":[]},{"name":"updateUser()","total_count":1,"children":[]}]}]},{"name":"Settings.tsx","total_count":1,"children":[{"name":"Settings()","total_count":1,"children":[]}]},{"name":"SignupWizard.tsx","total_count":2,"children":[{"name":"SignupWizard()","total_count":1,"children":[]},{"name":"SignupWizardProps","total_count":1,"children":[]}]},{"name":"SuperAdminHub.tsx","total_count":2,"children":[{"name":"SubscriptionRequest","total_count":1,"children":[]},{"name":"SuperAdminHub()","total_count":1,"children":[]}]},{"name":"Tasks.tsx","total_count":1,"children":[{"name":"Tasks()","total_count":1,"children":[]}]},{"name":"types.ts","total_count":60,"children":[{"name":"ActivityLevel","total_count":1,"children":[]},{"name":"Attendance","total_count":1,"children":[]},{"name":"AuditLog","total_count":1,"children":[]},{"name":"Branch","total_count":1,"children":[]},{"name":"BrandingSettings","total_count":1,"children":[]},{"name":"Client","total_count":1,"children":[]},{"name":"ClientDocument","total_count":1,"children":[]},{"name":"ClientId","total_count":1,"children":[]},{"name":"ClientPackage","total_count":1,"children":[]},{"name":"ClientStatus","total_count":1,"children":[]},{"name":"ClientUpdates","total_count":1,"children":[]},{"name":"Coach","total_count":1,"children":[]},{"name":"CoachSchedule","total_count":1,"children":[]},{"name":"Comment","total_count":1,"children":[]},{"name":"CommissionRates","total_count":1,"children":[]},{"name":"CRMComment","total_count":1,"children":[]},{"name":"FeatureFlags","total_count":1,"children":[]},{"name":"FitnessTarget","total_count":1,"children":[]},{"name":"Gender","total_count":1,"children":[]},{"name":"GuestInvite","total_count":1,"children":[]},{"name":"HeroSlide","total_count":1,"children":[]},{"name":"ImportBatch","total_count":1,"children":[]},{"name":"ImportBatchId","total_count":1,"children":[]},{"name":"InteractionLog","total_count":1,"children":[]},{"name":"InteractionOutcome","total_count":1,"children":[]},{"name":"InteractionType","total_count":1,"children":[]},{"name":"isAdmin()","total_count":1,"children":[]},{"name":"isSuperAdmin()","total_count":1,"children":[]},{"name":"JuiceBarOrder","total_count":1,"children":[]},{"name":"LeadCategory","total_count":1,"children":[]},{"name":"LeadInterest","total_count":1,"children":[]},{"name":"LeadSource","total_count":1,"children":[]},{"name":"LeadStage","total_count":1,"children":[]},{"name":"Locker","total_count":1,"children":[]},{"name":"LockerRequest","total_count":1,"children":[]},{"name":"OfferEntry","total_count":1,"children":[]},{"name":"Package","total_count":1,"children":[]},{"name":"PackageId","total_count":1,"children":[]},{"name":"PackageType","total_count":1,"children":[]},{"name":"PasswordResetRequest","total_count":1,"children":[]},{"name":"Payment","total_count":1,"children":[]},{"name":"PaymentId","total_count":1,"children":[]},{"name":"PendingAccount","total_count":1,"children":[]},{"name":"PrivateSession","total_count":1,"children":[]},{"name":"PTPackageRecord","total_count":1,"children":[]},{"name":"SalesTarget","total_count":1,"children":[]},{"name":"ScheduleEntry","total_count":1,"children":[]},{"name":"SessionId","total_count":1,"children":[]},{"name":"StorefrontConfig","total_count":1,"children":[]},{"name":"StorefrontSection","total_count":1,"children":[]},{"name":"Task","total_count":1,"children":[]},{"name":"TaskId","total_count":1,"children":[]},{"name":"TaskPriority","total_count":1,"children":[]},{"name":"TaskStatus","total_count":1,"children":[]},{"name":"Tenant","total_count":1,"children":[]},{"name":"User","total_count":1,"children":[]},{"name":"UserId","total_count":1,"children":[]},{"name":"UserRole","total_count":1,"children":[]},{"name":"UserSalesTarget","total_count":1,"children":[]},{"name":"UserTarget","total_count":1,"children":[]}]},{"name":"UnconfirmedMemberships.tsx","total_count":3,"children":[{"name":"LOCALES","total_count":1,"children":[]},{"name":"PendingItem","total_count":1,"children":[]},{"name":"UnconfirmedMemberships()","total_count":1,"children":[]}]},{"name":"Users.tsx","total_count":1,"children":[{"name":"Users()","total_count":1,"children":[]}]},{"name":"utils","total_count":14,"children":[{"name":"currency.ts","total_count":3,"children":[{"name":"formatCurrency()","total_count":1,"children":[]},{"name":"getCurrencyCode()","total_count":1,"children":[]},{"name":"getCurrencySymbol()","total_count":1,"children":[]}]},{"name":"errorHandler.ts","total_count":3,"children":[{"name":"FirestoreErrorInfo","total_count":1,"children":[]},{"name":"handleFirestoreError()","total_count":1,"children":[]},{"name":"OperationType","total_count":1,"children":[]}]},{"name":"holdUtils.ts","total_count":3,"children":[{"name":"getHoldStatusInfo()","total_count":1,"children":[]},{"name":"holdPayment()","total_count":1,"children":[]},{"name":"releasePayment()","total_count":1,"children":[]}]},{"name":"passwordStrength.ts","total_count":3,"children":[{"name":"getPasswordStrength()","total_count":1,"children":[]},{"name":"PasswordStrengthResult","total_count":1,"children":[]},{"name":"validateNewPassword()","total_count":1,"children":[]}]},{"name":"pdfGenerator.ts","total_count":1,"children":[{"name":"generateClientContract()","total_count":1,"children":[]}]},{"name":"resolveUserDisplay.ts","total_count":1,"children":[{"name":"resolveUserDisplay()","total_count":1,"children":[]}]}]},{"name":"utils.ts","total_count":3,"children":[{"name":"cleanData()","total_count":1,"children":[]},{"name":"getEgyptDate()","total_count":1,"children":[]},{"name":"toEgyptTime()","total_count":1,"children":[]}]},{"name":"main.tsx","total_count":1,"children":[]},{"name":"vite-env.d.ts","total_count":1,"children":[]}]};
+
+    function transformData(jsonData) {
+        // Helper function to recursively build the children structure
+        function processNode(node, parentL1StageName) {
+            let displayName = node.name;
+            // Append total_count if it exists and is not already in the name
+            if (node.total_count !== undefined) {
+                if (!/\(Total Count: \d+\)$/.test(displayName)) {
+                    displayName += ` (Total Count: ${node.total_count})`;
+                }
+            }
+
+            const newNode = { name: displayName };
+
+            if (parentL1StageName === "Root") {
+                 newNode.originalStageName = node.name;
+            } else {
+                newNode.originalStageName = parentL1StageName;
+            }
+
+            if (node.children && node.children.length > 0) {
+                const stageNameToPass = (parentL1StageName === "Root") ? node.name : parentL1StageName;
+                newNode.children = node.children.map(child => processNode(child, stageNameToPass));
+            }
+
+            return newNode;
+        }
+
+        let rootDisplayName = jsonData.name;
+        if (jsonData.total_count !== undefined && !/\(Total Count: \d+\)$/.test(rootDisplayName)) {
+            rootDisplayName += ` (Total Count: ${jsonData.total_count})`;
+        }
+
+        return {
+            name: rootDisplayName,
+            originalStageName: "Root",
+            children: (jsonData.children || []).map(child => processNode(child, "Root"))
+        };
+    }
+
+    const treeData = transformData(initialJsonData);
+
+    // Auto-populated phaseColors: every depth-1 child of the root gets
+    // a stable colour from a bigger palette so all top-level dirs are
+    // distinguishable.
+    const PALETTE = [
+      ["#3498DB","#2980B9","#AED6F1"], ["#2ECC71","#27AE60","#A9DFBF"],
+      ["#E74C3C","#C0392B","#F5B7B1"], ["#9B59B6","#8E44AD","#D7BDE2"],
+      ["#F39C12","#D68910","#FAD7A0"], ["#1ABC9C","#117864","#A2D9CE"],
+      ["#34495E","#1B2631","#ABB2B9"], ["#E67E22","#BA4A00","#F5CBA7"],
+      ["#16A085","#0E6655","#A2D9CE"], ["#D35400","#A04000","#EDBB99"],
+      ["#7F8C8D","#566573","#D5DBDB"], ["#C0392B","#7B241C","#F5B7B1"],
+      ["#2E86C1","#1B4F72","#A9CCE3"], ["#28B463","#196F3D","#A9DFBF"],
+      ["#AF7AC5","#6C3483","#D2B4DE"],
+    ];
+    const phaseColors = { "Root": { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+                          "Default": { fill: "#BDC3C7", stroke: "#95A5A6", collapsedFill: "#ECF0F1" } };
+    (initialJsonData.children || []).forEach((c, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      phaseColors[c.name] = { fill: pal[0], stroke: pal[1], collapsedFill: pal[2] };
+    });
+
+    const levelSpecificPalettes = {
+      0: { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+      2: { fill: "#6ab04c", stroke: "#508a38", collapsedFill: "#a3d391" },
+      3: { fill: "#f0932b", stroke: "#d0730f", collapsedFill: "#f6c07e" },
+      4: { fill: "#be2edd", stroke: "#a01cb3", collapsedFill: "#e08bf2" },
+      5: { fill: "#00a8ff", stroke: "#007ac1", collapsedFill: "#74d2ff" },
+      6: { fill: "#e55039", stroke: "#c23620", collapsedFill: "#f09a8d" },
+      default: { fill: "#747d8c", stroke: "#57606f", collapsedFill: "#a4b0be" }
+    };
+
+    const svgElement = d3.select("#tree-svg");
+    const initialSvgWidth = +svgElement.attr("width");
+    const initialSvgHeight = +svgElement.attr("height");
+    const margin = { top: 40, right: 120, bottom: 80, left: 450 };
+    let width = initialSvgWidth - margin.left - margin.right;
+    let height = initialSvgHeight - margin.top - margin.bottom;
+    const duration = 500;
+    let nodeCounter = 0;
+    const g = svgElement.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const treemap = d3.tree().nodeSize([40, 0]);
+    let rootNode = d3.hierarchy(treeData, d => d.children);
+    rootNode.x0 = 0;
+    rootNode.y0 = 0;
+
+    if (rootNode.children) {
+      rootNode.children.forEach(d_child => {
+        if (d_child.children) { collapseBranch(d_child); }
+      });
+    }
+    updateTree(rootNode);
+
+    function collapseBranch(d) { if (d.children) { d._children = d.children; d._children.forEach(collapseBranch); d.children = null; } }
+    function expandBranch(d) { if (d._children) { d.children = d._children; d._children = null; } if (d.children) { d.children.forEach(expandBranch); } }
+    window.expandAll = () => { expandBranch(rootNode); updateTree(rootNode); };
+    window.collapseAll = () => { if (rootNode.children) { rootNode.children.forEach(collapseBranch); } updateTree(rootNode); };
+    window.resetView = () => { if (rootNode.children) { rootNode.children.forEach(d_child => { if (d_child.children || d_child._children) { collapseBranch(d_child); } }); } if (rootNode._children && !rootNode.children) { rootNode.children = rootNode._children; rootNode._children = null; } updateTree(rootNode); };
+
+    function updateTree(source) {
+      const treeLayoutData = treemap(rootNode);
+      let nodes = treeLayoutData.descendants();
+      let links = treeLayoutData.descendants().slice(1);
+
+      let minX = 0;
+      let maxX = 0;
+      if (nodes.length > 0) {
+        minX = d3.min(nodes, d => d.x);
+        maxX = d3.max(nodes, d => d.x);
+      }
+
+      let neededHeight = Math.max(initialSvgHeight, maxX - minX + margin.top + margin.bottom + 100);
+      svgElement.transition().duration(duration / 2).attr("height", neededHeight);
+      g.transition().duration(duration / 2).attr("transform", `translate(${margin.left},${margin.top - minX + 40})`);
+
+      nodes.forEach(d => { d.y = d.depth * 400; }); // Adjust horizontal separation if needed
+
+      const node = g.selectAll('g.node').data(nodes, d => d.id || (d.id = ++nodeCounter));
+      const nodeEnter = node.enter().append('g')
+        .attr('class', d => "node" + (d.children || d._children ? " node--internal" : " node--leaf") + (d._children ? " _children" : ""))
+        .attr('transform', d => `translate(${source.y0},${source.x0})`)
+        .on('click', (event, d) => { if (d.children) { d._children = d.children; d.children = null; } else if (d._children) { d.children = d._children; d._children = null; } updateTree(d); })
+        .style('cursor', d => (d.children || d._children) ? 'pointer' : 'default');
+
+      nodeEnter.append('circle').attr('r', 1e-6);
+
+      nodeEnter.append('text')
+        .attr('dy', '.35em')
+        .attr('x', d => d.children || d._children ? -14 : 14)
+        .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+        .style("fill-opacity", 1e-6)
+        .call(wrapText, 380);
+
+      const nodeUpdate = nodeEnter.merge(node);
+      nodeUpdate.transition().duration(duration)
+        .attr('transform', d => `translate(${d.y},${d.x})`)
+        .attr('class', d => "node" + (d.children ? " node--internal" : " node--leaf") + (d._children ? " node--internal _children" : ""));
+
+      nodeUpdate.select('circle').attr('r', 8.5)
+        .style('fill', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            if (d._children) return palette.collapsedFill;
+            if (d.children) return palette.fill;
+            return "#fff";
+        })
+        .style('stroke', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            return palette.stroke;
+        });
+      nodeUpdate.select('text').style("fill-opacity", 1).call(wrapText, 380);
+
+      const nodeExit = node.exit().transition().duration(duration).attr('transform', d => `translate(${source.y},${source.x})`).remove();
+      nodeExit.select('circle').attr('r', 1e-6);
+      nodeExit.select('text').style('fill-opacity', 1e-6);
+
+      const link = g.selectAll('path.link').data(links, d => d.id);
+      const linkEnter = link.enter().insert('path', "g").attr('class', 'link').attr('d', d => { const o = { x: source.x0, y: source.y0 }; return diagonal(o, o); });
+
+      linkEnter.merge(link).transition().duration(duration).attr('d', d => diagonal(d, d.parent))
+        .style('stroke', d => {
+            const sourceNode = d.parent;
+            if (!sourceNode) return phaseColors.Default.stroke;
+            const l1AncestorName = sourceNode.data.originalStageName;
+            const colorPalette = phaseColors[l1AncestorName] || phaseColors.Default;
+            return colorPalette.stroke;
+        });
+      link.exit().transition().duration(duration).attr('d', d => { const o = { x: source.x, y: source.y }; return diagonal(o, o); }).remove();
+      nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+    }
+
+    function diagonal(s, d) { return `M ${s.y} ${s.x} C ${(s.y + d.y) / 2} ${s.x}, ${(s.y + d.y) / 2} ${d.x}, ${d.y} ${d.x}`; }
+
+    function wrapText(textElements, maxWidth) {
+        const textPartColors = {
+            name: '#343a40',
+            count: '#0056b3'
+        };
+        const countRegex = /(\s\(Total Count: \d+\))$/;
+
+        textElements.each(function () {
+            const textD3 = d3.select(this);
+            const originalNodeText = textD3.datum().data.name;
+            const x = parseFloat(textD3.attr("x") || 0);
+            const initialDy = textD3.attr("dy");
+            const textAnchor = textD3.attr("text-anchor");
+            const lineHeight = 1.1;
+
+            textD3.text(null);
+
+            let namePart = originalNodeText;
+            let countPartText = "";
+
+            const countMatch = originalNodeText.match(countRegex);
+            if (countMatch && originalNodeText.endsWith(countMatch[0])) {
+                namePart = originalNodeText.substring(0, originalNodeText.length - countMatch[0].length).trim();
+                countPartText = countMatch[0].trim();
+            }
+
+            const tokens = [];
+            namePart.split(/\s+/).filter(Boolean).forEach(word => {
+                tokens.push({ text: word, type: 'name' });
+            });
+            if (countPartText) {
+                tokens.push({ text: countPartText, type: 'count' });
+            }
+
+            if (tokens.length === 0 && originalNodeText) {
+                tokens.push({ text: originalNodeText, type: 'name' });
+            }
+
+            let currentTspan = textD3.append("tspan").attr("x", x).attr("dy", initialDy);
+            if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+
+            let lineTokens = [];
+
+            for (let i = 0; i < tokens.length; i++) {
+                const tokenObj = tokens[i];
+
+                lineTokens.push(tokenObj);
+                currentTspan.text(lineTokens.map(t => t.text).join(" "));
+
+                if (currentTspan.node().getComputedTextLength() > maxWidth && lineTokens.length > 1) {
+                    lineTokens.pop();
+
+                    currentTspan.text(null);
+                    lineTokens.forEach((prevToken, idx) => {
+                        currentTspan.append("tspan")
+                            .text((idx > 0 ? " " : "") + prevToken.text)
+                            .style("fill", textPartColors[prevToken.type] || textPartColors.name)
+                            .style("font-weight", prevToken.type === 'count' ? "bold" : "normal");
+                    });
+
+                    lineTokens = [tokenObj];
+                    currentTspan = textD3.append("tspan").attr("x", x).attr("dy", lineHeight + "em");
+                    if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+                }
+            }
+
+            currentTspan.text(null);
+            lineTokens.forEach((token, idx) => {
+                currentTspan.append("tspan")
+                    .text((idx > 0 ? " " : "") + token.text)
+                    .style("fill", textPartColors[token.type] || textPartColors.name)
+                    .style("font-weight", token.type === 'count' ? "bold" : "normal");
+            });
+
+            if (textD3.selectAll("tspan > tspan").empty() && textD3.select("tspan").text().length === 0 && originalNodeText) {
+                let t = textD3.select("tspan");
+                let displayText = originalNodeText;
+                t.text(displayText).style("fill", textPartColors.name);
+                if (t.node() && t.node().getComputedTextLength() > maxWidth && displayText.length > 20) {
+                    let estimatedChars = Math.floor(maxWidth / (t.node().getComputedTextLength()/displayText.length) );
+                    displayText = displayText.substring(0, Math.max(0, estimatedChars - 3)) + "...";
+                    t.text(displayText);
+                }
+            }
+        });
+    }
+  </script>
+</body>
+</html>

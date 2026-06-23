@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { downloadFile } from './utils/download';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from './context';
@@ -114,13 +115,7 @@ export default function Reports() {
       ),
     ].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.setAttribute('href', URL.createObjectURL(blob));
-    link.setAttribute('download', `${filename}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadFile(blob, `${filename}.csv`);
   };
 
   // --- KPI: Revenue this month ---

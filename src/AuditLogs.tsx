@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useAuditLogs } from './hooks/useAuditLogs';
+import { downloadFile } from './utils/download';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -42,12 +43,7 @@ function downloadJSON(data: AuditLog[], cutoffDays: number): void {
   const today = format(new Date(), 'yyyy-MM-dd');
   const filename = `mitrixogymcrm-audit-archive_before-${cutoffDate}_exported-${today}.json`;
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadFile(blob, filename);
 }
 
 const PAGE_SIZE = 20;

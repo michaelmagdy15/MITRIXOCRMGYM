@@ -19,7 +19,7 @@ import CommissionReport from './components/CommissionReport';
 import { BadgePercent, QrCode, Printer, MapPin, Plus, Trophy } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Branch } from './types';
-import { exportDatabaseToJson, restoreDatabaseFromJson } from './services/backupService';
+import { exportDatabaseToJson, restoreDatabaseFromJson, mergeBackupRecords } from './services/backupService';
 import type { BackupProgressCallback } from './services/backupService';
 import AdminPointsManager from './components/AdminPointsManager';
 import AdminActivityFeed from './components/AdminActivityFeed';
@@ -41,6 +41,7 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingPin, setIsSavingPin] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
+  const [selectedAccent, setSelectedAccent] = React.useState(branding.brandAccentColor ?? '#1a1a1a');
 
   // Change password state
   const [currentPwd, setCurrentPwd] = useState('');
@@ -77,6 +78,12 @@ export default function Settings() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreStatus, setRestoreStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Backup-station import state ──
+  const [backupImportFile, setBackupImportFile] = React.useState<File | null>(null);
+  const [backupImportPreview, setBackupImportPreview] = React.useState<{ checkins: number; payments: number; leads: number } | null>(null);
+  const [backupImportLoading, setBackupImportLoading] = React.useState(false);
+  const [backupImportResult, setBackupImportResult] = React.useState<string | null>(null);
 
   const [testSmsPhone, setTestSmsPhone] = useState('+201000680580');
   const [testSmsMessage, setTestSmsMessage] = useState('Test SMS from mitrixogymcrm');
@@ -181,6 +188,10 @@ export default function Settings() {
     setCurrencySymbol(branding.currencySymbol || 'LE');
   }, [branding]);
 
+  React.useEffect(() => {
+    setSelectedAccent(branding.brandAccentColor ?? '#1a1a1a');
+  }, [branding.brandAccentColor]);
+
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -259,6 +270,41 @@ export default function Settings() {
     } finally {
       setIsRestoring(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleBackupFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBackupImportFile(file);
+    setBackupImportResult(null);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      setBackupImportPreview({
+        checkins: (parsed.checkins ?? []).length,
+        payments: (parsed.payments ?? []).length,
+        leads: (parsed.leads ?? []).length,
+      });
+    } catch {
+      setBackupImportPreview(null);
+    }
+  };
+
+  const handleMergeBackup = async () => {
+    if (!backupImportFile) return;
+    setBackupImportLoading(true);
+    setBackupImportResult(null);
+    try {
+      const text = await backupImportFile.text();
+      const result = await mergeBackupRecords(text);
+      setBackupImportResult(`✅ Imported: ${result.checkins} check-ins, ${result.payments} payments, ${result.leads} leads`);
+      setBackupImportFile(null);
+      setBackupImportPreview(null);
+    } catch (err) {
+      setBackupImportResult('❌ Import failed: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setBackupImportLoading(false);
     }
   };
 
@@ -624,6 +670,76 @@ export default function Settings() {
                 </CardContent>
               </Card>
 
+              {/* ── Brand Color ── */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Brand Color</CardTitle>
+                  <CardDescription>
+                    Choose your gym&apos;s accent color for highlights, badges, and active states.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Preset swatches */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">Presets</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: 'Onyx', hex: '#1a1a1a' },
+                        { label: 'Crimson', hex: '#dc2626' },
+                        { label: 'Flame', hex: '#ea580c' },
+                        { label: 'Gold', hex: '#ca8a04' },
+                        { label: 'Emerald', hex: '#16a34a' },
+                        { label: 'Royal Blue', hex: '#2563eb' },
+                        { label: 'Violet', hex: '#7c3aed' },
+                        { label: 'Rose', hex: '#e11d48' },
+                        { label: 'Teal', hex: '#0d9488' },
+                      ].map(({ label, hex }) => (
+                        <button
+                          key={hex}
+                          title={label}
+                          onClick={() => setSelectedAccent(hex)}
+                          className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
+                            selectedAccent === hex ? 'border-foreground scale-110 shadow-md' : 'border-transparent'
+                          }`}
+                          style={{ backgroundColor: hex }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom picker */}
+                  <div className="flex items-center gap-3">
+                    <Label className="text-xs text-muted-foreground">Custom</Label>
+                    <input
+                      type="color"
+                      value={selectedAccent}
+                      onChange={e => setSelectedAccent(e.target.value)}
+                      className="w-10 h-10 rounded-lg cursor-pointer border border-border bg-transparent p-0.5"
+                    />
+                    <span className="text-sm font-mono text-muted-foreground">{selectedAccent}</span>
+                  </div>
+
+                  {/* Live preview */}
+                  <div
+                    className="rounded-lg px-4 py-3 flex items-center gap-2 transition-colors"
+                    style={{ backgroundColor: selectedAccent }}
+                  >
+                    <div className="w-2 h-2 rounded-full bg-white/80" />
+                    <span className="text-white text-sm font-medium">Your brand color preview</span>
+                  </div>
+
+                  {/* Save */}
+                  <Button
+                    onClick={async () => {
+                      await updateBranding({ brandAccentColor: selectedAccent });
+                    }}
+                    size="sm"
+                  >
+                    Save
+                  </Button>
+                </CardContent>
+              </Card>
+
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -769,6 +885,46 @@ export default function Settings() {
         {/* ── Backup ── */}
         <TabsContent value="backup" className="animate-in fade-in-50 duration-500">
           <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Import Backup Station Records</CardTitle>
+                <CardDescription>
+                  Import records logged in the offline backup-station.html while the main system was unavailable.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-col gap-3">
+                  <Label htmlFor="backup-file-input" className="text-sm">
+                    Select backup JSON file
+                  </Label>
+                  <input
+                    id="backup-file-input"
+                    type="file"
+                    accept=".json"
+                    onChange={handleBackupFileSelect}
+                    className="block text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-secondary file:text-secondary-foreground hover:file:bg-secondary/80 cursor-pointer"
+                  />
+                </div>
+                {backupImportPreview && (
+                  <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
+                    <p className="font-medium">File preview:</p>
+                    <p className="text-muted-foreground">
+                      {backupImportPreview.checkins} check-ins · {backupImportPreview.payments} payments · {backupImportPreview.leads} leads
+                    </p>
+                  </div>
+                )}
+                {backupImportResult && (
+                  <p className="text-sm font-medium">{backupImportResult}</p>
+                )}
+                <Button
+                  onClick={handleMergeBackup}
+                  disabled={!backupImportFile || backupImportLoading}
+                  size="sm"
+                >
+                  {backupImportLoading ? 'Importing…' : 'Merge Records into System'}
+                </Button>
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

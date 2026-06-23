@@ -24,6 +24,7 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { WhatsAppDialog } from './components/WhatsAppDialog';
 import { MessageCircle } from 'lucide-react';
+import { downloadFile } from './utils/download';
 
 export default function Leads() {
   const {
@@ -151,12 +152,7 @@ export default function Leads() {
   const downloadQRCode = async (memberId: string, name: string) => {
     try {
       const blob = await getQRCodeAsBlob(memberId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `QR_${name.replace(/\s+/g, '_')}_${memberId}.png`;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadFile(blob, `QR_${name.replace(/\s+/g, '_')}_${memberId}.png`);
     } catch (error) {
       console.error('Error downloading QR code:', error);
       alert('Failed to download QR code');
@@ -383,13 +379,7 @@ export default function Leads() {
 
     const csvString = csvRows.join('\n');
     const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `leads_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadFile(blob, `leads_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   };
   
   const handleAddComment = async () => {

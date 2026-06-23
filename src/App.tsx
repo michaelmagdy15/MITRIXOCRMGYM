@@ -13,6 +13,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { BrowserRouter } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import Dashboard from './Dashboard';
 import Leads from './Leads';
 import Clients from './Clients';
@@ -49,8 +50,10 @@ import OnboardingWizard from './OnboardingWizard';
 import AdminHub from './AdminHub';
 import SuperAdminHub from './SuperAdminHub';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
+import { OfflineBanner } from './components/OfflineBanner';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com'];
+const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
 
 function AppContent() {
   const { currentUser: authUser } = useAuth();
@@ -144,7 +147,7 @@ function AppContent() {
     if (!currentUser) {
       return <Login isSuperAdmin={true} />;
     }
-    const isPlatformAdmin = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'].includes(currentUser?.email?.toLowerCase());
+    const isPlatformAdmin = PLATFORM_ADMIN_EMAILS.includes(currentUser?.email?.toLowerCase());
     if (!isPlatformAdmin) {
       return (
         <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-6 text-center">
@@ -315,7 +318,7 @@ function AppContent() {
     return (
       <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans">
         {/* Radial light source glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(244,63,94,0.08)_0%,transparent_60%)] pointer-events-none animate-[pulse_4s_infinite_ease-in-out]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--brand-accent-muted)_0%,transparent_60%)] pointer-events-none animate-[pulse_4s_infinite_ease-in-out]" />
         
         <div className="relative flex flex-col items-center z-10 scale-95 animate-[fadeIn_0.8s_ease-out_forwards]">
           <div className="relative flex items-center justify-center mb-6">
@@ -409,14 +412,14 @@ function AppContent() {
                   {companyName}
                 </h1>
                 
-                <p className="text-[10px] tracking-[0.4em] text-zinc-500 uppercase mt-2 font-semibold">Boxing Club</p>
+
               </div>
             )}
           </div>
           
           {/* Glowing loader bar */}
           <div className="h-1 w-28 bg-zinc-900 mt-10 rounded-full overflow-hidden border border-white/5 relative">
-            <div className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full animate-[slide_1.5s_infinite_ease-in-out] shadow-[0_0_10px_#f43f5e]" />
+            <div className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full animate-[slide_1.5s_infinite_ease-in-out] shadow-[0_0_10px_var(--brand-accent)]" />
           </div>
           <p className="text-[10px] tracking-[0.3em] text-zinc-500 uppercase mt-4 font-semibold animate-pulse">Initializing CRM Portal...</p>
         </div>
@@ -516,7 +519,7 @@ function AppContent() {
     );
   }
 
-  const isPlatformAdmin = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'].includes(currentUser?.email?.toLowerCase());
+  const isPlatformAdmin = PLATFORM_ADMIN_EMAILS.includes(currentUser?.email?.toLowerCase());
 
   const navItems = [
     { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, show: true },
@@ -584,6 +587,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex font-sans overflow-x-hidden">
+      <OfflineBanner />
       {/* Floating Exit Preview Banner — ALWAYS visible when preview is active */}
       {previewRole && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] animate-in slide-in-from-bottom-4 duration-300">
@@ -1143,6 +1147,7 @@ export default function App() {
                   <CartProvider>
                     <AppContent />
                     <BuildVersionFooter />
+                    <Toaster richColors position="top-right" />
                   </CartProvider>
                 </LanguageProvider>
               </ThemeProvider>

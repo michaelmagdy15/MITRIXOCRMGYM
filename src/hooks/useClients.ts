@@ -90,6 +90,36 @@ export const useClients = (currentUser: User | null) => {
     }
   };
 
+  /**
+   * Private helper — creates a Firebase Auth user + Firestore /users document
+   * for a gym member's portal account.
+   * Returns the new uid on success, or undefined if creation failed.
+   */
+  const createPortalAccount = async (
+    memberId: string,
+    name: string,
+    phone?: string
+  ): Promise<string | undefined> => {
+    try {
+      const email = getMemberEmail(memberId);
+      const uid = await createFirebaseUser(email, '12345678');
+      const newUser: User = {
+        id: uid,
+        name,
+        email,
+        role: 'client',
+        clientRecordId: memberId,
+        phone: phone || '',
+        mustChangePassword: true,
+      };
+      await setDoc(doc(db, 'users', uid), newUser);
+      return uid;
+    } catch (authErr) {
+      console.error('Auto portal account creation failed:', authErr);
+      return undefined;
+    }
+  };
+
   const addClient = async (client: Client) => {
     try {
       const { id, comments, ...clientData } = client;
@@ -115,23 +145,8 @@ export const useClients = (currentUser: User | null) => {
 
       // Auto-create portal account
       if (finalData.memberId) {
-        try {
-          const email = getMemberEmail(finalData.memberId);
-          const uid = await createFirebaseUser(email, '12345678');
-          const newUser: User = {
-            id: uid,
-            name: finalData.name,
-            email,
-            role: 'client',
-            clientRecordId: finalData.memberId,
-            phone: finalData.phone || '',
-            mustChangePassword: true
-          };
-          await setDoc(doc(db, 'users', uid), newUser);
-          finalData.portalUserId = uid;
-        } catch (authErr) {
-          console.error("Auto portal account creation failed:", authErr);
-        }
+        const uid = await createPortalAccount(finalData.memberId, finalData.name, finalData.phone);
+        if (uid) finalData.portalUserId = uid;
       }
 
       await setDoc(docRef, finalData);
@@ -215,23 +230,8 @@ export const useClients = (currentUser: User | null) => {
 
         // Auto-create portal account in bulk
         if (finalClient.memberId) {
-          try {
-            const email = getMemberEmail(finalClient.memberId);
-            const uid = await createFirebaseUser(email, '12345678');
-            const newUser: User = {
-              id: uid,
-              name: finalClient.name,
-              email,
-              role: 'client',
-              clientRecordId: finalClient.memberId,
-              phone: finalClient.phone || '',
-              mustChangePassword: true
-            };
-            await setDoc(doc(db, 'users', uid), newUser);
-            finalClient.portalUserId = uid;
-          } catch (authErr) {
-            console.error("Auto bulk portal account creation failed:", authErr);
-          }
+          const uid = await createPortalAccount(finalClient.memberId, finalClient.name, finalClient.phone);
+          if (uid) finalClient.portalUserId = uid;
         }
 
         batch.set(docRef, finalClient);
@@ -274,23 +274,12 @@ export const useClients = (currentUser: User | null) => {
       const memberId = updateData.memberId || existing?.memberId;
 
       if (hasNoPortal && memberId) {
-        try {
-          const email = getMemberEmail(memberId);
-          const uid = await createFirebaseUser(email, '12345678');
-          const newUser: User = {
-            id: uid,
-            name: updateData.name || existing?.name || '',
-            email,
-            role: 'client',
-            clientRecordId: memberId,
-            phone: updateData.phone || existing?.phone || '',
-            mustChangePassword: true
-          };
-          await setDoc(doc(db, 'users', uid), newUser);
-          updateData.portalUserId = uid;
-        } catch (authErr) {
-          console.error("Auto portal account creation on status change failed:", authErr);
-        }
+        const uid = await createPortalAccount(
+          memberId,
+          updateData.name || existing?.name || '',
+          updateData.phone || existing?.phone || ''
+        );
+        if (uid) updateData.portalUserId = uid;
       }
 
       await updateDoc(doc(db, 'clients', id), cleanData(updateData));

@@ -11,6 +11,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { useAppContext } from '../context';
+import { downloadFile } from '../utils/download';
 import { useAuth } from '../contexts/AuthContext';
 import { useClients } from '../hooks/useClients';
 import { usePayments } from '../hooks/usePayments';
@@ -162,14 +163,7 @@ const CommissionReport: React.FC = () => {
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Commission_Report_${selectedMonth}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadFile(blob, `Commission_Report_${selectedMonth}.csv`);
   };
 
   const totalMonthRevenue = reportData.reduce((sum, r) => sum + r.totalRevenue, 0);

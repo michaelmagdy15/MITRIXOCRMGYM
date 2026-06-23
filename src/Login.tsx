@@ -184,7 +184,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
     return (
       <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans">
         {/* Radial light source glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(244,63,94,0.08)_0%,transparent_60%)] pointer-events-none animate-[pulse_4s_infinite_ease-in-out]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--brand-accent-muted)_0%,transparent_60%)] pointer-events-none animate-[pulse_4s_infinite_ease-in-out]" />
         
         <div className="relative flex flex-col items-center z-10 scale-95 animate-[fadeIn_0.8s_ease-out_forwards]">
           <div className="relative flex items-center justify-center mb-6">
@@ -278,14 +278,14 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                   {companyName}
                 </h1>
                 
-                <p className="text-[10px] tracking-[0.4em] text-zinc-500 uppercase mt-2 font-semibold">Boxing Club</p>
+
               </div>
             )}
           </div>
           
           {/* Glowing loader bar */}
           <div className="h-1 w-28 bg-zinc-900 mt-10 rounded-full overflow-hidden border border-white/5 relative">
-            <div className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full animate-[slide_1.5s_infinite_ease-in-out] shadow-[0_0_10px_#f43f5e]" />
+            <div className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full animate-[slide_1.5s_infinite_ease-in-out] shadow-[0_0_10px_var(--brand-accent)]" />
           </div>
           <p className="text-[10px] tracking-[0.3em] text-zinc-500 uppercase mt-4 font-semibold animate-pulse">Initializing CRM Portal...</p>
         </div>
@@ -430,7 +430,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
       ) : (
         <>
           <h1 className="text-5xl font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-[0.4em] font-logo mt-2">Don't limit your challenges</p>
+
         </>
       )}
     </div>

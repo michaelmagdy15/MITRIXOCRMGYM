@@ -195,7 +195,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               {(branding.companyName || 'CRM').toUpperCase()}
             </h1>
           )}
-          <p className="text-[11px] tracking-[0.5em] text-zinc-400 uppercase mt-6 font-bold">Boxing Club</p>
+          <p className="text-[11px] tracking-[0.5em] text-zinc-400 uppercase mt-6 font-bold">{branding?.companyName ?? ''}</p>
           
           <div className="h-1.5 w-32 bg-zinc-900 mt-10 rounded-full overflow-hidden border border-white/5 relative">
             <div className="h-full bg-gradient-to-r from-red-600 to-red-500 rounded-full animate-[slide_1.8s_infinite_ease-in-out] shadow-[0_0_10px_#C20E1A]" />

@@ -12,6 +12,7 @@ import { SALES_NAME_MAPPING } from './constants';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { differenceInDays, isSameDay, parseISO, isAfter, isBefore, addDays, subDays, subMonths, startOfMonth, endOfMonth, isWithinInterval, format, getDay } from 'date-fns';
 import { useLanguage } from './contexts/LanguageContext';
+import { toast } from 'sonner';
 
 const PRIVATE_PACKAGES = [
   'drop session pt', 
@@ -135,10 +136,10 @@ export default function Dashboard() {
           status: 'Active'
         });
       }
-      alert(`Successfully unfrozen ${clientName}`);
+      toast.success(`Successfully unfrozen ${clientName}`);
     } catch (err) {
       console.error(err);
-      alert('Failed to unfreeze member.');
+      toast.error('Failed to unfreeze member.');
     }
   };
   const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);

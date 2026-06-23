@@ -84,6 +84,8 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --brand-accent: #1a1a1a;
+    --brand-accent-muted: #1a1a1a26;
 }
 
 .dark {
@@ -118,6 +120,8 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    --brand-accent: #1a1a1a;
+    --brand-accent-muted: #1a1a1a26;
 }
 
 @layer base {
@@ -288,4 +292,10 @@
   .mb-safe {
     margin-bottom: env(safe-area-inset-bottom);
   }
+
+  /* ── Brand Accent Utilities ── */
+  .bg-brand-accent { background-color: var(--brand-accent); }
+  .text-brand-accent { color: var(--brand-accent); }
+  .border-brand-accent { border-color: var(--brand-accent); }
+  .ring-brand-accent { --tw-ring-color: var(--brand-accent); }
 }

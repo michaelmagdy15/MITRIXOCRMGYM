@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { downloadFile } from './utils/download';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
@@ -211,13 +212,7 @@ export default function Debtors() {
 
     const csvString = csvRows.join('\n');
     const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `debtors_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadFile(blob, `debtors_export_${format(new Date(), 'yyyy-MM-dd')}.csv`);
   };
 
   const handlePayClick = (payment: Payment) => {

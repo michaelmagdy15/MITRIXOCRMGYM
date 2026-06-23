@@ -312,6 +312,7 @@ export interface BrandingSettings {
   dailyCheckinPin?: string;
   currencyCode?: string;
   currencySymbol?: string;
+  brandAccentColor?: string;  // NEW: gym brand accent hex e.g. "#dc2626"
 }
 
 export type UserId = string;

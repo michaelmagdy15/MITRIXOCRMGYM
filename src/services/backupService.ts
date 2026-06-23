@@ -152,3 +152,64 @@ export const restoreDatabaseFromJson = async (jsonData: string) => {
     await batch.commit();
   }
 };
+
+/**
+ * Merges records exported from the offline backup-station.html into Firestore.
+ * Only adds new records — does NOT overwrite existing data.
+ * Handles: check-ins (attendance), payments, leads (clients with status='lead').
+ */
+export const mergeBackupRecords = async (
+  jsonString: string,
+  onProgress?: BackupProgressCallback
+): Promise<{ checkins: number; payments: number; leads: number }> => {
+  const data = JSON.parse(jsonString) as {
+    checkins?: any[];
+    payments?: any[];
+    leads?: any[];
+  };
+
+  const checkins = data.checkins ?? [];
+  const payments = data.payments ?? [];
+  const leads = data.leads ?? [];
+  const total = checkins.length + payments.length + leads.length;
+  let done = 0;
+
+  let batch = writeBatch(db);
+  let opCount = 0;
+
+  const flush = async () => {
+    if (opCount > 0) {
+      await batch.commit();
+      batch = writeBatch(db);
+      opCount = 0;
+    }
+  };
+
+  const addOp = async (colPath: string, id: string, data: Record<string, any>) => {
+    batch.set(doc(db, colPath, id), { ...data, _importedFromBackup: true }, { merge: false });
+    opCount++;
+    done++;
+    if (onProgress) onProgress(`Importing record ${done}/${total}…`, Math.round((done / total) * 100));
+    if (opCount >= 450) await flush();
+  };
+
+  for (const ci of checkins) {
+    const { id, ...rest } = ci;
+    await addOp('attendance', id, rest);
+  }
+
+  for (const pay of payments) {
+    const { id, ...rest } = pay;
+    await addOp('payments', id, rest);
+  }
+
+  for (const lead of leads) {
+    const { id, ...rest } = lead;
+    await addOp('clients', id, { ...rest, status: 'lead' });
+  }
+
+  await flush();
+  onProgress?.('Done', 100);
+
+  return { checkins: checkins.length, payments: payments.length, leads: leads.length };
+};

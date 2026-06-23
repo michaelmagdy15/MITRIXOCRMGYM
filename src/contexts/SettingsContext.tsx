@@ -4,6 +4,18 @@ import { db } from '../firebase';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { addAuditLog } from '../services/auditService';
 
+const DEFAULT_ACCENT = '#1a1a1a';
+
+function applyBrandAccent(hex?: string) {
+  try {
+    const color = hex || DEFAULT_ACCENT;
+    document.documentElement.style.setProperty('--brand-accent', color);
+    document.documentElement.style.setProperty('--brand-accent-muted', color + '26');
+  } catch {
+    // silently ignore — CSS fallback default applies
+  }
+}
+
 interface SettingsContextType {
   branding: BrandingSettings;
   updateBranding: (branding: Partial<BrandingSettings>) => Promise<void>;
@@ -124,6 +136,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
         .then((snapshot) => {
           if (active) {
             if (snapshot.exists()) {
+              applyBrandAccent(snapshot.data()?.brandAccentColor);
               preloadBrandingLogo(snapshot.data() as BrandingSettings, () => {
                 if (active) setIsBrandingLoaded(true);
               });
@@ -144,6 +157,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       (snapshot) => {
         if (active) {
           if (snapshot.exists()) {
+            applyBrandAccent((snapshot.data() as BrandingSettings).brandAccentColor);
             preloadBrandingLogo(snapshot.data() as BrandingSettings, () => {
               if (active) setIsBrandingLoaded(true);
             });
@@ -244,6 +258,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
 
   const updateBranding = useCallback(async (updates: Partial<BrandingSettings>) => {
     await setDoc(doc(db, 'settings', 'branding'), updates, { merge: true });
+    if (updates.brandAccentColor !== undefined) {
+      applyBrandAccent(updates.brandAccentColor);
+    }
     await addAuditLog('UPDATE', 'TARGET', 'branding', `Updated branding settings`);
   }, []);
 
@@ -325,7 +342,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     return (
       <div className={`min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans ${isExiting ? 'preloader-exit' : ''}`}>
         {/* Radial light source glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(244,63,94,0.08)_0%,transparent_60%)] pointer-events-none animate-[pulse_4s_infinite_ease-in-out]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--brand-accent-muted)_0%,transparent_60%)] pointer-events-none animate-[pulse_4s_infinite_ease-in-out]" />
         
         <div className="relative flex flex-col items-center z-10 scale-95 animate-[fadeIn_0.8s_ease-out_forwards]">
           <div className="relative flex items-center justify-center mb-6">
@@ -419,14 +436,14 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
                   {companyName}
                 </h1>
                 
-                <p className="text-[10px] tracking-[0.4em] text-zinc-500 uppercase mt-2 font-semibold">Boxing Club</p>
+
               </div>
             )}
           </div>
           
           {/* Glowing loader bar */}
           <div className="h-1 w-28 bg-zinc-900 mt-10 rounded-full overflow-hidden border border-white/5 relative">
-            <div className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full animate-[slide_1.5s_infinite_ease-in-out] shadow-[0_0_10px_#f43f5e]" />
+            <div className="h-full bg-gradient-to-r from-rose-500 to-rose-600 rounded-full animate-[slide_1.5s_infinite_ease-in-out] shadow-[0_0_10px_var(--brand-accent)]" />
           </div>
           <p className="text-[10px] tracking-[0.3em] text-zinc-500 uppercase mt-4 font-semibold animate-pulse">Initializing CRM Portal...</p>
         </div>
