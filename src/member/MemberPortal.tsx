@@ -252,7 +252,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
-      <header className="border-b bg-card shadow-sm h-16 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
+      <header className="border-b bg-card shadow-sm h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div 
             className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity"
@@ -381,7 +381,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1.5 shadow-lg backdrop-blur-md bg-opacity-90">
+      <nav className="fixed bottom-0 left-0 right-0 bg-card/90 border-t z-50 flex justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur-md">
         {filteredNavItems.map(({ tab, label, icon }) => (
           <button
             key={tab}

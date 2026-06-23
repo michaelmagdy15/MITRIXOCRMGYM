@@ -230,14 +230,14 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       
       {/* ── LEADS PENDING BANNER ── */}
       {isLeadPending && (
-        <div className="bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-500 text-xs px-4 py-3 text-center font-bold flex items-center justify-center gap-2 animate-in slide-in-from-top duration-300">
+        <div className="bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-500 text-xs px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] text-center font-bold flex items-center justify-center gap-2 animate-in slide-in-from-top duration-300">
           <ShieldAlert className="h-4 w-4 shrink-0" />
           <span>Account Pending Activation. Pay at branch to unlock member features.</span>
         </div>
       )}
 
       {/* ── HEADER ── */}
-      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b px-4 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b px-4 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between">
         <div 
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => setActiveTab('book')}
@@ -261,7 +261,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
       {/* ── TABS ── */}
       {(!isStrike || !isMobile) && (
-        <div className="bg-card border-b px-2 flex overflow-x-auto no-scrollbar py-2 gap-2 sticky top-16 z-30">
+        <div className="bg-card border-b px-2 flex overflow-x-auto no-scrollbar py-2 gap-2 sticky top-[calc(4rem+env(safe-area-inset-top))] z-30">
           {[
             { id: 'book', label: 'Book', icon: <Calendar className="h-4 w-4" /> },
             { id: 'locations', label: 'Locations', icon: <MapPin className="h-4 w-4" /> },

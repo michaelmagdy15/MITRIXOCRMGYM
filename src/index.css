@@ -253,4 +253,39 @@
   body.font-arabic {
     font-family: 'Cairo', sans-serif !important;
   }
+
+  /* ── iOS Native Mobile Normalization & Safe Areas ── */
+  html, body {
+    overscroll-behavior-y: none;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  a, button, [role="button"], select, input[type="submit"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  img, a {
+    -webkit-touch-callout: none;
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .mt-safe {
+    margin-top: env(safe-area-inset-top);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
 }
