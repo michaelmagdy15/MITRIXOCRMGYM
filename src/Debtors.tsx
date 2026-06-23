@@ -249,7 +249,7 @@ export default function Debtors() {
 
     if (payMethod === 'Instapay') {
       const refClean = instapayRef.trim();
-      if (!/^\d{12}$/.test(refClean)) {
+      if (refClean && !/^\d{12}$/.test(refClean)) {
         setErrorMsg(currentLoc.instapayRefRequired);
         return;
       }

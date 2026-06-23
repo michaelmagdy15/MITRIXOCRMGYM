@@ -222,7 +222,7 @@ export default function Clients() {
     const repId = upgradeSalesRep !== 'unassigned' ? upgradeSalesRep : (currentUser?.id || '');
     const repName = users.find(u => u.id === repId)?.name || '';
 
-    if (upgradePaymentMethod === 'Instapay' && (!upgradeInstapayRef || !/^\d{12}$/.test(upgradeInstapayRef))) {
+    if (upgradePaymentMethod === 'Instapay' && upgradeInstapayRef && !/^\d{12}$/.test(upgradeInstapayRef)) {
       alert('Please enter a valid 12-digit Instapay reference number.');
       return;
     }

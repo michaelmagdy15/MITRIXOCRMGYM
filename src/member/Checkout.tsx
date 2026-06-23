@@ -136,7 +136,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
   };
 
   const handlePurchaseSubmit = async () => {
-    if (paymentMethod === 'Instapay' && (!instapayRef || instapayRef.length !== 12)) {
+    if (paymentMethod === 'Instapay' && instapayRef && instapayRef.length !== 12) {
       setError('Please provide a valid 12-digit Instapay reference number.');
       return;
     }

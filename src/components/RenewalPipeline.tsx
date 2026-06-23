@@ -112,7 +112,7 @@ export default function RenewalPipeline() {
       return;
     }
 
-    if (method === 'Instapay' && (!instapayRef || !/^\d{12}$/.test(instapayRef))) {
+    if (method === 'Instapay' && instapayRef && !/^\d{12}$/.test(instapayRef)) {
       alert('Invalid Reference: Please enter a valid 12-digit Instapay reference number.');
       return;
     }

@@ -325,7 +325,7 @@ export default function Payments() {
       return;
     }
 
-    if (method === 'Instapay' && (!instapayRef || !/^\d{12}$/.test(instapayRef))) {
+    if (method === 'Instapay' && instapayRef && !/^\d{12}$/.test(instapayRef)) {
       setAlertTitle('Invalid Reference');
       setAlertDescription('Please enter a valid 12-digit Instapay reference number.');
       setAlertOpen(true);
@@ -1086,7 +1086,7 @@ export default function Payments() {
                       className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-mono"
                       value={instapayRef} 
                       maxLength={12}
-                      onChange={(e) => setPaymentDate(e.target.value.replace(/\D/g, ''))} 
+                      onChange={(e) => setInstapayRef(e.target.value.replace(/\D/g, ''))} 
                     />
                   </div>
                 )}
