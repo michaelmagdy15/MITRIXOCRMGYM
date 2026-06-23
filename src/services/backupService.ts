@@ -1,5 +1,5 @@
 import { collection, getDocs, writeBatch, doc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 
 const ROOT_COLLECTIONS = [
   'users',
@@ -163,10 +163,18 @@ export const mergeBackupRecords = async (
   onProgress?: BackupProgressCallback
 ): Promise<{ checkins: number; payments: number; leads: number }> => {
   const data = JSON.parse(jsonString) as {
+    tenantId?: string;
     checkins?: any[];
     payments?: any[];
     leads?: any[];
   };
+
+  const currentTenantId = getTenantId();
+  if (data.tenantId && data.tenantId !== currentTenantId) {
+    throw new Error(
+      `Tenant mismatch: this backup is from "${data.tenantId}" but you are logged into "${currentTenantId}". Please import this file from the correct gym's system.`
+    );
+  }
 
   const checkins = data.checkins ?? [];
   const payments = data.payments ?? [];
@@ -174,6 +182,35 @@ export const mergeBackupRecords = async (
   const total = checkins.length + payments.length + leads.length;
   let done = 0;
 
+  // ── Build lookup maps for auto-linking (ALL reads BEFORE any writes) ───────
+  onProgress?.('Loading client index…', 0);
+  const clientsSnapshot = await getDocs(collection(db, 'clients'));
+  const byMemberId = new Map<string, string>(); // memberId  -> docId
+  const byNameNorm = new Map<string, string>(); // norm name -> docId
+  const byPhone    = new Map<string, string>(); // digits-only phone -> docId
+
+  clientsSnapshot.forEach(snap => {
+    const d = snap.data() as Record<string, unknown>;
+    if (d['memberId']) byMemberId.set(String(d['memberId']).trim(), snap.id);
+    if (d['name'])     byNameNorm.set(String(d['name']).trim().toLowerCase(), snap.id);
+    if (d['phone'])    byPhone.set(String(d['phone']).replace(/\D/g, ''), snap.id);
+  });
+
+  const findClientId = (r: Record<string, unknown>): string | null => {
+    const mid = String(r['memberId'] ?? '').trim();
+    if (mid && byMemberId.has(mid)) return byMemberId.get(mid)!;
+
+    const nameKey = String(r['memberName'] ?? r['clientName'] ?? r['name'] ?? '').trim().toLowerCase();
+    if (nameKey && byNameNorm.has(nameKey)) return byNameNorm.get(nameKey)!;
+
+    const phoneKey = String(r['phone'] ?? '').replace(/\D/g, '');
+    if (phoneKey.length >= 7 && byPhone.has(phoneKey)) return byPhone.get(phoneKey)!;
+
+    return null;
+  };
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const now = new Date();
   let batch = writeBatch(db);
   let opCount = 0;
 
@@ -185,27 +222,53 @@ export const mergeBackupRecords = async (
     }
   };
 
-  const addOp = async (colPath: string, id: string, data: Record<string, any>) => {
-    batch.set(doc(db, colPath, id), { ...data, _importedFromBackup: true }, { merge: false });
+  const addOp = async (colPath: string, id: string, docData: Record<string, unknown>) => {
+    batch.set(doc(db, colPath, id), { ...docData, _importedFromBackup: true, _importedAt: now }, { merge: false });
     opCount++;
     done++;
     if (onProgress) onProgress(`Importing record ${done}/${total}…`, Math.round((done / total) * 100));
     if (opCount >= 450) await flush();
   };
 
+  // ── Check-ins: inject clientId when a match is found ─────────────────────
   for (const ci of checkins) {
-    const { id, ...rest } = ci;
-    await addOp('attendance', id, rest);
+    const { id, ...rest } = ci as Record<string, unknown> & { id: string };
+    const matchedClientId = findClientId(rest);
+    await addOp('attendance', id, {
+      ...rest,
+      ...(matchedClientId ? { clientId: matchedClientId } : {}),
+    });
   }
 
+  // ── Payments: inject clientId when a match is found ───────────────────────
   for (const pay of payments) {
-    const { id, ...rest } = pay;
-    await addOp('payments', id, rest);
+    const { id, ...rest } = pay as Record<string, unknown> & { id: string };
+    const matchedClientId = findClientId(rest);
+    await addOp('payments', id, {
+      ...rest,
+      ...(matchedClientId ? { clientId: matchedClientId } : {}),
+    });
   }
 
+  // ── Leads: update existing client OR create new ───────────────────────────
   for (const lead of leads) {
-    const { id, ...rest } = lead;
-    await addOp('clients', id, { ...rest, status: 'lead' });
+    const { id, ...rest } = lead as Record<string, unknown> & { id: string };
+    const matchedClientId = findClientId(rest);
+
+    if (matchedClientId) {
+      // Existing client — update contact metadata, skip duplicate creation
+      batch.update(doc(db, 'clients', matchedClientId), {
+        lastContactedAt: now,
+        _lastBackupImport: now,
+      });
+      opCount++;
+      done++;
+      if (onProgress) onProgress(`Importing record ${done}/${total}…`, Math.round((done / total) * 100));
+      if (opCount >= 450) await flush();
+    } else {
+      // New lead — use the original backup id so re-imports stay idempotent
+      await addOp('clients', id, { ...rest, status: 'lead' });
+    }
   }
 
   await flush();

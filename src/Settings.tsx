@@ -21,6 +21,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Branch } from './types';
 import { exportDatabaseToJson, restoreDatabaseFromJson, mergeBackupRecords } from './services/backupService';
 import type { BackupProgressCallback } from './services/backupService';
+import { generateBackupStationHTML } from './services/backupStationGenerator';
+import { getTenantId } from './firebase';
+import { downloadFile } from './utils/download';
 import AdminPointsManager from './components/AdminPointsManager';
 import AdminActivityFeed from './components/AdminActivityFeed';
 import AdminGamificationManager from './components/AdminGamificationManager';
@@ -885,6 +888,31 @@ export default function Settings() {
         {/* ── Backup ── */}
         <TabsContent value="backup" className="animate-in fade-in-50 duration-500">
           <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Download My Backup Station</CardTitle>
+                <CardDescription>
+                  Download a personalized offline backup file for {branding.companyName || 'your gym'}. Staff can use it during outages — check-ins, payments and leads are saved locally and can be synced back when the system is restored.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  onClick={() => {
+                    const html = generateBackupStationHTML({
+                      gymName: branding.companyName || 'My Gym',
+                      tenantId: getTenantId(),
+                      brandColor: branding.brandAccentColor || '#1a1a1a',
+                    });
+                    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+                    downloadFile(blob, `backup-station-${getTenantId()}.html`);
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  ⬇️ Download Backup Station
+                </Button>
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle>Import Backup Station Records</CardTitle>
