@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       VitePWA({
+        selfDestroying: true,   // kills the SW on all users' browsers
         registerType: 'autoUpdate',
         includeAssets: ['pwa-icon.png', 'favicon.png', 'mitrixogymcrmlogo.png'],
         manifest: {

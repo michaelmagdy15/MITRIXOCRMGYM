@@ -2086,7 +2086,12 @@ export default function Clients() {
                             <TableBody>
                               {payments
                                 .filter((p) => p.clientId === activeClient.id)
-                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                .sort((a, b) => {
+                                  const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+                                  if (dateDiff !== 0) return dateDiff;
+                                  // Tiebreaker: created_at (actual recording time) newest first
+                                  return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+                                })
                                 .map((payment) => (
                                   <TableRow key={payment.id} className="hover:bg-muted/20 border-b transition-colors">
                                     <TableCell className="py-2.5 px-3 text-xs">{format(parseISO(payment.date), 'MMM d, yyyy')}</TableCell>

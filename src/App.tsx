@@ -51,6 +51,7 @@ import AdminHub from './AdminHub';
 import SuperAdminHub from './SuperAdminHub';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { OfflineBanner } from './components/OfflineBanner';
+import { TenantInitScreen } from './components/TenantInitScreen';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com'];
 const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
@@ -1135,6 +1136,19 @@ function AuthAwareSettingsProvider({ children }: { children: React.ReactNode }) 
   );
 }
 
+/**
+ * Reads isAuthReady from AuthContext and passes it to TenantInitScreen.
+ * Must live inside <AuthProvider> so useAuth() is available.
+ */
+function TenantInitWrapper({ children }: { children: React.ReactNode }) {
+  const { isAuthReady } = useAuth();
+  return (
+    <TenantInitScreen ready={isAuthReady}>
+      {children}
+    </TenantInitScreen>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -1145,9 +1159,11 @@ export default function App() {
               <ThemeProvider>
                 <LanguageProvider>
                   <CartProvider>
-                    <AppContent />
-                    <BuildVersionFooter />
-                    <Toaster richColors position="top-right" />
+                    <TenantInitWrapper>
+                      <AppContent />
+                      <BuildVersionFooter />
+                      <Toaster richColors position="top-right" />
+                    </TenantInitWrapper>
                   </CartProvider>
                 </LanguageProvider>
               </ThemeProvider>
