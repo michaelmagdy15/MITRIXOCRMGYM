@@ -1433,7 +1433,7 @@ export default function Payments() {
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[10px] text-muted-foreground">{format(egyptDate, 'h:mm a')}</div>
+                                <div className="text-[10px] text-muted-foreground">{payment.created_at ? format(getEgyptDate(payment.created_at), 'h:mm a') : format(egyptDate, 'h:mm a')}</div>
                               </>
                             );
                           })() : (
