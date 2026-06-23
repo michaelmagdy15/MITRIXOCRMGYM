@@ -33,48 +33,48 @@ export default function CartDrawer() {
             )}
           </Button>
         } />
-        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md flex flex-col p-0 h-[85vh] sm:h-auto max-h-[90vh]">
-          <DialogHeader className="p-6 border-b shrink-0">
+        <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-md !gap-0 flex flex-col p-0 max-h-[80dvh] sm:max-h-[85vh] overflow-hidden">
+          <DialogHeader className="px-5 py-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ShoppingCart className="h-5 w-5" />
               Your Cart ({totalItems})
             </DialogTitle>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-3">
             {items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-4">
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground space-y-4">
                 <ShoppingCart className="h-12 w-12 opacity-20" />
                 <p>Your cart is empty.</p>
               </div>
             ) : (
               items.map((item) => (
-                <div key={item.pkg.id} className="flex flex-col gap-3 p-4 bg-card border rounded-xl shadow-sm">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-bold text-sm">{item.pkg.name}</h4>
-                      <p className="text-xs text-muted-foreground mt-1">
+                <div key={item.pkg.id} className="flex flex-col gap-2.5 p-3.5 bg-card border rounded-xl shadow-sm">
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-bold text-sm truncate">{item.pkg.name}</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {item.pkg.sessions} Sessions • {item.pkg.expiryDays} Days
                       </p>
                     </div>
-                    <p className="font-bold text-primary">{item.pkg.price.toLocaleString()} {t('payments.currency_le')}</p>
+                    <p className="font-bold text-primary text-sm shrink-0">{item.pkg.price.toLocaleString()} {t('payments.currency_le')}</p>
                   </div>
                   
                   <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                    <div className="flex items-center gap-3 bg-muted rounded-lg p-1">
+                    <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 rounded-md"
+                        className="h-7 w-7 rounded-md"
                         onClick={() => updateQuantity(item.pkg.id, item.quantity - 1)}
                       >
                         <Minus className="h-3 w-3" />
                       </Button>
-                      <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
+                      <span className="text-xs font-bold w-5 text-center">{item.quantity}</span>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 rounded-md"
+                        className="h-7 w-7 rounded-md"
                         onClick={() => updateQuantity(item.pkg.id, item.quantity + 1)}
                       >
                         <Plus className="h-3 w-3" />
@@ -95,13 +95,13 @@ export default function CartDrawer() {
           </div>
 
           {items.length > 0 && (
-            <div className="p-6 border-t bg-card mt-auto shrink-0 space-y-4">
-              <div className="flex justify-between items-center font-bold text-lg">
+            <div className="px-5 py-4 border-t bg-card shrink-0 space-y-3">
+              <div className="flex justify-between items-center font-bold text-base">
                 <span>Total</span>
                 <span className="text-primary">{totalPrice.toLocaleString()} {t('payments.currency_le')}</span>
               </div>
               <Button 
-                className="w-full h-12 text-md font-bold"
+                className="w-full h-11 text-sm font-bold"
                 onClick={() => {
                   setIsCartOpen(false);
                   setIsCheckoutOpen(true);
