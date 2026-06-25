@@ -210,9 +210,12 @@
       border-bottom-right-radius: 0 !important;
       border-top-left-radius: 1.5rem !important;
       border-top-right-radius: 1.5rem !important;
+      /* Force override translations for Tailwind CSS v4 and compile pipelines */
+      --tw-translate-x: 0px !important;
+      --tw-translate-y: 0px !important;
       transform: none !important;
-      translate: none !important;
-      scale: none !important;
+      translate: 0px 0px !important;
+      scale: 1 !important;
       margin: 0 !important;
       overflow-y: auto !important;
       -webkit-overflow-scrolling: touch !important;

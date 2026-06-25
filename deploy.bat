@@ -6,7 +6,7 @@ echo       CRM AUTO DEPLOYMENT SCRIPT
 echo =========================================
 echo.
 set /p commit_msg="Enter commit message (or press Enter for default): "
-if "%commit_msg%"=="" set commit_msg="Auto-deploy: Update config and server"
+if "%commit_msg%"=="" set commit_msg=Auto-deploy: Update config and server
 
 echo.
 echo [1/3] Adding changes to Git...

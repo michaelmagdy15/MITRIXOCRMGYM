@@ -15,7 +15,7 @@
       "extends": "production",
       "env": {
         "GYM_SUBDOMAIN": "strike",
-        "APP_NAME": "StrikeEG",
+        "APP_NAME": "STRIKE",
         "PRODUCTION_URL": "https://strike.mitrixo.com"
       }
     },
@@ -23,7 +23,7 @@
       "extends": "production",
       "env": {
         "GYM_SUBDOMAIN": "strikeboxing",
-        "APP_NAME": "StrikeEG",
+        "APP_NAME": "STRIKE",
         "PRODUCTION_URL": "https://strike.mitrixo.com"
       }
     }

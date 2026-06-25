@@ -18,7 +18,7 @@ import Constants from 'expo-constants';
 
 let config = {
   PRODUCTION_URL: 'https://strike.mitrixo.com/',
-  APP_NAME: 'StrikeEG'
+  APP_NAME: 'STRIKE'
 };
 try {
   config = require('./config.json');
