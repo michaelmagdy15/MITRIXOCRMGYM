@@ -10,6 +10,7 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { getTenantId } from './firebase';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { BrowserRouter } from 'react-router-dom';
@@ -79,6 +80,11 @@ function AppContent() {
   const [clientViewMode, setClientViewMode] = React.useState<'portal' | 'store'>('portal');
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
 
+  const isStrike = React.useMemo(() => {
+    const tenantId = getTenantId();
+    return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
+  }, [branding?.companyName]);
+
   const toggleSidebar = () => {
     setIsSidebarCollapsed(prev => {
       const next = !prev;
@@ -124,6 +130,16 @@ function AppContent() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Save Expo push token if available on login
+  React.useEffect(() => {
+    const token = (window as any).expoPushToken;
+    if (currentUser?.id && token) {
+      import('./services/pushService').then(({ saveExpoPushToken }) => {
+        saveExpoPushToken(currentUser.id, token, currentUser.clientDocId || currentUser.clientRecordId || undefined);
+      });
+    }
+  }, [currentUser?.id]);
 
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -503,6 +519,13 @@ function AppContent() {
   }
 
   if (currentUser.role === 'coach') {
+    if (isStrike) {
+      return (
+        <MemberPortal 
+          onSwitchToStore={() => setClientViewMode('store')} 
+        />
+      );
+    }
     return <CoachPortal />;
   }
 

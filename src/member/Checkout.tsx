@@ -197,6 +197,17 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
         createdAt: new Date().toISOString()
       });
 
+      // Trigger push notification to admins
+      try {
+        const { notifyAdmins } = await import('../services/pushService');
+        await notifyAdmins(
+          'New Booking Request 🛒',
+          `${name} has requested a package purchase of ${totalPrice.toLocaleString()} EGP.`
+        );
+      } catch (err) {
+        console.error('Failed to send admin push notification:', err);
+      }
+
       // Send confirmation email via Firestore trigger
       if (buyerEmail) {
         try {

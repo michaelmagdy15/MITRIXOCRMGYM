@@ -92,7 +92,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   const [loading, setLoading] = useState(true);
 
   // Booking and Profile Sub-tabs state
-  const [bookingSubTab, setBookingSubTab] = useState<'pt' | 'group'>('pt');
+  const [bookingSubTab, setBookingSubTab] = useState<'pt' | 'group'>(isStrike ? 'group' : 'pt');
   
   const profileSubTabsList = useMemo(() => {
     const list = [
@@ -323,21 +323,23 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         
         {activeTab === 'booking' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border">
-              <button 
-                onClick={() => setBookingSubTab('pt')} 
-                className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${bookingSubTab === 'pt' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
-              >
-                PT Sessions
-              </button>
-              <button 
-                onClick={() => setBookingSubTab('group')} 
-                className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${bookingSubTab === 'group' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
-              >
-                Group Classes
-              </button>
-            </div>
-            {bookingSubTab === 'pt' ? <MemberSessions client={activeClient} /> : <MemberClasses client={activeClient} />}
+            {!isStrike && (
+              <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border">
+                <button 
+                  onClick={() => setBookingSubTab('pt')} 
+                  className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${bookingSubTab === 'pt' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+                >
+                  PT Sessions
+                </button>
+                <button 
+                  onClick={() => setBookingSubTab('group')} 
+                  className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${bookingSubTab === 'group' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+                >
+                  Group Classes
+                </button>
+              </div>
+            )}
+            {isStrike || bookingSubTab === 'group' ? <MemberClasses client={activeClient} /> : <MemberSessions client={activeClient} />}
           </div>
         )}
 

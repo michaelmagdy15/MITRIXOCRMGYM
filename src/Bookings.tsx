@@ -198,6 +198,19 @@ export default function Bookings() {
         }
       }
 
+      // Notify client via push notification
+      try {
+        const { notifyClient } = await import('./services/pushService');
+        const pkgNames = selectedRequest.items.map(item => item.packageName).join(', ');
+        await notifyClient(
+          selectedRequest.clientId,
+          'Purchase Approved! 🎉',
+          `Your request for ${pkgNames} has been approved and activated.`
+        );
+      } catch (err) {
+        console.error('Failed to send client push notification:', err);
+      }
+
       setIsAcceptOpen(false);
       setSelectedRequest(null);
     } catch (err: any) {
@@ -230,6 +243,18 @@ export default function Bookings() {
             notes: `Booking rejected via Bookings tab. Reason: ${rejectReason || 'No reason provided'}`
           });
         }
+      }
+
+      // Notify client via push notification
+      try {
+        const { notifyClient } = await import('./services/pushService');
+        await notifyClient(
+          rejectingRequest.clientId,
+          'Purchase Request Declined',
+          `Your booking request has been declined. ${rejectReason ? `Reason: ${rejectReason}` : ''}`
+        );
+      } catch (err) {
+        console.error('Failed to send client push notification:', err);
       }
 
       setIsRejectOpen(false);
