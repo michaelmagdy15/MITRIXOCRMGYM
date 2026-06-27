@@ -146,7 +146,7 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <StatusBar style="light" backgroundColor="#000" />
       <View style={styles.container}>
         <WebView
@@ -188,7 +188,7 @@ export default function App() {
           renderLoading={renderLoading}
         />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
