@@ -1,0 +1,82 @@
+name: EAS Build Mobile App
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Platform to build'
+        required: true
+        default: 'ios'
+        type: choice
+        options:
+          - ios
+          - android
+          - all
+      profile:
+        description: 'EAS build profile (configured in eas.json)'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - preview
+          - development
+      submit:
+        description: 'Automatically submit to App Store / Google Play'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  build:
+    name: Build & Publish App
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Install Dependencies
+        run: |
+          cd mobile
+          npm ci
+
+      - name: Run EAS Local Build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          cd mobile
+          
+          # Build arguments
+          PLATFORM="${{ github.event.inputs.platform }}"
+          PROFILE="${{ github.event.inputs.profile }}"
+          SUBMIT_FLAG=""
+          
+          if [ "${{ github.event.inputs.submit }}" = "true" ]; then
+            SUBMIT_FLAG="--auto-submit"
+          fi
+          
+          echo "Building platform: $PLATFORM with profile: $PROFILE"
+          eas build --platform "$PLATFORM" --local --profile "$PROFILE" --non-interactive $SUBMIT_FLAG
+
+      - name: Upload Build Artifacts (IPAs / APKs)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-build-files
+          path: |
+            mobile/*.ipa
+            mobile/*.apk
+            mobile/*.aab
+          if-no-files-found: warn
