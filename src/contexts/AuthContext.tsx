@@ -39,7 +39,7 @@ interface AuthContextType {
   createCoachAccount: (name: string, email: string, branch?: string) => Promise<{ uid: string; coachId: string }>;
   createClientAccount: (clientId: string, memberId: string, clientName: string, phone?: string) => Promise<{ uid: string }>;
   submitSignUpRequest: (name: string, email: string, role: UserRole, message?: string) => Promise<void>;
-  registerFreeUser: (email: string, password: string, profileData: any) => Promise<void>;
+  registerFreeUser: (email: string, password: string, profileData: any) => Promise<string>;
   approveSignUpRequest: (id: string, pending: PendingAccount) => Promise<void>;
   denySignUpRequest: (id: string) => Promise<void>;
   submitPasswordResetRequest: (email: string, name?: string) => Promise<void>;
@@ -719,6 +719,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await setDoc(doc(db, 'users', uid), newUser);
 
     // Auto-login happens automatically by Firebase onAuthStateChanged
+    return clientRef.id;
   };
 
   const memoizedCurrentUser = useMemo(() => {

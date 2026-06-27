@@ -67,7 +67,8 @@ export default function CalendarView() {
     ptPackageRecords, 
     addPTPackageRecord, 
     updatePTPackageRecord,
-    branches
+    branches,
+    coaches
   } = useAppContext();
 
   const { t, language, isRtl } = useLanguage();
@@ -641,8 +642,8 @@ export default function CalendarView() {
                       <SelectValue placeholder={language === 'ar' ? 'اختر المدرب' : 'Select trainer'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {users.filter(u => u.role === 'coach' || u.role === 'rep' || u.role === 'manager').map(u => (
-                        <SelectItem key={u.id} value={u.id}>{u.name} ({u.role})</SelectItem>
+                      {users.filter(u => u.role === 'coach' || coaches.some(c => c.active && c.userId === u.id)).map(u => (
+                        <SelectItem key={u.id} value={u.id}>{u.name} (Coach)</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -691,8 +692,8 @@ export default function CalendarView() {
                       <SelectValue placeholder={language === 'ar' ? 'اختر المدرب' : 'Select coach'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {users.filter(u => u.role === 'coach' || u.role === 'rep' || u.role === 'manager').map(u => (
-                        <SelectItem key={u.id} value={u.name}>{u.name} ({u.role})</SelectItem>
+                      {coaches.filter(c => c.active).map(c => (
+                        <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

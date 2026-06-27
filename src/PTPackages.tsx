@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 export default function PTPackages() {
-  const { currentUser, users, clients, updateClient, ptPackageRecords, addPTPackageRecord, updatePTPackageRecord } = useAppContext();
+  const { currentUser, users, clients, updateClient, ptPackageRecords, addPTPackageRecord, updatePTPackageRecord, coaches } = useAppContext();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isNewPackageOpen, setIsNewPackageOpen] = useState(false);
   const [newPackageClientId, setNewPackageClientId] = useState('');
@@ -327,7 +327,7 @@ export default function PTPackages() {
                   <SelectValue placeholder="Select trainer" />
                 </SelectTrigger>
                 <SelectContent>
-                  {users.filter(u => u.role === 'rep' || u.role === 'manager').map(user => (
+                   {users.filter(u => u.role === 'coach' || coaches.some(c => c.active && c.userId === u.id)).map(user => (
                     <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                   ))}
                 </SelectContent>

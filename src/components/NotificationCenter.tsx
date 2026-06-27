@@ -3,10 +3,12 @@ import { useAppContext } from '../context';
 import { useTasks } from '../hooks/useTasks';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Bell, AlertTriangle, Gift, CheckSquare, Clock, User as UserIcon, X, Check } from 'lucide-react';
+import { Bell, AlertTriangle, Gift, CheckSquare, Clock, User as UserIcon, X, Check, ShoppingCart } from 'lucide-react';
 import { differenceInDays, isSameDay, isSameMonth, parseISO, isToday, isBefore, isAfter, startOfDay } from 'date-fns';
+import { db } from '../firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
-export type NotificationType = 'lead_stale' | 'member_expiring' | 'birthday' | 'task_due';
+export type NotificationType = 'lead_stale' | 'member_expiring' | 'birthday' | 'task_due' | 'booking_request';
 
 export interface AppNotification {
   id: string;
@@ -19,13 +21,29 @@ export interface AppNotification {
 }
 
 export function NotificationCenter() {
-  const { clients, setSearchQuery } = useAppContext();
+  const { clients, setSearchQuery, setActiveTab } = useAppContext();
   const { currentUser, updateUser } = useAuth();
   const { tasks } = useTasks();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [pendingBookings, setPendingBookings] = useState<any[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to pending booking requests
+  useEffect(() => {
+    const q = query(collection(db, 'bookingRequests'), where('status', '==', 'Pending'));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setPendingBookings(list);
+    }, (err) => {
+      console.error("Error loading pending bookings for notifications:", err);
+    });
+    return () => unsub();
+  }, []);
 
   // Load dismissed notifications from database and localStorage on mount
   useEffect(() => {
@@ -178,17 +196,35 @@ export function NotificationCenter() {
       }
     });
 
+    // 5. Pending booking requests
+    pendingBookings.forEach(booking => {
+      generated.push({
+        id: `booking_req_${booking.id}`,
+        type: 'booking_request',
+        title: 'New Booking Request',
+        description: `${booking.clientName} requested: ${booking.items.map((i: any) => i.packageName).join(', ')} (${booking.totalPrice} EGP)`,
+        date: booking.createdAt ? parseISO(booking.createdAt) : today,
+        recordName: booking.clientName,
+        recordId: booking.id
+      });
+    });
+
     // Sort by date (newest first for tasks/events, but here we can just show tasks first, then birthdays, etc.)
     generated.sort((a, b) => b.date.getTime() - a.date.getTime());
     
     setNotifications(generated);
-  }, [clients, tasks]);
+  }, [clients, tasks, pendingBookings]);
 
   const activeNotifications = notifications.filter(n => !dismissedIds.has(n.id));
 
   const handleNotificationClick = (notification: AppNotification) => {
-    setSearchQuery(notification.recordName);
-    setIsOpen(false);
+    if (notification.type === 'booking_request') {
+      setActiveTab('bookings');
+      setIsOpen(false);
+    } else {
+      setSearchQuery(notification.recordName);
+      setIsOpen(false);
+    }
   };
 
   const getIcon = (type: NotificationType) => {
@@ -197,6 +233,7 @@ export function NotificationCenter() {
       case 'lead_stale': return <Clock className="h-4 w-4 text-amber-500" />;
       case 'member_expiring': return <AlertTriangle className="h-4 w-4 text-destructive" />;
       case 'task_due': return <CheckSquare className="h-4 w-4 text-blue-500" />;
+      case 'booking_request': return <ShoppingCart className="h-4 w-4 text-emerald-500" />;
       default: return <Bell className="h-4 w-4" />;
     }
   };

@@ -7,9 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus } from 'lucide-react';
+import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users } from 'lucide-react';
 import { Client, Package } from '../types';
-import { getTenantId } from '../firebase';
+import { getTenantId, db } from '../firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-fns';
 
 export function getPackageImage(packageName: string, sessions: number): string {
   const lowerName = packageName.toLowerCase();
@@ -103,6 +105,31 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   // Refs for scrolling to sections
   const kidsSectionRef = useRef<HTMLDivElement>(null);
   const adultSectionRef = useRef<HTMLDivElement>(null);
+  const dateScrollRef = useRef<HTMLDivElement>(null);
+
+  const [classes, setClasses] = useState<any[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
+  const [loadingClasses, setLoadingClasses] = useState(true);
+
+  // Generate date range: 7 days before and 14 days after today
+  const dateRange = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i - 7));
+
+  useEffect(() => {
+    const q = collection(db, 'classes');
+    const unsub = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+      setClasses(list);
+      setLoadingClasses(false);
+    }, (err) => {
+      console.error("Error loading classes for GuestPortal:", err);
+      setLoadingClasses(false);
+    });
+    return () => unsub();
+  }, []);
 
   // Preloader: wait for logo image to load (cached for subsequent renders)
   useEffect(() => {
@@ -768,37 +795,159 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         {/* ── SCHEDULE TAB ── */}
         {activeTab === 'schedule' && (
           <div className="p-4 space-y-4 sf-tab-enter">
-            <h2 className="text-xl font-black uppercase tracking-tight mb-2">Class Schedule</h2>
-            
-            <div className="space-y-3">
-              {((): any[] => {
-                const b1 = branches[0] || 'Main Branch';
-                const b2 = branches[1] || b1;
-                const coachList = coaches.filter(c => c.active);
-                const c1 = coachList[0]?.name || 'Coach Captain Yasser';
-                const c2 = coachList[1]?.name || 'Coach Michael';
-                const c3 = coachList[2]?.name || 'Coach Nour';
+            <div>
+              <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" /> Classes & Events
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Browse daily schedule and upcoming club sessions.</p>
+            </div>
 
-                return [
-                  { time: "09:00 AM", name: "Fitness Foundation", coach: c1, branch: b1, days: "Mon / Wed" },
-                  { time: "11:00 AM", name: "Strength & Conditioning", coach: c2, branch: b1, days: "Sat / Mon / Wed" },
-                  { time: "05:00 PM", name: "Kids & Juniors Training", coach: c3, branch: b1, days: "Sun / Tue" },
-                  { time: "06:00 PM", name: "Advanced Conditioning", coach: c1, branch: b2, days: "Tue / Thu" },
-                  { time: "07:00 PM", name: "HIIT Sparring Session", coach: c2, branch: b2, days: "Sat / Mon / Thu" }
-                ];
-              })().map((cls, idx) => (
-                <div key={idx} className="bg-card border rounded-2xl p-4 flex justify-between items-center shadow-sm sf-card-stagger">
-                  <div className="space-y-1">
-                    <Badge variant="outline" className="text-[9px] font-bold border-primary/20 text-primary uppercase">{cls.days}</Badge>
-                    <h3 className="font-extrabold text-xs uppercase text-foreground">{cls.name}</h3>
-                    <p className="text-[10px] text-muted-foreground">with {cls.coach}</p>
-                    <p className="text-[9px] text-zinc-500 font-bold">📍 {cls.branch}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <Badge className="font-mono text-xs font-bold">{cls.time}</Badge>
-                  </div>
+            {/* ─── BeFit-Style Horizontal Date Ribbon ─── */}
+            <div className="relative">
+              <div
+                ref={dateScrollRef}
+                className="flex gap-1 overflow-x-auto no-scrollbar py-1 px-0.5"
+              >
+                {dateRange.map((date, idx) => {
+                  const dateKey = format(date, 'yyyy-MM-dd');
+                  const isSelected = isSameDay(date, selectedDate);
+                  const today = isToday(date);
+                  const hasClasses = classes.some(c => c.date === dateKey);
+
+                  return (
+                    <button
+                      key={idx}
+                      data-today={today ? 'true' : undefined}
+                      onClick={() => setSelectedDate(startOfDay(date))}
+                      className={`flex flex-col items-center min-w-[48px] py-2 px-1 rounded-xl transition-all duration-200 shrink-0 ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/30 scale-105'
+                          : today
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'text-muted-foreground hover:bg-muted/50'
+                      }`}
+                    >
+                      <span className="text-[9px] font-bold uppercase tracking-wider">
+                        {format(date, 'EEE')}
+                      </span>
+                      <span className="text-lg font-bold leading-none mt-0.5">
+                        {format(date, 'd')}
+                      </span>
+                      <span className="text-[8px] font-medium mt-0.5 uppercase">
+                        {format(date, 'MMM')}
+                      </span>
+                      {hasClasses && (
+                        <div className={`h-1 w-1 rounded-full mt-1 ${
+                          isSelected ? 'bg-primary-foreground' : 'bg-primary'
+                        }`} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ─── Selected Date Header ─── */}
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-muted-foreground">
+                {isToday(selectedDate) ? 'Today' : format(selectedDate, 'EEEE, dd MMM')}
+                <span className="ml-2 font-normal">
+                  {classes.filter(c => {
+                    try {
+                      return isSameDay(parseISO(c.date), selectedDate);
+                    } catch { return false; }
+                  }).length} sessions
+                </span>
+              </p>
+            </div>
+
+            {/* ─── Class Cards ─── */}
+            <div className="space-y-3">
+              {loadingClasses ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
                 </div>
-              ))}
+              ) : classes.filter(c => {
+                try {
+                  return isSameDay(parseISO(c.date), selectedDate);
+                } catch { return false; }
+              }).length === 0 ? (
+                <div className="border border-dashed bg-muted/20 rounded-2xl py-10 text-center text-muted-foreground text-xs italic">
+                  <Calendar className="h-8 w-8 mx-auto opacity-20 mb-2" />
+                  No sessions scheduled for {isToday(selectedDate) ? 'today' : format(selectedDate, 'dd MMM')}.
+                </div>
+              ) : (
+                classes.filter(c => {
+                  try {
+                    return isSameDay(parseISO(c.date), selectedDate);
+                  } catch { return false; }
+                }).map(gymClass => {
+                  const isFull = gymClass.attendees ? gymClass.attendees.length >= gymClass.capacity : false;
+                  const spotsLeft = gymClass.attendees ? Math.max(0, gymClass.capacity - gymClass.attendees.length) : gymClass.capacity;
+
+                  return (
+                    <div key={gymClass.id} className="bg-card border rounded-2xl p-4 space-y-3 shadow-sm hover:bg-card/75 transition-all">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant={gymClass.type === 'Event' ? 'default' : 'secondary'} className="text-[9px] uppercase tracking-wider h-4">
+                              {gymClass.type}
+                            </Badge>
+                            <span className="text-[10px] text-primary uppercase font-mono tracking-wider font-bold">
+                              {gymClass.branch}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-black uppercase leading-snug tracking-tight text-foreground">{gymClass.name}</h4>
+                          <p className="text-[10px] text-muted-foreground">Led by <strong>{gymClass.coachName}</strong></p>
+                        </div>
+
+                        <div className="text-right flex flex-col items-end">
+                          <div className="flex items-center gap-1 text-[11px] font-mono font-bold">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            {gymClass.time}
+                          </div>
+                        </div>
+                      </div>
+
+                      {gymClass.description && (
+                        <p className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded-lg border leading-relaxed">
+                          {gymClass.description}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between border-t pt-2.5 mt-1">
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold">
+                          <Users className="h-3.5 w-3.5" />
+                          <span>{gymClass.attendees ? gymClass.attendees.length : 0} / {gymClass.capacity} Joined</span>
+                          {spotsLeft <= 3 && spotsLeft > 0 && (
+                            <Badge className="bg-amber-500/10 text-amber-600 border-amber-200/50 text-[9px] font-bold">
+                              {spotsLeft} spots left!
+                            </Badge>
+                          )}
+                        </div>
+
+                        {isLoggedIn ? (
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs font-bold rounded-xl"
+                            onClick={onSwitchToCRM}
+                          >
+                            Go to Portal to Join
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs font-bold rounded-xl"
+                            onClick={onSwitchToCRM}
+                          >
+                            Login to Book
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}

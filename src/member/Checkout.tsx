@@ -114,10 +114,13 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
     setIsLoading(true);
     setError('');
     try {
-      await registerFreeUser(regEmail, regPassword, {
+      const createdId = await registerFreeUser(regEmail, regPassword, {
         name: regName,
         phone: regPhone,
       });
+      if (createdId) {
+        setClientDocId(createdId);
+      }
       // Success: Auto-logged in, will advance to 'details' step
     } catch (err: any) {
       setError(err.message || 'Failed to register account.');
@@ -171,8 +174,30 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
         createdAt: new Date().toISOString(),
       });
 
+      // Also create a structured booking request in the `bookingRequests` collection
+      const buyerEmail = email || regEmail || currentUser?.email || '';
+      await addDoc(collection(db, 'bookingRequests'), {
+        clientName: name,
+        clientPhone: phone,
+        clientEmail: buyerEmail,
+        clientId,
+        items: items.map(i => ({
+          packageId: i.pkg.id,
+          packageName: i.pkg.name,
+          price: i.pkg.price,
+          quantity: i.quantity,
+          sessions: i.pkg.sessions,
+          type: i.pkg.type || 'Other',
+          expiryDays: i.pkg.expiryDays
+        })),
+        totalPrice,
+        paymentMethod,
+        instapayRef: paymentMethod === 'Instapay' ? instapayRef : '',
+        status: 'Pending',
+        createdAt: new Date().toISOString()
+      });
+
       // Send confirmation email via Firestore trigger
-      const buyerEmail = email || regEmail;
       if (buyerEmail) {
         try {
           await addDoc(collection(db, 'mail'), {

@@ -30,8 +30,9 @@ import MemberCheckin from './MemberCheckin';
 import HelpPage from './HelpPage';
 import Debtors from './Debtors';
 import UnconfirmedMemberships from './UnconfirmedMemberships';
+import Bookings from './Bookings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock } from 'lucide-react';
+import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -532,6 +533,12 @@ function AppContent() {
     },
     { id: 'clients', label: t('nav.clients'), icon: Users, show: true },
     { id: 'calendar', label: t('nav.calendar'), icon: CalendarIcon, show: true },
+    {
+      id: 'bookings',
+      label: 'Bookings',
+      icon: ShoppingCart,
+      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'rep')
+    },
     { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: effectiveRole !== 'admin' },
     {
       id: 'payments',
@@ -1008,6 +1015,10 @@ function AppContent() {
 
             <TabsContent value="calendar" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <CalendarView />
+            </TabsContent>
+
+            <TabsContent value="bookings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <Bookings />
             </TabsContent>
 
             {currentUser.role !== 'admin' && (

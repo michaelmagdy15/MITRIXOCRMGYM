@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 export default function PrivateSessions() {
-  const { currentUser, users, clients, updateClient, ptPackageRecords: privateSessions, addPTPackageRecord: addPrivateSession, updatePTPackageRecord: updatePrivateSession } = useAppContext();
+  const { currentUser, users, clients, updateClient, ptPackageRecords: privateSessions, addPTPackageRecord: addPrivateSession, updatePTPackageRecord: updatePrivateSession, coaches } = useAppContext();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
   const [newSessionClientId, setNewSessionClientId] = useState('');
@@ -328,7 +328,7 @@ export default function PrivateSessions() {
                   <SelectValue placeholder="Select trainer" />
                 </SelectTrigger>
                 <SelectContent>
-                  {users.filter(u => u.role === 'rep' || u.role === 'manager' || u.role === 'coach').map(user => (
+                   {users.filter(u => u.role === 'coach' || coaches.some(c => c.active && c.userId === u.id)).map(user => (
                     <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                   ))}
                 </SelectContent>
