@@ -68,7 +68,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, auditLogs, features } = useAppContext();
+  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, auditLogs, features, attendances } = useAppContext();
   const { packages } = usePackages();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
@@ -2383,6 +2383,50 @@ export default function Clients() {
                                 <TableRow>
                                   <TableCell colSpan={4} className="text-center py-10 text-xs text-muted-foreground italic">
                                     No payments recorded.
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+
+                      {/* Attendance History */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Attendance History</p>
+                          <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-none">
+                            {attendances.filter((att) => att.clientId === activeClient.id).length} entries
+                          </Badge>
+                        </div>
+                        <div className="rounded-xl border bg-background overflow-hidden max-h-[300px] overflow-y-auto custom-scrollbar">
+                          <Table>
+                            <TableHeader className="bg-muted/30">
+                              <TableRow>
+                                <TableHead className="text-[10px] uppercase py-2.5 px-3">Date</TableHead>
+                                <TableHead className="text-[10px] uppercase py-2.5 px-3">Package</TableHead>
+                                <TableHead className="text-[10px] uppercase py-2.5 px-3">Branch</TableHead>
+                                <TableHead className="text-[10px] uppercase py-2.5 px-3">Recorded By</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {attendances
+                                .filter((att) => att.clientId === activeClient.id)
+                                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                .map((att) => (
+                                  <TableRow key={att.id || Math.random().toString()} className="hover:bg-muted/20 border-b transition-colors">
+                                    <TableCell className="py-2.5 px-3 text-xs">
+                                      {att.date ? format(parseISO(att.date), 'MMM d, yyyy - hh:mm a') : '—'}
+                                    </TableCell>
+                                    <TableCell className="py-2.5 px-3 text-xs max-w-[150px] truncate">{att.packageName || '—'}</TableCell>
+                                    <TableCell className="py-2.5 px-3 text-xs capitalize">{att.branch || '—'}</TableCell>
+                                    <TableCell className="py-2.5 px-3 text-xs">{att.recordedBy || '—'}</TableCell>
+                                  </TableRow>
+                                ))}
+                              {attendances.filter((att) => att.clientId === activeClient.id).length === 0 && (
+                                <TableRow>
+                                  <TableCell colSpan={4} className="text-center py-10 text-xs text-muted-foreground italic">
+                                    No attendance recorded.
                                   </TableCell>
                                 </TableRow>
                               )}
