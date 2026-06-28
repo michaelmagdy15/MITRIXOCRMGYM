@@ -185,6 +185,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
       const isBooked = gymClass.attendees.includes(client.id);
       let updatedAttendees = [...gymClass.attendees];
       let updatedPackages = client.packages ? [...client.packages] : [];
+      let updatedSessionsRemaining = client.sessionsRemaining;
 
       if (isBooked) {
         // Leaving class: Refund 1 session
@@ -201,6 +202,10 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
 
         if (pkgToRefund && (pkgToRefund.sessionsRemaining as any) !== 'unlimited') {
           pkgToRefund.sessionsRemaining = (Number(pkgToRefund.sessionsRemaining) || 0) + 1;
+        }
+
+        if (client.sessionsRemaining !== 'unlimited') {
+          updatedSessionsRemaining = (Number(client.sessionsRemaining) || 0) + 1;
         }
       } else {
         // Joining class: Validate capacity
@@ -237,13 +242,20 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
           validPkg.sessionsRemaining = (Number(validPkg.sessionsRemaining) || 0) - 1;
         }
 
+        if (client.sessionsRemaining !== 'unlimited') {
+          updatedSessionsRemaining = Math.max(0, (Number(client.sessionsRemaining) || 0) - 1);
+        }
+
         updatedAttendees.push(client.id);
       }
 
       // Perform updates atomically in a batch
       const batch = writeBatch(db);
       batch.update(doc(db, 'classes', gymClass.id), { attendees: updatedAttendees });
-      batch.update(doc(db, 'clients', client.id), { packages: updatedPackages });
+      batch.update(doc(db, 'clients', client.id), { 
+        packages: updatedPackages,
+        sessionsRemaining: updatedSessionsRemaining
+      });
       await batch.commit();
 
     } catch (err) {

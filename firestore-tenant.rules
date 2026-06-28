@@ -91,7 +91,7 @@ service cloud.firestore {
     }
 
     function isSafeClientSelfEdit() {
-      let allowed = ['name', 'phone', 'portalUserId'];
+      let allowed = ['name', 'phone', 'portalUserId', 'packages', 'sessionsRemaining'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
              (!('portalUserId' in request.resource.data) || request.resource.data.portalUserId == request.auth.uid) &&
              (!('portalUserId' in resource.data) || resource.data.portalUserId == request.auth.uid);
@@ -152,8 +152,18 @@ service cloud.firestore {
     }
 
     function isSafeUserSelfEdit() {
-      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL'];
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL', 'clientDocId', 'dismissedNotifications', 'expoPushToken'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
+             (!('clientDocId' in request.resource.data) || 
+              (
+                exists(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)) &&
+                (
+                  get(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)).data.memberId == resource.data.clientRecordId ||
+                  resource.data.clientRecordId.matches('^\\s*' + get(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)).data.memberId + '\\s*$') ||
+                  get(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)).data.memberId.matches('^\\s*' + resource.data.clientRecordId + '\\s*$')
+                )
+              )
+             );
     }
 
     // ===============================================================
@@ -330,7 +340,19 @@ service cloud.firestore {
         )
       ));
       allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.portalUserId == request.auth.uid);
-      allow update: if isTenantStaff() || (isOwnClientRecord(clientId) && isSafeClientSelfEdit());
+      allow update: if isTenantStaff() || 
+                    (isOwnClientRecord(clientId) && isSafeClientSelfEdit()) ||
+                    (
+                      isAuthenticated() &&
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                      (
+                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId == resource.data.memberId ||
+                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId.matches('^\\s*' + resource.data.memberId + '\\s*$') ||
+                        resource.data.memberId.matches('^\\s*' + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId + '\\s*$')
+                      ) &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['portalUserId']) &&
+                      request.resource.data.portalUserId == request.auth.uid
+                    );
       allow delete: if isTenantAdmin();
     }
 
@@ -363,6 +385,11 @@ service cloud.firestore {
       allow read: if true;
       allow create, delete: if isTenantStaff();
       allow update: if isTenantStaff() || isAuthenticated();
+    }
+
+    match /traffic/{logId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
     }
 
     match /tasks/{taskId} {

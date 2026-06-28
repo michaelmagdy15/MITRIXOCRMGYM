@@ -83,7 +83,7 @@ service cloud.firestore {
     }
 
     function isSafeClientSelfEdit() {
-      let allowed = ['name', 'phone', 'portalUserId'];
+      let allowed = ['name', 'phone', 'portalUserId', 'packages', 'sessionsRemaining'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
              (!('portalUserId' in request.resource.data) || request.resource.data.portalUserId == request.auth.uid) &&
              (!('portalUserId' in resource.data) || resource.data.portalUserId == request.auth.uid);

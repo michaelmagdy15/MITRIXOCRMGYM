@@ -180,6 +180,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
 
       // Find active PT package
       let updatedPackages = client.packages ? [...client.packages] : [];
+      let updatedSessionsRemaining = client.sessionsRemaining;
       const validPkgIndex = updatedPackages.findIndex(pkg => {
         if (pkg.status !== 'Active') return false;
         const nameUpper = pkg.packageName.toUpperCase();
@@ -196,6 +197,10 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       const validPkg = updatedPackages[validPkgIndex];
       if (validPkg && (validPkg.sessionsRemaining as any) !== 'unlimited') {
         validPkg.sessionsRemaining = (Number(validPkg.sessionsRemaining) || 0) - 1;
+      }
+
+      if (client.sessionsRemaining !== 'unlimited') {
+        updatedSessionsRemaining = Math.max(0, (Number(client.sessionsRemaining) || 0) - 1);
       }
 
       // Add the session & task inside a batch
@@ -226,7 +231,10 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
         createdAt: new Date().toISOString(),
       });
 
-      batch.update(doc(db, 'clients', client.id), { packages: updatedPackages });
+      batch.update(doc(db, 'clients', client.id), { 
+        packages: updatedPackages,
+        sessionsRemaining: updatedSessionsRemaining
+      });
       await batch.commit();
 
       setBookingSuccess(true);
@@ -329,6 +337,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     if (!window.confirm("Are you sure you want to cancel this PT session?")) return;
     try {
       let updatedPackages = client.packages ? [...client.packages] : [];
+      let updatedSessionsRemaining = client.sessionsRemaining;
       // Find active PT package to refund
       const pkgToRefund = updatedPackages.find(pkg => {
         if (pkg.status !== 'Active') return false;
@@ -340,9 +349,16 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
         pkgToRefund.sessionsRemaining = (Number(pkgToRefund.sessionsRemaining) || 0) + 1;
       }
 
+      if (client.sessionsRemaining !== 'unlimited') {
+        updatedSessionsRemaining = (Number(client.sessionsRemaining) || 0) + 1;
+      }
+
       const batch = writeBatch(db);
       batch.update(doc(db, 'sessions', sessionId), { status: 'Cancelled' });
-      batch.update(doc(db, 'clients', client.id), { packages: updatedPackages });
+      batch.update(doc(db, 'clients', client.id), { 
+        packages: updatedPackages,
+        sessionsRemaining: updatedSessionsRemaining
+      });
       
       const newAuditRef = doc(collection(db, 'auditLogs'));
       batch.set(newAuditRef, {
