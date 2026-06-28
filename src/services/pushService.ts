@@ -1,5 +1,5 @@
 import { db } from '../firebase';
-import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 /**
  * Saves the Expo Push Token to the user's account and client record in Firestore.
@@ -110,10 +110,13 @@ export async function notifyAdmins(title: string, body: string, data?: any) {
 export async function notifyClient(clientId: string, title: string, body: string, data?: any) {
   if (!clientId) return;
   try {
-    const q = query(collection(db, 'clients'), where('id', '==', clientId));
-    const snap = await getDocs(q);
-    if (snap.empty) return;
-    const clientData = snap.docs[0].data();
+    const clientRef = doc(db, 'clients', clientId);
+    const clientSnap = await getDoc(clientRef);
+    if (!clientSnap.exists()) {
+      console.warn(`[Push Service] Client document not found: ${clientId}`);
+      return;
+    }
+    const clientData = clientSnap.data();
     const token = clientData.expoPushToken;
     if (token) {
       await sendPushNotification(token, title, body, data);
