@@ -104,6 +104,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      allowedHosts: true,
       watch: {
         ignored: ['**/scratch/**', '**/handover_docs/**', '**/.git/**']
       },

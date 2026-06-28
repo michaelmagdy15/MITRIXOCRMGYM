@@ -214,8 +214,8 @@ export default function MemberProfile({ client }: { client: Client | null }) {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* ─── BeFit-Style Avatar Hero Card ─── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/20 via-primary/5 to-transparent border p-5">
+      {/* ─── BeFit-Style Avatar Hero Card (Glassmorphic) ─── */}
+      <div className="relative overflow-hidden rounded-2xl bg-card/45 backdrop-blur-md border border-border/30 p-5 shadow-lg shadow-black/5 dark:shadow-black/20">
         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-8 translate-x-8" />
         <div className="flex items-center gap-4">
           {/* Avatar Circle */}
@@ -223,7 +223,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-extrabold tracking-tight truncate">{client?.name || 'Member'}</h2>
+            <h2 className="text-lg font-extrabold tracking-tight truncate uppercase">{client?.name || 'MEMBER'}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
               <Badge variant="outline" className="text-[9px] font-mono bg-card/50">{client?.memberId || 'N/A'}</Badge>
               <Badge className={`text-[9px] ${client?.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' : 'bg-zinc-500/10 text-zinc-500 border-zinc-200/50'}`}>
@@ -237,18 +237,18 @@ export default function MemberProfile({ client }: { client: Client | null }) {
         </div>
         {/* Quick Stats Row */}
         <div className="grid grid-cols-3 gap-2 mt-4">
-          <div className="text-center p-2 bg-card/50 rounded-xl border">
+          <div className="text-center p-2.5 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
             <p className="text-lg font-extrabold font-mono text-primary">{totalCheckins}</p>
             <p className="text-[9px] text-muted-foreground font-bold">Check-ins</p>
           </div>
-          <div className="text-center p-2 bg-card/50 rounded-xl border">
+          <div className="text-center p-2.5 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
             <p className="text-lg font-extrabold font-mono text-orange-500 flex items-center justify-center gap-0.5">
               <Flame className="h-4 w-4" />{currentStreak}
             </p>
             <p className="text-[9px] text-muted-foreground font-bold">Streak</p>
           </div>
-          <div className="text-center p-2 bg-card/50 rounded-xl border">
-            <p className="text-lg font-extrabold font-mono text-primary">{client?.branch || '—'}</p>
+          <div className="text-center p-2.5 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
+            <p className="text-lg font-extrabold font-mono text-primary uppercase">{client?.branch || '—'}</p>
             <p className="text-[9px] text-muted-foreground font-bold">Branch</p>
           </div>
         </div>

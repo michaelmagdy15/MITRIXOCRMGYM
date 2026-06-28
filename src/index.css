@@ -100,7 +100,7 @@
     --secondary: oklch(0.25 0.01 240);
     --secondary-foreground: oklch(0.98 0 0);
     --muted: oklch(0.23 0.01 240);
-    --muted-foreground: oklch(0.65 0 0);
+    --muted-foreground: oklch(0.78 0.01 240);
     --accent: oklch(0.25 0.01 240);
     --accent-foreground: oklch(0.98 0 0);
     --destructive: oklch(0.4 0.15 20);
@@ -301,4 +301,13 @@
   .text-brand-accent { color: var(--brand-accent); }
   .border-brand-accent { border-color: var(--brand-accent); }
   .ring-brand-accent { --tw-ring-color: var(--brand-accent); }
+
+  /* Hide scrollbars globally for a native mobile app feel */
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+  html, body, div, main, nav, section, ul {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
 }

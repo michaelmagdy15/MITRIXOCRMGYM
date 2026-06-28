@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Client, User } from '../types';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, addDoc, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, doc, getDoc, getDocs, updateDoc, writeBatch } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { format, parseISO, addDays, isAfter } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, Clock, MapPin, Dumbbell, CalendarRange, User as UserIcon, CheckCircle2, MessageSquare, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, MapPin, Dumbbell, CalendarRange, User as UserIcon, CheckCircle2, MessageSquare, AlertCircle, ShoppingBag } from 'lucide-react';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
   Scheduled:  { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50',   text: 'Scheduled' },
@@ -22,7 +22,7 @@ const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
 
 const DAYS_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
-export default function MemberSessions({ client }: { client: Client | null }) {
+export default function MemberSessions({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: () => void }) {
   const [sessions, setSessions] = useState<any[]>([]);
   const [coaches, setCoaches] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -178,8 +178,31 @@ export default function MemberSessions({ client }: { client: Client | null }) {
         throw new Error("This coach is already booked within this hour. Please choose another time.");
       }
 
-      // 2. Directly add the session
-      await addDoc(collection(db, 'sessions'), {
+      // Find active PT package
+      let updatedPackages = client.packages ? [...client.packages] : [];
+      const validPkgIndex = updatedPackages.findIndex(pkg => {
+        if (pkg.status !== 'Active') return false;
+        const nameUpper = pkg.packageName.toUpperCase();
+        const isPT = nameUpper.includes('PT') || nameUpper.includes('PERSONAL');
+        if (!isPT) return false;
+        const remaining = pkg.sessionsRemaining;
+        return (remaining as any) === 'unlimited' || (typeof remaining === 'number' && remaining > 0);
+      });
+
+      if (validPkgIndex === -1) {
+        throw new Error("You do not have any active Personal Training (PT) packages with sessions remaining. Please buy a package first.");
+      }
+
+      const validPkg = updatedPackages[validPkgIndex];
+      if (validPkg && (validPkg.sessionsRemaining as any) !== 'unlimited') {
+        validPkg.sessionsRemaining = (Number(validPkg.sessionsRemaining) || 0) - 1;
+      }
+
+      // Add the session & task inside a batch
+      const batch = writeBatch(db);
+      
+      const newSessionRef = doc(collection(db, 'sessions'));
+      batch.set(newSessionRef, {
         clientId: client.id,
         date: selectedDateTime.toISOString(),
         status: 'Scheduled',
@@ -188,11 +211,10 @@ export default function MemberSessions({ client }: { client: Client | null }) {
         branch: selectedCoach?.branch || client.branch || 'ALL'
       });
 
-      // 3. Create a task in firestore to notify coach/admins
+      const newTaskRef = doc(collection(db, 'tasks'));
       const formattedDate = format(selectedDateTime, 'PPP');
       const formattedTime = format(selectedDateTime, 'p');
-
-      await addDoc(collection(db, 'tasks'), {
+      batch.set(newTaskRef, {
         title: `PT Booking: ${client.name}`,
         description: `Member booked a PT session with ${selectedCoach?.name || 'Coach'} on ${formattedDate} at ${formattedTime}.${bookingMessage ? ` Message: ${bookingMessage}` : ''}`,
         dueDate: bookingDate,
@@ -203,6 +225,9 @@ export default function MemberSessions({ client }: { client: Client | null }) {
         createdBy: client.portalUserId || client.id,
         createdAt: new Date().toISOString(),
       });
+
+      batch.update(doc(db, 'clients', client.id), { packages: updatedPackages });
+      await batch.commit();
 
       setBookingSuccess(true);
       setBookingMessage('');
@@ -303,20 +328,34 @@ export default function MemberSessions({ client }: { client: Client | null }) {
   const handleCancelSession = async (sessionId: string) => {
     if (!window.confirm("Are you sure you want to cancel this PT session?")) return;
     try {
-      const sessionRef = doc(db, 'sessions', sessionId);
-      await updateDoc(sessionRef, {
-        status: 'Cancelled'
+      let updatedPackages = client.packages ? [...client.packages] : [];
+      // Find active PT package to refund
+      const pkgToRefund = updatedPackages.find(pkg => {
+        if (pkg.status !== 'Active') return false;
+        const nameUpper = pkg.packageName.toUpperCase();
+        return nameUpper.includes('PT') || nameUpper.includes('PERSONAL');
       });
 
-      await addDoc(collection(db, 'auditLogs'), {
+      if (pkgToRefund && (pkgToRefund.sessionsRemaining as any) !== 'unlimited') {
+        pkgToRefund.sessionsRemaining = (Number(pkgToRefund.sessionsRemaining) || 0) + 1;
+      }
+
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'sessions', sessionId), { status: 'Cancelled' });
+      batch.update(doc(db, 'clients', client.id), { packages: updatedPackages });
+      
+      const newAuditRef = doc(collection(db, 'auditLogs'));
+      batch.set(newAuditRef, {
         action: 'UPDATE',
         entityType: 'SESSION',
         entityId: sessionId,
-        details: `PT Session ${sessionId} cancelled by client ID ${client.id}.`,
+        details: `PT Session ${sessionId} cancelled by client ID ${client.id}. PT session refunded.`,
         timestamp: new Date().toISOString(),
         userId: client.portalUserId || client.id,
         userName: client.name
       });
+
+      await batch.commit();
     } catch (err: any) {
       console.error("Error cancelling session:", err);
       alert("Failed to cancel session: " + err.message);
@@ -340,9 +379,21 @@ export default function MemberSessions({ client }: { client: Client | null }) {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div>
-        <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-          <Dumbbell className="h-5 w-5 text-primary" /> My Sessions
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <Dumbbell className="h-5 w-5 text-primary" /> My Sessions
+          </h2>
+          {onSwitchToStore && (
+            <Button 
+              onClick={onSwitchToStore} 
+              variant="outline" 
+              size="sm" 
+              className="h-8 text-[11px] font-bold border-primary/20 hover:border-primary/45 rounded-xl flex items-center gap-1.5 shrink-0 bg-background/50 shadow-sm"
+            >
+              <ShoppingBag className="h-3 w-3" /> Buy Packages
+            </Button>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground mt-0.5">View scheduled personal training sessions and book new workouts.</p>
       </div>
 

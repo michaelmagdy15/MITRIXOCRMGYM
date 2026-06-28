@@ -127,3 +127,60 @@ export async function notifyClient(clientId: string, title: string, body: string
     console.error('[Push Service] Error notifying client:', err);
   }
 }
+
+/**
+ * Sends a push notification to all registered members.
+ */
+export async function notifyAllMembers(title: string, body: string, data?: any) {
+  try {
+    const q = query(
+      collection(db, 'clients')
+    );
+    const snap = await getDocs(q);
+    const tokens = snap.docs
+      .map(doc => doc.data().expoPushToken)
+      .filter((t): t is string => typeof t === 'string' && t.startsWith('ExponentPushToken'));
+
+    if (tokens.length === 0) {
+      console.log('[Push Service] No member tokens found.');
+      return { successCount: 0, totalCount: 0 };
+    }
+
+    // De-duplicate tokens
+    const uniqueTokens = Array.from(new Set(tokens));
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < uniqueTokens.length; i += 100) {
+      chunks.push(uniqueTokens.slice(i, i + 100));
+    }
+
+    let successCount = 0;
+    for (const chunk of chunks) {
+      const messages = chunk.map(token => ({
+        to: token,
+        sound: 'default',
+        title,
+        body,
+        data
+      }));
+
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Accept-encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messages),
+      });
+      const resData = await response.json();
+      console.log('[Push Service] Sent batch notifications:', resData);
+      successCount += chunk.length;
+    }
+
+    return { successCount, totalCount: uniqueTokens.length };
+  } catch (err) {
+    console.error('[Push Service] Error sending push to all members:', err);
+    throw err;
+  }
+}

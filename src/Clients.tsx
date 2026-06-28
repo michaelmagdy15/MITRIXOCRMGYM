@@ -18,6 +18,7 @@ import { format, parseISO, isAfter, isBefore, addDays, subDays, differenceInDays
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { QRCodeSVG } from 'qrcode.react';
+import { toast } from 'sonner';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import ImportData from './ImportData';
 import ImportHistory from './ImportHistory';
@@ -61,6 +62,8 @@ export default function Clients() {
   const activeClient = activeClientId ? clients.find(c => c.id === activeClientId) : null;
   const [activeTab, setActiveTab] = useState('active');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [isBulkPackageDialogOpen, setIsBulkPackageDialogOpen] = useState(false);
+  const [bulkSelectedPackageName, setBulkSelectedPackageName] = useState('');
   
   // Lazy Loading Details State
   const [activeClientDetails, setActiveClientDetails] = useState<{clientId: string, comments: any[], interactions: any[]} | null>(null);
@@ -790,6 +793,93 @@ export default function Clients() {
     setSelectedClientIds([]);
   };
 
+  const changeClientPackage = async (clientId: string, newPackageName: string) => {
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return;
+
+    const sysPkg = packages.find(p => p.name === newPackageName);
+    if (!sysPkg) return;
+
+    const isPt = sysPkg.name.toLowerCase().includes('pt') || sysPkg.name.toLowerCase().includes('private');
+    const category = isPt ? 'Private Training' : 'Group Training';
+
+    // 1. Prepare packages list
+    const packagesCopy = [...(client.packages || [])];
+    const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+    
+    const now = new Date();
+    const startDateStr = now.toISOString();
+    const endDateStr = new Date(now.getTime() + sysPkg.expiryDays * 24 * 60 * 60 * 1000).toISOString();
+
+    const newClientPkg: ClientPackage = {
+      id: 'pkg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+      packageName: sysPkg.name,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      sessionsTotal: sysPkg.sessions,
+      sessionsRemaining: sysPkg.sessions,
+      status: 'Active',
+      subscriptionType: 'renew'
+    };
+
+    if (activePkgIdx !== -1) {
+      // Deactivate the old active package
+      const activePkg = packagesCopy[activePkgIdx];
+      if (activePkg) {
+        packagesCopy[activePkgIdx] = {
+          ...activePkg,
+          id: activePkg.id || 'pkg-' + Date.now(),
+          status: 'Expired',
+          endDate: startDateStr
+        };
+      }
+    }
+    
+    // Add the new active package
+    packagesCopy.push(newClientPkg);
+
+    // 2. Perform Firestore update
+    await updateClient(client.id, {
+      packageType: sysPkg.name,
+      sessionsRemaining: sysPkg.sessions,
+      startDate: startDateStr,
+      membershipExpiry: endDateStr,
+      packages: packagesCopy
+    });
+
+    // 3. Log Audit Log
+    await addDoc(collection(db, 'auditLogs'), {
+      action: 'UPDATE',
+      entityType: 'CLIENT',
+      entityId: client.id,
+      details: `Active package corrected to ${sysPkg.name} (Sessions: ${sysPkg.sessions}, Expiry Days: ${sysPkg.expiryDays})`,
+      timestamp: new Date().toISOString(),
+      userId: currentUser?.id || '',
+      userName: currentUser?.name || '',
+      branch: client.branch || ''
+    });
+  };
+
+  const confirmBulkUpdatePackage = async () => {
+    if (!bulkSelectedPackageName) return;
+    setIsBulkPackageDialogOpen(false);
+    
+    let successCount = 0;
+    try {
+      for (const clientId of selectedClientIds) {
+        await changeClientPackage(clientId, bulkSelectedPackageName);
+        successCount++;
+      }
+      toast.success(`Successfully updated package for ${successCount} members.`);
+    } catch (err) {
+      console.error(err);
+      toast.error(`Error updating packages. Updated ${successCount} members.`);
+    } finally {
+      setSelectedClientIds([]);
+      setBulkSelectedPackageName('');
+    }
+  };
+
   const handleDeleteClient = async (id: string) => {
     setClientToDelete(id);
     setIsDeleteDialogOpen(true);
@@ -1304,6 +1394,9 @@ export default function Clients() {
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="bg-background text-primary border-primary/20 hover:bg-primary/5" onClick={() => setIsBulkPackageDialogOpen(true)}>
+                    <RefreshCw className="h-4 w-4 mr-2" /> Change Package
+                  </Button>
                   {canDeleteRecords && (
                     <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
                       <Trash2 className="h-4 w-4 mr-2" /> {t('common.delete_selected')}
@@ -1386,6 +1479,46 @@ export default function Clients() {
         variant="destructive"
         confirmText="Delete All Selected"
       />
+
+      <Dialog open={isBulkPackageDialogOpen} onOpenChange={setIsBulkPackageDialogOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Batch Change Package</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-xs text-muted-foreground">
+              You are about to change the active package for <strong>{selectedClientIds.length}</strong> selected members.
+              This will update their active package type, reset their remaining sessions, and recalculate their expiry date from today.
+            </p>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">Select New Package</Label>
+              <Select
+                value={bulkSelectedPackageName}
+                onValueChange={(val) => setBulkSelectedPackageName(val || '')}
+              >
+                <SelectTrigger className="w-full text-xs bg-background font-semibold">
+                  <SelectValue placeholder="Choose a package" />
+                </SelectTrigger>
+                <SelectContent>
+                  {packages.map((p) => (
+                    <SelectItem key={p.id} value={p.name} className="text-xs">
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex gap-3 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setIsBulkPackageDialogOpen(false); setBulkSelectedPackageName(''); }}>
+              Cancel
+            </Button>
+            <Button className="flex-1 rounded-xl font-bold" disabled={!bulkSelectedPackageName} onClick={confirmBulkUpdatePackage}>
+              Update Packages
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {whatsAppClient && (
         <WhatsAppDialog
@@ -1843,9 +1976,34 @@ export default function Clients() {
                       ) : activeClient.packageType && activeClient.packageType !== 'Unknown' ? (
                         <div className="p-3 bg-primary/5 rounded-lg border text-xs space-y-2">
                           <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <span className="text-[9px] uppercase text-muted-foreground block">Package</span>
-                              <span className="font-semibold">{activeClient.packageType}</span>
+                            <div className="col-span-2 mb-2">
+                              <span className="text-[9px] uppercase text-muted-foreground block mb-1">Active Package (Correction)</span>
+                              <Select
+                                value={activeClient.packageType}
+                                onValueChange={async (val) => {
+                                  if (!val || val === activeClient.packageType) return;
+                                  if (confirm(`Are you sure you want to correct this member's active package to: ${val}? This will update their active package, sessions remaining, and expiry date.`)) {
+                                    try {
+                                      await changeClientPackage(activeClient.id, val);
+                                      toast.success("Package updated successfully!");
+                                    } catch (err) {
+                                      console.error(err);
+                                      toast.error("Failed to update package.");
+                                    }
+                                  }
+                                }}
+                              >
+                                <SelectTrigger className="h-8 text-xs bg-background font-semibold">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {packages.map((p) => (
+                                    <SelectItem key={p.id} value={p.name} className="text-xs">
+                                      {p.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
                             </div>
                             {typeof activeClient.sessionsRemaining !== 'undefined' && (
                               <div>

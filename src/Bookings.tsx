@@ -479,7 +479,7 @@ export default function Bookings() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="memberGender" className="text-xs font-bold text-muted-foreground uppercase">Gender</Label>
-                <Select value={clientGender} onValueChange={setClientGender}>
+                <Select value={clientGender} onValueChange={(val) => setClientGender(val || '')}>
                   <SelectTrigger id="memberGender" className="h-10 bg-background">
                     <SelectValue placeholder="Select Gender" />
                   </SelectTrigger>
@@ -495,7 +495,7 @@ export default function Bookings() {
             {/* Sales Representative Attribution */}
             <div className="space-y-1.5 border-t pt-3 mt-2">
               <Label htmlFor="salesRep" className="text-xs font-bold text-primary uppercase">Attributed Sales Rep</Label>
-              <Select value={salesRepId} onValueChange={setSalesRepId}>
+              <Select value={salesRepId} onValueChange={(val) => setSalesRepId(val || '')}>
                 <SelectTrigger id="salesRep" className="h-10 bg-background border-primary/20">
                   <SelectValue placeholder="Assign Sales Representative" />
                 </SelectTrigger>

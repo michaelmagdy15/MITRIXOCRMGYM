@@ -57,7 +57,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
     gift: <Gift className="h-3.5 w-3.5 text-pink-500" />,
     refund: <ArrowUpCircle className="h-3.5 w-3.5 text-blue-500" />,
     packageBuy: <ShoppingBag className="h-3.5 w-3.5 text-amber-500" />,
-    admin_adjustment: <Sparkles className="h-3.5 w-3.5 text-purple-500" />,
+    admin_adjustment: <Sparkles className="h-3.5 w-3.5 text-primary" />,
     promo_bonus: <Gift className="h-3.5 w-3.5 text-emerald-500" />,
   };
 

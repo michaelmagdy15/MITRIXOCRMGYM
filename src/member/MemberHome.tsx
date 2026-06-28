@@ -123,7 +123,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
 
   const greeting = useMemo(() => getGreeting(), []);
-  const firstName = client?.name?.split(' ')[0] || 'Member';
+  const firstName = (client?.name?.split(' ')[0] || 'Member').toUpperCase();
 
   // ─── Fetch attendance data ───
   useEffect(() => {
@@ -276,36 +276,30 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
     const list = [
       { 
         icon: isStrike ? (
-          <BoxingGlovesIcon className="h-7 w-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />
+          <BoxingGlovesIcon className="h-7 w-7 text-foreground drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
         ) : (
-          <Calendar className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />
+          <Calendar strokeWidth={1.25} className="h-6 w-6 text-red-500 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
         ), 
         label: 'Bookings', 
         action: () => onNavigate?.('booking'),
         glowColor: isStrike ? '#18181b' : '#C20E1A'
       },
       { 
-        icon: <ShoppingBag className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />, 
-        label: 'Shop', 
-        action: () => onSwitchToStore?.(),
-        glowColor: isStrike ? '#3f3f46' : '#F59E0B'
-      },
-      { 
-        icon: <Coins className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />, 
+        icon: <Coins strokeWidth={1.25} className={`h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-yellow-600'}`} />, 
         label: 'Wallet', 
         action: () => onNavigate?.('wallet'),
         glowColor: isStrike ? '#71717a' : '#D97706',
         walletRequired: true
       },
       { 
-        icon: <Trophy className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />, 
+        icon: <Trophy strokeWidth={1.25} className={`h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-emerald-500'}`} />, 
         label: 'Progress', 
         action: () => onNavigate?.('profile-progress'),
         glowColor: isStrike ? '#a1a1aa' : '#059669',
         pointsRequired: true
       },
       { 
-        icon: <User className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />, 
+        icon: <User strokeWidth={1.25} className={`h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-cyan-500'}`} />, 
         label: 'Profile', 
         action: () => onNavigate?.('profile'),
         glowColor: isStrike ? '#e4e4e7' : '#06B6D4'
@@ -339,7 +333,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
 
   const bestStreakBadgeColor = isStrike 
     ? 'bg-amber-500/10 border-amber-500/20 text-amber-500'
-    : 'bg-purple-500/10 border-purple-500/20 text-purple-500';
+    : 'bg-primary/10 border-primary/20 text-primary';
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -422,10 +416,10 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         </div>
       )}
 
-      {/* ─── Quick Shortcuts (Glassmorphism-style) ─── */}
-      <div>
+      {/* ─── Quick Shortcuts (Glassmorphic Style) ─── */}
+      <div className="relative z-10">
         <h3 className="text-sm font-bold mb-3">Quick Shortcuts</h3>
-        <div className={`grid gap-3 p-4 bg-card/60 backdrop-blur-md border border-border/40 rounded-3xl shadow-sm ${
+        <div className={`grid gap-3 p-5 bg-card/50 backdrop-blur-lg border border-border/30 rounded-3xl shadow-xl shadow-black/5 dark:shadow-black/20 hover:border-primary/20 transition-all duration-300 ${
           shortcuts.length === 3 ? 'grid-cols-3' : shortcuts.length === 4 ? 'grid-cols-4' : 'grid-cols-5'
         }`}>
           {shortcuts.map((s, idx) => (
@@ -434,30 +428,10 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
               onClick={s.action}
               className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
             >
-              <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
-                {/* Background glow orb */}
-                <div 
-                  className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
-                  style={{ backgroundColor: s.glowColor }}
-                />
-                
-                {/* Glass surface */}
-                <div 
-                  className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
-                  style={{
-                    boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${s.glowColor}4D`
-                  }}
-                >
-                  {s.icon}
-                </div>
-                
-                {/* Glossy reflection layer */}
-                <div className="absolute inset-0 bg-gradient-to-b from-white/25 via-transparent to-transparent opacity-50 pointer-events-none" />
-                
-                {/* Interactive Hover light swipe */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+              <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
+                {s.icon}
               </div>
-              <span className="text-[10px] font-bold mt-2 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
+              <span className="text-[10px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
                 {s.label}
               </span>
             </button>
@@ -466,7 +440,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
       </div>
 
       {/* ─── Premium Membership Card (Horizontal Silver-Metallic) ─── */}
-      <div className="relative group overflow-hidden rounded-3xl shadow-2xl transition-all duration-300 hover:shadow-black/25">
+      <div className="relative group overflow-hidden rounded-[24px] shadow-2xl transition-all duration-300 hover:shadow-black/25 animate-float z-10">
         <div className="absolute inset-0 bg-grid-black/[0.03] rounded-3xl pointer-events-none" />
         {/* Subtle dynamic metallic reflection light */}
         <div className="absolute -inset-y-12 -inset-x-12 bg-gradient-to-tr from-white/20 via-transparent to-white/10 blur-xl opacity-60 group-hover:opacity-80 transition-opacity pointer-events-none" />
@@ -538,10 +512,10 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         </Card>
       </div>
 
-      {/* ─── Stats Grid (BeFit-Inspired) ─── */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* ─── Stats Grid (BeFit-Inspired Glassmorphic) ─── */}
+      <div className="grid grid-cols-2 gap-3 relative z-10">
         {/* Package */}
-        <Card className="border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="border border-border/30 bg-card/45 backdrop-blur-lg shadow-lg shadow-black/5 dark:shadow-black/20 rounded-3xl hover:border-primary/20 hover:scale-[1.02] active:scale-98 transition-all duration-300">
           <CardContent className="p-4 flex flex-col justify-between h-[100px]">
             <div className="flex items-center justify-between text-muted-foreground">
               <span className="text-[10px] font-bold uppercase tracking-wider">Package</span>
@@ -563,7 +537,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         </Card>
 
         {/* Sessions */}
-        <Card className="border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="border border-border/30 bg-card/45 backdrop-blur-lg shadow-lg shadow-black/5 dark:shadow-black/20 rounded-3xl hover:border-primary/20 hover:scale-[1.02] active:scale-98 transition-all duration-300">
           <CardContent className="p-4 flex flex-col justify-between h-[100px]">
             <div className="flex items-center justify-between text-muted-foreground">
               <span className="text-[10px] font-bold uppercase tracking-wider">Sessions</span>
@@ -585,7 +559,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         </Card>
 
         {/* Check-in streak */}
-        <Card className="border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="border border-border/30 bg-card/45 backdrop-blur-lg shadow-lg shadow-black/5 dark:shadow-black/20 rounded-3xl hover:border-primary/20 hover:scale-[1.02] active:scale-98 transition-all duration-300">
           <CardContent className="p-4 flex flex-col justify-between h-[100px]">
             <div className="flex items-center justify-between text-muted-foreground">
               <span className="text-[10px] font-bold uppercase tracking-wider">Streak</span>
@@ -604,7 +578,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         </Card>
 
         {/* Last Check-in */}
-        <Card className="border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
+        <Card className="border border-border/30 bg-card/45 backdrop-blur-lg shadow-lg shadow-black/5 dark:shadow-black/20 rounded-3xl hover:border-primary/20 hover:scale-[1.02] active:scale-98 transition-all duration-300">
           <CardContent className="p-4 flex flex-col justify-between h-[100px]">
             <div className="flex items-center justify-between text-muted-foreground">
               <span className="text-[10px] font-bold uppercase tracking-wider">Last Visit</span>

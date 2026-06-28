@@ -32,7 +32,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   useEffect(() => {
     if (!selectedBranch && branches.length > 0) {
-      setSelectedBranch(branches[0]);
+      setSelectedBranch(branches[0] || '');
     }
   }, [branches, selectedBranch]);
   const [lastScannedMember, setLastScannedMember] = useState<any>(null);

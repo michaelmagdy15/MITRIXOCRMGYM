@@ -431,7 +431,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   const Logo = () => (
     <div className="mb-8 text-center flex flex-col items-center">
       {branding.logoUrl ? (
-        <img src={branding.logoUrl} alt={branding.companyName} className="h-20 w-auto object-contain mb-4" referrerPolicy="no-referrer" />
+        <img src={branding.logoUrl} alt={branding.companyName} className="h-20 w-auto object-contain mb-4 dark:brightness-0 dark:invert" referrerPolicy="no-referrer" />
       ) : (
         <>
           <h1 className="text-5xl font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
@@ -680,7 +680,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
           )}
 
           <div className="text-center text-xs text-muted-foreground/60">
-            Made & managed by <a href="https://mitrixo.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors font-medium underline underline-offset-4 decoration-muted-foreground/30 hover:decoration-foreground">mitrixo.com systems</a>
+            Made & managed by mitrixo.com systems
           </div>
         </div>
 

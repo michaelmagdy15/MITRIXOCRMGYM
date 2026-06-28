@@ -96,30 +96,30 @@ export default function MemberBadges({ client }: { client: Client | null }) {
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* ─── Hero Stats ─── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-500/20 via-purple-500/5 to-transparent border border-purple-500/20 p-5">
-        <div className="absolute top-0 right-0 w-36 h-36 bg-purple-500/5 rounded-full -translate-y-10 translate-x-10" />
+      {/* ─── Hero Stats (Glassmorphic & Theme Accent) ─── */}
+      <div className="relative overflow-hidden rounded-2xl bg-card/45 backdrop-blur-md border border-border/30 p-5 shadow-lg shadow-black/5 dark:shadow-black/20">
+        <div className="absolute top-0 right-0 w-36 h-36 bg-primary/5 rounded-full -translate-y-10 translate-x-10" />
         
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-3">
-            <div className="p-2 bg-purple-500/20 rounded-xl">
-              <Trophy className="h-5 w-5 text-purple-500" />
+            <div className="p-2 bg-primary/10 rounded-xl">
+              <Trophy className="h-5 w-5 text-primary" />
             </div>
-            <span className="text-xs font-bold uppercase tracking-widest text-purple-600 dark:text-purple-400">Achievements</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-primary">Achievements</span>
           </div>
           
           <div className="grid grid-cols-3 gap-3">
-            <div className="text-center p-3 bg-card/50 rounded-xl border">
-              <p className="text-2xl font-black text-purple-500">{unlockedCount}</p>
+            <div className="text-center p-3 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
+              <p className="text-2xl font-black text-primary">{unlockedCount}</p>
               <p className="text-[9px] text-muted-foreground font-bold mt-0.5">Badges</p>
             </div>
-            <div className="text-center p-3 bg-card/50 rounded-xl border">
+            <div className="text-center p-3 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
               <p className="text-2xl font-black text-amber-500 flex items-center justify-center gap-0.5">
                 <Coins className="h-4 w-4" />{totalCoins}
               </p>
               <p className="text-[9px] text-muted-foreground font-bold mt-0.5">Coins</p>
             </div>
-            <div className="text-center p-3 bg-card/50 rounded-xl border">
+            <div className="text-center p-3 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
               <p className="text-2xl font-black text-orange-500 flex items-center justify-center gap-0.5">
                 <Flame className="h-4 w-4" />{streak?.currentStreak || 0}
               </p>

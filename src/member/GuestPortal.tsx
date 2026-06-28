@@ -33,7 +33,7 @@ export function getPackageImage(packageName: string, sessions: number): string {
 
   // 2. Juniors
   if (lowerName.includes('junior')) {
-    const isPro = lowerName.includes('pro');
+    const isPro = lowerName.includes('pro') || lowerName.includes('advanced');
     if (isPro) {
       if (sessions === 10) return "/Juniors-Juniors Pro/Juniors 10 sessions (pro).jpg";
       if (sessions === 20) return "/Juniors-Juniors Pro/Juniors 20 sessions (pro).jpg";
@@ -75,6 +75,51 @@ const BoxingGlovesIcon = ({ className }: { className?: string }) => (
     </g>
   </svg>
 );
+
+export function getPackageTypeLabel(packageName: string): string | null {
+  const upper = packageName.toUpperCase();
+  const hasGT = upper.includes('GT') || upper.includes('GP') || upper.includes('GROUP');
+  const hasPT = upper.includes('PT') || upper.includes('PERSONAL');
+  
+  if (hasGT && hasPT) {
+    return 'Group Training & Personal Training';
+  } else if (hasGT) {
+    return 'Group Training (GT)';
+  } else if (hasPT) {
+    return 'Personal Training (PT)';
+  }
+  return null;
+}
+
+export function getBranchDetails(branchName: string) {
+  const nameLower = branchName.toLowerCase();
+  if (nameLower.includes('complex') || nameLower.includes('maxim compound') || nameLower.includes('maxim country')) {
+    return {
+      displayName: 'Maxim Compound Branch',
+      address: 'Maxim Country Club',
+      mapUrl: 'https://maps.app.goo.gl/8BPj5eG8EtsZD66c8'
+    };
+  }
+  if (nameLower.includes('mivida')) {
+    return {
+      displayName: 'Mivida Branch',
+      address: 'Lake District',
+      mapUrl: 'https://maps.app.goo.gl/hEM2eFL4fF2bqS8F7'
+    };
+  }
+  if (nameLower.includes('impact') || nameLower.includes('strike')) {
+    return {
+      displayName: 'Impact by Strike',
+      address: 'Maxim Mall',
+      mapUrl: 'https://maps.app.goo.gl/4VnA5jAgiZx1RhjQ8'
+    };
+  }
+  return {
+    displayName: branchName,
+    address: `${branchName}, Egypt`,
+    mapUrl: null
+  };
+}
 
 interface GuestPortalProps {
   onSwitchToCRM: (tab?: string) => void;
@@ -120,7 +165,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       const list = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      })) as any[];
       list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
       setClasses(list);
       setLoadingClasses(false);
@@ -270,7 +315,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
           onClick={() => setActiveTab('book')}
         >
           {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt={branding.companyName || 'CRM'} className="h-8 w-auto object-contain" />
+            <img src={branding.logoUrl} alt={branding.companyName || 'CRM'} className="h-8 w-auto object-contain dark:brightness-0 dark:invert" referrerPolicy="no-referrer" />
           ) : (
             <h1 className="text-xl font-black tracking-[0.2em]">{(branding.companyName || 'CRM').toUpperCase()}</h1>
           )}
@@ -332,34 +377,14 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   onClick={() => scrollToSection(kidsSectionRef)}
                   className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
                 >
-                  <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
-                    {/* Background glow orb */}
-                    <div 
-                      className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
-                      style={{ backgroundColor: isStrike ? '#18181b' : '#C20E1A' }}
-                    />
-                    
-                    {/* Glass surface */}
-                    <div 
-                      className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
-                      style={{
-                        boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${isStrike ? '#18181b' : '#C20E1A'}4D`
-                      }}
-                    >
-                      {isStrike ? (
-                        <BoxingGlovesIcon className="h-8 w-8 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
-                      ) : (
-                        <Dumbbell className="h-7 w-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
-                      )}
-                    </div>
-                    
-                    {/* Glossy reflection layer */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/25 via-transparent to-transparent opacity-50 pointer-events-none" />
-                    
-                    {/* Interactive Hover light swipe */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+                  <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
+                    {isStrike ? (
+                      <BoxingGlovesIcon className="h-7 w-7 text-foreground drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
+                    ) : (
+                      <Dumbbell className="h-7 w-7 text-red-500 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
+                    )}
                   </div>
-                  <span className="text-[11px] font-bold mt-2 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
+                  <span className="text-[11px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
                     Book
                   </span>
                 </button>
@@ -369,30 +394,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   onClick={() => setActiveTab('locations')}
                   className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
                 >
-                  <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
-                    {/* Background glow orb */}
-                    <div 
-                      className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
-                      style={{ backgroundColor: isStrike ? '#3f3f46' : '#C20E1A' }}
-                    />
-                    
-                    {/* Glass surface */}
-                    <div 
-                      className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
-                      style={{
-                        boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${isStrike ? '#3f3f46' : '#C20E1A'}4D`
-                      }}
-                    >
-                      <MapPin className="h-7 w-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
-                    </div>
-                    
-                    {/* Glossy reflection layer */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/25 via-transparent to-transparent opacity-50 pointer-events-none" />
-                    
-                    {/* Interactive Hover light swipe */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+                  <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
+                    <MapPin strokeWidth={1.25} className={`h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-amber-500'}`} />
                   </div>
-                  <span className="text-[11px] font-bold mt-2 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
+                  <span className="text-[11px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
                     Locations
                   </span>
                 </button>
@@ -402,30 +407,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   onClick={() => setActiveTab('schedule')}
                   className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
                 >
-                  <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
-                    {/* Background glow orb */}
-                    <div 
-                      className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
-                      style={{ backgroundColor: isStrike ? '#71717a' : '#C20E1A' }}
-                    />
-                    
-                    {/* Glass surface */}
-                    <div 
-                      className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
-                      style={{
-                        boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${isStrike ? '#71717a' : '#C20E1A'}4D`
-                      }}
-                    >
-                      <Calendar className="h-7 w-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
-                    </div>
-                    
-                    {/* Glossy reflection layer */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/25 via-transparent to-transparent opacity-50 pointer-events-none" />
-                    
-                    {/* Interactive Hover light swipe */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+                  <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
+                    <Calendar strokeWidth={1.25} className={`h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-yellow-600'}`} />
                   </div>
-                  <span className="text-[11px] font-bold mt-2 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
+                  <span className="text-[11px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
                     Schedule
                   </span>
                 </button>
@@ -435,30 +420,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   onClick={() => setActiveTab('announcements')}
                   className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
                 >
-                  <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
-                    {/* Background glow orb */}
-                    <div 
-                      className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
-                      style={{ backgroundColor: isStrike ? '#a1a1aa' : '#00A859' }}
-                    />
-                    
-                    {/* Glass surface */}
-                    <div 
-                      className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
-                      style={{
-                        boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${isStrike ? '#a1a1aa' : '#00A859'}4D`
-                      }}
-                    >
-                      <Megaphone className="h-7 w-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
-                    </div>
-                    
-                    {/* Glossy reflection layer */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/25 via-transparent to-transparent opacity-50 pointer-events-none" />
-                    
-                    {/* Interactive Hover light swipe */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+                  <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
+                    <Megaphone strokeWidth={1.25} className={`h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-emerald-500'}`} />
                   </div>
-                  <span className="text-[11px] font-bold mt-2 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
+                  <span className="text-[11px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
                     Announcements
                   </span>
                 </button>
@@ -553,6 +518,11 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                     </div>
                     <div className="flex-1 flex flex-col justify-center">
                       <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
+                      {getPackageTypeLabel(pkg.name) && (
+                        <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                          {getPackageTypeLabel(pkg.name)}
+                        </p>
+                      )}
                       <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                       <div className="mt-2 flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
@@ -639,6 +609,11 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                         <Badge variant="outline" className="text-[8px] font-bold border-zinc-700 text-zinc-400 uppercase tracking-widest px-1.5 py-0">{pkg.type || 'Adults'}</Badge>
                       </div>
                       <h3 className="font-extrabold text-xs text-foreground uppercase mt-1 truncate">{pkg.name}</h3>
+                      {getPackageTypeLabel(pkg.name) && (
+                        <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                          {getPackageTypeLabel(pkg.name)}
+                        </p>
+                      )}
                       <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                       <div className="mt-2 flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
@@ -696,6 +671,11 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                     </div>
                     <div className="flex-1 flex flex-col justify-center min-w-0">
                       <h3 className="font-extrabold text-xs text-foreground uppercase truncate">{pkg.name}</h3>
+                      {getPackageTypeLabel(pkg.name) && (
+                        <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                          {getPackageTypeLabel(pkg.name)}
+                        </p>
+                      )}
                       <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days</p>
                       <div className="mt-2 flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
@@ -773,10 +753,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1 h-10 text-xs font-bold rounded-xl gap-1" onClick={onSwitchToCRM}>
+                  <Button variant="outline" size="sm" className="flex-1 h-10 text-xs font-bold rounded-xl gap-1" onClick={() => onSwitchToCRM()}>
                     <RefreshCcw className="h-3 w-3" /> Renew
                   </Button>
-                  <Button size="sm" className="flex-1 h-10 text-xs font-bold rounded-xl gap-1" onClick={onSwitchToCRM}>
+                  <Button size="sm" className="flex-1 h-10 text-xs font-bold rounded-xl gap-1" onClick={() => onSwitchToCRM()}>
                     <ArrowUpRight className="h-3 w-3" /> Upgrade
                   </Button>
                 </div>
@@ -802,22 +782,50 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
           <div className="p-4 space-y-4 sf-tab-enter">
             <h2 className="text-xl font-black uppercase tracking-tight mb-2">Our Locations</h2>
             
-            {branches.map((branch, idx) => (
-              <div key={branch} className={`bg-card border rounded-2xl p-5 shadow-sm space-y-3 sf-card-stagger ${idx === 0 ? 'border-primary/20 bg-primary/5' : ''}`}>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-extrabold text-sm uppercase">{branch} Branch</h3>
-                  <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[9px]">Open</Badge>
+            {branches.map((branch, idx) => {
+              const details = getBranchDetails(branch);
+              return (
+                <div key={branch} className={`bg-card border rounded-2xl p-5 shadow-sm space-y-3 sf-card-stagger ${idx === 0 ? 'border-primary/20 bg-primary/5' : ''}`}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-extrabold text-sm uppercase">{details.displayName}</h3>
+                    <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-[9px]">Open</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Welcome to our {details.displayName} location. Coached by certified instructors, featuring state-of-the-art facilities and equipment.
+                  </p>
+                  <div className="pt-2 border-t text-[11px] space-y-1 text-muted-foreground font-semibold">
+                    <p>
+                      📍 Location:{' '}
+                      {details.mapUrl ? (
+                        <a 
+                          href={details.mapUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-primary hover:underline inline-flex items-center gap-0.5"
+                        >
+                          {details.address} <ArrowUpRight className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        details.address
+                      )}
+                    </p>
+                    <p>⏰ Timings: 6:00 AM - 11:00 PM</p>
+                    <p>📞 Contact: {branding.companyName} Reception</p>
+                  </div>
+                  
+                  {details.mapUrl && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full mt-2 rounded-xl text-xs font-bold bg-primary/5 text-primary border-primary/10 hover:bg-primary/10 flex items-center justify-center gap-1.5"
+                      onClick={() => window.open(details.mapUrl!, '_blank', 'noopener,noreferrer')}
+                    >
+                      <Map className="h-3.5 w-3.5" /> Get Directions
+                    </Button>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Welcome to our {branch} location. Coached by certified instructors, featuring state-of-the-art facilities and equipment.
-                </p>
-                <div className="pt-2 border-t text-[11px] space-y-1 text-muted-foreground font-semibold">
-                  <p>📍 Location: {branch}, Egypt</p>
-                  <p>⏰ Timings: 6:00 AM - 11:00 PM</p>
-                  <p>📞 Contact: {branding.companyName} Reception</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             
             {branches.length === 0 && (
               <div className="text-center p-8 text-muted-foreground text-xs font-semibold">
@@ -965,7 +973,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                           <Button
                             size="sm"
                             className="h-8 text-xs font-bold rounded-xl"
-                            onClick={onSwitchToCRM}
+                            onClick={() => onSwitchToCRM()}
                           >
                             Go to Portal to Join
                           </Button>
@@ -973,7 +981,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                           <Button
                             size="sm"
                             className="h-8 text-xs font-bold rounded-xl"
-                            onClick={onSwitchToCRM}
+                            onClick={() => onSwitchToCRM()}
                           >
                             Login to Book
                           </Button>
@@ -1071,6 +1079,11 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   )}
                 </div>
                 <h2 className="text-xl font-black tracking-tight uppercase">{selectedPackage.name}</h2>
+                {getPackageTypeLabel(selectedPackage.name) && (
+                  <p className="text-xs text-primary font-bold tracking-wide uppercase mt-1">
+                    {getPackageTypeLabel(selectedPackage.name)}
+                  </p>
+                )}
               </div>
 
               {/* Stats Grid */}
@@ -1135,7 +1148,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               <Button 
                 variant="outline" 
                 className="flex-1 rounded-full shadow-xl bg-background/90 backdrop-blur-md border-primary/30 text-xs font-bold h-12 sf-interactive"
-                onClick={onSwitchToCRM}
+                onClick={() => onSwitchToCRM()}
               >
                 <Dumbbell className="h-4 w-4 mr-2" />
                 My Portal
@@ -1152,7 +1165,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             <Button 
               variant="outline" 
               className="w-[90vw] max-w-sm rounded-full shadow-xl bg-background/90 backdrop-blur-md border-border/50 text-xs font-bold h-12 sf-interactive"
-              onClick={onSwitchToCRM}
+              onClick={() => onSwitchToCRM()}
             >
               <LogIn className="h-4 w-4 mr-2" />
               Member / Staff Login

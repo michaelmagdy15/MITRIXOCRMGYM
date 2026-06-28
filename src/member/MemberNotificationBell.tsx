@@ -21,7 +21,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   expiry_warning: <AlertTriangle className="h-4 w-4 text-amber-500" />,
   session_reminder: <Calendar className="h-4 w-4 text-emerald-500" />,
   birthday: <Gift className="h-4 w-4 text-pink-500" />,
-  promo: <Sparkles className="h-4 w-4 text-purple-500" />,
+  promo: <Sparkles className="h-4 w-4 text-amber-500" />,
   system: <Info className="h-4 w-4 text-zinc-500" />,
 };
 
@@ -148,7 +148,7 @@ export default function MemberNotificationBell({ clientId }: MemberNotificationB
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8 relative text-zinc-400 hover:text-white"
+        className="h-8 w-8 relative text-foreground"
         onClick={() => setIsOpen(!isOpen)}
         title="Notifications"
       >

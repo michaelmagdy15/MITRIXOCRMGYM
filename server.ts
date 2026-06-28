@@ -178,9 +178,10 @@ async function getTenantInfoForHost(hostname: string): Promise<{ config: any; st
       }
     }
     
-    // B. Search by subdomain (e.g. gym.mitrixo.com -> subdomain 'gym')
+    // B. Search by subdomain (e.g. gym.mitrixo.com -> subdomain 'gym', or gym.localhost -> subdomain 'gym')
     const parts = normalizedHost.split('.');
-    if (parts.length >= 3) {
+    const isLocalDomain = parts.length === 2 && (parts[1] === 'localhost' || parts[1] === 'local');
+    if (parts.length >= 3 || isLocalDomain) {
       const subdomain = parts[0];
       if (subdomain && subdomain !== 'www' && subdomain !== 'api') {
         const subDoc = await centralDb.collection('tenants').doc(subdomain).get();

@@ -477,7 +477,7 @@ export default function AdminStorefrontManager() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs">Branch</Label>
-                    <Select value={entry.branch} onValueChange={(v) => updateScheduleEntry(entry.id, { branch: v })}>
+                    <Select value={entry.branch} onValueChange={(v) => updateScheduleEntry(entry.id, { branch: v || '' })}>
                       <SelectTrigger className="h-10 bg-background/50">
                         <SelectValue placeholder="Select branch" />
                       </SelectTrigger>

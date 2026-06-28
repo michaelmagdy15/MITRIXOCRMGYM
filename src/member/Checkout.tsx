@@ -291,7 +291,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
   };
 
   return (
-    <Dialog open={open} onOpenChange={open ? undefined : resetAndClose}>
+    <Dialog open={open} onOpenChange={(val) => { if (!val) resetAndClose(); }}>
       <DialogContent className="w-[95vw] sm:max-w-md bg-card max-h-[90vh] overflow-y-auto custom-scrollbar">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Checkout</DialogTitle>

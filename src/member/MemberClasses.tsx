@@ -5,7 +5,7 @@ import { collection, query, onSnapshot, doc, updateDoc, addDoc, getDocs, writeBa
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, Clock, MapPin, Users as UsersIcon, CheckCircle2, AlertTriangle, Sparkles } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users as UsersIcon, CheckCircle2, AlertTriangle, Sparkles, ShoppingBag } from 'lucide-react';
 import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-fns';
 
 interface GymClass {
@@ -21,7 +21,7 @@ interface GymClass {
   description?: string;
 }
 
-export default function MemberClasses({ client }: { client: Client | null }) {
+export default function MemberClasses({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: () => void }) {
   const [classes, setClasses] = useState<GymClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
@@ -151,20 +151,65 @@ export default function MemberClasses({ client }: { client: Client | null }) {
     try {
       const isBooked = gymClass.attendees.includes(client.id);
       let updatedAttendees = [...gymClass.attendees];
+      let updatedPackages = client.packages ? [...client.packages] : [];
 
       if (isBooked) {
+        // Leaving class: Refund 1 session
         updatedAttendees = updatedAttendees.filter(id => id !== client.id);
+        
+        // Find matching active GT package to refund
+        const isKidsClass = gymClass.name.toLowerCase().includes('kids') || gymClass.name.toLowerCase().includes('junior');
+        const pkgToRefund = updatedPackages.find(pkg => {
+          if (pkg.status !== 'Active') return false;
+          const nameUpper = pkg.packageName.toUpperCase();
+          const isGroup = nameUpper.includes('GT') || nameUpper.includes('GP') || nameUpper.includes('GROUP');
+          if (!isGroup) return false;
+          const isKidsPackage = nameUpper.includes('KIDS') || nameUpper.includes('JUNIOR');
+          return isKidsClass === isKidsPackage;
+        });
+
+        if (pkgToRefund && (pkgToRefund.sessionsRemaining as any) !== 'unlimited') {
+          pkgToRefund.sessionsRemaining = (Number(pkgToRefund.sessionsRemaining) || 0) + 1;
+        }
       } else {
+        // Joining class: Validate capacity
         if (gymClass.attendees.length >= gymClass.capacity) {
           alert("This class is fully booked!");
           return;
         }
+
+        // Validate package availability
+        const isKidsClass = gymClass.name.toLowerCase().includes('kids') || gymClass.name.toLowerCase().includes('junior');
+        const validPkgIndex = updatedPackages.findIndex(pkg => {
+          if (pkg.status !== 'Active') return false;
+          const nameUpper = pkg.packageName.toUpperCase();
+          const isGroup = nameUpper.includes('GT') || nameUpper.includes('GP') || nameUpper.includes('GROUP');
+          if (!isGroup) return false;
+          const isKidsPackage = nameUpper.includes('KIDS') || nameUpper.includes('JUNIOR');
+          if (isKidsClass !== isKidsPackage) return false;
+          const remaining = pkg.sessionsRemaining;
+          return (remaining as any) === 'unlimited' || (typeof remaining === 'number' && remaining > 0);
+        });
+
+        if (validPkgIndex === -1) {
+          alert(`You do not have any active Group Training (GT) packages matching this class category (${isKidsClass ? 'Kids' : 'Adults'}) with sessions remaining. Please buy a package first.`);
+          return;
+        }
+
+        const validPkg = updatedPackages[validPkgIndex];
+        if (validPkg && (validPkg.sessionsRemaining as any) !== 'unlimited') {
+          validPkg.sessionsRemaining = (Number(validPkg.sessionsRemaining) || 0) - 1;
+        }
+
         updatedAttendees.push(client.id);
       }
 
-      await updateDoc(doc(db, 'classes', gymClass.id), {
-        attendees: updatedAttendees
-      });
+      // Perform updates atomically in a batch
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'classes', gymClass.id), { attendees: updatedAttendees });
+      batch.update(doc(db, 'clients', client.id), { packages: updatedPackages });
+      await batch.commit();
+
     } catch (err) {
       console.error("Failed to update booking status:", err);
       alert("Failed to update booking. Please try again.");
@@ -198,9 +243,21 @@ export default function MemberClasses({ client }: { client: Client | null }) {
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div>
-        <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-primary" /> Classes & Events
-        </h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-primary" /> Classes & Events
+          </h2>
+          {onSwitchToStore && (
+            <Button 
+              onClick={onSwitchToStore} 
+              variant="outline" 
+              size="sm" 
+              className="h-8 text-[11px] font-bold border-primary/20 hover:border-primary/45 rounded-xl flex items-center gap-1.5 shrink-0 bg-background/50 shadow-sm"
+            >
+              <ShoppingBag className="h-3 w-3" /> Buy Packages
+            </Button>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground mt-0.5">Swipe to browse upcoming sessions and events.</p>
       </div>
 
@@ -290,7 +347,6 @@ export default function MemberClasses({ client }: { client: Client | null }) {
                         </span>
                       </div>
                       <h4 className="text-sm font-bold leading-snug tracking-tight">{gymClass.name}</h4>
-                      <p className="text-[11px] text-muted-foreground">Led by <strong>{gymClass.coachName}</strong></p>
                     </div>
 
                     <div className="text-right flex flex-col items-end">

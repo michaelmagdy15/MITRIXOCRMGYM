@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins } from 'lucide-react';
 import { db, getTenantId } from '../firebase';
-import { collection, query, where, doc, documentId, getDoc, getDocs } from 'firebase/firestore';
+import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
 import { Client } from '../types';
 
 import MemberHome from './MemberHome';
@@ -187,22 +187,20 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       .finally(() => setLoading(false));
   }, [currentUser?.clientRecordId]);
 
-  // 2. Fetch active client record when switched
+  // 2. Listen to active client record in real-time
   useEffect(() => {
     if (!selectedClientId) return;
-    // Skip if already loaded as primary
-    if (activeClient?.id === selectedClientId) return;
 
     const docRef = doc(db, 'clients', selectedClientId);
-    getDoc(docRef)
-      .then((docSnap) => {
-        if (docSnap.exists()) {
-          setActiveClient({ ...docSnap.data(), id: docSnap.id } as Client);
-        }
-      })
-      .catch((err) => {
-        console.warn("Could not load active client (may be a permissions issue):", err.code || err.message);
-      });
+    const unsub = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setActiveClient({ ...docSnap.data(), id: docSnap.id } as Client);
+      }
+    }, (err) => {
+      console.warn("Could not listen to active client record:", err.code || err.message);
+    });
+
+    return () => unsub();
   }, [selectedClientId]);
 
   // 3. Fetch linked clients (family members)
@@ -259,15 +257,19 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col font-sans">
-      <header className="border-b bg-card shadow-sm h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
+    <div className="min-h-screen bg-background flex flex-col font-sans relative overflow-hidden">
+      {/* Decorative Premium Glow Blobs */}
+      <div className="absolute top-[5%] right-[-20%] w-[320px] h-[320px] rounded-full bg-primary/10 dark:bg-primary/20 blur-[100px] pointer-events-none z-0" />
+      <div className="absolute bottom-[15%] left-[-20%] w-[320px] h-[320px] rounded-full bg-orange-500/10 dark:bg-orange-500/15 blur-[100px] pointer-events-none z-0" />
+
+      <header className="border-b bg-card/60 backdrop-blur-xl h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div 
             className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity"
             onClick={() => setActiveTab('home')}
           >
             {branding.logoUrl ? (
-              <img src={branding.logoUrl} alt={branding.companyName} className="h-8 w-auto object-contain" referrerPolicy="no-referrer" />
+              <img src={branding.logoUrl} alt={branding.companyName} className="h-8 w-auto object-contain dark:brightness-0 dark:invert" referrerPolicy="no-referrer" />
             ) : (
               <h1 className="text-lg font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
             )}
@@ -288,11 +290,11 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={primaryClient.id}>
-                    {primaryClient.name} (You)
+                    {primaryClient.name.toUpperCase()} (You)
                   </SelectItem>
                   {linkedClients.map(c => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                      {c.name.toUpperCase()}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -300,27 +302,13 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             </div>
           )}
 
-          {onSwitchToStore && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={onSwitchToStore} 
-              title="Shop Packages" 
-              className="h-8 w-8 text-zinc-400 hover:text-white"
-            >
-              <ShoppingBag className="h-4 w-4" />
-            </Button>
-          )}
-
-          <CartDrawer />
-
           <MemberNotificationBell clientId={activeClient?.id} />
 
-          <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-foreground">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
-          <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="h-8 w-8 text-zinc-400 hover:text-white">
+          <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="h-8 w-8 text-foreground">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
@@ -347,7 +335,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
                 </button>
               </div>
             )}
-            {isStrike || bookingSubTab === 'group' ? <MemberClasses client={activeClient} /> : <MemberSessions client={activeClient} />}
+            {isStrike || bookingSubTab === 'group' ? <MemberClasses client={activeClient} onSwitchToStore={onSwitchToStore} /> : <MemberSessions client={activeClient} onSwitchToStore={onSwitchToStore} />}
           </div>
         )}
 
@@ -363,7 +351,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
                 <button 
                   key={tab.id}
                   onClick={() => setProfileSubTab(tab.id as any)}
-                  className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === tab.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+                  className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === tab.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground/80 dark:text-zinc-400 hover:text-foreground'}`}
                 >
                   {tab.label}
                 </button>

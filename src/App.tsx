@@ -48,6 +48,7 @@ import { QRCodePage } from './components/QRCodePage';
 import QuoteGenerator from './QuoteGenerator';
 import ClubOperations from './ClubOperations';
 import { CartProvider, useCart } from './member/CartContext';
+import CommandPalette from './components/CommandPalette';
 import OnboardingWizard from './OnboardingWizard';
 import AdminHub from './AdminHub';
 import SuperAdminHub from './SuperAdminHub';
@@ -80,6 +81,18 @@ function AppContent() {
   const [clientViewMode, setClientViewMode] = React.useState<'portal' | 'store'>('portal');
   const [memberPortalInitialTab, setMemberPortalInitialTab] = React.useState<string>('home');
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const isStrike = React.useMemo(() => {
     const tenantId = getTenantId();
@@ -132,14 +145,28 @@ function AppContent() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Save Expo push token if available on login
+  // Save Expo push token if available on login / loaded from WebView
   React.useEffect(() => {
-    const token = (window as any).expoPushToken;
-    if (currentUser?.id && token) {
+    const handlePushTokenLoaded = (e: Event) => {
+      const token = (e as CustomEvent).detail || (window as any).expoPushToken;
+      if (currentUser?.id && token) {
+        import('./services/pushService').then(({ saveExpoPushToken }) => {
+          saveExpoPushToken(currentUser.id, token, currentUser.clientDocId || currentUser.clientRecordId || undefined);
+        });
+      }
+    };
+
+    // 1. Check if token is already injected
+    const existingToken = (window as any).expoPushToken;
+    if (currentUser?.id && existingToken) {
       import('./services/pushService').then(({ saveExpoPushToken }) => {
-        saveExpoPushToken(currentUser.id, token, currentUser.clientDocId || currentUser.clientRecordId || undefined);
+        saveExpoPushToken(currentUser.id, existingToken, currentUser.clientDocId || currentUser.clientRecordId || undefined);
       });
     }
+
+    // 2. Listen for future injections
+    window.addEventListener('expoPushTokenLoaded', handlePushTokenLoaded);
+    return () => window.removeEventListener('expoPushTokenLoaded', handlePushTokenLoaded);
   }, [currentUser?.id]);
 
   const handlePinSubmit = (e: React.FormEvent) => {
@@ -1167,6 +1194,7 @@ function AppContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
     </div>
   );
 }

@@ -11,3 +11,5 @@ coverage/
 *service-account.json
 dist-server/
 scratch/
+nul
+src/sdk/

@@ -207,8 +207,14 @@ service cloud.firestore {
     }
 
     function isSafeUserSelfEdit() {
-      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL'];
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL', 'clientDocId'];
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
+             (!('clientDocId' in request.resource.data) || 
+              (
+                exists(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)) &&
+                get(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)).data.memberId == resource.data.clientRecordId
+              )
+             );
     }
 
     // ===============================================================
@@ -419,7 +425,15 @@ service cloud.firestore {
         )
       ));
       allow create: if ismitrixogymcrmStaff() || (isAuthenticated() && request.resource.data.portalUserId == request.auth.uid);
-      allow update: if ismitrixogymcrmStaff() || (isOwnClientRecord(clientId) && isSafeClientSelfEdit());
+      allow update: if ismitrixogymcrmStaff() || 
+                    (isOwnClientRecord(clientId) && isSafeClientSelfEdit()) ||
+                    (
+                      isAuthenticated() &&
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId == resource.data.memberId &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['portalUserId']) &&
+                      request.resource.data.portalUserId == request.auth.uid
+                    );
       allow delete: if ismitrixogymcrmAdmin();
     }
 
@@ -452,6 +466,17 @@ service cloud.firestore {
       allow read: if true;
       allow create, delete: if ismitrixogymcrmStaff();
       allow update: if ismitrixogymcrmStaff() || isAuthenticated();
+    }
+
+    match /traffic/{logId} {
+      allow read: if isAuthenticated();
+      allow write: if ismitrixogymcrmStaff();
+    }
+
+    match /bodyRecords/{recordId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if ismitrixogymcrmStaff() || (isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId));
+      allow update, delete: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
     }
 
     match /tasks/{taskId} {

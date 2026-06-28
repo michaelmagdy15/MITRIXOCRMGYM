@@ -44,9 +44,10 @@ export const isGroupPackage = (pkg: string) => {
   const lower = pkg.toLowerCase().trim();
   return GROUP_PACKAGES.includes(lower) || lower.includes('group') || lower.includes('gt');
 };
-import { Target, Users, CalendarDays, AlertTriangle, Gift, Settings, ChevronLeft, ChevronRight, Trophy, Download, ArrowUpDown, UserCheck, UserPlus, Snowflake, Clock } from 'lucide-react';
+import { Target, Users, CalendarDays, AlertTriangle, Gift, Settings, ChevronLeft, ChevronRight, Trophy, Download, ArrowUpDown, UserCheck, UserPlus, Snowflake, Clock, Send, Megaphone } from 'lucide-react';
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import OnlineUsers from './components/OnlineUsers';
+import { Textarea } from '@/components/ui/textarea';
 
 function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], renderItem: (item: any) => React.ReactNode, itemsPerPage?: number }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -148,6 +149,35 @@ export default function Dashboard() {
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedMonthOffset, setSelectedMonthOffset] = useState(0);
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'revenue', direction: 'desc' });
+  const [pushTitle, setPushTitle] = useState('');
+  const [pushBody, setPushBody] = useState('');
+  const [isSendingPush, setIsSendingPush] = useState(false);
+
+  const handleSendAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pushTitle.trim() || !pushBody.trim()) {
+      toast.error('Please enter both title and message.');
+      return;
+    }
+    
+    setIsSendingPush(true);
+    try {
+      const { notifyAllMembers } = await import('./services/pushService');
+      const res = await notifyAllMembers(pushTitle.trim(), pushBody.trim());
+      if (res && res.successCount > 0) {
+        toast.success(`Announcement sent to all ${res.successCount} registered mobile devices!`);
+        setPushTitle('');
+        setPushBody('');
+      } else {
+        toast.warning('No active mobile push tokens registered on the system yet.');
+      }
+    } catch (err) {
+      console.error('[Dashboard] Error sending push announcement:', err);
+      toast.error('Failed to send push notifications. Please check connection and try again.');
+    } finally {
+      setIsSendingPush(false);
+    }
+  };
 
   const clientMap = React.useMemo(() => {
     const map = new Map<string, any>();
@@ -1446,6 +1476,59 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── MOBILE ANNOUNCEMENTS (PUSH NOTIFICATIONS) ── */}
+      {(currentUser?.role === 'admin' || currentUser?.role === 'crm_admin' || currentUser?.role === 'manager') && (
+        <div className="grid grid-cols-1 gap-6">
+          <Card className="border-primary/15 bg-primary/[0.02] dark:bg-primary/[0.02] rounded-2xl shadow-sm border">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center text-sm font-extrabold uppercase tracking-wider text-primary gap-2">
+                <Megaphone className="h-5 w-5 text-primary" /> Send Mobile Announcement
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Compose and broadcast a push notification to all gym members who have downloaded the mobile app.
+              </p>
+            </CardHeader>
+            <CardContent className="pt-2">
+              <form onSubmit={handleSendAnnouncement} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground">Notification Title</Label>
+                    <Input 
+                      placeholder="e.g. Special Offer 🎉 or Branch Update 📍"
+                      className="bg-background text-xs font-medium rounded-xl h-10 border border-input focus:ring-2 focus:ring-primary focus:outline-none"
+                      value={pushTitle}
+                      onChange={(e) => setPushTitle(e.target.value)}
+                      disabled={isSendingPush}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground">Message Body</Label>
+                    <Textarea 
+                      placeholder="Type your announcement details here..."
+                      className="bg-background text-xs font-medium rounded-xl min-h-[80px] border border-input focus:ring-2 focus:ring-primary focus:outline-none"
+                      value={pushBody}
+                      onChange={(e) => setPushBody(e.target.value)}
+                      disabled={isSendingPush}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex justify-end pt-2">
+                  <Button 
+                    type="submit" 
+                    disabled={isSendingPush || !pushTitle.trim() || !pushBody.trim()}
+                    className="rounded-xl px-5 h-10 text-xs font-bold gap-2 flex items-center"
+                  >
+                    {isSendingPush ? 'Sending Notifications...' : 'Send Broadcast'}
+                    <Send className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
         </div>

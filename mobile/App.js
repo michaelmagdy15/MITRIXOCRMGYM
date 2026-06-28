@@ -14,6 +14,7 @@ import NetInfo from '@react-native-community/netinfo';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import { Camera } from 'expo-camera';
 
 let config = {
   PRODUCTION_URL: 'https://strike.mitrixo.com/',
@@ -52,13 +53,21 @@ export default function App() {
   const [expoPushToken, setExpoPushToken] = useState('');
   const [hasLoadedSuccessfully, setHasLoadedSuccessfully] = useState(false);
 
-  // 1. Get Push Notification Permission and Token
+  // 1. Get Push Notification & Camera Permissions and Token
   useEffect(() => {
     registerForPushNotificationsAsync().then((token) => {
       if (token) {
         setExpoPushToken(token);
       }
     });
+
+    // Request camera permissions for QR code check-in scanner
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('[Camera] Camera permission not granted');
+      }
+    })();
 
     // Listener for when a notification is received while app is running
     const notificationListener = Notifications.addNotificationReceivedListener((notification) => {
@@ -103,6 +112,19 @@ export default function App() {
 
     return () => backHandler.remove();
   }, [canGoBack]);
+
+  // 4. Inject push token dynamically when it changes
+  useEffect(() => {
+    if (expoPushToken && webViewRef.current) {
+      const injectScript = `
+        window.expoPushToken = "${expoPushToken}";
+        if (window.dispatchEvent) {
+          window.dispatchEvent(new CustomEvent('expoPushTokenLoaded', { detail: "${expoPushToken}" }));
+        }
+      `;
+      webViewRef.current.injectJavaScript(injectScript);
+    }
+  }, [expoPushToken]);
 
   const handleRetry = () => {
     NetInfo.fetch().then((state) => {
