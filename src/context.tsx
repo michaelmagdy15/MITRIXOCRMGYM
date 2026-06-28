@@ -414,64 +414,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     if (snap.empty) return { success: false, message: 'Member not found. Please check your ID or phone number.' };
 
-    const clientDoc = snap.docs[0];
-    if (!clientDoc) return { success: false, message: 'Member not found.' };
-    const client = clientDoc.data() as Client;
+    let clientDoc = null;
+    let client = null;
+    let checkinCount = 0;
+    let totalExpectedSessions = 1;
+    let alreadyCheckedInTodayList: string[] = [];
 
-    // Check membership is not expired
-    if (client.status === 'Expired') {
-      return { success: false, message: 'Membership is expired. You must head to the STRIKE branch to renew.' };
+    // Find the first matching client that is eligible for check-in today
+    for (const docSnap of snap.docs) {
+      const cData = docSnap.data() as Client;
+      
+      // Skip if client status is Expired
+      if (cData.status === 'Expired') continue;
+      
+      // Count check-ins for this specific client today
+      const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+      const attendanceRef = collection(db, 'attendance');
+      const attendanceSnap = await getDocs(
+        query(attendanceRef, where('clientId', '==', docSnap.id))
+      );
+      const todayCheckins = attendanceSnap.docs.filter(s => {
+        const d = s.data();
+        if (!d.date) return false;
+        try {
+          return new Date(d.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr;
+        } catch {
+          return false;
+        }
+      });
+      const currentCheckinCount = todayCheckins.length;
+
+      // Count expected sessions today for this client
+      const sessionsRef = collection(db, 'sessions');
+      const sessionsSnap = await getDocs(
+        query(sessionsRef, where('clientId', '==', docSnap.id), where('date', '==', cairoDateStr))
+      );
+      const ptSessionsCount = sessionsSnap.docs.filter(s => {
+        const status = s.data().status;
+        return status === 'Scheduled' || status === 'Attended';
+      }).length;
+
+      const classesRef = collection(db, 'classes');
+      const classesSnap = await getDocs(
+        query(classesRef, where('date', '==', cairoDateStr))
+      );
+      const groupClassesCount = classesSnap.docs.filter(s => {
+        const attendees = s.data().attendees || [];
+        return attendees.includes(docSnap.id);
+      }).length;
+
+      const expected = Math.max(1, ptSessionsCount + groupClassesCount);
+
+      if (currentCheckinCount < expected) {
+        // We found an eligible member who hasn't completed their checks!
+        clientDoc = docSnap;
+        client = cData;
+        checkinCount = currentCheckinCount;
+        totalExpectedSessions = expected;
+        break;
+      } else {
+        alreadyCheckedInTodayList.push(cData.name);
+      }
+    }
+
+    if (!clientDoc || !client) {
+      // Find the first non-expired client to report the double check-in message
+      const firstActive = snap.docs.find(d => d.data().status !== 'Expired');
+      if (firstActive) {
+        return { success: false, message: `Double check-in blocked. All active members linked to this ID/phone (${alreadyCheckedInTodayList.join(', ')}) have already checked in today.` };
+      }
+      // If all are expired, report expired error for the first one
+      const firstDoc = snap.docs[0];
+      if (firstDoc && firstDoc.data().status === 'Expired') {
+        return { success: false, message: 'Membership is expired. You must head to the STRIKE branch to renew.' };
+      }
+      return { success: false, message: 'Member not found.' };
     }
 
     // Block check-in if sessions are exhausted (numeric 0 or negative)
     if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining <= 0) {
-      return { success: false, message: 'No sessions remaining. Please renew your membership with staff.' };
-    }
-
-    // Count existing check-ins for today in local Egypt time
-    const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-    const attendanceRef = collection(db, 'attendance');
-    const attendanceSnap = await getDocs(
-      query(attendanceRef, where('clientId', '==', clientDoc.id))
-    );
-    const todayCheckins = attendanceSnap.docs.filter(docSnap => {
-      const data = docSnap.data();
-      if (!data.date) return false;
-      try {
-        const checkinCairoDate = new Date(data.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-        return checkinCairoDate === cairoDateStr;
-      } catch {
-        return false;
-      }
-    });
-    const checkinCount = todayCheckins.length;
-
-    // Count expected sessions today
-    const sessionsRef = collection(db, 'sessions');
-    const sessionsSnap = await getDocs(
-      query(sessionsRef, where('clientId', '==', clientDoc.id), where('date', '==', cairoDateStr))
-    );
-    const ptSessionsCount = sessionsSnap.docs.filter(docSnap => {
-      const status = docSnap.data().status;
-      return status === 'Scheduled' || status === 'Attended';
-    }).length;
-
-    const classesRef = collection(db, 'classes');
-    const classesSnap = await getDocs(
-      query(classesRef, where('date', '==', cairoDateStr))
-    );
-    const groupClassesCount = classesSnap.docs.filter(docSnap => {
-      const attendees = docSnap.data().attendees || [];
-      return attendees.includes(clientDoc.id);
-    }).length;
-
-    const totalExpectedSessions = Math.max(1, ptSessionsCount + groupClassesCount);
-
-    if (checkinCount >= totalExpectedSessions) {
-      const msg = totalExpectedSessions === 1 
-        ? 'Double check-in blocked. You have already checked in today.'
-        : `Double check-in blocked. You have already checked in ${checkinCount} times today for ${totalExpectedSessions} scheduled sessions.`;
-      return { success: false, message: msg };
+      return { success: false, message: `No sessions remaining for ${client.name}. Please renew your membership with staff.` };
     }
 
     try {
