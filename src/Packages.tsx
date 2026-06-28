@@ -13,7 +13,7 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
 export default function Packages() {
-  const { currentUser } = useAppContext();
+  const { currentUser, branches } = useAppContext();
   const { packages, addPackage, updatePackage, deletePackage } = usePackages();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -153,9 +153,9 @@ export default function Packages() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">All Branches</SelectItem>
-                      <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                      <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                      <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                      {branches.map(b => (
+                        <SelectItem key={b} value={b}>{b}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -272,9 +272,9 @@ export default function Packages() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ALL">All Branches (Global)</SelectItem>
-                    <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                    <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                    <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                    {branches.map(b => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

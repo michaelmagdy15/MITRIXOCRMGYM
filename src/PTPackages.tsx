@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 export default function PTPackages() {
-  const { currentUser, users, clients, updateClient, ptPackageRecords, addPTPackageRecord, updatePTPackageRecord, coaches } = useAppContext();
+  const { currentUser, users, clients, updateClient, ptPackageRecords, addPTPackageRecord, updatePTPackageRecord, coaches, branches } = useAppContext();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isNewPackageOpen, setIsNewPackageOpen] = useState(false);
   const [newPackageClientId, setNewPackageClientId] = useState('');
@@ -216,9 +216,9 @@ export default function PTPackages() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Branches</SelectItem>
-                  <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                  <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                  <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                  {branches.map(b => (
+                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </CardContent>
@@ -341,9 +341,9 @@ export default function PTPackages() {
                   <SelectValue placeholder="Select branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                  <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                  <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                  {branches.map(b => (
+                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

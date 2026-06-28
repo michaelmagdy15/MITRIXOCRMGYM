@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function MemberCheckin() {
   const [searchParams] = useSearchParams();
   const { selfCheckIn } = useAppContext();
-  const { branding } = useSettings();
+  const { branding, branches } = useSettings();
   const navigate = useNavigate();
 
   const [branch, setBranch] = useState<Branch | ''>((searchParams.get('branch') as Branch) || '');
@@ -21,8 +21,6 @@ export default function MemberCheckin() {
   const [pin, setPin] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  const branches: Branch[] = ['COMPLEX', 'MIVIDA', 'mitrixogymcrm IMPACT'];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

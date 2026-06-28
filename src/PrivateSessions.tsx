@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 export default function PrivateSessions() {
-  const { currentUser, users, clients, updateClient, ptPackageRecords: privateSessions, addPTPackageRecord: addPrivateSession, updatePTPackageRecord: updatePrivateSession, coaches } = useAppContext();
+  const { currentUser, users, clients, updateClient, ptPackageRecords: privateSessions, addPTPackageRecord: addPrivateSession, updatePTPackageRecord: updatePrivateSession, coaches, branches } = useAppContext();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isNewSessionOpen, setIsNewSessionOpen] = useState(false);
   const [newSessionClientId, setNewSessionClientId] = useState('');
@@ -217,9 +217,9 @@ export default function PrivateSessions() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Branches</SelectItem>
-                  <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                  <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                  <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                  {branches.map(b => (
+                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </CardContent>
@@ -342,9 +342,9 @@ export default function PrivateSessions() {
                   <SelectValue placeholder="Select branch" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                  <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                  <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                  {branches.map(b => (
+                    <SelectItem key={b} value={b}>{b}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

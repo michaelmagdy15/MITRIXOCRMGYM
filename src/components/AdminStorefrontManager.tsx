@@ -18,7 +18,7 @@ import {
 import type { HeroSlide, StorefrontSection, ScheduleEntry, OfferEntry, StorefrontConfig } from '../types';
 
 export default function AdminStorefrontManager() {
-  const { storefrontConfig, updateStorefrontConfig } = useSettings();
+  const { storefrontConfig, updateStorefrontConfig, branches } = useSettings();
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -477,7 +477,16 @@ export default function AdminStorefrontManager() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs">Branch</Label>
-                    <Input value={entry.branch} onChange={e => updateScheduleEntry(entry.id, { branch: e.target.value })} placeholder="e.g. COMPLEX" />
+                    <Select value={entry.branch} onValueChange={(v) => updateScheduleEntry(entry.id, { branch: v })}>
+                      <SelectTrigger className="h-10 bg-background/50">
+                        <SelectValue placeholder="Select branch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {branches.map(b => (
+                          <SelectItem key={b} value={b}>{b}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs">Days</Label>

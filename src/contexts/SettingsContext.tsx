@@ -218,10 +218,19 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     return () => { unsubStorefront(); };
   }, [role, isAuthenticated]);
 
-  // Auth-required settings — only subscribe when a privileged user is logged in to avoid permission errors
+  // Branches — load or subscribe to physical branches list
   useEffect(() => {
-    if (!isAuthenticated) return;
-    if (role === 'coach' || role === 'client') return;
+    if (!isAuthenticated || role === 'client' || role === 'coach') {
+      getDoc(doc(db, 'settings', 'branches'))
+        .then((snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            if (data?.branches && Array.isArray(data.branches)) setBranches(data.branches);
+          }
+        })
+        .catch((err) => console.warn('Could not load branches:', err.message));
+      return;
+    }
 
     const unsubBranches = onSnapshot(
       doc(db, 'settings', 'branches'),
@@ -233,6 +242,13 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       },
       (error) => console.error('Firestore Error (branches):', error)
     );
+    return () => { unsubBranches(); };
+  }, [role, isAuthenticated]);
+
+  // Auth-required settings — only subscribe when a privileged user is logged in to avoid permission errors
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (role === 'coach' || role === 'client') return;
 
     const unsubCommission = onSnapshot(
       doc(db, 'settings', 'commission'),
@@ -253,8 +269,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       (error) => console.error('Firestore Error (sales-target):', error)
     );
 
-    return () => { unsubBranches(); unsubCommission(); unsubTarget(); };
-  }, [isAuthenticated]);
+    return () => { unsubCommission(); unsubTarget(); };
+  }, [role, isAuthenticated]);
 
   const updateBranding = useCallback(async (updates: Partial<BrandingSettings>) => {
     await setDoc(doc(db, 'settings', 'branding'), updates, { merge: true });

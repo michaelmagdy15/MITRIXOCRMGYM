@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useAuth } from './contexts/AuthContext';
+import { useAppContext } from './context';
 import { useAuditLogs } from './hooks/useAuditLogs';
 import { downloadFile } from './utils/download';
 import { Card, CardContent } from '@/components/ui/card';
@@ -73,6 +74,7 @@ const selectClass = "flex h-10 w-full rounded-md border border-muted bg-backgrou
 
 export default function AuditLogs() {
   const { currentUser, users, allUsers } = useAuth();
+  const { branches } = useAppContext();
   const canAccess =
     currentUser?.role === 'manager' ||
     currentUser?.role === 'admin' ||
@@ -374,9 +376,9 @@ export default function AuditLogs() {
                 onChange={e => { setBranchFilter(e.target.value as any); resetPage(); }}
               >
                 <option value="ALL">All Branches</option>
-                <option value="COMPLEX">COMPLEX</option>
-                <option value="MIVIDA">MIVIDA</option>
-                <option value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</option>
+                {branches.map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
               </select>
             </div>
           </div>

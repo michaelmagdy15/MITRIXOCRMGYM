@@ -381,7 +381,7 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read: if (settingId == 'branding') || (settingId == 'features') || (settingId == 'storefront') || canmitrixogymcrmAccessSettings();
+      allow read: if (settingId == 'branding') || (settingId == 'features') || (settingId == 'storefront') || (settingId == 'branches') || canmitrixogymcrmAccessSettings();
       allow write: if canmitrixogymcrmAccessSettings() && (settingId != 'branding' || isValidBranding(request.resource.data));
     }
 

@@ -1244,9 +1244,9 @@ export default function Payments() {
             onChange={(e) => setFilterBranch(e.target.value)}
           >
             <option value="All">{t('dashboard.all_branches')}</option>
-            <option value="COMPLEX">COMPLEX</option>
-            <option value="MIVIDA">MIVIDA</option>
-            <option value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</option>
+            {branches.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
           </select>
         </div>
 

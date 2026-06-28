@@ -376,10 +376,10 @@ export default function ImportData({ type }: ImportDataProps) {
           sessionsRemaining = isNaN(s) ? (sessionsRemainingRaw.toString().toLowerCase().includes('no') ? 'no attend' : undefined) : s;
         }
 
-        let branch: 'COMPLEX' | 'MIVIDA' | 'mitrixogymcrm IMPACT' | undefined;
-        if (branchRaw.includes('COMPLEX')) branch = 'COMPLEX';
-        else if (branchRaw.includes('MIVIDA')) branch = 'MIVIDA';
-        else if (branchRaw.includes('MITRIXOGYMCRM IMPACT') || branchRaw.includes('IMPACT')) branch = 'mitrixogymcrm IMPACT';
+        let branch: string | undefined;
+        if (branchRaw.includes('COMPLEX') || branchRaw.includes('MAXIM')) branch = 'Maxim Compound';
+        else if (branchRaw.includes('MIVIDA')) branch = 'Mivida Compound';
+        else if (branchRaw.includes('IMPACT') || branchRaw.includes('STRIKE')) branch = 'Strike IMPACT';
 
         let paid = false;
         let paidAmount = 0;

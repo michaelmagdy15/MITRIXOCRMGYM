@@ -34,7 +34,8 @@ export default function Leads() {
     canDeleteRecords,
     fetchClientDetails,
     clients, addClient, updateClient, deleteMultipleClients, deleteClient, addComment, addInteraction,
-    prefilledLeadData, setPrefilledLeadData
+    prefilledLeadData, setPrefilledLeadData,
+    branches
   } = useAppContext();
   const { t } = useLanguage();
 
@@ -843,9 +844,9 @@ export default function Leads() {
                                       <SelectValue placeholder="Select branch" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                                      <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                                      <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                                      {branches.map(b => (
+                                        <SelectItem key={b} value={b}>{b}</SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 </div>
@@ -1275,9 +1276,9 @@ export default function Leads() {
                       <SelectValue placeholder="Select branch" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                      <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                      <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                      {branches.map(b => (
+                        <SelectItem key={b} value={b}>{b}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1354,9 +1355,9 @@ export default function Leads() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="All">{t('dashboard.all_branches')}</SelectItem>
-                <SelectItem value="COMPLEX">COMPLEX</SelectItem>
-                <SelectItem value="MIVIDA">MIVIDA</SelectItem>
-                <SelectItem value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</SelectItem>
+                {branches.map(b => (
+                  <SelectItem key={b} value={b}>{b}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

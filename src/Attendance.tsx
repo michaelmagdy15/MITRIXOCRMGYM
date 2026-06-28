@@ -14,7 +14,7 @@ import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
-  const { currentUser, users, setActiveTab, setActiveClientId } = useAppContext();
+  const { currentUser, users, setActiveTab, setActiveClientId, branches } = useAppContext();
   const { clients } = useClients(currentUser);
   const { attendances, recordAttendance } = useAttendance(currentUser, clients);
   const { t, language, isRtl } = useLanguage();
@@ -27,8 +27,14 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       const saved = localStorage.getItem('kioskBranch');
       if (saved) return saved as Branch;
     }
-    return 'COMPLEX';
+    return '' as Branch;
   });
+
+  useEffect(() => {
+    if (!selectedBranch && branches.length > 0) {
+      setSelectedBranch(branches[0]);
+    }
+  }, [branches, selectedBranch]);
   const [lastScannedMember, setLastScannedMember] = useState<any>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -319,9 +325,11 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               }
             }}
           >
-            <option value="COMPLEX">COMPLEX {t('attendance.branch_suffix')}</option>
-            <option value="MIVIDA">MIVIDA {t('attendance.branch_suffix')}</option>
-            <option value="mitrixogymcrm IMPACT">mitrixogymcrm IMPACT</option>
+            {branches.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
           </select>
         </div>
       </div>
