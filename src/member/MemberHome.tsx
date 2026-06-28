@@ -282,33 +282,33 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         ), 
         label: 'Bookings', 
         action: () => onNavigate?.('booking'),
-        glowColor: '#C20E1A'
+        glowColor: isStrike ? '#18181b' : '#C20E1A'
       },
       { 
         icon: <ShoppingBag className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />, 
         label: 'Shop', 
         action: () => onSwitchToStore?.(),
-        glowColor: '#F59E0B'
+        glowColor: isStrike ? '#3f3f46' : '#F59E0B'
       },
       { 
         icon: <Coins className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />, 
         label: 'Wallet', 
         action: () => onNavigate?.('wallet'),
-        glowColor: '#D97706',
+        glowColor: isStrike ? '#71717a' : '#D97706',
         walletRequired: true
       },
       { 
         icon: <Trophy className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />, 
         label: 'Progress', 
         action: () => onNavigate?.('profile-progress'),
-        glowColor: '#059669',
+        glowColor: isStrike ? '#a1a1aa' : '#059669',
         pointsRequired: true
       },
       { 
         icon: <User className="h-6 w-6 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.35)]" />, 
         label: 'Profile', 
         action: () => onNavigate?.('profile'),
-        glowColor: '#06B6D4'
+        glowColor: isStrike ? '#e4e4e7' : '#06B6D4'
       },
     ];
     return list.filter(item => {
