@@ -334,10 +334,18 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 >
                   <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
                     {/* Background glow orb */}
-                    <div className="absolute inset-0.5 bg-[#C20E1A] rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" />
+                    <div 
+                      className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
+                      style={{ backgroundColor: isStrike ? '#18181b' : '#C20E1A' }}
+                    />
                     
                     {/* Glass surface */}
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.4),0_8px_20px_rgba(194,14,26,0.3)] flex items-center justify-center">
+                    <div 
+                      className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
+                      style={{
+                        boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${isStrike ? '#18181b' : '#C20E1A'}4D`
+                      }}
+                    >
                       {isStrike ? (
                         <BoxingGlovesIcon className="h-8 w-8 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
                       ) : (
@@ -363,10 +371,18 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 >
                   <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
                     {/* Background glow orb */}
-                    <div className="absolute inset-0.5 bg-[#C20E1A] rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" />
+                    <div 
+                      className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
+                      style={{ backgroundColor: isStrike ? '#3f3f46' : '#C20E1A' }}
+                    />
                     
                     {/* Glass surface */}
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.4),0_8px_20px_rgba(194,14,26,0.3)] flex items-center justify-center">
+                    <div 
+                      className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
+                      style={{
+                        boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${isStrike ? '#3f3f46' : '#C20E1A'}4D`
+                      }}
+                    >
                       <MapPin className="h-7 w-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
                     </div>
                     
@@ -388,10 +404,18 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 >
                   <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
                     {/* Background glow orb */}
-                    <div className="absolute inset-0.5 bg-[#C20E1A] rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" />
+                    <div 
+                      className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
+                      style={{ backgroundColor: isStrike ? '#71717a' : '#C20E1A' }}
+                    />
                     
                     {/* Glass surface */}
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.4),0_8px_20px_rgba(194,14,26,0.3)] flex items-center justify-center">
+                    <div 
+                      className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
+                      style={{
+                        boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${isStrike ? '#71717a' : '#C20E1A'}4D`
+                      }}
+                    >
                       <Calendar className="h-7 w-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
                     </div>
                     
@@ -413,10 +437,18 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 >
                   <div className="relative w-16 h-16 rounded-full flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:-translate-y-1">
                     {/* Background glow orb */}
-                    <div className="absolute inset-0.5 bg-[#00A859] rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" />
+                    <div 
+                      className="absolute inset-0.5 rounded-full opacity-60 blur-[4px] group-hover:opacity-85 transition-opacity" 
+                      style={{ backgroundColor: isStrike ? '#a1a1aa' : '#00A859' }}
+                    />
                     
                     {/* Glass surface */}
-                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl shadow-[inset_0_2px_4px_rgba(255,255,255,0.4),0_8px_20px_rgba(0,168,89,0.3)] flex items-center justify-center">
+                    <div 
+                      className="absolute inset-0 bg-gradient-to-tr from-white/10 via-transparent to-white/20 rounded-full border border-white/30 backdrop-blur-xl flex items-center justify-center"
+                      style={{
+                        boxShadow: `inset 0 2px 4px rgba(255,255,255,0.4), 0 8px 20px ${isStrike ? '#a1a1aa' : '#00A859'}4D`
+                      }}
+                    >
                       <Megaphone className="h-7 w-7 text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" />
                     </div>
                     
