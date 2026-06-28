@@ -515,6 +515,31 @@ async function startServer() {
     }
   });
 
+  app.post("/api/proxy-push", async (req, res) => {
+    try {
+      const { messages } = req.body;
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ error: "Missing or invalid 'messages' array in request body." });
+      }
+
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Accept-encoding": "gzip, deflate",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(messages),
+      });
+
+      const resData = await response.json();
+      return res.status(response.status).json(resData);
+    } catch (err: any) {
+      console.error("[Push Proxy] Error forwarding push request:", err);
+      return res.status(500).json({ error: err.message || "Failed to forward push request." });
+    }
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

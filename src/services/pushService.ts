@@ -59,19 +59,19 @@ export async function sendPushNotification(expoPushToken: string, title: string,
     const brandedName = getTenantBrandedName();
     const finalTitle = brandedName ? `${brandedName}: ${title}` : title;
 
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+    const response = await fetch('/api/proxy-push', {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
-        'Accept-encoding': 'gzip, deflate',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        to: expoPushToken,
-        sound: 'default',
-        title: finalTitle,
-        body,
-        data,
+        messages: [{
+          to: expoPushToken,
+          sound: 'default',
+          title: finalTitle,
+          body,
+          data,
+        }]
       }),
     });
     const resData = await response.json();
@@ -192,14 +192,12 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
         data
       }));
 
-      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      const response = await fetch('/api/proxy-push', {
         method: 'POST',
         headers: {
-          'Accept': 'application/json',
-          'Accept-encoding': 'gzip, deflate',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(messages),
+        body: JSON.stringify({ messages }),
       });
       const resData = await response.json();
       console.log('[Push Service] Sent batch notifications:', resData);
