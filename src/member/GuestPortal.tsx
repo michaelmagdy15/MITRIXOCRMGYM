@@ -101,9 +101,9 @@ export function getBranchDetails(branchName: string) {
       mapUrl: 'https://maps.app.goo.gl/8BPj5eG8EtsZD66c8'
     };
   }
-  if (nameLower.includes('mivida')) {
+  if (nameLower.includes('mivida') || nameLower.includes('mvida')) {
     return {
-      displayName: 'Mivida Branch',
+      displayName: 'Mvida Compound Branch',
       address: 'Lake District',
       mapUrl: 'https://maps.app.goo.gl/hEM2eFL4fF2bqS8F7'
     };

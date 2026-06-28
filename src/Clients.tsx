@@ -55,10 +55,24 @@ const migratePackageData = (client: Client, systemPackages: any[]): Partial<Clie
   };
 };
 
+export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults' => {
+  if (client.memberCategory) return client.memberCategory;
+  const pkgStr = (client.packageType || '').toLowerCase();
+  if (pkgStr.includes('kids pro')) return 'Kids Pro';
+  if (pkgStr.includes('kids')) return 'Kids Only';
+  if (pkgStr.includes('junior advanced') || pkgStr.includes('juniors advanced') || pkgStr.includes('junior pro')) return 'Junior Advanced';
+  if (pkgStr.includes('junior')) return 'Junior Only';
+  if (pkgStr.includes('adult')) return 'Adults';
+  return 'Adults';
+};
+
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, auditLogs } = useAppContext();
+  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, auditLogs, features } = useAppContext();
   const { packages } = usePackages();
+  const visiblePackages = React.useMemo(() => {
+    return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
+  }, [packages, features]);
   const activeClient = activeClientId ? clients.find(c => c.id === activeClientId) : null;
   const [activeTab, setActiveTab] = useState('active');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
@@ -102,6 +116,8 @@ export default function Clients() {
   const [newMemberBranch, setNewMemberBranch] = useState<any>('');
   const [newMemberAssignedTo, setNewMemberAssignedTo] = useState<string>('');
   const [newMemberLinked, setNewMemberLinked] = useState(false);
+  const [newMemberGender, setNewMemberGender] = useState<'Male' | 'Female' | 'Other' | 'Prefer not to say'>('Male');
+  const [newMemberCategory, setNewMemberCategory] = useState<'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults'>('Adults');
 
   const [upgradeDialogClientId, setUpgradeDialogClientId] = useState<string | null>(null);
   const [upgradePkgName, setUpgradePkgName] = useState('');
@@ -116,6 +132,7 @@ export default function Clients() {
   const [sortBy, setSortBy] = useState('newest');
   const [filterDiscount, setFilterDiscount] = useState('All');
   const [filterGender, setFilterGender] = useState('All');
+  const [filterCategory, setFilterCategory] = useState('All');
 
   // Interaction Logging State
   const [interactionType, setInteractionType] = useState<InteractionType>('Call');
@@ -156,6 +173,7 @@ export default function Clients() {
   const deferredSortBy = useDeferredValue(sortBy);
   const deferredFilterDiscount = useDeferredValue(filterDiscount);
   const deferredFilterGender = useDeferredValue(filterGender);
+  const deferredFilterCategory = useDeferredValue(filterCategory);
 
   const handleAddMember = () => {
     if (!newMemberName || newMemberName.trim().length < 2) {
@@ -179,6 +197,8 @@ export default function Clients() {
       assignedTo: newMemberAssignedTo || (currentUser?.role === 'rep' ? currentUser.id : undefined),
       startDate: new Date().toISOString(),
       linkedAccount: newMemberLinked || undefined,
+      gender: newMemberGender,
+      memberCategory: newMemberCategory,
     });
     setIsNewMemberOpen(false);
     setNewMemberName('');
@@ -186,6 +206,8 @@ export default function Clients() {
     setNewMemberBranch('');
     setNewMemberAssignedTo('');
     setNewMemberLinked(false);
+    setNewMemberGender('Male');
+    setNewMemberCategory('Adults');
   };
 
   const handleAddInteraction = async (clientId: string) => {
@@ -749,6 +771,10 @@ export default function Clients() {
       filtered = filtered.filter(m => m.gender === deferredFilterGender);
     }
 
+    if (deferredFilterCategory && deferredFilterCategory !== 'All') {
+      filtered = filtered.filter(m => getMemberCategory(m) === deferredFilterCategory);
+    }
+
     // Sort
     filtered = [...filtered].sort((a, b) => {
       if (deferredSortBy === 'id-asc') return (Number(a.memberId) || 0) - (Number(b.memberId) || 0);
@@ -896,7 +922,7 @@ export default function Clients() {
   React.useEffect(() => {
     setCurrentPage(1);
     setSelectedClientIds([]);
-  }, [activeTab, searchTerm, filterBranch, filterRep, sortBy, filterDiscount, filterGender]);
+  }, [activeTab, searchTerm, filterBranch, filterRep, sortBy, filterDiscount, filterGender, filterCategory]);
 
   const exportToCSV = () => {
     const headers = ['Member ID', 'Name', 'Phone', 'Branch', 'Package', 'Packages Rem.', 'Status', 'Expiry Date', 'Total Paid', 'Assigned To'];
@@ -982,6 +1008,9 @@ export default function Clients() {
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {getStatusBadge(client.status)}
+                  <Badge variant="outline" className="font-bold text-[9px] uppercase bg-indigo-500/10 text-indigo-400 border-indigo-500/20 px-1.5 py-0 h-4 shrink-0">
+                    {getMemberCategory(client)}
+                  </Badge>
                   {typeof client.sessionsRemaining === 'number' ? (
                     <Badge variant={client.sessionsRemaining < 0 ? 'destructive' : 'secondary'} className="text-[10px] h-4">
                       {client.sessionsRemaining} {t('common.left')}
@@ -1046,6 +1075,7 @@ export default function Clients() {
             <TableHead>{t('leads.table.phone')}</TableHead>
             <TableHead className="hidden md:table-cell">{t('leads.branch')}</TableHead>
             <TableHead className="hidden md:table-cell">{t('members.table.package')}</TableHead>
+            <TableHead className="hidden md:table-cell">Category</TableHead>
             <TableHead>{t('members.table.sessions')}</TableHead>
             <TableHead>{t('members.table.status')}</TableHead>
             <TableHead className="hidden sm:table-cell">{t('members.table.expiry_date')}</TableHead>
@@ -1087,6 +1117,11 @@ export default function Clients() {
               </TableCell>
               <TableCell className="hidden md:table-cell">
                 <Badge variant="outline">{client.packageType || t('leads.tabs.other')}</Badge>
+              </TableCell>
+              <TableCell className="hidden md:table-cell">
+                <Badge variant="outline" className="font-bold text-[10px] uppercase bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
+                  {getMemberCategory(client)}
+                </Badge>
               </TableCell>
               <TableCell>
                 {typeof client.sessionsRemaining === 'number' ? (
@@ -1267,6 +1302,35 @@ export default function Clients() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Gender</Label>
+                  <Select value={newMemberGender} onValueChange={(v: any) => setNewMemberGender(v)}>
+                    <SelectTrigger className="h-14 rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                      <SelectValue placeholder="Select Gender" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none shadow-2xl">
+                      <SelectItem value="Male" className="rounded-xl py-3 px-4">Male</SelectItem>
+                      <SelectItem value="Female" className="rounded-xl py-3 px-4">Female</SelectItem>
+                      <SelectItem value="Other" className="rounded-xl py-3 px-4">Other</SelectItem>
+                      <SelectItem value="Prefer not to say" className="rounded-xl py-3 px-4">Prefer not to say</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Member Category</Label>
+                  <Select value={newMemberCategory} onValueChange={(v: any) => setNewMemberCategory(v)}>
+                    <SelectTrigger className="h-14 rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                      <SelectValue placeholder="Select Category" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none shadow-2xl">
+                      <SelectItem value="Kids Only" className="rounded-xl py-3 px-4">Kids Only</SelectItem>
+                      <SelectItem value="Kids Pro" className="rounded-xl py-3 px-4">Kids Pro</SelectItem>
+                      <SelectItem value="Junior Only" className="rounded-xl py-3 px-4">Junior Only</SelectItem>
+                      <SelectItem value="Junior Advanced" className="rounded-xl py-3 px-4">Junior Advanced</SelectItem>
+                      <SelectItem value="Adults" className="rounded-xl py-3 px-4">Adults</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="mt-8 p-5 rounded-2xl border border-dashed border-muted-foreground/30 bg-muted/10">
                 <label className="flex items-start gap-4 cursor-pointer">
@@ -1351,6 +1415,22 @@ export default function Clients() {
               <option value="Female">Female</option>
               <option value="Other">Other</option>
               <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+          </div>
+
+          <div className="w-full md:w-[150px] space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground ml-1">Category</Label>
+            <select 
+              className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring border-none"
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+            >
+              <option value="All">All Categories</option>
+              <option value="Kids Only">Kids Only</option>
+              <option value="Kids Pro">Kids Pro</option>
+              <option value="Junior Only">Junior Only</option>
+              <option value="Junior Advanced">Junior Advanced</option>
+              <option value="Adults">Adults</option>
             </select>
           </div>
           {/* Assigned Rep filter — sales manager & CRM admin only */}
@@ -1500,7 +1580,7 @@ export default function Clients() {
                   <SelectValue placeholder="Choose a package" />
                 </SelectTrigger>
                 <SelectContent>
-                  {packages.map((p) => (
+                  {visiblePackages.map((p) => (
                     <SelectItem key={p.id} value={p.name} className="text-xs">
                       {p.name}
                     </SelectItem>
@@ -1552,6 +1632,10 @@ export default function Clients() {
                       </span>
                     </p>
                   </div>
+                </div>
+                <div className="text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>
+                  <span className="text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
                 </div>
               </div>
             </DialogHeader>
@@ -1660,6 +1744,35 @@ export default function Clients() {
                               updateClient(activeClient.id, { dateOfBirth: val ? new Date(val).toISOString() : '' });
                             }}
                           />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gender</Label>
+                          <select
+                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            value={activeClient.gender || ''}
+                            onChange={(e) => updateClient(activeClient.id, { gender: e.target.value as any })}
+                          >
+                            <option value="" disabled>Select Gender</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                            <option value="Prefer not to say">Prefer not to say</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Category</Label>
+                          <select
+                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            value={activeClient.memberCategory || ''}
+                            onChange={(e) => updateClient(activeClient.id, { memberCategory: e.target.value as any })}
+                          >
+                            <option value="" disabled>Select Category</option>
+                            <option value="Kids Only">Kids Only</option>
+                            <option value="Kids Pro">Kids Pro</option>
+                            <option value="Junior Only">Junior Only</option>
+                            <option value="Junior Advanced">Junior Advanced</option>
+                            <option value="Adults">Adults</option>
+                          </select>
                         </div>
                         <div className="space-y-1 col-span-2">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Sales Rep</Label>
@@ -1865,7 +1978,7 @@ export default function Clients() {
                                   <SelectValue placeholder="Select package" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {packages.map((p) => (
+                                  {visiblePackages.map((p) => (
                                     <SelectItem key={p.id} value={p.name} className="text-xs">
                                       {p.name}
                                     </SelectItem>
@@ -1997,7 +2110,7 @@ export default function Clients() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {packages.map((p) => (
+                                  {visiblePackages.map((p) => (
                                     <SelectItem key={p.id} value={p.name} className="text-xs">
                                       {p.name}
                                     </SelectItem>
@@ -2787,7 +2900,7 @@ export default function Clients() {
                   <SelectValue placeholder="Select package" />
                 </SelectTrigger>
                 <SelectContent>
-                  {packages.map(p => (
+                  {visiblePackages.map(p => (
                     <SelectItem key={p.id} value={p.name}>{p.name} ({p.price.toLocaleString()} LE)</SelectItem>
                   ))}
                 </SelectContent>

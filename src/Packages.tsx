@@ -13,7 +13,7 @@ import { Plus, Edit, Trash2 } from 'lucide-react';
 import { ConfirmDialog } from './components/ConfirmDialog';
 
 export default function Packages() {
-  const { currentUser, branches } = useAppContext();
+  const { currentUser, branches, features } = useAppContext();
   const { packages, addPackage, updatePackage, deletePackage } = usePackages();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -160,19 +160,21 @@ export default function Packages() {
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Type</Label>
-                <Select value={packageType} onValueChange={(v: any) => v && setPackageType(v)}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Private">Private</SelectItem>
-                    <SelectItem value="Group">Group</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {features?.ptPackages !== false && (
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select value={packageType} onValueChange={(v: any) => v && setPackageType(v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Private">Private</SelectItem>
+                      <SelectItem value="Group">Group</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
@@ -196,7 +198,9 @@ export default function Packages() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {packages.map(pkg => (
+              {packages
+                .filter(pkg => features?.ptPackages !== false || pkg.type !== 'Private')
+                .map(pkg => (
                 <TableRow key={pkg.id}>
                   <TableCell className="font-medium">{pkg.name}</TableCell>
                   <TableCell>
@@ -279,19 +283,21 @@ export default function Packages() {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={packageType} onValueChange={(v: any) => v && setPackageType(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Private">Private</SelectItem>
-                  <SelectItem value="Group">Group</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+             {features?.ptPackages !== false && (
+               <div className="space-y-2">
+                 <Label>Type</Label>
+                 <Select value={packageType} onValueChange={(v: any) => v && setPackageType(v)}>
+                   <SelectTrigger>
+                     <SelectValue />
+                   </SelectTrigger>
+                   <SelectContent>
+                     <SelectItem value="Private">Private</SelectItem>
+                     <SelectItem value="Group">Group</SelectItem>
+                     <SelectItem value="Other">Other</SelectItem>
+                   </SelectContent>
+                 </Select>
+               </div>
+             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>

@@ -51,11 +51,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     privatePackagesSold: 0,
     groupPackagesSold: 0,
   });
-  const [branches, setBranches] = useState<Branch[]>(['COMPLEX', 'MIVIDA', 'mitrixogymcrm IMPACT']);
+  const [branches, setBranches] = useState<Branch[]>(['Maxim Compound', 'Mvida Compound', 'Impact by Strike']);
   const [commissionRates, setCommissionRates] = useState({ ptRate: 8, groupRate: 5 });
   const [features, setFeatures] = useState<FeatureFlags>({
     leads: true,
-    ptPackages: true,
+    ptPackages: false,
     payments: true,
     attendance: true,
     reports: true,

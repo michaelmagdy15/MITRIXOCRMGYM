@@ -95,7 +95,7 @@ export default function MemberAttendance({ client }: { client: Client | null }) 
                           <Clock className="h-3.5 w-3.5 text-zinc-400" /> {timeStr}
                         </span>
                         <span className="flex items-center gap-1 text-primary uppercase tracking-wider text-[10px]">
-                          <MapPin className="h-3 w-3" /> {item.branch || 'COMPLEX'}
+                          <MapPin className="h-3 w-3" /> {item.branch || 'Maxim Compound'}
                         </span>
                       </div>
                     </div>

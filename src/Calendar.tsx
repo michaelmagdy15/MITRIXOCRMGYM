@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useLanguage } from './contexts/LanguageContext';
 import { db } from './firebase';
-import { collection, onSnapshot, addDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   format, 
   isSameDay, 
@@ -68,7 +69,8 @@ export default function CalendarView() {
     addPTPackageRecord, 
     updatePTPackageRecord,
     branches,
-    coaches
+    coaches,
+    features
   } = useAppContext();
 
   const { t, language, isRtl } = useLanguage();
@@ -102,6 +104,14 @@ export default function CalendarView() {
   const [classCapacity, setClassCapacity] = useState(15);
   const [classType, setClassType] = useState<'Class' | 'Event'>('Class');
   const [classDescription, setClassDescription] = useState('');
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [repeatWeeks, setRepeatWeeks] = useState(4);
+
+  useEffect(() => {
+    if (features && features.ptPackages === false) {
+      setBookingType('class');
+    }
+  }, [features]);
 
   // Fetch classes collection
   useEffect(() => {
@@ -136,11 +146,12 @@ export default function CalendarView() {
 
   // Filtered sessions
   const filteredRecords = useMemo(() => {
+    if (features?.ptPackages === false) return [];
     return ptPackageRecords.filter(record => {
       if (selectedBranch !== 'All' && record.branch !== selectedBranch) return false;
       return true;
     });
-  }, [ptPackageRecords, selectedBranch]);
+  }, [ptPackageRecords, selectedBranch, features]);
 
   // Filtered classes
   const filteredClasses = useMemo(() => {
@@ -229,17 +240,39 @@ export default function CalendarView() {
     } else {
       if (!className || !bookDate || !bookBranch || !classCoachName || !bookTime || !classEndTime) return;
 
-      await addDoc(collection(db, 'classes'), {
-        name: className,
-        coachName: classCoachName,
-        date: bookDate,
-        time: `${bookTime} - ${classEndTime}`,
-        branch: bookBranch,
-        capacity: Number(classCapacity) || 15,
-        attendees: [],
-        type: classType,
-        description: classDescription || undefined
-      });
+      if (repeatWeekly) {
+        const batch = writeBatch(db);
+        const baseDate = parseISO(bookDate);
+        for (let i = 0; i < repeatWeeks; i++) {
+          const classDate = addDays(baseDate, 7 * i);
+          const dateStr = format(classDate, 'yyyy-MM-dd');
+          const newDocRef = doc(collection(db, 'classes'));
+          batch.set(newDocRef, {
+            name: className,
+            coachName: classCoachName,
+            date: dateStr,
+            time: `${bookTime} - ${classEndTime}`,
+            branch: bookBranch,
+            capacity: Number(classCapacity) || 15,
+            attendees: [],
+            type: classType,
+            description: classDescription || undefined
+          });
+        }
+        await batch.commit();
+      } else {
+        await addDoc(collection(db, 'classes'), {
+          name: className,
+          coachName: classCoachName,
+          date: bookDate,
+          time: `${bookTime} - ${classEndTime}`,
+          branch: bookBranch,
+          capacity: Number(classCapacity) || 15,
+          attendees: [],
+          type: classType,
+          description: classDescription || undefined
+        });
+      }
 
       // Reset fields
       setClassName('');
@@ -248,6 +281,8 @@ export default function CalendarView() {
       setClassCapacity(15);
       setClassType('Class');
       setClassDescription('');
+      setRepeatWeekly(false);
+      setRepeatWeeks(4);
     }
 
     setIsBookModalOpen(false);
@@ -746,6 +781,34 @@ export default function CalendarView() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 items-center pt-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox 
+                      id="repeatWeekly" 
+                      checked={repeatWeekly} 
+                      onCheckedChange={(checked) => setRepeatWeekly(!!checked)} 
+                    />
+                    <label htmlFor="repeatWeekly" className="text-xs font-semibold cursor-pointer select-none">
+                      {language === 'ar' ? 'تكرار أسبوعياً' : 'Repeat weekly'}
+                    </label>
+                  </div>
+                  {repeatWeekly && (
+                    <div className="space-y-1">
+                      <Label className="text-xs font-bold text-muted-foreground uppercase">
+                        {language === 'ar' ? 'عدد الأسابيع' : 'Weeks to repeat'}
+                      </Label>
+                      <Input 
+                        type="number"
+                        min="1"
+                        max="12"
+                        className="rounded-xl bg-muted/20 border-white/5 h-10 focus:border-primary"
+                        value={repeatWeeks}
+                        onChange={(e) => setRepeatWeeks(Math.max(1, Number(e.target.value) || 1))}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1">

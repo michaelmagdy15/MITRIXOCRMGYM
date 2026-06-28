@@ -198,6 +198,7 @@ export interface Client {
   
   // Gamified Fitness & AI Health Profile
   gender?: Gender;
+  memberCategory?: 'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults';
   height?: number; // in cm
   weight?: number; // in kg
   activityLevel?: ActivityLevel;

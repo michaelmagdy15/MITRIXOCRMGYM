@@ -37,9 +37,12 @@ function toCanonical(name: string): string {
 }
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
-  const { clients, users, updateClient, addClient, currentUser, branding, canDeletePayments, branches, processPaymentTransaction, setActiveTab, setActiveClientId } = useAppContext();
+  const { clients, users, updateClient, addClient, currentUser, branding, canDeletePayments, branches, processPaymentTransaction, setActiveTab, setActiveClientId, features } = useAppContext();
   const { coaches } = useCoaches();
   const { packages } = usePackages();
+  const visiblePackages = React.useMemo(() => {
+    return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
+  }, [packages, features]);
   const { payments, addPayment, deletePayment, updatePayment } = usePayments({ currentUser, clients, canDeletePayments });
   const [isNewPaymentOpen, setIsNewPaymentOpen] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
@@ -66,6 +69,8 @@ export default function Payments() {
   const [newClientPhone, setNewClientPhone] = useState('');
   const [newClientBranch, setNewClientBranch] = useState('');
   const [newClientLinked, setNewClientLinked] = useState(false);
+  const [newClientGender, setNewClientGender] = useState<'Male' | 'Female' | 'Other' | 'Prefer not to say'>('Male');
+  const [newClientCategory, setNewClientCategory] = useState<'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults'>('Adults');
   const [pendingNewPhone, setPendingNewPhone] = useState<string | null>(null);
 
   useEffect(() => {
@@ -255,6 +260,8 @@ export default function Payments() {
       assignedTo: currentUser?.role === 'rep' ? currentUser.id : undefined,
       startDate: new Date().toISOString(),
       linkedAccount: newClientLinked || undefined,
+      gender: newClientGender,
+      memberCategory: newClientCategory,
     } as any);
     setPendingNewPhone(newClientPhone.trim());
     setIsCreatingNew(false);
@@ -263,6 +270,8 @@ export default function Payments() {
     setNewClientPhone('');
     setNewClientBranch('');
     setNewClientLinked(false);
+    setNewClientGender('Male');
+    setNewClientCategory('Adults');
   };
 
   const handlePackageChange = (val: string | null) => {
@@ -909,6 +918,27 @@ export default function Payments() {
                               <option value="">{t('leads.branch')}</option>
                               {branches.map(b => <option key={b} value={b}>{b}</option>)}
                             </select>
+                            <select
+                              className="flex h-10 w-full rounded-xl border border-input bg-background/60 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              value={newClientGender}
+                              onChange={e => setNewClientGender(e.target.value as any)}
+                            >
+                              <option value="Male">Male</option>
+                              <option value="Female">Female</option>
+                              <option value="Other">Other</option>
+                              <option value="Prefer not to say">Prefer not to say</option>
+                            </select>
+                            <select
+                              className="flex h-10 w-full rounded-xl border border-input bg-background/60 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              value={newClientCategory}
+                              onChange={e => setNewClientCategory(e.target.value as any)}
+                            >
+                              <option value="Adults">Adults</option>
+                              <option value="Kids Only">Kids Only</option>
+                              <option value="Kids Pro">Kids Pro</option>
+                              <option value="Junior Only">Junior Only</option>
+                              <option value="Junior Advanced">Junior Advanced</option>
+                            </select>
                             <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
                               <Checkbox checked={newClientLinked} onCheckedChange={c => setNewClientLinked(!!c)} />
                               {t('members.linked_family_account')}
@@ -1098,7 +1128,7 @@ export default function Payments() {
                       <SelectValue placeholder={t('payments.package_type')} />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      {packages.map(pkg => (
+                      {visiblePackages.map(pkg => (
                         <SelectItem key={pkg.id} value={pkg.name} className="rounded-xl py-3 px-4">
                           {pkg.name} ({pkg.price} LE)
                         </SelectItem>
@@ -1550,7 +1580,7 @@ export default function Payments() {
                                         <SelectValue placeholder={t('payments.upgrade.select_package')} />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        {packages.map(pkg => (
+                                        {visiblePackages.map(pkg => (
                                           <SelectItem key={pkg.id} value={pkg.name}>
                                             {pkg.name} ({pkg.price} {t('payments.currency_le')})
                                           </SelectItem>
@@ -1923,7 +1953,7 @@ export default function Payments() {
       <div className="mt-8">
         <h3 className="text-lg font-semibold mb-4">{t('payments.available_packages')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {packages.map(pkg => (
+          {visiblePackages.map(pkg => (
             <Card key={pkg.id} className="bg-muted/30">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">{pkg.name}</CardTitle>

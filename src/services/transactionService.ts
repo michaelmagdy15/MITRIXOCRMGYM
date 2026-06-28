@@ -201,12 +201,29 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       status: 'Active'
     };
 
+    const pkgStr = (params.packageType || '').toLowerCase();
+    let inferredCategory: 'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults' | undefined;
+    if (pkgStr.includes('kids pro')) {
+      inferredCategory = 'Kids Pro';
+    } else if (pkgStr.includes('kids')) {
+      inferredCategory = 'Kids Only';
+    } else if (pkgStr.includes('junior advanced') || pkgStr.includes('juniors advanced') || pkgStr.includes('junior pro')) {
+      inferredCategory = 'Junior Advanced';
+    } else if (pkgStr.includes('junior')) {
+      inferredCategory = 'Junior Only';
+    } else if (pkgStr.includes('adult')) {
+      inferredCategory = 'Adults';
+    } else {
+      inferredCategory = 'Adults';
+    }
+
     const clientUpdate: any = {
       packageType: params.packageType,
       startDate: pkgStartDate.toISOString(),
       status: params.isMemberOnHold ? 'Hold' : 'Active',
       hasDiscount: !!params.discountType,
-      lastContactDate: new Date().toISOString()
+      lastContactDate: new Date().toISOString(),
+      memberCategory: inferredCategory
     };
     
     if (resolvedEndDate) {

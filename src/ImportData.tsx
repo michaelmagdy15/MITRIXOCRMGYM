@@ -364,10 +364,9 @@ export default function ImportData({ type }: ImportDataProps) {
         if (isHold) {
           status = 'Hold';
         } else if (membershipExpiry) {
-          const expiryDate = parseISO(membershipExpiry);
-          if (isBefore(expiryDate, now)) status = 'Expired';
-          else if (isBefore(expiryDate, addDays(now, 30))) status = 'Nearly Expired';
-          else status = 'Active';
+          if (status !== 'Expired' && status !== 'Hold' && status !== 'Lead') {
+            status = 'Active';
+          }
         }
 
         let sessionsRemaining: number | 'no attend' | undefined;
@@ -378,8 +377,8 @@ export default function ImportData({ type }: ImportDataProps) {
 
         let branch: string | undefined;
         if (branchRaw.includes('COMPLEX') || branchRaw.includes('MAXIM')) branch = 'Maxim Compound';
-        else if (branchRaw.includes('MIVIDA')) branch = 'Mivida Compound';
-        else if (branchRaw.includes('IMPACT') || branchRaw.includes('STRIKE')) branch = 'IMPACT by Strike';
+        else if (branchRaw.includes('MIVIDA') || branchRaw.includes('MVIDA')) branch = 'Mvida Compound';
+        else if (branchRaw.includes('IMPACT') || branchRaw.includes('STRIKE')) branch = 'Impact by Strike';
 
         let paid = false;
         let paidAmount = 0;

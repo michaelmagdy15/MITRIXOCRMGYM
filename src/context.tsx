@@ -419,13 +419,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const client = clientDoc.data() as Client;
 
     // Check membership is not expired
-    if (client.membershipExpiry) {
-      const expiry = new Date(client.membershipExpiry);
-      if (expiry < new Date()) {
-        const dateStr = expiry.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-        return { success: false, message: `Membership expired on ${dateStr}. Please renew with staff.` };
-      }
-    } else if (client.status === 'Expired') {
+    if (client.status === 'Expired') {
       return { success: false, message: 'Membership is expired. Please contact staff to renew.' };
     }
 

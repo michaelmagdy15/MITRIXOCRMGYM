@@ -40,13 +40,7 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       if (!client) throw new Error('Client not found');
 
       // Block expired members from checking in
-      if (client.membershipExpiry) {
-        const expiry = startOfDay(parseISO(client.membershipExpiry));
-        const today = startOfDay(new Date());
-        if (isBefore(expiry, today)) {
-          throw new Error(`${client.name}'s membership expired on ${expiry.toLocaleDateString()}. Please renew before checking in.`);
-        }
-      } else if (client.status === 'Expired') {
+      if (client.status === 'Expired') {
         throw new Error(`${client.name}'s membership is expired. Please renew before checking in.`);
       }
 

@@ -319,7 +319,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         
         {activeTab === 'booking' && (
           <div className="space-y-4">
-            {!isStrike && (
+            {!isStrike && features.ptPackages !== false && (
               <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border">
                 <button 
                   onClick={() => setBookingSubTab('pt')} 
@@ -335,7 +335,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
                 </button>
               </div>
             )}
-            {isStrike || bookingSubTab === 'group' ? <MemberClasses client={activeClient} onSwitchToStore={onSwitchToStore} /> : <MemberSessions client={activeClient} onSwitchToStore={onSwitchToStore} />}
+            {isStrike || features.ptPackages === false || bookingSubTab === 'group' ? <MemberClasses client={activeClient} onSwitchToStore={onSwitchToStore} /> : <MemberSessions client={activeClient} onSwitchToStore={onSwitchToStore} />}
           </div>
         )}
 
