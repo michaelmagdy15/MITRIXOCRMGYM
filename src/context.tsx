@@ -397,8 +397,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!auth.currentUser) {
       try {
         await signInAnonymously(auth);
-      } catch {
-        return { success: false, message: 'Check-in service unavailable. Please ask staff for assistance.' };
+      } catch (err) {
+        console.warn("Check-in service anonymous sign-in failed, proceeding anyway:", err);
       }
     }
 
@@ -420,12 +420,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Check membership is not expired
     if (client.status === 'Expired') {
-      return { success: false, message: 'Membership is expired. Please contact staff to renew.' };
+      return { success: false, message: 'Membership is expired. You must head to the STRIKE branch to renew.' };
     }
 
     // Block check-in if sessions are exhausted (numeric 0 or negative)
     if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining <= 0) {
       return { success: false, message: 'No sessions remaining. Please renew your membership with staff.' };
+    }
+
+    // Count existing check-ins for today in local Egypt time
+    const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+    const attendanceRef = collection(db, 'attendance');
+    const attendanceSnap = await getDocs(
+      query(attendanceRef, where('clientId', '==', clientDoc.id))
+    );
+    const todayCheckins = attendanceSnap.docs.filter(docSnap => {
+      const data = docSnap.data();
+      if (!data.date) return false;
+      try {
+        const checkinCairoDate = new Date(data.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+        return checkinCairoDate === cairoDateStr;
+      } catch {
+        return false;
+      }
+    });
+    const checkinCount = todayCheckins.length;
+
+    // Count expected sessions today
+    const sessionsRef = collection(db, 'sessions');
+    const sessionsSnap = await getDocs(
+      query(sessionsRef, where('clientId', '==', clientDoc.id), where('date', '==', cairoDateStr))
+    );
+    const ptSessionsCount = sessionsSnap.docs.filter(docSnap => {
+      const status = docSnap.data().status;
+      return status === 'Scheduled' || status === 'Attended';
+    }).length;
+
+    const classesRef = collection(db, 'classes');
+    const classesSnap = await getDocs(
+      query(classesRef, where('date', '==', cairoDateStr))
+    );
+    const groupClassesCount = classesSnap.docs.filter(docSnap => {
+      const attendees = docSnap.data().attendees || [];
+      return attendees.includes(clientDoc.id);
+    }).length;
+
+    const totalExpectedSessions = Math.max(1, ptSessionsCount + groupClassesCount);
+
+    if (checkinCount >= totalExpectedSessions) {
+      const msg = totalExpectedSessions === 1 
+        ? 'Double check-in blocked. You have already checked in today.'
+        : `Double check-in blocked. You have already checked in ${checkinCount} times today for ${totalExpectedSessions} scheduled sessions.`;
+      return { success: false, message: msg };
     }
 
     try {

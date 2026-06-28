@@ -179,6 +179,10 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
 
   const handleToggleBooking = async (gymClass: GymClass) => {
     if (!client || !client.id) return;
+    if (client.status === 'Expired') {
+      alert("Your membership is expired. You must head to the STRIKE branch to renew before booking classes.");
+      return;
+    }
     setActionClassId(gymClass.id);
 
     try {
@@ -188,6 +192,21 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
       let updatedSessionsRemaining = client.sessionsRemaining;
 
       if (isBooked) {
+        // Leaving class: Check 1-hour cancellation limit
+        const startTimeStr = gymClass.time.split(' - ')[0]; // e.g. "18:00"
+        if (startTimeStr) {
+          const [hours, minutes] = startTimeStr.split(':').map(Number);
+          const classStart = new Date(gymClass.date);
+          classStart.setHours(hours || 0, minutes || 0, 0, 0);
+          
+          const now = new Date();
+          const diffMs = classStart.getTime() - now.getTime();
+          if (diffMs < 3600000) {
+            alert("Bookings cannot be cancelled less than 1 hour before the class starts.");
+            return;
+          }
+        }
+
         // Leaving class: Refund 1 session
         updatedAttendees = updatedAttendees.filter(id => id !== client.id);
         

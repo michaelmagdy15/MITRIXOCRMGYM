@@ -128,6 +128,11 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     e.preventDefault();
     if (!selectedCoachId || !bookingDate || !bookingTime || !client.id) return;
 
+    if (client.status === 'Expired') {
+      setBookingError("Your membership is expired. You must head to the STRIKE branch to renew before booking sessions.");
+      return;
+    }
+
     setIsSubmitting(true);
     setBookingSuccess(false);
     setBookingError(null);
@@ -253,6 +258,19 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     e.preventDefault();
     if (!selectedRescheduleSession || !rescheduleDate || !rescheduleTime) return;
 
+    if (selectedRescheduleSession.date && selectedRescheduleSession.time) {
+      const [hours, minutes] = selectedRescheduleSession.time.split(':').map(Number);
+      const sessionStart = new Date(selectedRescheduleSession.date);
+      sessionStart.setHours(hours || 0, minutes || 0, 0, 0);
+      
+      const now = new Date();
+      const diffMs = sessionStart.getTime() - now.getTime();
+      if (diffMs < 3600000) {
+        setRescheduleError("Sessions cannot be rescheduled less than 1 hour before start time.");
+        return;
+      }
+    }
+
     setIsRescheduling(true);
     setRescheduleError(null);
 
@@ -336,6 +354,20 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
   const handleCancelSession = async (sessionId: string) => {
     if (!window.confirm("Are you sure you want to cancel this PT session?")) return;
     try {
+      const session = sessions.find(s => s.id === sessionId);
+      if (session && session.date && session.time) {
+        const [hours, minutes] = session.time.split(':').map(Number);
+        const sessionStart = new Date(session.date);
+        sessionStart.setHours(hours || 0, minutes || 0, 0, 0);
+        
+        const now = new Date();
+        const diffMs = sessionStart.getTime() - now.getTime();
+        if (diffMs < 3600000) {
+          alert("Sessions cannot be cancelled less than 1 hour before start time.");
+          return;
+        }
+      }
+
       let updatedPackages = client.packages ? [...client.packages] : [];
       let updatedSessionsRemaining = client.sessionsRemaining;
       // Find active PT package to refund

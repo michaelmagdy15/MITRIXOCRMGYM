@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins } from 'lucide-react';
+import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins, AlertCircle } from 'lucide-react';
 import { db, getTenantId } from '../firebase';
 import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
 import { Client } from '../types';
@@ -315,6 +315,17 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 py-6 pb-28 max-w-md mx-auto w-full overscroll-contain">
+        {activeClient?.status === 'Expired' && (
+          <div className="mb-4 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
+            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold text-sm">Membership Expired</p>
+              <p className="text-xs font-semibold leading-relaxed">
+                Your membership is currently expired. You must head to the STRIKE branch to renew.
+              </p>
+            </div>
+          </div>
+        )}
         {activeTab === 'home' && <MemberHome client={activeClient} onSwitchToStore={onSwitchToStore} onNavigate={handleNavigate} />}
         
         {activeTab === 'booking' && (

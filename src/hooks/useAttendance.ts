@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, orderBy, getDocs, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Attendance, Branch, Client, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
@@ -41,7 +41,53 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
 
       // Block expired members from checking in
       if (client.status === 'Expired') {
-        throw new Error(`${client.name}'s membership is expired. Please renew before checking in.`);
+        throw new Error(`${client.name}'s membership is expired. They must head to the STRIKE branch to renew.`);
+      }
+
+      // Count existing check-ins for today in local Egypt time
+      const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+      const attendanceRef = collection(db, 'attendance');
+      const attendanceSnap = await getDocs(
+        query(attendanceRef, where('clientId', '==', clientId))
+      );
+      const todayCheckins = attendanceSnap.docs.filter(docSnap => {
+        const data = docSnap.data();
+        if (!data.date) return false;
+        try {
+          const checkinCairoDate = new Date(data.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+          return checkinCairoDate === cairoDateStr;
+        } catch {
+          return false;
+        }
+      });
+      const checkinCount = todayCheckins.length;
+
+      // Count expected sessions today
+      const sessionsRef = collection(db, 'sessions');
+      const sessionsSnap = await getDocs(
+        query(sessionsRef, where('clientId', '==', clientId), where('date', '==', cairoDateStr))
+      );
+      const ptSessionsCount = sessionsSnap.docs.filter(docSnap => {
+        const status = docSnap.data().status;
+        return status === 'Scheduled' || status === 'Attended';
+      }).length;
+
+      const classesRef = collection(db, 'classes');
+      const classesSnap = await getDocs(
+        query(classesRef, where('date', '==', cairoDateStr))
+      );
+      const groupClassesCount = classesSnap.docs.filter(docSnap => {
+        const attendees = docSnap.data().attendees || [];
+        return attendees.includes(clientId);
+      }).length;
+
+      const totalExpectedSessions = Math.max(1, ptSessionsCount + groupClassesCount);
+
+      if (checkinCount >= totalExpectedSessions) {
+        const msg = totalExpectedSessions === 1 
+          ? `Double check-in blocked. ${client.name} has already checked in today.`
+          : `Double check-in blocked. ${client.name} has already checked in ${checkinCount} times today for ${totalExpectedSessions} scheduled sessions.`;
+        throw new Error(msg);
       }
 
       const attendanceData: Omit<Attendance, 'id'> = {

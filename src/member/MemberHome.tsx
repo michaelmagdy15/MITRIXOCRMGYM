@@ -10,7 +10,7 @@ import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fn
 import { 
   Sparkles, Calendar, CheckCircle2, Trophy, Activity, Dumbbell, Award, Users, 
   ShoppingBag, Bell, Clock, Flame, ChevronRight, MapPin, Zap, User, 
-  TrendingUp, Star, Timer, Target, Coins
+  TrendingUp, Star, Timer, Target, Coins, AlertCircle, Lock
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -348,6 +348,19 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         <p className="text-lg font-semibold text-primary mt-0.5">{firstName}</p>
       </div>
 
+      {/* ─── Expired Status Red Warning Banner ─── */}
+      {client.status === 'Expired' && (
+        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl flex items-start gap-3 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-sm">Membership Expired</p>
+            <p className="text-xs font-semibold leading-relaxed">
+              Your membership is currently expired and you cannot record attendance. You must head to the STRIKE branch to renew.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ─── Streak & Stats Badges ─── */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/20 text-orange-500 px-3 py-1.5 rounded-full">
@@ -495,14 +508,21 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
 
             {/* Right Side: QR Code & Brand Sub-text */}
             <div className="flex flex-col items-center justify-center shrink-0">
-              <div className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center">
-                <QRCodeSVG 
-                  value={memberQrValue} 
-                  size={80} 
-                  level="H" 
-                  includeMargin={false}
-                  fgColor="#18181b"
-                />
+              <div className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center relative overflow-hidden">
+                {client.status === 'Expired' ? (
+                  <div className="flex flex-col items-center justify-center text-rose-600 w-full h-full bg-rose-50 rounded-xl">
+                    <Lock className="h-7 w-7 text-rose-600 shrink-0" />
+                    <span className="text-[9px] font-black tracking-tighter uppercase mt-1 leading-none">LOCKED</span>
+                  </div>
+                ) : (
+                  <QRCodeSVG 
+                    value={memberQrValue} 
+                    size={80} 
+                    level="H" 
+                    includeMargin={false}
+                    fgColor="#18181b"
+                  />
+                )}
               </div>
               <span className="text-[8px] font-extrabold tracking-[0.3em] uppercase text-zinc-700 mt-1 font-logo">
                 STRIKE GYMS
