@@ -207,7 +207,7 @@ service cloud.firestore {
     }
 
     function isSafeUserSelfEdit() {
-      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL', 'clientDocId'];
+      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL', 'clientDocId', 'dismissedNotifications', 'expoPushToken'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
              (!('clientDocId' in request.resource.data) || 
               (
