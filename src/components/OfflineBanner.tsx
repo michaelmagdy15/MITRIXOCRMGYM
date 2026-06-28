@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { Wifi, WifiOff } from 'lucide-react';
 
 export function OfflineBanner() {
   const { isOnline, justCameBackOnline } = useNetworkStatus();
@@ -11,26 +12,10 @@ export function OfflineBanner() {
       <div
         role="status"
         aria-live="polite"
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 9999,
-          backgroundColor: '#16a34a',
-          color: '#fff',
-          textAlign: 'center',
-          padding: '8px 16px',
-          fontSize: '14px',
-          fontWeight: 500,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-        }}
+        className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 bg-emerald-500/90 dark:bg-emerald-600/90 backdrop-blur-md text-white border border-emerald-400/30 px-4 py-2.5 rounded-full shadow-lg text-xs font-bold tracking-wide uppercase animate-in fade-in slide-in-from-top-4 duration-300"
       >
-        <span>✅</span>
-        <span>Back online — syncing your local changes automatically…</span>
+        <Wifi className="h-4 w-4 animate-bounce" />
+        <span>Back online — Syncing local changes…</span>
       </div>
     );
   }
@@ -39,28 +24,10 @@ export function OfflineBanner() {
     <div
       role="alert"
       aria-live="assertive"
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 9999,
-        backgroundColor: '#b45309',
-        color: '#fff',
-        textAlign: 'center',
-        padding: '8px 16px',
-        fontSize: '14px',
-        fontWeight: 500,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '8px',
-      }}
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-2 bg-amber-500/95 dark:bg-amber-600/95 backdrop-blur-md text-white border border-amber-400/30 px-4 py-2.5 rounded-full shadow-lg text-xs font-bold tracking-wide uppercase animate-in fade-in slide-in-from-top-4 duration-300"
     >
-      <span>📴</span>
-      <span>
-        Offline — your changes are saved locally and will sync automatically when you reconnect.
-      </span>
+      <WifiOff className="h-4 w-4 animate-pulse" />
+      <span>Offline Mode — Changes saved locally</span>
     </div>
   );
 }

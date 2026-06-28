@@ -48,12 +48,12 @@ import { QRCodePage } from './components/QRCodePage';
 import QuoteGenerator from './QuoteGenerator';
 import ClubOperations from './ClubOperations';
 import { CartProvider, useCart } from './member/CartContext';
+import { OfflineBanner } from './components/OfflineBanner';
 import CommandPalette from './components/CommandPalette';
 import OnboardingWizard from './OnboardingWizard';
 import AdminHub from './AdminHub';
 import SuperAdminHub from './SuperAdminHub';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
-import { OfflineBanner } from './components/OfflineBanner';
 import { TenantInitScreen } from './components/TenantInitScreen';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com'];
@@ -1236,6 +1236,7 @@ export default function App() {
                 <LanguageProvider>
                   <CartProvider>
                     <TenantInitWrapper>
+                      <OfflineBanner />
                       <AppContent />
                       <BuildVersionFooter />
                       <Toaster richColors position="top-right" />
