@@ -64,10 +64,26 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       await addDoc(collection(db, 'attendance'), attendanceData);
 
       // Decrement sessions only for finite packages with sessions remaining
+      const packagesCopy = client.packages ? [...client.packages] : [];
+      const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+      
+      const updateData: any = {};
+      
+      if (activePkgIdx !== -1) {
+        const activePkg = { ...packagesCopy[activePkgIdx] };
+        if (typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+          activePkg.sessionsRemaining = activePkg.sessionsRemaining - 1;
+          packagesCopy[activePkgIdx] = activePkg;
+          updateData.packages = packagesCopy;
+        }
+      }
+      
       if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-        await updateDoc(doc(db, 'clients', clientId), {
-          sessionsRemaining: client.sessionsRemaining - 1,
-        });
+        updateData.sessionsRemaining = client.sessionsRemaining - 1;
+      }
+      
+      if (Object.keys(updateData).length > 0) {
+        await updateDoc(doc(db, 'clients', clientId), updateData);
       }
 
       await addAuditLog('CREATE', 'ATTENDANCE', clientId, `Attendance: ${client.name} at ${branch}`, currentUser?.name);

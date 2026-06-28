@@ -144,6 +144,39 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     }
   }, []);
 
+  const isPackageMatchingClass = (packageName: string, className: string): boolean => {
+    const pName = packageName.toLowerCase();
+    const cName = className.toLowerCase();
+    
+    const isPT = pName.includes('pt') || pName.includes('personal');
+    if (isPT) return false;
+    
+    const classIsJunior = cName.includes('junior');
+    const classIsKids = cName.includes('kid');
+    const classIsAdvanced = cName.includes('advanced') || cName.includes('pro');
+    
+    const pkgHasJunior = pName.includes('junior');
+    const pkgHasKids = pName.includes('kid');
+    const pkgHasAdvanced = pName.includes('advanced') || pName.includes('pro');
+    
+    if (classIsJunior) {
+      if (classIsAdvanced) {
+        return pkgHasJunior && pkgHasAdvanced;
+      }
+      return pkgHasJunior && !pkgHasAdvanced;
+    }
+    
+    if (classIsKids) {
+      if (classIsAdvanced) {
+        return pkgHasKids && pkgHasAdvanced;
+      }
+      return pkgHasKids && !pkgHasAdvanced;
+    }
+    
+    // Adult class (neither kids nor junior)
+    return !classIsJunior && !classIsKids && !pkgHasJunior && !pkgHasKids;
+  };
+
   const handleToggleBooking = async (gymClass: GymClass) => {
     if (!client || !client.id) return;
     setActionClassId(gymClass.id);
@@ -158,14 +191,12 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
         updatedAttendees = updatedAttendees.filter(id => id !== client.id);
         
         // Find matching active GT package to refund
-        const isKidsClass = gymClass.name.toLowerCase().includes('kids') || gymClass.name.toLowerCase().includes('junior');
         const pkgToRefund = updatedPackages.find(pkg => {
           if (pkg.status !== 'Active') return false;
           const nameUpper = pkg.packageName.toUpperCase();
           const isGroup = nameUpper.includes('GT') || nameUpper.includes('GP') || nameUpper.includes('GROUP');
           if (!isGroup) return false;
-          const isKidsPackage = nameUpper.includes('KIDS') || nameUpper.includes('JUNIOR');
-          return isKidsClass === isKidsPackage;
+          return isPackageMatchingClass(pkg.packageName, gymClass.name);
         });
 
         if (pkgToRefund && (pkgToRefund.sessionsRemaining as any) !== 'unlimited') {
@@ -179,20 +210,25 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
         }
 
         // Validate package availability
-        const isKidsClass = gymClass.name.toLowerCase().includes('kids') || gymClass.name.toLowerCase().includes('junior');
         const validPkgIndex = updatedPackages.findIndex(pkg => {
           if (pkg.status !== 'Active') return false;
           const nameUpper = pkg.packageName.toUpperCase();
           const isGroup = nameUpper.includes('GT') || nameUpper.includes('GP') || nameUpper.includes('GROUP');
           if (!isGroup) return false;
-          const isKidsPackage = nameUpper.includes('KIDS') || nameUpper.includes('JUNIOR');
-          if (isKidsClass !== isKidsPackage) return false;
+          if (!isPackageMatchingClass(pkg.packageName, gymClass.name)) return false;
           const remaining = pkg.sessionsRemaining;
           return (remaining as any) === 'unlimited' || (typeof remaining === 'number' && remaining > 0);
         });
 
         if (validPkgIndex === -1) {
-          alert(`You do not have any active Group Training (GT) packages matching this class category (${isKidsClass ? 'Kids' : 'Adults'}) with sessions remaining. Please buy a package first.`);
+          let displayCategory = 'Adults';
+          const cName = gymClass.name.toLowerCase();
+          if (cName.includes('junior')) {
+            displayCategory = cName.includes('advanced') || cName.includes('pro') ? 'Juniors Advanced' : 'Juniors';
+          } else if (cName.includes('kid')) {
+            displayCategory = cName.includes('pro') ? 'Kids Pro' : 'Kids';
+          }
+          alert(`You do not have any active Group Training (GT) packages matching this class category (${displayCategory}) with sessions remaining. Please buy a package first.`);
           return;
         }
 

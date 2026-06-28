@@ -173,10 +173,32 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       }, 3000);
 
     } else {
-      // Normal admin checkin flow
+      // Normal admin checkin flow - auto record attendance immediately!
       setLastScannedMember(member);
       setIsScanning(false);
       setError(null);
+      setSuccessMessage(null);
+      setIsRecording(true);
+      try {
+        await recordAttendance(member.id, selectedBranch);
+        setSuccessMessage(t('attendance.attendance_recorded').replace('{name}', member.name));
+        setTimeout(() => {
+          setLastScannedMember(null);
+          setSuccessMessage(null);
+          if (manualInputRef.current) manualInputRef.current.value = '';
+          setIsScanning(true); // Auto-restart scanning
+        }, 3000);
+      } catch (err: any) {
+        setError(err instanceof Error ? err.message : t('attendance.failed_record_attendance'));
+        setTimeout(() => {
+          setLastScannedMember(null);
+          setError(null);
+          if (manualInputRef.current) manualInputRef.current.value = '';
+          setIsScanning(true); // Auto-restart scanning
+        }, 4000);
+      } finally {
+        setIsRecording(false);
+      }
     }
   };
 

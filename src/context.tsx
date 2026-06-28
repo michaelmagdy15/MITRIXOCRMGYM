@@ -445,10 +445,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       // Decrement sessions only if finite and above zero
+      const packagesCopy = client.packages ? [...client.packages] : [];
+      const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+      
+      const updateData: any = {};
+      
+      if (activePkgIdx !== -1) {
+        const activePkg = { ...packagesCopy[activePkgIdx] };
+        if (typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+          activePkg.sessionsRemaining = activePkg.sessionsRemaining - 1;
+          packagesCopy[activePkgIdx] = activePkg;
+          updateData.packages = packagesCopy;
+        }
+      }
+      
       if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-        await updateDoc(doc(db, 'clients', clientDoc.id), {
-          sessionsRemaining: client.sessionsRemaining - 1,
-        });
+        updateData.sessionsRemaining = client.sessionsRemaining - 1;
+      }
+      
+      if (Object.keys(updateData).length > 0) {
+        await updateDoc(doc(db, 'clients', clientDoc.id), updateData);
       }
     } catch {
       return { success: false, message: 'Failed to record attendance. Please ask staff for help.' };
