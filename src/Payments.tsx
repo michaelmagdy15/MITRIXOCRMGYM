@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
-import { SALES_NAME_MAPPING } from './constants';
+import { SALES_NAME_MAPPING, toCanonical } from './constants';
 import { useCoaches } from './hooks/useCoaches';
 import { usePackages } from './hooks/usePackages';
 import { usePayments } from './hooks/usePayments';
@@ -22,19 +22,6 @@ import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, 
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog } from './components/AlertDialog';
 
-/**
- * Canonicalise any sales name variant (alias, typo, email prefix) to its
- * clean canonical form using SALES_NAME_MAPPING.
- * Unknown names are returned as-is, so new reps work automatically.
- */
-function toCanonical(name: string): string {
-  if (!name) return '';
-  const lower = name.trim().toLowerCase();
-  for (const [key, value] of Object.entries(SALES_NAME_MAPPING)) {
-    if (key.toLowerCase() === lower) return value;
-  }
-  return name.trim();
-}
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
   const { clients, users, updateClient, addClient, currentUser, branding, canDeletePayments, branches, processPaymentTransaction, setActiveTab, setActiveClientId, features } = useAppContext();
@@ -355,7 +342,7 @@ export default function Payments() {
 
     const salesRepUser = users.find(u => {
       const name = u.name || u.email || u.id;
-      return name.trim().toLowerCase() === salesName.trim().toLowerCase();
+      return toCanonical(name).toLowerCase() === toCanonical(salesName).toLowerCase();
     });
     const salesRepId = salesRepUser ? salesRepUser.id : undefined;
 
@@ -1775,9 +1762,8 @@ export default function Payments() {
                                     <Button
                                       onClick={async () => {
                                         const salesRepUser = users.find(u => 
-                                          u.name === editSalesName || 
                                           u.id === editSalesName || 
-                                          (u.name && editSalesName && u.name.trim().toLowerCase() === editSalesName.trim().toLowerCase())
+                                          (toCanonical(u.name || u.email || '').toLowerCase() === toCanonical(editSalesName || '').toLowerCase())
                                         );
                                         const salesRepId = salesRepUser ? salesRepUser.id : undefined;
 

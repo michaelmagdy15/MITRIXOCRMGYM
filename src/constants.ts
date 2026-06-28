@@ -49,7 +49,14 @@ export const SALES_NAME_MAPPING: Record<string, string> = {
   'Maison': 'Maison Mohamed',
   'Maison Mohmed': 'Maison Mohamed',  // typo in user profile
   'Maison Mohamed': 'Maison Mohamed',
+  'Maisoon Mohamed': 'Maison Mohamed',
+  'Maisoon Mohmed': 'Maison Mohamed',
+  'maisoon mohamed': 'Maison Mohamed',
+  'maisoon mohmed': 'Maison Mohamed',
+  'maison mohamed': 'Maison Mohamed',
+  'maison mohmed': 'Maison Mohamed',
   'maisoon': 'Maison Mohamed',
+  'maison': 'Maison Mohamed',
   'maisonmohmed6': 'Maison Mohamed',  // email prefix
 
   // ---- Mustafa Mahmoud ----
@@ -59,6 +66,10 @@ export const SALES_NAME_MAPPING: Record<string, string> = {
   'Mostafa': 'Mustafa Mahmoud',
   'Mostafa Mahmoud': 'Mustafa Mahmoud',
   'mostafamahmoud688': 'Mustafa Mahmoud',  // email prefix
+  'mustafa mahmoud': 'Mustafa Mahmoud',
+  'mostafa mahmoud': 'Mustafa Mahmoud',
+  'mustafa': 'Mustafa Mahmoud',
+  'mostafa': 'Mustafa Mahmoud',
 
   // ---- Hassan Tarek ----
   'Hassan Tarek': 'Hassan Tarek',
@@ -75,3 +86,13 @@ export const SALES_NAME_MAPPING: Record<string, string> = {
   'Omar Sherif': 'Omar Sherif',
   'Salma Ahmed': 'Salma Ahmed',
 };
+
+export function toCanonical(name: string): string {
+  if (!name) return '';
+  const lower = name.trim().toLowerCase();
+  for (const [key, value] of Object.entries(SALES_NAME_MAPPING)) {
+    if (key.toLowerCase() === lower) return value;
+  }
+  return name.trim();
+}
+

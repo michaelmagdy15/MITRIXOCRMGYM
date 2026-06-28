@@ -1,7 +1,7 @@
 import React, { useState, useDeferredValue, useRef } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
-import { ASSIGNABLE_ROLES } from './constants';
+import { ASSIGNABLE_ROLES, toCanonical } from './constants';
 import { usePackages } from './hooks/usePackages';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -807,7 +807,7 @@ export default function Clients() {
         filtered = filtered.filter(m => {
           if (m.assignedTo && m.assignedTo !== '') return false;
           if (m.salesName) {
-            const matchedRep = users.find(u => u.name && m.salesName!.trim().toLowerCase() === u.name.trim().toLowerCase());
+            const matchedRep = users.find(u => u.name && toCanonical(m.salesName!).toLowerCase() === toCanonical(u.name).toLowerCase());
             if (matchedRep) return false; // Has a salesName matching a known rep → not unassigned
           }
           return true;
@@ -819,7 +819,7 @@ export default function Clients() {
           // Match by userId
           if (m.assignedTo === deferredFilterRep) return true;
           // Match by legacy salesName (case-insensitive) for imported records
-          if (m.salesName && repUser.name && m.salesName.trim().toLowerCase() === repUser.name.trim().toLowerCase()) return true;
+          if (m.salesName && repUser.name && toCanonical(m.salesName).toLowerCase() === toCanonical(repUser.name).toLowerCase()) return true;
           return false;
         });
       }

@@ -16,7 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useClients } from '../hooks/useClients';
 import { usePayments } from '../hooks/usePayments';
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
-import { SALES_NAME_MAPPING, SALES_MEMBERS } from '../constants';
+import { SALES_NAME_MAPPING, SALES_MEMBERS, toCanonical } from '../constants';
 
 
 const CommissionReport: React.FC = () => {
@@ -109,7 +109,7 @@ const CommissionReport: React.FC = () => {
               winnerId = assigned;
             } else {
               // It's a name string — resolve through mapping then look up ID
-              const resolvedName = (SALES_NAME_MAPPING[assigned] || assigned).toLowerCase().trim();
+              const resolvedName = toCanonical(assigned).toLowerCase().trim();
               const resolvedId = nameToRepId[resolvedName] || nameToRepId[assigned.toLowerCase().trim()];
               if (resolvedId) winnerId = resolvedId;
             }
