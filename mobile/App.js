@@ -5,7 +5,6 @@ import {
   Text,
   View,
   SafeAreaView,
-  ActivityIndicator,
   TouchableOpacity,
   BackHandler,
   Platform,
@@ -112,13 +111,7 @@ export default function App() {
     });
   };
 
-  const renderLoading = () => (
-    <View style={styles.loaderContainer}>
-      <ActivityIndicator size="large" color="#ffffff" />
-      <Text style={styles.loaderText}>{APP_NAME}</Text>
-      <Text style={styles.loaderSubtext}>Loading your dashboard...</Text>
-    </View>
-  );
+
 
   // Script to inject into the WebView to make the push token globally accessible in your web app
   const runBeforeFirstPaint = `
@@ -198,9 +191,6 @@ export default function App() {
             setIsLoading(navState.loading);
           }}
           
-          // Custom renderers
-          startInLoadingState={true}
-          renderLoading={renderLoading}
           onLoad={() => setHasLoadedSuccessfully(true)}
         />
         {renderOfflineBanner()}
@@ -264,26 +254,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000000',
   },
-  loaderContainer: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#0a0a0a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 999,
-  },
-  loaderText: {
-    color: '#ffffff',
-    fontSize: 22,
-    fontWeight: 'bold',
-    letterSpacing: 4,
-    marginTop: 20,
-    textTransform: 'uppercase',
-  },
-  loaderSubtext: {
-    color: '#a1a1aa',
-    fontSize: 14,
-    marginTop: 8,
-  },
+
   offlineContainer: {
     flex: 1,
     backgroundColor: '#0a0a0a',
