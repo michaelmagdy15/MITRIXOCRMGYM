@@ -33,9 +33,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onPaymentUpdated = exports.onClientAssigned = exports.onLeadCreated = exports.metaWebhook = exports.upgradeMemberPackage = exports.forcePasswordReset = void 0;
+exports.checkExpiredMemberships = exports.onPaymentUpdated = exports.onClientAssigned = exports.onLeadCreated = exports.metaWebhook = exports.upgradeMemberPackage = exports.forcePasswordReset = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
+const scheduler_1 = require("firebase-functions/v2/scheduler");
 const params_1 = require("firebase-functions/params");
 const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
@@ -280,6 +281,63 @@ exports.onPaymentUpdated = (0, firestore_1.onDocumentUpdated)("payments/{payment
         catch (error) {
             logger.error(`Error syncing branch to Client ${clientId}:`, error);
         }
+    }
+});
+/**
+ * Daily Cron: Move expired members to 'Expired' status.
+ * Runs every day at 1:00 PM (13:00) Cairo time.
+ */
+exports.checkExpiredMemberships = (0, scheduler_1.onSchedule)({
+    schedule: "0 13 * * *",
+    timeZone: "Africa/Cairo",
+}, async (event) => {
+    logger.info("[checkExpiredMemberships] Starting daily expiry scan...");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    try {
+        const clientsSnap = await db
+            .collection("clients")
+            .where("status", "==", "Active")
+            .get();
+        let expiredCount = 0;
+        let batch = db.batch();
+        let writeCount = 0;
+        for (const doc of clientsSnap.docs) {
+            const client = doc.data();
+            if (client.membershipExpiry) {
+                const expiryDate = new Date(client.membershipExpiry);
+                if (expiryDate < today) {
+                    const updates = { status: "Expired" };
+                    // Also expire packages that have ended
+                    if (client.packages && Array.isArray(client.packages)) {
+                        updates.packages = client.packages.map((pkg) => {
+                            if (pkg.status === "Active" && pkg.endDate) {
+                                const pkgEnd = new Date(pkg.endDate);
+                                if (pkgEnd < today) {
+                                    return { ...pkg, status: "Expired" };
+                                }
+                            }
+                            return pkg;
+                        });
+                    }
+                    batch.update(doc.ref, updates);
+                    expiredCount++;
+                    writeCount++;
+                    if (writeCount === 400) {
+                        await batch.commit();
+                        batch = db.batch();
+                        writeCount = 0;
+                    }
+                }
+            }
+        }
+        if (writeCount > 0) {
+            await batch.commit();
+        }
+        logger.info(`[checkExpiredMemberships] Successfully expired ${expiredCount} members.`);
+    }
+    catch (error) {
+        logger.error("[checkExpiredMemberships] Error in daily membership expiry scan:", error);
     }
 });
 //# sourceMappingURL=index.js.map

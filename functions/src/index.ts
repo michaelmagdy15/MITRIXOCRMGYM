@@ -1,5 +1,6 @@
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
 import { onDocumentCreated, onDocumentUpdated, FirestoreEvent, QueryDocumentSnapshot, Change } from "firebase-functions/v2/firestore";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
@@ -298,3 +299,71 @@ export const onPaymentUpdated = onDocumentUpdated("payments/{paymentId}", async 
     }
   }
 });
+
+/**
+ * Daily Cron: Move expired members to 'Expired' status.
+ * Runs every day at 1:00 PM (13:00) Cairo time.
+ */
+export const checkExpiredMemberships = onSchedule(
+  {
+    schedule: "0 13 * * *",
+    timeZone: "Africa/Cairo",
+  },
+  async (event) => {
+    logger.info("[checkExpiredMemberships] Starting daily expiry scan...");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    try {
+      const clientsSnap = await db
+        .collection("clients")
+        .where("status", "==", "Active")
+        .get();
+
+      let expiredCount = 0;
+      let batch = db.batch();
+      let writeCount = 0;
+
+      for (const doc of clientsSnap.docs) {
+        const client = doc.data();
+        if (client.membershipExpiry) {
+          const expiryDate = new Date(client.membershipExpiry);
+          if (expiryDate < today) {
+            const updates: any = { status: "Expired" };
+
+            // Also expire packages that have ended
+            if (client.packages && Array.isArray(client.packages)) {
+              updates.packages = client.packages.map((pkg: any) => {
+                if (pkg.status === "Active" && pkg.endDate) {
+                  const pkgEnd = new Date(pkg.endDate);
+                  if (pkgEnd < today) {
+                    return { ...pkg, status: "Expired" };
+                  }
+                }
+                return pkg;
+              });
+            }
+
+            batch.update(doc.ref, updates);
+            expiredCount++;
+            writeCount++;
+
+            if (writeCount === 400) {
+              await batch.commit();
+              batch = db.batch();
+              writeCount = 0;
+            }
+          }
+        }
+      }
+
+      if (writeCount > 0) {
+        await batch.commit();
+      }
+
+      logger.info(`[checkExpiredMemberships] Successfully expired ${expiredCount} members.`);
+    } catch (error) {
+      logger.error("[checkExpiredMemberships] Error in daily membership expiry scan:", error);
+    }
+  }
+);
