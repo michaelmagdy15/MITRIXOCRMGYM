@@ -149,26 +149,33 @@ export async function notifyClient(clientId: string, title: string, body: string
   }
 }
 
-/**
- * Sends a push notification to all registered members.
- */
 export async function notifyAllMembers(title: string, body: string, data?: any) {
   try {
-    const q = query(
-      collection(db, 'clients')
-    );
-    const snap = await getDocs(q);
-    const tokens = snap.docs
-      .map(doc => doc.data().expoPushToken)
-      .filter((t): t is string => typeof t === 'string' && t.startsWith('ExponentPushToken'));
+    const clientsSnap = await getDocs(collection(db, 'clients'));
+    const usersSnap = await getDocs(collection(db, 'users'));
 
-    if (tokens.length === 0) {
+    const tokensSet = new Set<string>();
+
+    clientsSnap.docs.forEach(doc => {
+      const token = doc.data().expoPushToken;
+      if (typeof token === 'string' && token.startsWith('ExponentPushToken')) {
+        tokensSet.add(token);
+      }
+    });
+
+    usersSnap.docs.forEach(doc => {
+      const token = doc.data().expoPushToken;
+      if (typeof token === 'string' && token.startsWith('ExponentPushToken')) {
+        tokensSet.add(token);
+      }
+    });
+
+    const uniqueTokens = Array.from(tokensSet);
+
+    if (uniqueTokens.length === 0) {
       console.log('[Push Service] No member tokens found.');
       return { successCount: 0, totalCount: 0 };
     }
-
-    // De-duplicate tokens
-    const uniqueTokens = Array.from(new Set(tokens));
 
     const chunks: string[][] = [];
     for (let i = 0; i < uniqueTokens.length; i += 100) {
