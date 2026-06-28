@@ -120,14 +120,26 @@ export const useClients = (currentUser: User | null) => {
     }
   };
 
-  const addClient = async (client: Client) => {
+  const addClient = async (client: Omit<Client, 'id' | 'createdAt'>): Promise<void> => {
     try {
       const { id, comments, ...clientData } = client;
       
-      // Check for duplicates (skip for linked family accounts sharing a phone)
-      const isDuplicate = !clientData.linkedAccount && baseClients.some(c => c.phone === clientData.phone);
-      if (isDuplicate) {
-        throw new Error(`A client with phone number ${clientData.phone} already exists.`);
+      // Normalize phone suffix (last 10 digits)
+      const newPhoneNorm = clientData.phone ? clientData.phone.replace(/\D/g, '').slice(-10) : '';
+
+      // Find siblings sharing the same normalized phone suffix
+      const siblings = (newPhoneNorm && newPhoneNorm.length >= 10)
+        ? baseClients.filter(c => c.phone && c.phone.replace(/\D/g, '').slice(-10) === newPhoneNorm)
+        : [];
+
+      // Auto-set linkedAccount if siblings exist
+      if (siblings.length > 0) {
+        clientData.linkedAccount = true;
+      } else {
+        const isDuplicate = !clientData.linkedAccount && baseClients.some(c => c.phone === clientData.phone);
+        if (isDuplicate) {
+          throw new Error(`A client with phone number ${clientData.phone} already exists.`);
+        }
       }
 
       if (clientData.paid === undefined) clientData.paid = false;
@@ -136,11 +148,25 @@ export const useClients = (currentUser: User | null) => {
         clientData.memberId = await generateMemberId();
       }
 
+      // Inherit sales rep from sibling if unassigned
+      let canonicalRep = clientData.salesRep;
+      if (!canonicalRep || canonicalRep.trim() === '' || canonicalRep.toLowerCase() === 'unassigned') {
+        const siblingWithRep = siblings.find(s => s.salesRep && s.salesRep.trim() !== '' && s.salesRep.toLowerCase() !== 'unassigned');
+        if (siblingWithRep) {
+          canonicalRep = siblingWithRep.salesRep;
+        }
+      }
+      clientData.salesRep = canonicalRep || 'Unassigned';
+
       const docRef = doc(collection(db, 'clients'));
+      const siblingIds = siblings.map(s => s.id);
+      const linkedClientIds = Array.from(new Set([...(clientData.linkedClientIds || []), ...siblingIds]));
+
       const finalData = {
         ...cleanData(clientData),
         id: docRef.id,
         createdAt: new Date().toISOString(),
+        linkedClientIds,
       };
 
       // Auto-create portal account
@@ -149,7 +175,23 @@ export const useClients = (currentUser: User | null) => {
         if (uid) finalData.portalUserId = uid;
       }
 
-      await setDoc(docRef, finalData);
+      const batch = writeBatch(db);
+      batch.set(docRef, finalData);
+
+      // Link siblings bidirectionally and sync sales rep
+      for (const sibling of siblings) {
+        const sibRef = doc(db, 'clients', sibling.id);
+        const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
+        const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
+        
+        if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
+          sibUpdates.salesRep = canonicalRep;
+        }
+        batch.update(sibRef, sibUpdates);
+      }
+
+      await batch.commit();
+
       await addAuditLog(
         'CREATE',
         client.status === 'Lead' ? 'LEAD' : 'CLIENT',
@@ -306,7 +348,47 @@ export const useClients = (currentUser: User | null) => {
         }
       }
 
-      await updateDoc(doc(db, 'clients', id), cleanData(updateData));
+      // Link siblings and update their sales rep if phone number or salesRep is changed
+      const phoneToUse = updateData.phone || existing?.phone || '';
+      const phoneNorm = phoneToUse ? phoneToUse.replace(/\D/g, '').slice(-10) : '';
+      
+      const siblings = (phoneNorm && phoneNorm.length >= 10)
+        ? baseClients.filter(c => c.id !== id && c.phone && c.phone.replace(/\D/g, '').slice(-10) === phoneNorm)
+        : [];
+
+      if (siblings.length > 0) {
+        updateData.linkedAccount = true;
+        const siblingIds = siblings.map(s => s.id);
+        updateData.linkedClientIds = Array.from(new Set([...(updateData.linkedClientIds || existing?.linkedClientIds || []), ...siblingIds]));
+      }
+
+      // Inherit sales rep if missing
+      let canonicalRep = updateData.salesRep || existing?.salesRep;
+      if (!canonicalRep || canonicalRep.trim() === '' || canonicalRep.toLowerCase() === 'unassigned') {
+        const siblingWithRep = siblings.find(s => s.salesRep && s.salesRep.trim() !== '' && s.salesRep.toLowerCase() !== 'unassigned');
+        if (siblingWithRep) {
+          canonicalRep = siblingWithRep.salesRep;
+          updateData.salesRep = canonicalRep;
+        }
+      }
+
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'clients', id), cleanData(updateData));
+
+      // Link back and sync sales rep to siblings
+      for (const sibling of siblings) {
+        const sibRef = doc(db, 'clients', sibling.id);
+        const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), id]));
+        const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
+        
+        if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
+          sibUpdates.salesRep = canonicalRep;
+        }
+        batch.update(sibRef, sibUpdates);
+      }
+
+      await batch.commit();
+
       const clientName = baseClients.find(c => c.id === id)?.name || id;
       addAuditLog('UPDATE', 'CLIENT', id, `Updated client/lead: ${clientName}`, currentUser?.name);
     } catch (error) {
