@@ -782,7 +782,9 @@ function AppContent() {
         )}
 
         {/* Mobile Left Drawer Sidebar Panel */}
-        <aside className={`fixed inset-y-0 start-0 w-72 bg-card border-e border-border z-50 md:hidden flex flex-col p-4 shadow-2xl transition-transform duration-300 transform ${isMobileSidebarOpen ? 'translate-x-0' : 'ltr:-translate-x-full rtl:translate-x-full'}`}>
+        <aside className={`fixed inset-y-0 start-0 w-72 bg-card border-e border-border z-50 md:hidden flex flex-col p-4 shadow-2xl transition-transform duration-300 transform ${isMobileSidebarOpen ? 'translate-x-0' : 'ltr:-translate-x-full rtl:translate-x-full'} ${
+          /mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent) ? 'pt-[calc(1.0rem+env(safe-area-inset-top))]' : ''
+        }`}>
           <div className="flex items-center justify-between mb-6 pb-4 border-b">
             <div 
               className="flex items-center space-x-2 cursor-pointer hover:opacity-85 transition-opacity"
@@ -891,7 +893,11 @@ function AppContent() {
         {/* Main Content Pane */}
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
           {/* Header */}
-          <header className="border-b bg-card shadow-sm h-16 flex items-center justify-between px-6 flex-shrink-0">
+          <header className={`border-b bg-card shadow-sm flex items-center justify-between px-6 flex-shrink-0 ${
+            /mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent) 
+              ? 'pt-[env(safe-area-inset-top)] h-[calc(4rem+env(safe-area-inset-top))]' 
+              : 'h-16'
+          }`}>
             <div className="flex items-center space-x-4 flex-1">
               {/* Hamburger button on mobile */}
               <Button 
