@@ -456,9 +456,15 @@ service cloud.firestore {
 
     match /tasks/{taskId} {
       allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) || resource.data.assignedTo == request.auth.uid));
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() || (request.resource.data.status == 'Pending' && request.resource.data.title.startsWith('Package Purchase Request:'));
       allow update: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
       allow delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /bookingRequests/{requestId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId)));
+      allow create: if true;
+      allow update, delete: if ismitrixogymcrmStaff();
     }
 
     match /counters/{counterId} {
