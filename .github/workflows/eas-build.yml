@@ -59,17 +59,37 @@ jobs:
         run: |
           cd mobile
           
-          # Build arguments
           PLATFORM="${{ github.event.inputs.platform }}"
           PROFILE="${{ github.event.inputs.profile }}"
-          SUBMIT_FLAG=""
-          
-          if [ "${{ github.event.inputs.submit }}" = "true" ]; then
-            SUBMIT_FLAG="--auto-submit"
-          fi
           
           echo "Building platform: $PLATFORM with profile: $PROFILE"
-          eas build --platform "$PLATFORM" --local --profile "$PROFILE" --non-interactive $SUBMIT_FLAG
+          eas build --platform "$PLATFORM" --local --profile "$PROFILE" --non-interactive
+
+      - name: Submit to App Store / Google Play
+        if: ${{ github.event.inputs.submit == 'true' }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          cd mobile
+          
+          # Find the compiled build file
+          IPA_FILE=$(ls *.ipa 2>/dev/null | head -n 1)
+          AAB_FILE=$(ls *.aab 2>/dev/null | head -n 1)
+          APK_FILE=$(ls *.apk 2>/dev/null | head -n 1)
+          
+          if [ -n "$IPA_FILE" ]; then
+            echo "Submitting iOS build: $IPA_FILE"
+            eas submit --platform ios --profile "${{ github.event.inputs.profile }}" --path "$IPA_FILE" --non-interactive
+          elif [ -n "$AAB_FILE" ]; then
+            echo "Submitting Android build: $AAB_FILE"
+            eas submit --platform android --profile "${{ github.event.inputs.profile }}" --path "$AAB_FILE" --non-interactive
+          elif [ -n "$APK_FILE" ]; then
+            echo "Submitting Android build: $APK_FILE"
+            eas submit --platform android --profile "${{ github.event.inputs.profile }}" --path "$APK_FILE" --non-interactive
+          else
+            echo "No compiled build files found to submit."
+            exit 1
+          fi
 
       - name: Upload Build Artifacts (IPAs / APKs)
         uses: actions/upload-artifact@v4
