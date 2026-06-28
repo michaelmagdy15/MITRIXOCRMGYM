@@ -51,6 +51,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [key, setKey] = useState(0); // For reloading WebView
   const [expoPushToken, setExpoPushToken] = useState('');
+  const [hasLoadedSuccessfully, setHasLoadedSuccessfully] = useState(false);
 
   // 1. Get Push Notification Permission and Token
   useEffect(() => {
@@ -125,7 +126,7 @@ export default function App() {
     true;
   `;
 
-  if (!isConnected) {
+  if (!isConnected && !hasLoadedSuccessfully) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="light" backgroundColor="#000" />
@@ -145,6 +146,15 @@ export default function App() {
     );
   }
 
+  const renderOfflineBanner = () => {
+    if (isConnected) return null;
+    return (
+      <View style={styles.offlineBanner}>
+        <Text style={styles.offlineBannerText}>⚡ Offline Mode — Showing cached data</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.safeArea}>
       <StatusBar style="light" backgroundColor="#000" />
@@ -154,6 +164,7 @@ export default function App() {
           ref={webViewRef}
           source={{ uri: PRODUCTION_URL }}
           style={styles.webview}
+          cacheMode="LOAD_CACHE_ELSE_NETWORK"
           
           // Technical WebView configurations
           javaScriptEnabled={true}
@@ -171,8 +182,12 @@ export default function App() {
           // Custom User-Agent suffix for Guideline 4.8 Apple Sign-In compliance
           applicationNameForUserAgent="mitrixogymcrmCRM-Mobile"
           
-          // Handle load errors by showing custom offline screen
-          onError={() => setIsConnected(false)}
+          // Handle load errors
+          onError={() => {
+            if (!hasLoadedSuccessfully) {
+              setIsConnected(false);
+            }
+          }}
           
           // Inject the push token so the web client can read it
           injectedJavaScriptBeforeContentLoaded={runBeforeFirstPaint}
@@ -186,7 +201,9 @@ export default function App() {
           // Custom renderers
           startInLoadingState={true}
           renderLoading={renderLoading}
+          onLoad={() => setHasLoadedSuccessfully(true)}
         />
+        {renderOfflineBanner()}
       </View>
     </View>
   );
@@ -312,5 +329,18 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  offlineBanner: {
+    backgroundColor: '#C20E1A',
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  offlineBannerText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
   },
 });
