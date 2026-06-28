@@ -144,7 +144,7 @@ export default function App() {
   if (!isConnected && !hasLoadedSuccessfully) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar style="light" backgroundColor="#000" />
+        <StatusBar style="dark" backgroundColor="#fff" />
         <View style={styles.offlineContainer}>
           <View style={styles.offlineIconContainer}>
             <Text style={styles.offlineIcon}>⚡</Text>
@@ -172,7 +172,7 @@ export default function App() {
 
   return (
     <View style={styles.safeArea}>
-      <StatusBar style="light" backgroundColor="#000" />
+      <StatusBar style="dark" backgroundColor="#fff" />
       <View style={styles.container}>
         <WebView
           key={key}
@@ -266,15 +266,15 @@ async function registerForPushNotificationsAsync() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#ffffff',
   },
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#ffffff',
   },
   webview: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#ffffff',
   },
 
   offlineContainer: {
