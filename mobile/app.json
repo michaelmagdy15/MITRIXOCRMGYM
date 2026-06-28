@@ -2,14 +2,14 @@
   "expo": {
     "name": "STRIKE",
     "slug": "strike-eg",
-    "version": "1.0.4",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mitrixogymcrmboxing.crm",
-      "buildNumber": "9",
+      "buildNumber": "10",
       "infoPlist": {
         "NSCameraUsageDescription": "This app requires access to the camera to scan member QR codes for attendance and check-in.",
         "NSPhotoLibraryUsageDescription": "This app requires access to your photo library to let you upload profile pictures and branding logos.",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.mitrixogymcrmboxing.crm",
-      "versionCode": 9,
+      "versionCode": 10,
       "adaptiveIcon": {
         "backgroundColor": "#0a0a0a",
         "foregroundImage": "./assets/android-icon-foreground.png"
