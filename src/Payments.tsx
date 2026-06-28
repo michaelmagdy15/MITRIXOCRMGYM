@@ -52,6 +52,7 @@ export default function Payments() {
   const [editBranch, setEditBranch] = useState('');
   const [editMethod, setEditMethod] = useState<Payment['method']>('Cash');
   const [editSalesName, setEditSalesName] = useState('');
+  const [editCoachName, setEditCoachName] = useState('');
   const [editClientName, setEditClientName] = useState('');
   const [editClientPhone, setEditClientPhone] = useState('');
   const [alertOpen, setAlertOpen] = useState(false);
@@ -1646,6 +1647,7 @@ export default function Payments() {
                                   setEditBranch(payment.branch || client?.branch || '');
                                   setEditMethod(payment.method);
                                   setEditSalesName(payment.salesName || '');
+                                  setEditCoachName(payment.coachName || '');
                                   setEditClientName(client?.name || '');
                                   setEditClientPhone(client?.phone || client?.memberId || '');
                                   setEditPaymentDate(payment.date ? payment.date.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'));
@@ -1729,6 +1731,22 @@ export default function Payments() {
                                         </SelectContent>
                                       </Select>
                                     </div>
+                                    {(payment.package_category_type === 'Private Training' || payment.coachName) && (
+                                      <div>
+                                        <Label className="text-xs font-semibold">Coach Name</Label>
+                                        <Select value={editCoachName} onValueChange={(val) => setEditCoachName(val || '')}>
+                                          <SelectTrigger className="h-9">
+                                            <SelectValue placeholder="Select Coach" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                                            {coaches.map(c => (
+                                              <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    )}
                                     <div>
                                       <Label className="text-xs font-semibold">{t('payments.edit.amount')}</Label>
                                       <Input
@@ -1770,6 +1788,7 @@ export default function Payments() {
                                           method: editMethod,
                                           salesName: editSalesName || undefined,
                                           sales_rep_id: salesRepId || undefined,
+                                          coachName: (editCoachName && editCoachName !== 'unassigned') ? editCoachName : undefined,
                                           date: editPaymentDate ? new Date(editPaymentDate).toISOString() : payment.date,
                                         });
                                         setEditingPaymentId(null);

@@ -63,8 +63,8 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
   const totalResults = filteredNav.length + filteredClients.length;
 
   // Handle select action
-  const handleSelect = (item: any) => {
-    if (item.id && typeof item.id === 'string' && !item.name.startsWith('Member:')) {
+  const handleSelect = (item: any, isClient: boolean = false) => {
+    if (!isClient) {
       // Navigation item
       setActiveTab(item.id);
       onClose();
@@ -93,11 +93,11 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
         e.preventDefault();
         // Determine which item is selected
         if (selectedIndex < filteredNav.length) {
-          handleSelect(filteredNav[selectedIndex]);
+          handleSelect(filteredNav[selectedIndex], false);
         } else {
           const clientIdx = selectedIndex - filteredNav.length;
           if (filteredClients[clientIdx]) {
-            handleSelect(filteredClients[clientIdx]);
+            handleSelect(filteredClients[clientIdx], true);
           }
         }
       }
@@ -177,7 +177,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
                         ? 'bg-primary text-primary-foreground shadow-md scale-[1.01]' 
                         : 'hover:bg-muted/50 text-foreground'
                     }`}
-                    onClick={() => handleSelect(item)}
+                    onClick={() => handleSelect(item, false)}
                     onMouseEnter={() => setSelectedIndex(idx)}
                   >
                     <div className="flex items-center gap-3">
@@ -220,7 +220,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
                         ? 'bg-primary text-primary-foreground shadow-md scale-[1.01]' 
                         : 'hover:bg-muted/50 text-foreground'
                     }`}
-                    onClick={() => handleSelect(client)}
+                    onClick={() => handleSelect(client, true)}
                     onMouseEnter={() => setSelectedIndex(globalIdx)}
                   >
                     <div className="flex items-center gap-3">

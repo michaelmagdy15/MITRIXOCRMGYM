@@ -155,6 +155,10 @@ export default function Dashboard() {
 
   const handleSendAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canSendPushNotifications) {
+      toast.error('You do not have permission to send push notifications.');
+      return;
+    }
     if (!pushTitle.trim() || !pushBody.trim()) {
       toast.error('Please enter both title and message.');
       return;
@@ -178,6 +182,12 @@ export default function Dashboard() {
       setIsSendingPush(false);
     }
   };
+
+  const canSendPushNotifications = React.useMemo(() => {
+    if (!currentUser) return false;
+    const nameEmail = (currentUser.name || currentUser.email || '').toLowerCase();
+    return ['michael', 'magd', 'shady'].some(k => nameEmail.includes(k));
+  }, [currentUser]);
 
   const clientMap = React.useMemo(() => {
     const map = new Map<string, any>();
@@ -1482,7 +1492,7 @@ export default function Dashboard() {
       )}
 
       {/* ── MOBILE ANNOUNCEMENTS (PUSH NOTIFICATIONS) ── */}
-      {(currentUser?.role === 'admin' || currentUser?.role === 'crm_admin' || currentUser?.role === 'manager') && (
+      {canSendPushNotifications && (
         <div className="grid grid-cols-1 gap-6">
           <Card className="border-primary/15 bg-primary/[0.02] dark:bg-primary/[0.02] rounded-2xl shadow-sm border">
             <CardHeader className="pb-3">
