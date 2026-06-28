@@ -1,5 +1,23 @@
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+
+function getTenantBrandedName(): string {
+  try {
+    const tenantId = getTenantId();
+    if (!tenantId || tenantId === 'default') {
+      return '';
+    }
+    if (tenantId.toLowerCase() === 'strike') {
+      return 'STRIKE';
+    }
+    if (tenantId.toLowerCase() === 'inzan') {
+      return 'INZAN';
+    }
+    return tenantId.charAt(0).toUpperCase() + tenantId.slice(1);
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Saves the Expo Push Token to the user's account and client record in Firestore.
@@ -38,6 +56,9 @@ export async function sendPushNotification(expoPushToken: string, title: string,
   }
 
   try {
+    const brandedName = getTenantBrandedName();
+    const finalTitle = brandedName ? `${brandedName}: ${title}` : title;
+
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: {
@@ -48,7 +69,7 @@ export async function sendPushNotification(expoPushToken: string, title: string,
       body: JSON.stringify({
         to: expoPushToken,
         sound: 'default',
-        title,
+        title: finalTitle,
         body,
         data,
       }),
