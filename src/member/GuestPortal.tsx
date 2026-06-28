@@ -300,7 +300,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col font-sans pb-24 select-none">
+    <div className="h-screen overflow-hidden bg-background flex flex-col font-sans select-none">
       
       {/* ── LEADS PENDING BANNER ── */}
       {isLeadPending && (

@@ -5,10 +5,35 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { format, parseISO, differenceInDays } from 'date-fns';
-import { Calendar, CheckCircle2, AlertTriangle, PlayCircle, PauseCircle, Package, ShoppingBag } from 'lucide-react';
+import { Calendar, CheckCircle2, AlertTriangle, PlayCircle, PauseCircle, Package, ShoppingBag, Clock } from 'lucide-react';
+import { db } from '../firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function MemberPackages({ client, onSwitchToStore }: { client: Client | null, onSwitchToStore?: () => void }) {
   if (!client) return null;
+
+  const [pendingRequests, setPendingRequests] = React.useState<any[]>([]);
+  const [loadingPending, setLoadingPending] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!client?.id) {
+      setLoadingPending(false);
+      return;
+    }
+    const q = query(
+      collection(db, 'bookingRequests'),
+      where('clientId', '==', client.id),
+      where('status', '==', 'Pending')
+    );
+    getDocs(q).then((snap) => {
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPendingRequests(list);
+    }).catch((err) => {
+      console.error("Error loading pending requests:", err);
+    }).finally(() => {
+      setLoadingPending(false);
+    });
+  }, [client?.id]);
 
   const packages = client.packages || [];
 
@@ -160,6 +185,45 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
         <h2 className="text-xl font-bold tracking-tight">My Packages</h2>
         <p className="text-xs text-muted-foreground mt-0.5">Track your memberships, training credits, and expiration dates.</p>
       </div>
+
+      {/* Pending Requests */}
+      {!loadingPending && pendingRequests.length > 0 && (
+        <div className="space-y-3 animate-in fade-in duration-300">
+          <h3 className="text-xs font-extrabold uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
+            <Clock className="h-4 w-4 text-amber-500" /> Pending Package Requests
+          </h3>
+          <div className="space-y-3">
+            {pendingRequests.map((req) => (
+              <Card key={req.id} className="border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors shadow-sm overflow-hidden">
+                <div className="h-1 w-full bg-amber-500" />
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-foreground">
+                        {req.items && req.items.length > 0 
+                          ? req.items.map((i: any) => `${i.quantity}x ${i.packageName}`).join(', ') 
+                          : 'Package Purchase Request'}
+                      </h4>
+                      <p className="text-[10px] text-muted-foreground">
+                        Requested on {req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy HH:mm') : 'N/A'}
+                      </p>
+                    </div>
+                    <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px]">
+                      Awaiting Payment
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center text-xs border-t border-amber-500/10 pt-2.5">
+                    <span className="text-muted-foreground">Payment Method: {req.paymentMethod}</span>
+                    <span className="font-bold text-amber-600 dark:text-amber-400">
+                      {req.totalPrice?.toLocaleString()} EGP
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Active Packages */}
       <div className="space-y-3">

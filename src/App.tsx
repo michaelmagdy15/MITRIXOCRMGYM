@@ -49,6 +49,7 @@ import QuoteGenerator from './QuoteGenerator';
 import ClubOperations from './ClubOperations';
 import { CartProvider, useCart } from './member/CartContext';
 import { OfflineBanner } from './components/OfflineBanner';
+import Checkout from './member/Checkout';
 import CommandPalette from './components/CommandPalette';
 import OnboardingWizard from './OnboardingWizard';
 import AdminHub from './AdminHub';
@@ -82,6 +83,13 @@ function AppContent() {
   const [memberPortalInitialTab, setMemberPortalInitialTab] = React.useState<string>('home');
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+
+  // If user logs in while checkout is open, keep them in the store view so they can complete the checkout!
+  React.useEffect(() => {
+    if (authUser && isCheckoutOpen) {
+      setClientViewMode('store');
+    }
+  }, [authUser, isCheckoutOpen]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1194,6 +1202,7 @@ function AppContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Checkout open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen} />
       <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
     </div>
   );

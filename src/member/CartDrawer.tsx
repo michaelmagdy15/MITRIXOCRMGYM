@@ -113,11 +113,6 @@ export default function CartDrawer() {
           )}
         </DialogContent>
       </Dialog>
-
-      <Checkout 
-        open={isCheckoutOpen} 
-        onOpenChange={setIsCheckoutOpen} 
-      />
     </>
   );
 }

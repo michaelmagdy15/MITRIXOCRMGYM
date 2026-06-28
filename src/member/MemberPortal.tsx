@@ -257,7 +257,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col font-sans relative overflow-hidden">
+    <div className="h-screen overflow-hidden bg-background flex flex-col font-sans relative">
       {/* Decorative Premium Glow Blobs */}
       <div className="absolute top-[5%] right-[-20%] w-[320px] h-[320px] rounded-full bg-primary/10 dark:bg-primary/20 blur-[100px] pointer-events-none z-0" />
       <div className="absolute bottom-[15%] left-[-20%] w-[320px] h-[320px] rounded-full bg-orange-500/10 dark:bg-orange-500/15 blur-[100px] pointer-events-none z-0" />
@@ -314,7 +314,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 pb-24 max-w-md">
+      <main className="flex-1 overflow-y-auto px-4 py-6 pb-28 max-w-md mx-auto w-full overscroll-contain">
         {activeTab === 'home' && <MemberHome client={activeClient} onSwitchToStore={onSwitchToStore} onNavigate={handleNavigate} />}
         
         {activeTab === 'booking' && (
