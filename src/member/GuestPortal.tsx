@@ -1098,33 +1098,34 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       {/* ── BOTTOM ACTION BAR ── */}
       {(!isStrike || !isMobile) && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent z-40 flex flex-col items-center gap-2">
-        {isLoggedIn ? (
-          <div className="flex gap-2 w-[90vw] max-w-sm">
+          {isLoggedIn ? (
+            <div className="flex gap-2 w-[90vw] max-w-sm">
+              <Button 
+                variant="outline" 
+                className="flex-1 rounded-full shadow-xl bg-background/90 backdrop-blur-md border-primary/30 text-xs font-bold h-12 sf-interactive"
+                onClick={onSwitchToCRM}
+              >
+                <Dumbbell className="h-4 w-4 mr-2" />
+                My Portal
+              </Button>
+              <Button 
+                variant="destructive" 
+                className="rounded-full shadow-xl text-xs font-bold h-12 px-6"
+                onClick={() => logout()}
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
             <Button 
               variant="outline" 
-              className="flex-1 rounded-full shadow-xl bg-background/90 backdrop-blur-md border-primary/30 text-xs font-bold h-12 sf-interactive"
+              className="w-[90vw] max-w-sm rounded-full shadow-xl bg-background/90 backdrop-blur-md border-border/50 text-xs font-bold h-12 sf-interactive"
               onClick={onSwitchToCRM}
             >
-              <Dumbbell className="h-4 w-4 mr-2" />
-              My Portal
+              <LogIn className="h-4 w-4 mr-2" />
+              Member / Staff Login
             </Button>
-            <Button 
-              variant="destructive" 
-              className="rounded-full shadow-xl text-xs font-bold h-12 px-6"
-              onClick={() => logout()}
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <Button 
-            variant="outline" 
-            className="w-[90vw] max-w-sm rounded-full shadow-xl bg-background/90 backdrop-blur-md border-border/50 text-xs font-bold h-12 sf-interactive"
-            onClick={onSwitchToCRM}
-          >
-            <LogIn className="h-4 w-4 mr-2" />
-            Member / Staff Login
-          </Button>
+          )}
         </div>
       )}
 
