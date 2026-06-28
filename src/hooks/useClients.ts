@@ -282,6 +282,30 @@ export const useClients = (currentUser: User | null) => {
         if (uid) updateData.portalUserId = uid;
       }
 
+      if (existing) {
+        if (updateData.sessionsRemaining !== undefined && updateData.packages === undefined) {
+          const packagesCopy = [...(existing.packages || [])];
+          const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+          if (activePkgIdx !== -1) {
+            packagesCopy[activePkgIdx] = {
+              ...packagesCopy[activePkgIdx],
+              sessionsRemaining: updateData.sessionsRemaining as any
+            } as any;
+            updateData.packages = packagesCopy;
+          }
+        } else if (updateData.packages !== undefined && updateData.sessionsRemaining === undefined) {
+          const activePkg = updateData.packages.find((p: any) => p.status === 'Active');
+          if (activePkg) {
+            updateData.sessionsRemaining = activePkg.sessionsRemaining !== undefined ? activePkg.sessionsRemaining : 0;
+            updateData.packageType = activePkg.packageName || '';
+            if (activePkg.startDate) updateData.startDate = activePkg.startDate;
+            if (activePkg.endDate) updateData.membershipExpiry = activePkg.endDate;
+          } else {
+            updateData.sessionsRemaining = 0;
+          }
+        }
+      }
+
       await updateDoc(doc(db, 'clients', id), cleanData(updateData));
       const clientName = baseClients.find(c => c.id === id)?.name || id;
       addAuditLog('UPDATE', 'CLIENT', id, `Updated client/lead: ${clientName}`, currentUser?.name);

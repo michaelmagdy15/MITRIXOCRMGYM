@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity } from 'lucide-react';
+import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Minus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity } from 'lucide-react';
 import { Client, InteractionType, InteractionOutcome, AuditLog, ClientPackage } from './types';
 import { format, parseISO, isAfter, isBefore, addDays, subDays, differenceInDays } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -74,6 +74,66 @@ export default function Clients() {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
   }, [packages, features]);
   const activeClient = activeClientId ? clients.find(c => c.id === activeClientId) : null;
+
+  const handleUpdateSessionsRemaining = async (change: number) => {
+    if (!activeClient) return;
+    
+    let newSessions = activeClient.sessionsRemaining;
+    if (typeof newSessions === 'number') {
+      newSessions = Math.max(0, newSessions + change);
+    } else {
+      const currentNum = parseInt(newSessions as any) || 0;
+      newSessions = Math.max(0, currentNum + change);
+    }
+
+    const updates: any = {
+      sessionsRemaining: newSessions
+    };
+
+    if (activeClient.packages && activeClient.packages.length > 0) {
+      const packagesCopy = [...activeClient.packages];
+      const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+      if (activePkgIdx !== -1) {
+        const activePkg = packagesCopy[activePkgIdx];
+        if (activePkg) {
+          let pkgSessions = activePkg.sessionsRemaining;
+          if (typeof pkgSessions === 'number') {
+            pkgSessions = Math.max(0, pkgSessions + change);
+          } else {
+            const currentNum = parseInt(pkgSessions as any) || 0;
+            pkgSessions = Math.max(0, currentNum + change);
+          }
+          packagesCopy[activePkgIdx] = {
+            ...activePkg,
+            sessionsRemaining: pkgSessions
+          } as ClientPackage;
+          updates.packages = packagesCopy;
+        }
+      }
+    }
+
+    await updateClient(activeClient.id, updates);
+  };
+
+  const updateClientPackages = (newPkgs: ClientPackage[]) => {
+    if (!activeClient) return;
+    
+    const activePkg = newPkgs.find(p => p.status === 'Active');
+    const updates: any = {
+      packages: newPkgs
+    };
+
+    if (activePkg) {
+      updates.packageType = activePkg.packageName || '';
+      updates.sessionsRemaining = activePkg.sessionsRemaining !== undefined ? activePkg.sessionsRemaining : 0;
+      if (activePkg.startDate) updates.startDate = activePkg.startDate;
+      if (activePkg.endDate) updates.membershipExpiry = activePkg.endDate;
+    } else {
+      updates.sessionsRemaining = 0;
+    }
+
+    updateClient(activeClient.id, updates);
+  };
   const [activeTab, setActiveTab] = useState('active');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [isBulkPackageDialogOpen, setIsBulkPackageDialogOpen] = useState(false);
@@ -320,11 +380,16 @@ export default function Clients() {
           const activePkg = packagesCopy[activePkgIdx];
           if (activePkg) {
             const sessionsRemaining = activePkg.sessionsRemaining;
+            const newSessionsLeft = typeof sessionsRemaining === 'number' ? sessionsRemaining + 1 : 1;
             packagesCopy[activePkgIdx] = {
               ...activePkg,
-              sessionsRemaining: typeof sessionsRemaining === 'number' ? sessionsRemaining + 1 : 1
-            };
-            await updateClient(activeClient.id, { points: newPoints, packages: packagesCopy });
+              sessionsRemaining: newSessionsLeft
+            } as ClientPackage;
+            await updateClient(activeClient.id, { 
+              points: newPoints, 
+              packages: packagesCopy,
+              sessionsRemaining: newSessionsLeft
+            });
           }
         } else {
           const sessionsRemaining = activeClient.sessionsRemaining;
@@ -1945,7 +2010,7 @@ export default function Clients() {
                             className="h-7 text-[10px] bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200"
                             onClick={() => {
                               const newPkg = { id: Math.random().toString(36).substring(7), packageName: '', status: 'Active' as const };
-                              updateClient(activeClient.id, { packages: [...(activeClient.packages || []), newPkg] });
+                              updateClientPackages([...(activeClient.packages || []), newPkg]);
                             }}
                           >
                             <Plus className="h-3 w-3 mr-1" /> Add
@@ -1971,7 +2036,7 @@ export default function Clients() {
                                     sessionsRemaining: sysPkg?.sessions,
                                     endDate: sysPkg && cur.startDate ? addDays(parseISO(cur.startDate), sysPkg.expiryDays).toISOString() : cur.endDate,
                                   };
-                                  updateClient(activeClient.id, { packages: updated });
+                                  updateClientPackages(updated);
                                 }}
                               >
                                 <SelectTrigger className="h-7 text-xs bg-muted/30">
@@ -2007,7 +2072,7 @@ export default function Clients() {
                                         startDate: ns,
                                         endDate: sysPkg && ns ? addDays(parseISO(ns), sysPkg.expiryDays).toISOString() : cur.endDate,
                                       };
-                                      updateClient(activeClient.id, { packages: updated });
+                                      updateClientPackages(updated);
                                     }}
                                   />
                                 </div>
@@ -2024,7 +2089,7 @@ export default function Clients() {
                                       const val = e.target.value;
                                       const ns = val ? new Date(val).toISOString() : '';
                                       updated[idx] = { ...cur, endDate: ns };
-                                      updateClient(activeClient.id, { packages: updated });
+                                      updateClientPackages(updated);
                                     }}
                                   />
                                 </div>
@@ -2038,8 +2103,13 @@ export default function Clients() {
                                       const updated = [...(activeClient.packages || [])];
                                       const cur = updated[idx];
                                       if (!cur) return;
-                                      updated[idx] = { ...cur, sessionsRemaining: parseInt(e.target.value) || 0 };
-                                      updateClient(activeClient.id, { packages: updated });
+                                      const newVal = parseInt(e.target.value) || 0;
+                                      updated[idx] = { ...cur, sessionsRemaining: newVal };
+                                      const updates = {
+                                        packages: updated,
+                                        ...(cur.status === 'Active' ? { sessionsRemaining: newVal } : {})
+                                      };
+                                      updateClient(activeClient.id, updates);
                                     }}
                                   />
                                 </div>
@@ -2053,7 +2123,7 @@ export default function Clients() {
                                     const cur = updated[idx];
                                     if (!cur) return;
                                     updated[idx] = { ...cur, status: val };
-                                    updateClient(activeClient.id, { packages: updated });
+                                    updateClientPackages(updated);
                                   }}
                                 >
                                   <SelectTrigger className="h-7 text-xs flex-1 bg-background">
@@ -2078,7 +2148,7 @@ export default function Clients() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-7 w-7 text-destructive shrink-0"
-                                  onClick={() => updateClient(activeClient.id, { packages: (activeClient.packages || []).filter((_, i) => i !== idx) })}
+                                  onClick={() => updateClientPackages((activeClient.packages || []).filter((_, i) => i !== idx))}
                                 >
                                   <Trash2 className="h-3 w-3" />
                                 </Button>
@@ -2119,13 +2189,33 @@ export default function Clients() {
                               </Select>
                             </div>
                             {typeof activeClient.sessionsRemaining !== 'undefined' && (
-                              <div>
-                                <span className="text-[9px] uppercase text-muted-foreground block">Sessions Left</span>
-                                <span className="font-semibold">
-                                  {activeClient.sessionsRemaining === 'unlimited' ? '∞ Unlimited' : activeClient.sessionsRemaining}
-                                </span>
-                              </div>
-                            )}
+                               <div className="flex flex-col gap-1">
+                                 <span className="text-[9px] uppercase text-muted-foreground block">Sessions Left</span>
+                                 <div className="flex items-center gap-1.5">
+                                   <Button 
+                                     size="icon" 
+                                     variant="outline" 
+                                     className="h-5 w-5 rounded-md" 
+                                     onClick={() => handleUpdateSessionsRemaining(-1)}
+                                     disabled={activeClient.sessionsRemaining === 'unlimited' || activeClient.sessionsRemaining === 0}
+                                   >
+                                     <Minus className="h-2.5 w-2.5" />
+                                   </Button>
+                                   <span className="font-mono font-bold text-xs min-w-[16px] text-center">
+                                     {activeClient.sessionsRemaining === 'unlimited' ? '∞' : activeClient.sessionsRemaining}
+                                   </span>
+                                   <Button 
+                                     size="icon" 
+                                     variant="outline" 
+                                     className="h-5 w-5 rounded-md" 
+                                     onClick={() => handleUpdateSessionsRemaining(1)}
+                                     disabled={activeClient.sessionsRemaining === 'unlimited'}
+                                   >
+                                     <Plus className="h-2.5 w-2.5" />
+                                   </Button>
+                                 </div>
+                               </div>
+                             )}
                             {activeClient.startDate && (
                               <div>
                                 <span className="text-[9px] uppercase text-muted-foreground block">Start</span>

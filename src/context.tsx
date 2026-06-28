@@ -445,10 +445,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updateData: any = {};
       
       if (activePkgIdx !== -1) {
-        const activePkg = { ...packagesCopy[activePkgIdx] };
-        if (typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
-          activePkg.sessionsRemaining = activePkg.sessionsRemaining - 1;
-          packagesCopy[activePkgIdx] = activePkg;
+        const activePkg = packagesCopy[activePkgIdx];
+        if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+          packagesCopy[activePkgIdx] = {
+            ...activePkg,
+            sessionsRemaining: activePkg.sessionsRemaining - 1
+          } as any;
           updateData.packages = packagesCopy;
         }
       }

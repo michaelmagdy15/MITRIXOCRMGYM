@@ -51,13 +51,25 @@ export const usePTSessions = (currentUser: User | null, clients: Client[]) => {
         const clientName = clients.find(c => c.id === record.clientId)?.name || record.clientId;
         await addAuditLog('UPDATE', 'PACKAGE_RECORD', id, `Updated package status to ${updates.status} for ${clientName}`);
 
-        // Deduct one session when a PT session is marked Attended
         if (updates.status === 'Attended') {
           const client = clients.find(c => c.id === record.clientId);
           if (client && typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-            await updateDoc(doc(db, 'clients', record.clientId), {
-              sessionsRemaining: client.sessionsRemaining - 1,
-            });
+            const packagesCopy = client.packages ? [...client.packages] : [];
+            const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+            const clientUpdate: any = {
+              sessionsRemaining: client.sessionsRemaining - 1
+            };
+            if (activePkgIdx !== -1) {
+              const activePkg = packagesCopy[activePkgIdx];
+              if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+                packagesCopy[activePkgIdx] = {
+                  ...activePkg,
+                  sessionsRemaining: activePkg.sessionsRemaining - 1
+                } as any;
+                clientUpdate.packages = packagesCopy;
+              }
+            }
+            await updateDoc(doc(db, 'clients', record.clientId), clientUpdate);
           }
         }
       }
