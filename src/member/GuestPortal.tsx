@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users } from 'lucide-react';
+import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard } from 'lucide-react';
 import { Client, Package } from '../types';
 import { getTenantId, db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -77,7 +77,7 @@ const BoxingGlovesIcon = ({ className }: { className?: string }) => (
 );
 
 interface GuestPortalProps {
-  onSwitchToCRM: () => void;
+  onSwitchToCRM: (tab?: string) => void;
   isLeadPending?: boolean;
   client?: Client | null;
 }
@@ -278,9 +278,12 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         
         <div className="flex items-center gap-2">
           {isLoggedIn && displayName && (
-            <div className="text-[11px] font-black text-muted-foreground mr-1 truncate max-w-[120px] bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 text-primary">
+            <button 
+              onClick={() => onSwitchToCRM('profile')}
+              className="text-[11px] font-black mr-1 truncate max-w-[120px] bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 text-primary cursor-pointer hover:bg-primary/20 transition-all flex items-center gap-1 active:scale-95"
+            >
               👤 {displayName.split(' ')[0]}
-            </div>
+            </button>
           )}
           <CartDrawer />
         </div>
@@ -312,7 +315,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       )}
 
       {/* ── MAIN STOREFRONT CONTENT ── */}
-      <main className="flex-1 overflow-y-auto">
+      <main className={`flex-1 overflow-y-auto ${isStrike && isMobile ? 'pb-[calc(5.5rem+env(safe-area-inset-bottom))]' : ''}`}>
         
         {activeTab === 'book' && (
           <div className="space-y-8 py-6 sf-tab-enter">
@@ -1093,7 +1096,8 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       )}
 
       {/* ── BOTTOM ACTION BAR ── */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent z-40 flex flex-col items-center gap-2">
+      {(!isStrike || !isMobile) && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent z-40 flex flex-col items-center gap-2">
         {isLoggedIn ? (
           <div className="flex gap-2 w-[90vw] max-w-sm">
             <Button 
@@ -1121,13 +1125,18 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             <LogIn className="h-4 w-4 mr-2" />
             Member / Staff Login
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       {isStrike && isMobile && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1.5 shadow-lg backdrop-blur-md bg-opacity-90">
+        <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur-md bg-opacity-90">
           {[
-            { id: 'signup', label: 'Sign Up', icon: <UserPlus className="h-5 w-5" />, action: onSwitchToCRM },
+            { 
+              id: 'signup', 
+              label: isLoggedIn ? 'My Portal' : 'Sign Up', 
+              icon: isLoggedIn ? <LayoutDashboard className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />, 
+              action: () => onSwitchToCRM(isLoggedIn ? 'profile' : undefined) 
+            },
             { id: 'book', label: 'Book', icon: <Calendar className="h-5 w-5" />, action: () => setActiveTab('book') },
             { id: 'locations', label: 'Locations', icon: <MapPin className="h-5 w-5" />, action: () => setActiveTab('locations') },
             { id: 'schedule', label: 'Schedule', icon: <Clock className="h-5 w-5" />, action: () => setActiveTab('schedule') },

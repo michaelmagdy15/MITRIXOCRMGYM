@@ -44,11 +44,12 @@ const NAV_ITEMS: { tab: MemberTab; label: string; icon: React.ReactNode }[] = [
 
 interface MemberPortalProps {
   isGuest?: boolean;
-  onSwitchToCRM?: () => void;
+  onSwitchToCRM?: (tab?: string) => void;
   onSwitchToStore?: () => void;
+  initialTab?: string;
 }
 
-export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchToStore }: MemberPortalProps = {}) {
+export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchToStore, initialTab }: MemberPortalProps = {}) {
   const { currentUser, logout } = useAuth();
   const { branding, features } = useSettings();
   const { theme, toggleTheme } = useTheme();
@@ -84,7 +85,14 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     });
   }, [features, isStrike, isMobile]);
 
-  const [activeTab, setActiveTab] = useState<MemberTab>('home');
+  const [activeTab, setActiveTab] = useState<MemberTab>((initialTab as MemberTab) || 'home');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab as MemberTab);
+    }
+  }, [initialTab]);
+
   const [primaryClient, setPrimaryClient] = useState<Client | null>(null);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [linkedClients, setLinkedClients] = useState<Client[]>([]);

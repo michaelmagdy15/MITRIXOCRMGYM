@@ -344,7 +344,10 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
       {/* ─── BeFit-Style Greeting Header ─── */}
-      <div className="pt-1">
+      <div 
+        className="pt-1 cursor-pointer hover:opacity-80 active:scale-98 transition-all"
+        onClick={() => onNavigate?.('profile')}
+      >
         <p className="text-2xl font-bold tracking-tight">
           {greeting.text} {greeting.emoji}
         </p>

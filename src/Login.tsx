@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useSettings } from './contexts/SettingsContext';
-import { sendPasswordReset } from './firebase';
+import { sendPasswordReset, getTenantId } from './firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,11 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   const { loginWithEmail, loginWithCoachId, loginWithMemberId, submitSignUpRequest, submitPasswordResetRequest, submitMemberPasswordResetRequest, isAuthReady, authError, setAuthError } = useAuth();
   const { branding } = useSettings();
   const { language, toggleLanguage } = useLanguage();
+
+  const isStrike = React.useMemo(() => {
+    const tenantId = getTenantId();
+    return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
+  }, [branding?.companyName]);
 
   const [view, setView] = useState<View>('login');
 
@@ -509,13 +514,15 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
               )}
 
               <Tabs defaultValue="member" onValueChange={() => { setError(''); setAuthError(null); }}>
-                <TabsList className="grid grid-cols-3 w-full mb-6 bg-muted/50 p-1 rounded-lg">
+                <TabsList className={`grid ${isStrike ? 'grid-cols-2' : 'grid-cols-3'} w-full mb-6 bg-muted/50 p-1 rounded-lg`}>
                   <TabsTrigger value="member" className="flex items-center justify-center gap-1.5 text-xs py-2">
                     <Users className="h-3.5 w-3.5" /> Member
                   </TabsTrigger>
-                  <TabsTrigger value="coach" className="flex items-center justify-center gap-1.5 text-xs py-2">
-                    <Dumbbell className="h-3.5 w-3.5" /> Coach
-                  </TabsTrigger>
+                  {!isStrike && (
+                    <TabsTrigger value="coach" className="flex items-center justify-center gap-1.5 text-xs py-2">
+                      <Dumbbell className="h-3.5 w-3.5" /> Coach
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger value="staff" className="flex items-center justify-center gap-1.5 text-xs py-2">
                     <ShieldCheck className="h-3.5 w-3.5" /> Staff
                   </TabsTrigger>
@@ -577,47 +584,49 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                 </TabsContent>
 
                 {/* ── Coach Tab ── */}
-                <TabsContent value="coach" className="space-y-4">
-                  <form onSubmit={handleCoachLogin} className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="coach-id">Coach ID</Label>
-                      <Input
-                        id="coach-id"
-                        placeholder="COACH-001"
-                        value={coachId}
-                        onChange={e => setCoachId(e.target.value.toUpperCase())}
-                        className="font-mono tracking-wide"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="coach-password">Password</Label>
-                      <div className="relative">
+                {!isStrike && (
+                  <TabsContent value="coach" className="space-y-4">
+                    <form onSubmit={handleCoachLogin} className="space-y-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="coach-id">Coach ID</Label>
                         <Input
-                          id="coach-password"
-                          type={showCoachPassword ? 'text' : 'password'}
-                          placeholder="••••••••"
-                          value={coachPassword}
-                          onChange={e => setCoachPassword(e.target.value)}
-                          className="pr-10"
-                          autoComplete="current-password"
+                          id="coach-id"
+                          placeholder="COACH-001"
+                          value={coachId}
+                          onChange={e => setCoachId(e.target.value.toUpperCase())}
+                          className="font-mono tracking-wide"
                           required
                         />
-                        <button type="button" onClick={() => setShowCoachPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                          {showCoachPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
                       </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="coach-password">Password</Label>
+                        <div className="relative">
+                          <Input
+                            id="coach-password"
+                            type={showCoachPassword ? 'text' : 'password'}
+                            placeholder="••••••••"
+                            value={coachPassword}
+                            onChange={e => setCoachPassword(e.target.value)}
+                            className="pr-10"
+                            autoComplete="current-password"
+                            required
+                          />
+                          <button type="button" onClick={() => setShowCoachPassword(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                            {showCoachPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                      <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={isLoading}>
+                        {isLoading ? 'Signing in...' : 'Sign In as Coach'}
+                      </Button>
+                    </form>
+                    <div className="text-center text-xs pt-2">
+                      <button className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onClick={() => { setForgotOpen(true); setForgotSubmitted(false); setForgotEmail(''); setForgotName(''); }}>
+                        Forgot password?
+                      </button>
                     </div>
-                    <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={isLoading}>
-                      {isLoading ? 'Signing in...' : 'Sign In as Coach'}
-                    </Button>
-                  </form>
-                  <div className="text-center text-xs pt-2">
-                    <button className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline" onClick={() => { setForgotOpen(true); setForgotSubmitted(false); setForgotEmail(''); setForgotName(''); }}>
-                      Forgot password?
-                    </button>
-                  </div>
-                </TabsContent>
+                  </TabsContent>
+                )}
 
                 {/* ── Staff Tab ── */}
                 <TabsContent value="staff" className="space-y-4">

@@ -78,6 +78,7 @@ function AppContent() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
   const [showPortalOverride, setShowPortalOverride] = React.useState<'crm' | 'member' | null>(null);
   const [clientViewMode, setClientViewMode] = React.useState<'portal' | 'store'>('portal');
+  const [memberPortalInitialTab, setMemberPortalInitialTab] = React.useState<string>('home');
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
 
   const isStrike = React.useMemo(() => {
@@ -533,13 +534,20 @@ function AppContent() {
     if (clientViewMode === 'store') {
       return (
         <GuestPortal 
-          onSwitchToCRM={() => setClientViewMode('portal')} 
+          onSwitchToCRM={(tab) => {
+            if (tab) setMemberPortalInitialTab(tab);
+            setClientViewMode('portal');
+          }} 
         />
       );
     }
     return (
       <MemberPortal 
-        onSwitchToStore={() => setClientViewMode('store')} 
+        initialTab={memberPortalInitialTab}
+        onSwitchToStore={() => {
+          setMemberPortalInitialTab('home');
+          setClientViewMode('store');
+        }} 
       />
     );
   }
