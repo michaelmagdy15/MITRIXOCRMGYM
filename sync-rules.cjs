@@ -10,7 +10,7 @@ const projectDefinitions = [
   {
     name: 'Strike CRM',
     absolute: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform',
-    relative: '../MitrixoGYMCRMPlatform'
+    relative: '.'
   },
   {
     name: 'ATPL Vector',

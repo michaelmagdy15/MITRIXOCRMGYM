@@ -105,6 +105,12 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       allowedHosts: true,
+      proxy: {
+        '/api': {
+          target: 'http://localhost:8080',
+          changeOrigin: true,
+        }
+      },
       watch: {
         ignored: ['**/scratch/**', '**/handover_docs/**', '**/.git/**']
       },

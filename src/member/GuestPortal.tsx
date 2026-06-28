@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
+import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard, Sun, Moon } from 'lucide-react';
 import { Client, Package } from '../types';
 import { getTenantId, db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -132,6 +133,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const { packages, branding, branches, coaches } = useAppContext();
   const { currentUser, logout } = useAuth();
   const { storefrontConfig } = useSettings();
+  const { theme, toggleTheme } = useTheme();
   // Detect if user is logged in (either passed as prop or via auth context)
   const isLoggedIn = !!(client || currentUser);
   const displayName = client?.name || currentUser?.name || '';
@@ -330,6 +332,15 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               👤 {displayName.split(' ')[0]}
             </button>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="h-8 w-8 rounded-lg text-foreground hover:bg-muted shrink-0"
+            title="Toggle Theme"
+          >
+            {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
           <CartDrawer />
         </div>
       </header>
@@ -1178,9 +1189,9 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur-md bg-opacity-90">
           {[
             { 
-              id: 'signup', 
-              label: isLoggedIn ? 'My Portal' : 'Sign Up', 
-              icon: isLoggedIn ? <LayoutDashboard className="h-5 w-5" /> : <UserPlus className="h-5 w-5" />, 
+              id: 'signin', 
+              label: isLoggedIn ? 'My Portal' : 'Sign In', 
+              icon: isLoggedIn ? <LayoutDashboard className="h-5 w-5" /> : <LogIn className="h-5 w-5" />, 
               action: () => onSwitchToCRM(isLoggedIn ? 'profile' : undefined) 
             },
             { id: 'book', label: 'Book', icon: <Calendar className="h-5 w-5" />, action: () => setActiveTab('book') },

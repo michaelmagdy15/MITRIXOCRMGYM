@@ -212,7 +212,11 @@ service cloud.firestore {
              (!('clientDocId' in request.resource.data) || 
               (
                 exists(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)) &&
-                get(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)).data.memberId == resource.data.clientRecordId
+                (
+                  get(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)).data.memberId == resource.data.clientRecordId ||
+                  resource.data.clientRecordId.matches('^\\s*' + get(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)).data.memberId + '\\s*$') ||
+                  get(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)).data.memberId.matches('^\\s*' + resource.data.clientRecordId + '\\s*$')
+                )
               )
              );
     }
@@ -343,7 +347,7 @@ service cloud.firestore {
     }
 
     match /attendance/{attendanceId} {
-      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow read: if isAuthenticated();
       allow write: if ismitrixogymcrmStaff() && isValidAttendance(request.resource.data);
     }
 
@@ -430,7 +434,11 @@ service cloud.firestore {
                     (
                       isAuthenticated() &&
                       exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId == resource.data.memberId &&
+                      (
+                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId == resource.data.memberId ||
+                        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId.matches('^\\s*' + resource.data.memberId + '\\s*$') ||
+                        resource.data.memberId.matches('^\\s*' + get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientRecordId + '\\s*$')
+                      ) &&
                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['portalUserId']) &&
                       request.resource.data.portalUserId == request.auth.uid
                     );
