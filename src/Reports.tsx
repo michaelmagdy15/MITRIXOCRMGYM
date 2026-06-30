@@ -100,6 +100,17 @@ export default function Reports() {
   const { t, language } = useLanguage();
   const now = new Date();
 
+  // Helper to parse dates safely and avoid "Invalid time value" crashes
+  const safeParseDate = (dateString: any): Date | null => {
+    if (!dateString || typeof dateString !== 'string') return null;
+    try {
+      const parsed = parseISO(dateString);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    } catch {
+      return null;
+    }
+  };
+
   const exportToCSV = (data: any[], filename: string) => {
     if (data.length === 0) return;
     const headers = Object.keys(data[0]);
@@ -122,7 +133,11 @@ export default function Reports() {
   const revenueThisMonth = useMemo(
     () =>
       payments
-        .filter(p => !p.deleted_at && isSameMonth(parseISO(p.date), now))
+        .filter(p => {
+          if (p.deleted_at) return false;
+          const parsed = safeParseDate(p.date);
+          return parsed ? isSameMonth(parsed, now) : false;
+        })
         .reduce((sum, p) => sum + (p.amount_paid || p.amount || 0), 0),
     [payments]
   );
@@ -171,19 +186,30 @@ export default function Reports() {
       .filter(member => {
         const memberAttendances = attendances.filter(a => a.clientId === member.id);
         if (memberAttendances.length === 0) return true;
-        const last = memberAttendances.sort((a, b) => b.date.localeCompare(a.date))[0];
+        const last = memberAttendances.sort((a, b) => {
+          const aDate = a.date || '';
+          const bDate = b.date || '';
+          return bDate.localeCompare(aDate);
+        })[0];
         if (!last) return true;
-        return differenceInDays(now, parseISO(last.date)) > 14;
+        const parsed = safeParseDate(last.date);
+        if (!parsed) return true;
+        return differenceInDays(now, parsed) > 14;
       })
       .map(m => {
         const last = attendances
           .filter(a => a.clientId === m.id)
-          .sort((a, b) => b.date.localeCompare(a.date))[0];
-        const daysAgo = last ? differenceInDays(now, parseISO(last.date)) : null;
+          .sort((a, b) => {
+            const aDate = a.date || '';
+            const bDate = b.date || '';
+            return bDate.localeCompare(aDate);
+          })[0];
+        const parsed = last ? safeParseDate(last.date) : null;
+        const daysAgo = parsed ? differenceInDays(now, parsed) : null;
         return {
           id: m.id,
           name: m.name,
-          lastDate: last ? format(parseISO(last.date), 'MMM d') : null,
+          lastDate: parsed ? format(parsed, 'MMM d') : null,
           daysAgo,
         };
       })
@@ -194,8 +220,8 @@ export default function Reports() {
   const cohortRetention = useMemo(() => {
     const cohorts: Record<string, { active: number; churned: number; sortKey: string }> = {};
     clients.forEach(c => {
-      if (!c.startDate) return;
-      const parsed = parseISO(c.startDate);
+      const parsed = safeParseDate(c.startDate);
+      if (!parsed) return;
       const month = format(parsed, 'MMM yy');
       const sortKey = format(parsed, 'yyyy-MM');
       if (!cohorts[month]) cohorts[month] = { active: 0, churned: 0, sortKey };
@@ -213,18 +239,27 @@ export default function Reports() {
 
   // --- Revenue Forecast ---
   const revenueForecast = useMemo(() => {
-    const expiringThisMonth = clients.filter(
-      c => c.status === 'Active' && c.membershipExpiry && isSameMonth(parseISO(c.membershipExpiry), now)
-    );
+    const expiringThisMonth = clients.filter(c => {
+      if (c.status !== 'Active') return false;
+      const parsed = safeParseDate(c.membershipExpiry);
+      return parsed ? isSameMonth(parsed, now) : false;
+    });
     const sumValue = expiringThisMonth.reduce((sum, c) => {
       const cp = payments.filter(p => p.clientId === c.id && !p.deleted_at);
-      const last = cp.sort((a, b) => b.date.localeCompare(a.date))[0];
+      const last = cp.sort((a, b) => {
+        const aDate = a.date || '';
+        const bDate = b.date || '';
+        return bDate.localeCompare(aDate);
+      })[0];
       return sum + (last?.amount_paid || last?.amount || 0);
     }, 0);
     const last3 = [subMonths(now, 1), subMonths(now, 2), subMonths(now, 3)];
     const rates = last3
       .map(m => {
-        const expired = clients.filter(c => c.membershipExpiry && isSameMonth(parseISO(c.membershipExpiry), m));
+        const expired = clients.filter(c => {
+          const parsed = safeParseDate(c.membershipExpiry);
+          return parsed ? isSameMonth(parsed, m) : false;
+        });
         if (!expired.length) return null;
         const renewed = expired.filter(c => c.status === 'Active' || c.status === 'Nearly Expired').length;
         return renewed / expired.length;

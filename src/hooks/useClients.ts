@@ -100,7 +100,7 @@ function mapOldToNewPackage(oldName: string, client: any): string {
 
 function predictGender(clientName: string): 'Male' | 'Female' | null {
   if (!clientName) return null;
-  const firstName = clientName.trim().split(/\s+/)[0].toLowerCase();
+  const firstName = (clientName.trim().split(/\s+/)[0] || '').toLowerCase();
   
   if (FEMALE_NAMES.has(firstName)) {
     return 'Female';
@@ -215,7 +215,7 @@ export const useClients = (currentUser: User | null) => {
 
   const addClient = async (client: Omit<Client, 'id' | 'createdAt'>): Promise<void> => {
     try {
-      const { id, comments, ...clientData } = client;
+      const { comments, ...clientData } = client;
 
       // Normalize package name and packageType
       if (clientData.packageType) {

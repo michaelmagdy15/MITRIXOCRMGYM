@@ -195,6 +195,7 @@ export interface Client {
   points?: number;
   typeOfClient?: string;
   salesName?: string;
+  salesRep?: string;
   
   // Gamified Fitness & AI Health Profile
   gender?: Gender;

@@ -84,7 +84,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             clientId: session.clientId,
             memberId: client.memberId || client.id.substring(0, 8),
             name: client.name,
-            slot: `PT Session (${session.time})`,
+            slot: `PT Session (${format(parseISO(session.date), 'h:mm a')})`,
             checkedIn: hasCheckin,
             checkinTime: session.status === 'Attended' ? session.date : checkinMap.get(session.clientId)?.date,
             type: 'PT'
