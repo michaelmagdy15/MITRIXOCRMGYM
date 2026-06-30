@@ -17,6 +17,99 @@ import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
 import { addAuditLog } from '../services/auditService';
 import { useAuth } from '../contexts/AuthContext';
+const FEMALE_NAMES = new Set([
+  'heba', 'karma', 'maria', 'martina', 'yassmin', 'yasmin', 'yasmeen', 'menna', 'riham', 'farah',
+  'loujy', 'habiba', 'maha', 'aiat', 'raghda', 'hend', 'maisoon', 'maison', 'farida', 'nadine',
+  'nancy', 'nouran', 'sherry', 'sherihan', 'shereen', 'sherine', 'salma', 'sarah', 'sara', 'mariam',
+  'maryam', 'malak', 'laila', 'layla', 'hana', 'jannah', 'jana', 'hania', 'kenzy', 'talia', 'tulin',
+  'judy', 'jory', 'lamar', 'logain', 'logayn', 'maya', 'yara', 'zeina', 'zaynab', 'zainab', 'fatma',
+  'fatima', 'aisha', 'khadija', 'ruqaya', 'rokaya', 'alyaa', 'alia', 'asmaa', 'asma', 'doaa',
+  'shaimaa', 'shymaa', 'mai', 'may', 'mona', 'noha', 'rania', 'rehab', 'dina', 'nermin', 'nermeen',
+  'radwa', 'ghada', 'mayar', 'marwa', 'amira', 'nada', 'basma', 'maiar', 'jomana', 'gona', 'gana',
+  'rawda', 'shahd', 'ganna', 'hoda', 'ola', 'omnia', 'esraa', 'israa', 'lobna', 'lubna', 'basant',
+  'passant', 'nesma', 'nehal', 'nihal', 'engy', 'ingy', 'aya', 'ayat', 'donia', 'dunya', 'rawan',
+  'rodaina', 'rudaina', 'ranim', 'reem', 'rim', 'safa', 'maram', 'hebatullah', 'hebat-allah',
+  'fatma-alzahraa', 'shahdan', 'nourhan', 'nourine', 'norine', 'nermin', 'noury', 'marihan'
+]);
+
+const MALE_NAMES = new Set([
+  'mohamed', 'mohammed', 'mouhamed', 'muhammad', 'muhamed', 'mahmoud', 'ahmed', 'ahmad', 'yassin',
+  'yousef', 'youssef', 'yusef', 'yahia', 'yahya', 'omar', 'rayan', 'amr', 'khaled', 'selim', 'aser',
+  'ali', 'aly', 'mostafa', 'mustafa', 'moustafa', 'hassan', 'hasan', 'tarek', 'tareq', 'sherif',
+  'hany', 'hani', 'wael', 'karim', 'karem', 'hazem', 'hamza', 'adam', 'malik', 'ibrahim', 'ismail',
+  'ismael', 'yehia', 'hussein', 'houssein', 'hosny', 'hosney', 'ezz', 'zeyad', 'ziad', 'mazen',
+  'marwan', 'eyad', 'iyad', 'moaz', 'mosa', 'musa', 'haroun', 'haron', 'kareem', 'tamer', 'shady',
+  'shadi', 'rami', 'ramy', 'fady', 'fadi', 'nader', 'sameh', 'samer', 'medhat', 'magdy', 'michael',
+  'mina', 'bishoy', 'peshoy', 'george', 'peter', 'kirollos', 'kyrillos', 'mark', 'john', 'andrew',
+  'yasser', 'adel', 'ashraf', 'emad', 'ehab', 'ihab', 'hisham', 'hesham', 'gamal', 'nasser',
+  'mamdouh', 'sayed', 'said', 'saied', 'seif', 'saif', 'alaa', 'salah', 'samer', 'samy', 'samir',
+  'wagih', 'wagdy', 'reda', 'maged', 'majdi', 'atef', 'ayman', 'amjad', 'akram',
+  'anwar', 'ashour', 'bahaa', 'diaa', 'taha', 'maher', 'khadry', 'khedry', 'abdelrahman', 'abdurrahman',
+  'abdulrahman', 'abdullah', 'abdelrahman', 'selim', 'soliman', 'suleiman', 'mohib', 'moris',
+  'slem', 'aser', 'adnan', 'anas', 'arabi', 'badr', 'emile', 'fadel', 'fahd', 'farid', 'fouad',
+  'gad', 'ghaleb', 'hady', 'hadid', 'haitham', 'hatem', 'helmy', 'kamal', 'kamel', 'lotfy', 'mamdouh',
+  'monir', 'mounir', 'mourad', 'murad', 'nabil', 'nagib', 'naguib', 'nashat', 'raafat', 'rafeeq',
+  'rafik', 'ragab', 'ramadan', 'rashad', 'rashaad', 'riad', 'riadh', 'saad', 'sabry', 'safwat',
+  'sameer', 'samih', 'shabaan', 'shawky', 'sobhy', 'sobhey', 'soliman', 'talat', 'talaat', 'tawfik',
+  'tawfeeq', 'zakaria', 'zaki'
+]);
+
+function mapOldToNewPackage(oldName: string, client: any): string {
+  if (!oldName) return oldName;
+  const name = oldName.trim().toUpperCase();
+
+  // Exact match or simple case normalize
+  if (name === "10 S GT (ADULT)" || name === "10 S GT (ADULTS)") return "10 S GT (Adult)";
+  if (name === "20 S GT (ADULT)" || name === "20 S GT (ADULTS)") return "20 S GT (Adult)";
+  if (name === "30 S GT (ADULT)" || name === "30 S GT (ADULTS)") return "30 S GT (Adult)";
+  if (name === "5 S GT(ADULT)" || name === "5 S GT (ADULT)") return "5 S GT (Adult)";
+  
+  if (name === "6MONTHS UNLIMITED" || name === "6 MONTHS UNLIMITED") return "6 Month";
+  
+  // Kids/Juniors combined packages
+  if (name.includes("KIDS/JUNIORS")) {
+    const type = (client.typeOfClient || client.memberCategory || "").toUpperCase();
+    const isJunior = type.includes("JUNIOR");
+    if (name.includes("10 S")) return isJunior ? "10 S GT (Juniors)" : "10 S GT (Kids)";
+    if (name.includes("20 S")) return isJunior ? "20 S GT (Juniors)" : "20 S GT (Kids)";
+    if (name.includes("30 S")) return isJunior ? "30 S GT (Juniors)" : "30 S GT (Kids)";
+  }
+
+  // Raw session counts (Historically PT)
+  if (name.includes("SESSIONS") || name.includes("SESSION PRIVATE")) {
+    const numMatch = name.match(/\d+/);
+    if (numMatch) {
+      const num = parseInt(numMatch[0]);
+      if (num <= 7) return "5 S PT";
+      if (num <= 15) return "10 S PT";
+      if (num <= 25) return "20 S PT";
+      return "30 S PT";
+    }
+  }
+
+  // Deposits or Complete Payments
+  if (name.includes("DEPOSIT") || name.includes("DEPOSITE") || name.includes("COMPLETE PAYMENT")) {
+    if (name.includes("10 S GT") || name.includes("10S GT")) return "10 S GT (Adult)";
+    if (name.includes("10 S PT") || name.includes("10S PT")) return "10 S PT";
+    if (name.includes("20 S PT") || name.includes("20S PT")) return "20 S PT";
+  }
+
+  // Fallbacks
+  return oldName;
+}
+
+function predictGender(clientName: string): 'Male' | 'Female' | null {
+  if (!clientName) return null;
+  const firstName = clientName.trim().split(/\s+/)[0].toLowerCase();
+  
+  if (FEMALE_NAMES.has(firstName)) {
+    return 'Female';
+  }
+  if (MALE_NAMES.has(firstName)) {
+    return 'Male';
+  }
+  return null;
+}
 
 export const useClients = (currentUser: User | null) => {
   const { effectiveRole } = useAuth();
@@ -123,6 +216,28 @@ export const useClients = (currentUser: User | null) => {
   const addClient = async (client: Omit<Client, 'id' | 'createdAt'>): Promise<void> => {
     try {
       const { id, comments, ...clientData } = client;
+
+      // Normalize package name and packageType
+      if (clientData.packageType) {
+        clientData.packageType = mapOldToNewPackage(clientData.packageType, clientData);
+      }
+      if (clientData.packages && Array.isArray(clientData.packages)) {
+        clientData.packages = clientData.packages.map(p => {
+          if (p.packageName) {
+            p.packageName = mapOldToNewPackage(p.packageName, clientData);
+          }
+          return p;
+        });
+      }
+
+      // Auto predict gender if not specified
+      const currentGender = clientData.gender ? clientData.gender.trim() : '';
+      if (!currentGender || currentGender.toLowerCase() === 'none') {
+        const predicted = predictGender(clientData.name);
+        if (predicted) {
+          clientData.gender = predicted;
+        }
+      }
       
       // Normalize phone suffix (last 10 digits)
       const newPhoneNorm = clientData.phone ? clientData.phone.replace(/\D/g, '').slice(-10) : '';
@@ -303,15 +418,38 @@ export const useClients = (currentUser: User | null) => {
   const updateClient = async (id: string, updates: Partial<Client>) => {
     try {
       const updateData = { ...updates };
+      const existing = baseClients.find(c => c.id === id);
+
+      // Normalize package name and packageType
+      if (updateData.packageType) {
+        updateData.packageType = mapOldToNewPackage(updateData.packageType, updateData);
+      }
+      if (updateData.packages && Array.isArray(updateData.packages)) {
+        updateData.packages = updateData.packages.map(p => {
+          if (p.packageName) {
+            p.packageName = mapOldToNewPackage(p.packageName, updateData);
+          }
+          return p;
+        });
+      }
+
+      // Auto predict gender if not specified
+      const currentGender = updateData.gender || existing?.gender;
+      const cleanGender = currentGender ? currentGender.trim() : '';
+      if (!cleanGender || cleanGender.toLowerCase() === 'none') {
+        const predicted = predictGender(updateData.name || existing?.name || '');
+        if (predicted) {
+          updateData.gender = predicted;
+        }
+      }
+
       if (!updateData.memberId) {
-        const existing = baseClients.find(c => c.id === id);
         if (existing && !existing.memberId) {
           updateData.memberId = await generateMemberId();
         }
       }
 
       // Auto-create portal account if they don't have one yet
-      const existing = baseClients.find(c => c.id === id);
       const hasNoPortal = !existing?.portalUserId && !updateData.portalUserId;
       const memberId = updateData.memberId || existing?.memberId;
 
