@@ -5,6 +5,11 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 
+// Initialize Firebase Admin SDK
+if (admin.apps.length === 0) {
+  admin.initializeApp();
+}
+
 // ===============================================================
 // Reserved subdomains — these can NEVER be provisioned as tenants
 // ===============================================================
@@ -221,6 +226,7 @@ function getRequestHostname(req: express.Request): string {
       return (hostStr.split(":")[0] || "").trim();
     }
   }
+  return req.hostname || "localhost";
 }
 
 async function getDbForRequest(req: express.Request) {
