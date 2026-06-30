@@ -221,7 +221,15 @@ function getRequestHostname(req: express.Request): string {
       return (hostStr.split(":")[0] || "").trim();
     }
   }
-  return req.hostname;
+}
+
+async function getDbForRequest(req: express.Request) {
+  const hostname = getRequestHostname(req);
+  const { config } = await getTenantInfoForHost(hostname);
+  if (config && config.firestoreDatabaseId) {
+    return getFirestore(config.firestoreDatabaseId);
+  }
+  return getFirestore();
 }
 
 async function startServer() {
@@ -412,6 +420,156 @@ async function startServer() {
     } catch (error) {
       console.error("[Server] Password reset error:", error);
       return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // ─── PUBLIC QR Code Check-In Endpoint ───
+  app.post("/api/attendance/qr-checkin", async (req, res) => {
+    const { qrData, branch } = req.body;
+    if (!qrData) {
+      return res.status(400).json({ error: "Missing qrData parameter" });
+    }
+
+    try {
+      const db = await getDbForRequest(req);
+
+      // Search by ID first
+      let clientSnap = await db.collection('clients').doc(qrData).get();
+      let clientDoc = null;
+      if (clientSnap.exists) {
+        clientDoc = clientSnap;
+      } else {
+        // Search by memberId
+        const q1 = await db.collection('clients').where('memberId', '==', qrData).limit(1).get();
+        if (!q1.empty) {
+          clientDoc = q1.docs[0];
+        } else {
+          // Search by phone
+          const q2 = await db.collection('clients').where('phone', '==', qrData).limit(1).get();
+          if (!q2.empty) {
+            clientDoc = q2.docs[0];
+          }
+        }
+      }
+
+      if (!clientDoc) {
+        return res.status(404).json({ error: "Member not found. Please check the QR code or ID." });
+      }
+
+      const client = clientDoc.data();
+      const clientId = clientDoc.id;
+
+      if (!client) {
+        return res.status(404).json({ error: "Member not found." });
+      }
+
+      // 1. Validation checks
+      if (client.status === 'Expired') {
+        return res.status(400).json({ error: `${client.name}'s membership is expired. They must head to the STRIKE branch to renew.` });
+      }
+      if (client.status === 'Hold') {
+        return res.status(400).json({ error: `${client.name}'s membership is currently on hold.` });
+      }
+
+      // Check double check-in
+      const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+      const todayCheckinsSnap = await db.collection('attendance')
+        .where('clientId', '==', clientId)
+        .get();
+      
+      const todayCheckins = todayCheckinsSnap.docs.filter(docSnap => {
+        const data = docSnap.data();
+        if (!data.date) return false;
+        try {
+          return new Date(data.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr;
+        } catch {
+          return false;
+        }
+      });
+      const checkinCount = todayCheckins.length;
+
+      // Count expected sessions
+      const sessionsSnap = await db.collection('sessions')
+        .where('clientId', '==', clientId)
+        .where('date', '==', cairoDateStr)
+        .get();
+      const ptSessionsCount = sessionsSnap.docs.filter(docSnap => {
+        const status = docSnap.data().status;
+        return status === 'Scheduled' || status === 'Attended';
+      }).length;
+
+      const classesSnap = await db.collection('classes')
+        .where('date', '==', cairoDateStr)
+        .get();
+      const groupClassesCount = classesSnap.docs.filter(docSnap => {
+        const attendees = docSnap.data().attendees || [];
+        return attendees.includes(clientId);
+      }).length;
+
+      const totalExpected = Math.max(1, ptSessionsCount + groupClassesCount);
+
+      if (checkinCount >= totalExpected) {
+        const msg = totalExpected === 1
+          ? `Double check-in blocked. ${client.name} has already checked in today.`
+          : `Double check-in blocked. ${client.name} has already checked in ${checkinCount} times today for ${totalExpected} scheduled sessions.`;
+        return res.status(400).json({ error: msg });
+      }
+
+      // 2. Add Attendance document
+      const attendanceData = {
+        clientId,
+        branch: branch || 'MAIN',
+        date: new Date().toISOString(),
+        recordedBy: 'qr-reader',
+        packageName: client.packageType || '',
+      };
+      await db.collection('attendance').add(attendanceData);
+
+      // 3. Mark matching scheduled PT sessions today to 'Attended'
+      const scheduledPTs = sessionsSnap.docs.filter(docSnap => docSnap.data().status === 'Scheduled');
+      for (const ptDoc of scheduledPTs) {
+        await ptDoc.ref.update({ status: 'Attended' });
+      }
+
+      // 4. Decrement remaining sessions
+      const packagesCopy = client.packages ? [...client.packages] : [];
+      const activePkgIdx = packagesCopy.findIndex((p: any) => p.status === 'Active');
+      const updateData: any = {};
+
+      if (activePkgIdx !== -1) {
+        const activePkg = packagesCopy[activePkgIdx];
+        if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+          packagesCopy[activePkgIdx] = {
+            ...activePkg,
+            sessionsRemaining: activePkg.sessionsRemaining - 1
+          };
+          updateData.packages = packagesCopy;
+        }
+      }
+
+      if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+        updateData.sessionsRemaining = client.sessionsRemaining - 1;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await db.collection('clients').doc(clientId).update(updateData);
+      }
+
+      // Log audit trail
+      await db.collection('auditLogs').add({
+        action: 'CREATE',
+        entityType: 'ATTENDANCE',
+        entityId: clientId,
+        details: `Attendance recorded via QR: ${client.name} at ${branch || 'MAIN'}`,
+        timestamp: new Date().toISOString(),
+        userId: 'qr-reader',
+        userName: 'QR Reader API'
+      });
+
+      return res.json({ success: true, message: `Check-in recorded for ${client.name}`, clientName: client.name });
+    } catch (err: any) {
+      console.error("[QR Checkin] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to process QR checkin" });
     }
   });
 

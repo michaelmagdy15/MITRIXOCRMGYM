@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useAppContext } from './context';
 import { useClients } from './hooks/useClients';
@@ -8,16 +8,128 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan, XCircle } from 'lucide-react';
+import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan, XCircle, Printer, Check, Calendar } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
+import { db } from './firebase';
+import { collection, query, onSnapshot } from 'firebase/firestore';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
-  const { currentUser, users, setActiveTab, setActiveClientId, branches } = useAppContext();
+  const { currentUser, users, setActiveTab, setActiveClientId, branches, ptPackageRecords } = useAppContext();
   const { clients } = useClients(currentUser);
   const { attendances, recordAttendance } = useAttendance(currentUser, clients);
   const { t, language, isRtl } = useLanguage();
+
+  const [classes, setClasses] = useState<any[]>([]);
+  useEffect(() => {
+    const q = query(collection(db, 'classes'));
+    const unsub = onSnapshot(q, (snap) => {
+      setClasses(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+    return () => unsub();
+  }, []);
+
+  const dailyRoster = useMemo(() => {
+    const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+    
+    // 1. Get check-ins for today
+    const todayCheckins = attendances.filter(a => {
+      if (!a.date) return false;
+      try {
+        const checkinCairoDate = new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+        return checkinCairoDate === cairoDateStr;
+      } catch {
+        return false;
+      }
+    });
+
+    // Map by clientId to see if they checked in
+    const checkinMap = new Map<string, typeof todayCheckins[0]>();
+    todayCheckins.forEach(c => {
+      checkinMap.set(c.clientId, c);
+    });
+
+    // 2. Sourced from classes
+    const classAttendees: any[] = [];
+    classes.forEach(cls => {
+      if (cls.date === cairoDateStr) {
+        const attendees = cls.attendees || [];
+        attendees.forEach((clientId: string) => {
+          const client = clients.find(c => c.id === clientId);
+          if (client) {
+            classAttendees.push({
+              clientId,
+              memberId: client.memberId || client.id.substring(0, 8),
+              name: client.name,
+              slot: `${cls.name} (${cls.time})`,
+              checkedIn: checkinMap.has(clientId),
+              checkinTime: checkinMap.get(clientId)?.date,
+              type: 'Class'
+            });
+          }
+        });
+      }
+    });
+
+    // 3. Sourced from private PT sessions
+    const ptAttendees: any[] = [];
+    ptPackageRecords.forEach(session => {
+      if (session.date === cairoDateStr && session.status !== 'Cancelled') {
+        const client = clients.find(c => c.id === session.clientId);
+        if (client) {
+          const isSessionAttended = session.status === 'Attended';
+          const hasCheckin = checkinMap.has(session.clientId) || isSessionAttended;
+          ptAttendees.push({
+            clientId: session.clientId,
+            memberId: client.memberId || client.id.substring(0, 8),
+            name: client.name,
+            slot: `PT Session (${session.time})`,
+            checkedIn: hasCheckin,
+            checkinTime: session.status === 'Attended' ? session.date : checkinMap.get(session.clientId)?.date,
+            type: 'PT'
+          });
+        }
+      }
+    });
+
+    // 4. Sourced from checkins not in classes/sessions (e.g. walk-ins)
+    const walkins: any[] = [];
+    todayCheckins.forEach(checkin => {
+      const alreadyIncluded = classAttendees.some(x => x.clientId === checkin.clientId) || 
+                              ptAttendees.some(x => x.clientId === checkin.clientId);
+      if (!alreadyIncluded) {
+        const client = clients.find(c => c.id === checkin.clientId);
+        if (client) {
+          walkins.push({
+            clientId: checkin.clientId,
+            memberId: client.memberId || client.id.substring(0, 8),
+            name: client.name,
+            slot: `Walk-in (${format(parseISO(checkin.date), 'h:mm a')})`,
+            checkedIn: true,
+            checkinTime: checkin.date,
+            type: 'Walk-in'
+          });
+        }
+      }
+    });
+
+    // Combine all list items and remove duplicates (prefer scheduled class/PT slot over walk-in)
+    const combined = [...classAttendees, ...ptAttendees, ...walkins];
+    const uniqueMap = new Map<string, any>();
+    combined.forEach(item => {
+      const existing = uniqueMap.get(item.clientId);
+      if (!existing) {
+        uniqueMap.set(item.clientId, item);
+      } else {
+        if (existing.type === 'Walk-in' && item.type !== 'Walk-in') {
+          uniqueMap.set(item.clientId, item);
+        }
+      }
+    });
+
+    return Array.from(uniqueMap.values());
+  }, [attendances, classes, ptPackageRecords, clients]);
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -605,6 +717,125 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           )}
         </div>
       )}
+      {/* Daily Attendance Roster Section (Hidden in Kiosk Mode) */}
+      {!isKiosk && (
+        <Card className="border-2 border-primary/10 shadow-lg no-print">
+          <CardHeader className="bg-primary/5 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-4">
+            <div>
+              <CardTitle className="text-lg flex items-center text-primary">
+                <Calendar className="me-2 h-5 w-5" />
+                Daily Attendance Roster
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Expected and checked-in members for today ({new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')})
+              </p>
+            </div>
+            <Button 
+              variant="outline"
+              className="flex items-center gap-1.5 font-bold shadow-sm"
+              onClick={() => window.print()}
+            >
+              <Printer className="h-4 w-4" />
+              Print Daily Roster
+            </Button>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead className="bg-muted/50 border-b">
+                  <tr>
+                    <th className="p-3 font-semibold text-muted-foreground">Member ID</th>
+                    <th className="p-3 font-semibold text-muted-foreground">Name</th>
+                    <th className="p-3 font-semibold text-muted-foreground">Time Slot / Class</th>
+                    <th className="p-3 font-semibold text-muted-foreground text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {dailyRoster.map((item) => (
+                    <tr key={item.clientId} className="hover:bg-muted/30 transition-colors">
+                      <td className="p-3 font-mono text-xs">#{item.memberId}</td>
+                      <td className="p-3 font-bold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('clients');
+                            setActiveClientId(item.clientId);
+                          }}
+                          className="hover:underline text-left"
+                        >
+                          {item.name}
+                        </button>
+                      </td>
+                      <td className="p-3 text-muted-foreground">{item.slot}</td>
+                      <td className="p-3 flex justify-center">
+                        {item.checkedIn ? (
+                          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20 font-bold flex items-center gap-1 px-2.5 py-0.5">
+                            <Check className="h-3.5 w-3.5 stroke-[3]" /> Checked-In
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground hover:bg-muted font-bold px-2.5 py-0.5">
+                            Scheduled
+                          </Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {dailyRoster.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-muted-foreground italic">
+                        No members scheduled or checked in for today.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Hidden print container, styled via CSS for A4 print */}
+      <div className="print-container hidden print:block">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #000', paddingBottom: '10px' }}>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>Daily Attendance Roster</h1>
+            <p style={{ margin: '5px 0 0 0', color: '#555' }}>
+              Gym Branch: {selectedBranch || 'MAIN'} | Date: {new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')}
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>STRIKE BOXING CLUB</h2>
+          </div>
+        </div>
+
+        <table className="print-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+          <thead>
+            <tr>
+              <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', backgroundColor: '#f2f2f2' }}>Member ID</th>
+              <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', backgroundColor: '#f2f2f2' }}>Member Name</th>
+              <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', backgroundColor: '#f2f2f2' }}>Scheduled Class / Time Slot</th>
+              <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', backgroundColor: '#f2f2f2', width: '200px' }}>Signature</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dailyRoster.map((item) => (
+              <tr key={item.clientId}>
+                <td style={{ border: '1px solid #000', padding: '10px', fontFamily: 'monospace' }}>#{item.memberId}</td>
+                <td style={{ border: '1px solid #000', padding: '10px', fontWeight: 'bold' }}>{item.name}</td>
+                <td style={{ border: '1px solid #000', padding: '10px' }}>{item.slot}</td>
+                <td style={{ border: '1px solid #000', padding: '10px', height: '45px' }}></td>
+              </tr>
+            ))}
+            {dailyRoster.length === 0 && (
+              <tr>
+                <td colSpan={4} style={{ border: '1px solid #000', padding: '20px', textAlign: 'center', fontStyle: 'italic' }}>
+                  No members scheduled or checked in for today.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

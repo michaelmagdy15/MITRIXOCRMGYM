@@ -338,4 +338,57 @@
     -ms-overflow-style: none !important;
     scrollbar-width: none !important;
   }
+
+  /* ── Print Styles ── */
+  @media print {
+    body {
+      background: white !important;
+      color: black !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      font-size: 12pt !important;
+    }
+    
+    header, nav, aside, footer, button, select, input, .no-print, [role="navigation"], .lucide, .fixed, .absolute:not(.print-container) {
+      display: none !important;
+    }
+
+    main {
+      padding: 0 !important;
+      margin: 0 !important;
+      overflow: visible !important;
+    }
+
+    .print-container {
+      display: block !important;
+      width: 100% !important;
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      background: white !important;
+      color: black !important;
+    }
+
+    .print-table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      margin-top: 20px !important;
+    }
+
+    .print-table th, .print-table td {
+      border: 1px solid #000 !important;
+      padding: 10px !important;
+      text-align: left !important;
+    }
+
+    .print-table th {
+      background-color: #f2f2f2 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    tr {
+      page-break-inside: avoid !important;
+    }
+  }
 }
