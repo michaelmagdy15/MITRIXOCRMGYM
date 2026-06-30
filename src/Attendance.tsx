@@ -795,46 +795,78 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       )}
 
       {/* Hidden print container, styled via CSS for A4 print */}
-      <div className="print-container hidden print:block">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #000', paddingBottom: '10px' }}>
+      <div className="print-container hidden print:block font-sans">
+        {/* Header Block */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '3px solid #18181b', paddingBottom: '16px', marginBottom: '24px' }}>
           <div>
-            <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: 0 }}>Daily Attendance Roster</h1>
-            <p style={{ margin: '5px 0 0 0', color: '#555' }}>
-              Gym Branch: {selectedBranch || 'MAIN'} | Date: {new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '12px', height: '24px', backgroundColor: '#ef4444', borderRadius: '2px' }}></div>
+              <h1 style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '0.025em', textTransform: 'uppercase', margin: 0, color: '#18181b' }}>Daily Attendance Roster</h1>
+            </div>
+            <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#71717a', fontWeight: '500' }}>
+              Gym Branch: <span style={{ color: '#18181b', fontWeight: '600' }}>{selectedBranch || 'MAIN'}</span> | Date: <span style={{ color: '#18181b', fontWeight: '600' }}>{new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')}</span>
             </p>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>STRIKE BOXING CLUB</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+            <img src="/strikelogo.png" alt="STRIKE Logo" style={{ height: '36px', width: 'auto', marginBottom: '2px', display: 'block' }} />
+            <p style={{ margin: 0, fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.05em' }}>Member Portal CRM</p>
           </div>
         </div>
 
-        <table className="print-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
+        {/* Stats Summary Panel */}
+        <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', padding: '12px 18px', backgroundColor: '#f4f4f5', borderRadius: '8px', border: '1px solid #e4e4e7' }}>
+          <div style={{ fontSize: '12px', color: '#71717a', fontWeight: '500' }}>
+            Total Scheduled: <span style={{ color: '#18181b', fontWeight: '700' }}>{dailyRoster.length}</span>
+          </div>
+          <div style={{ fontSize: '12px', color: '#71717a', fontWeight: '500' }}>
+            Checked In: <span style={{ color: '#10b981', fontWeight: '700' }}>{dailyRoster.filter(r => r.checkedIn).length}</span>
+          </div>
+          <div style={{ fontSize: '12px', color: '#71717a', fontWeight: '500' }}>
+            Pending: <span style={{ color: '#f59e0b', fontWeight: '700' }}>{dailyRoster.filter(r => !r.checkedIn).length}</span>
+          </div>
+        </div>
+
+        <table className="print-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', backgroundColor: '#f2f2f2' }}>Member ID</th>
-              <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', backgroundColor: '#f2f2f2' }}>Member Name</th>
-              <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', backgroundColor: '#f2f2f2' }}>Scheduled Class / Time Slot</th>
-              <th style={{ border: '1px solid #000', padding: '10px', textAlign: 'left', backgroundColor: '#f2f2f2', width: '200px' }}>Signature</th>
+              <th style={{ width: '15%', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em', fontWeight: '700' }}>Member ID</th>
+              <th style={{ width: '40%', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em', fontWeight: '700' }}>Member Name</th>
+              <th style={{ width: '25%', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em', fontWeight: '700' }}>Time Slot / Class</th>
+              <th style={{ width: '20%', textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em', fontWeight: '700' }}>Signature / Check-In</th>
             </tr>
           </thead>
           <tbody>
-            {dailyRoster.map((item) => (
-              <tr key={item.clientId}>
-                <td style={{ border: '1px solid #000', padding: '10px', fontFamily: 'monospace' }}>#{item.memberId}</td>
-                <td style={{ border: '1px solid #000', padding: '10px', fontWeight: 'bold' }}>{item.name}</td>
-                <td style={{ border: '1px solid #000', padding: '10px' }}>{item.slot}</td>
-                <td style={{ border: '1px solid #000', padding: '10px', height: '45px' }}></td>
+            {dailyRoster.map((item, idx) => (
+              <tr key={item.clientId} style={{ backgroundColor: idx % 2 === 1 ? '#fafafa' : '#ffffff' }}>
+                <td style={{ fontFamily: 'monospace', fontWeight: '600', fontSize: '12px', color: '#71717a' }}>#{item.memberId}</td>
+                <td style={{ fontWeight: '700', fontSize: '13px', color: '#18181b' }}>{item.name}</td>
+                <td style={{ fontSize: '13px', color: '#52525b' }}>{item.slot}</td>
+                <td style={{ padding: '8px 14px' }}>
+                  {item.checkedIn ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#059669', fontSize: '11px', fontWeight: '800', letterSpacing: '0.025em' }}>
+                      ✓ CHECKED-IN
+                    </div>
+                  ) : (
+                    <div style={{ borderBottom: '1px dashed #d4d4d8', width: '100%', height: '24px', margin: '4px 0' }}></div>
+                  )}
+                </td>
               </tr>
             ))}
             {dailyRoster.length === 0 && (
               <tr>
-                <td colSpan={4} style={{ border: '1px solid #000', padding: '20px', textAlign: 'center', fontStyle: 'italic' }}>
+                <td colSpan={4} style={{ padding: '32px', textAlign: 'center', fontStyle: 'italic', color: '#71717a' }}>
                   No members scheduled or checked in for today.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        
+        {/* Footer */}
+        <div style={{ marginTop: '40px', borderTop: '1px solid #e4e4e7', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#a1a1aa' }}>
+          <div>Generated on {new Date().toLocaleString(language === 'ar' ? 'ar-EG' : 'en-GB')}</div>
+          <div>STRIKE GYM CRM • Confidential</div>
+        </div>
       </div>
     </div>
   );

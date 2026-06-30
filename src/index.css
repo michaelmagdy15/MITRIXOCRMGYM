@@ -367,6 +367,7 @@
       left: 0 !important;
       background: white !important;
       color: black !important;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     }
 
     .print-table {
@@ -376,13 +377,14 @@
     }
 
     .print-table th, .print-table td {
-      border: 1px solid #000 !important;
-      padding: 10px !important;
+      border: 1px solid #e4e4e7 !important;
+      padding: 12px 14px !important;
       text-align: left !important;
     }
 
     .print-table th {
-      background-color: #f2f2f2 !important;
+      background-color: #18181b !important;
+      color: white !important;
       -webkit-print-color-adjust: exact !important;
       print-color-adjust: exact !important;
     }
