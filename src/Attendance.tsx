@@ -440,7 +440,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto px-1 sm:px-0">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 no-print">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{t('attendance.title')}</h2>
           <p className="text-muted-foreground">{t('attendance.subtitle')}</p>
@@ -468,7 +468,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 no-print">
         {/* Scanner Section */}
         <Card className="lg:col-span-7 overflow-hidden border-2 border-primary/10 shadow-lg">
           <CardHeader className="bg-primary/5 border-b">
