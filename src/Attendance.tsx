@@ -16,7 +16,7 @@ import { db } from './firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
-  const { currentUser, users, setActiveTab, setActiveClientId, branches, ptPackageRecords } = useAppContext();
+  const { currentUser, users, setActiveTab, setActiveClientId, branches, ptPackageRecords, branding } = useAppContext();
   const { clients } = useClients(currentUser);
   const { attendances, recordAttendance } = useAttendance(currentUser, clients);
   const { t, language, isRtl } = useLanguage();
@@ -808,7 +808,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <img src="/strikelogo.png" alt="STRIKE Logo" style={{ height: '36px', width: 'auto', marginBottom: '2px', display: 'block' }} />
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={branding.companyName || 'Logo'} style={{ height: '36px', width: 'auto', marginBottom: '2px', display: 'block' }} referrerPolicy="no-referrer" />
+            ) : (
+              <h2 style={{ fontSize: '18px', fontWeight: '900', letterSpacing: '0.05em', color: '#18181b', margin: 0 }}>
+                {branding.companyName || 'STRIKE BOXING CLUB'}
+              </h2>
+            )}
             <p style={{ margin: 0, fontSize: '10px', color: '#a1a1aa', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.05em' }}>Member Portal CRM</p>
           </div>
         </div>
@@ -865,7 +871,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         {/* Footer */}
         <div style={{ marginTop: '40px', borderTop: '1px solid #e4e4e7', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#a1a1aa' }}>
           <div>Generated on {new Date().toLocaleString(language === 'ar' ? 'ar-EG' : 'en-GB')}</div>
-          <div>STRIKE GYM CRM • Confidential</div>
+          <div>{branding.companyName || 'STRIKE'} GYM CRM • Confidential</div>
         </div>
       </div>
     </div>
