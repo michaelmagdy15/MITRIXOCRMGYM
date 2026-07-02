@@ -773,7 +773,12 @@ export default function Clients() {
     return isAfter(dobThisYear, subDays(now, 1)) && isBefore(dobThisYear, addDays(now, 7));
   });
 
-  const getFilteredMembers = () => {
+  // ⚡ Bolt Performance Optimization:
+  // Wrapped getFilteredMembers logic in a useMemo hook to prevent expensive
+  // O(n) filtering and sorting on large member arrays during unrelated re-renders.
+  // Impact: significantly improves UI responsiveness when components interact
+  // (e.g. typing in inputs elsewhere on the page).
+  const filteredMembers = React.useMemo(() => {
     let base = [];
     switch (deferredActiveTab) {
       case 'active': base = [...activeMembers, ...nearlyExpired]; break;
@@ -853,9 +858,22 @@ export default function Clients() {
     });
 
     return filtered;
-  };
+  }, [
+    deferredActiveTab,
+    activeMembers,
+    nearlyExpired,
+    onHold,
+    expired,
+    deferredSearchTerm,
+    deferredFilterBranch,
+    deferredFilterRep,
+    users,
+    deferredFilterDiscount,
+    deferredFilterGender,
+    deferredFilterCategory,
+    deferredSortBy
+  ]);
 
-  const filteredMembers = getFilteredMembers();
   const totalPages = Math.ceil(filteredMembers.length / itemsPerPage);
   const paginatedMembers = filteredMembers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 

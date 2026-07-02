@@ -223,7 +223,12 @@ export default function Leads() {
     return Math.max(0, score);
   };
   
-  const getFilteredLeads = () => {
+  // ⚡ Bolt Performance Optimization:
+  // Converted getFilteredLeads logic into a useMemo hook (now computing 'leads' directly).
+  // This avoids re-running O(n) filtering and sorting on the leads array every render,
+  // greatly enhancing performance and responsiveness when typing search queries or
+  // navigating other parts of the component.
+  const leads = React.useMemo(() => {
     let filtered = [...allLeads];
     
     // Tab filtering
@@ -277,9 +282,17 @@ export default function Leads() {
     }
 
     return filtered;
-  };
+  }, [
+    allLeads,
+    deferredActiveTab,
+    deferredSearchTerm,
+    deferredFilterBranch,
+    deferredFilterStage,
+    deferredFilterInterest,
+    deferredFilterAssignedTo,
+    deferredSortBy
+  ]);
 
-  const leads = getFilteredLeads();
   const totalPages = Math.ceil(leads.length / itemsPerPage);
   const paginatedLeads = leads.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
