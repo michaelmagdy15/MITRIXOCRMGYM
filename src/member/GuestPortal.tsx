@@ -149,6 +149,33 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   // Slide index state for slideshow
   const [slideIndex, setSlideIndex] = useState(0);
 
+  // Whitelabel dynamic configurations
+  const activeSlides = React.useMemo(() => {
+    const slides = (storefrontConfig?.heroSlides || []).filter(s => s.enabled !== false);
+    if (slides.length > 0) return slides;
+    return [
+      { id: 'default-1', title: 'Elite Fitness & Training', subtitle: 'Timings available now', badgeText: 'Featured', badgeColor: 'white', imageUrl: '', ctaText: 'Book Now!', enabled: true, order: 0 },
+      { id: 'default-2', title: 'Kids & Juniors Programs', subtitle: 'Specialized youth fitness and coaching', badgeText: 'Popular', badgeColor: 'primary', imageUrl: '', ctaText: 'Book Now!', enabled: true, order: 1 },
+      { id: 'default-3', title: 'Personal Coaching', subtitle: 'Certified personal trainers', badgeText: 'New', badgeColor: 'red', imageUrl: '', ctaText: 'Book Now!', enabled: true, order: 2 },
+    ];
+  }, [storefrontConfig?.heroSlides]);
+
+  const bannerSection = React.useMemo(() => {
+    return (storefrontConfig?.sections || []).find(s => s.type === 'banner');
+  }, [storefrontConfig?.sections]);
+
+  const getSlideImage = (slideId: string, customUrl?: string, index: number) => {
+    if (customUrl) return customUrl;
+    if (index === 0) return isStrike ? "/strike_slide_outdoor.png" : "/mitrixogymcrm_sessions_slide.png";
+    if (index === 1) return isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png";
+    return isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png";
+  };
+
+  const getBannerImage = () => {
+    if (bannerSection?.imageUrl) return bannerSection.imageUrl;
+    return isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png";
+  };
+
   // Refs for scrolling to sections
   const kidsSectionRef = useRef<HTMLDivElement>(null);
   const adultSectionRef = useRef<HTMLDivElement>(null);
@@ -206,12 +233,12 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
   // Slideshow auto-advance
   useEffect(() => {
-    if (activeTab !== 'book') return;
+    if (activeTab !== 'book' || activeSlides.length === 0) return;
     const interval = setInterval(() => {
-      setSlideIndex((prev) => (prev + 1) % 3);
+      setSlideIndex((prev) => (prev + 1) % activeSlides.length);
     }, 4000);
     return () => clearInterval(interval);
-  }, [activeTab]);
+  }, [activeTab, activeSlides.length]);
 
   // ─── Show ALL packages from the database, grouped by category ───
   const primaryBranch = branches[0] || 'Main Branch';
@@ -447,35 +474,34 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               <div className="relative h-52 rounded-3xl overflow-hidden shadow-xl border">
                 <div className="absolute inset-0 bg-gradient-to-tr from-black/95 via-black/40 to-transparent z-10" />
                 <img 
-                  src={isStrike ? "/strike_slide_outdoor.png" : "/mitrixogymcrm_sessions_slide.png"} 
+                  src={getSlideImage(activeSlides[slideIndex]?.id, activeSlides[slideIndex]?.imageUrl, slideIndex)} 
                   alt="mitrixogymcrm Sessions" 
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 ease-out scale-105"
                 />
                 
                 <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
-                  {slideIndex === 0 && (
-                    <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">
-                      <Badge className="mb-2 bg-white text-black hover:bg-zinc-200">Featured</Badge>
-                      <h3 className="text-white font-black text-xl leading-tight uppercase">Elite Fitness & Training</h3>
-                      <p className="text-white/70 text-xs mt-1 mb-3">{primaryBranch} • Timings available now</p>
-                    </div>
-                  )}
-                  {slideIndex === 1 && (
-                    <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">
-                      <Badge className="mb-2 bg-primary text-primary-foreground">Popular</Badge>
-                      <h3 className="text-white font-black text-xl leading-tight uppercase">Kids & Juniors Programs</h3>
-                      <p className="text-white/70 text-xs mt-1 mb-3">Specialized youth fitness and coaching</p>
-                    </div>
-                  )}
-                  {slideIndex === 2 && (
-                    <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">
-                      <Badge className="mb-2 bg-rose-600 text-white">New</Badge>
-                      <h3 className="text-white font-black text-xl leading-tight uppercase">Personal Coaching</h3>
-                      <p className="text-white/70 text-xs mt-1 mb-3">Certified personal trainers at {branding.companyName}</p>
-                    </div>
-                  )}
+                  {activeSlides.map((slide, idx) => {
+                    if (idx !== slideIndex) return null;
+                    return (
+                      <div key={slide.id} className="animate-in fade-in slide-in-from-bottom-3 duration-500">
+                        <Badge 
+                          className="mb-2" 
+                          style={{
+                            backgroundColor: slide.badgeColor === 'primary' ? 'var(--brand-accent)' : slide.badgeColor || 'white',
+                            color: slide.badgeColor === 'primary' ? 'white' : 'black'
+                          }}
+                        >
+                          {slide.badgeText || 'Featured'}
+                        </Badge>
+                        <h3 className="text-white font-black text-xl leading-tight uppercase">{slide.title}</h3>
+                        <p className="text-white/70 text-xs mt-1 mb-3">
+                          {slide.subtitle || `${primaryBranch} • Timings available now`}
+                        </p>
+                      </div>
+                    );
+                  })}
                   <Button size="sm" className="w-full font-bold h-10 rounded-xl bg-white text-black hover:bg-zinc-200" onClick={() => scrollToSection(kidsSectionRef)}>
-                    Book Now!
+                    {activeSlides[slideIndex]?.ctaText || 'Book Now!'}
                   </Button>
                 </div>
               </div>
@@ -564,13 +590,15 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               <div className="rounded-3xl overflow-hidden relative shadow-xl border">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10" />
                 <img 
-                  src={isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png"} 
-                  alt="IMPACT Sister Company" 
+                  src={getBannerImage()} 
+                  alt={bannerSection?.title || "IMPACT Sister Company"} 
                   className="w-full h-56 object-cover"
                 />
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-end p-6 text-center">
-                  <h2 className="text-3xl font-black tracking-tighter text-white uppercase">IMPACT</h2>
-                  <p className="text-white/80 text-[11px] mb-4 max-w-[240px] leading-relaxed">Our premium sister company focusing on functional conditioning, adult fitness, and high intensity classes.</p>
+                  <h2 className="text-3xl font-black tracking-tighter text-white uppercase">{bannerSection?.title || "IMPACT"}</h2>
+                  <p className="text-white/80 text-[11px] mb-4 max-w-[240px] leading-relaxed">
+                    {bannerSection?.subtitle || "Our premium sister company focusing on functional conditioning, adult fitness, and high intensity classes."}
+                  </p>
                   <Button 
                     variant="outline" 
                     className="bg-white text-black border-none hover:bg-zinc-200 transition-colors rounded-xl font-bold text-xs h-10 px-8 w-full"

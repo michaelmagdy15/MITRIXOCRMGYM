@@ -15,7 +15,7 @@ import NetInfo from '@react-native-community/netinfo';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { Camera } from 'expo-camera';
+import { requestCameraPermissionsAsync } from 'expo-camera';
 
 let config = {
   PRODUCTION_URL: 'https://strike.mitrixo.com/',
@@ -64,7 +64,7 @@ export default function App() {
 
     // Request camera permissions for QR code check-in scanner
     (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
+      const { status } = await requestCameraPermissionsAsync();
       if (status !== 'granted') {
         console.log('[Camera] Camera permission not granted');
       }
@@ -173,7 +173,7 @@ export default function App() {
 
   return (
     <View style={styles.safeArea}>
-      <StatusBar style="dark" backgroundColor="#fff" />
+      <StatusBar style="light" backgroundColor="#000000" />
       <View style={styles.container}>
         <WebView
           key={key}
@@ -181,6 +181,14 @@ export default function App() {
           source={{ uri: PRODUCTION_URL }}
           style={styles.webview}
           cacheMode="LOAD_CACHE_ELSE_NETWORK"
+          
+          // Native performance and UX enhancements
+          bounces={false}
+          decelerationRate="normal"
+          overScrollMode="never"
+          showsVerticalScrollIndicator={false}
+          showsHorizontalScrollIndicator={false}
+          scalesPageToFit={false}
           
           // Technical WebView configurations
           javaScriptEnabled={true}
@@ -277,15 +285,15 @@ async function registerForPushNotificationsAsync() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#000000',
   },
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#000000',
   },
   webview: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#000000',
   },
 
   offlineContainer: {
@@ -355,6 +363,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#000000',
   },
 });
