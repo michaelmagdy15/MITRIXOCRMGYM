@@ -262,7 +262,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       <div className="absolute top-[5%] right-[-20%] w-[320px] h-[320px] rounded-full bg-primary/10 dark:bg-primary/20 blur-[100px] pointer-events-none z-0" />
       <div className="absolute bottom-[15%] left-[-20%] w-[320px] h-[320px] rounded-full bg-orange-500/10 dark:bg-orange-500/15 blur-[100px] pointer-events-none z-0" />
 
-      <header className="border-b bg-card/60 backdrop-blur-xl h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
+      <header className="border-b bg-card h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div 
             className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity"

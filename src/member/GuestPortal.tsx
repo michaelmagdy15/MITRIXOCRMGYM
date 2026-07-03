@@ -338,7 +338,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       )}
 
       {/* ── HEADER ── */}
-      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b px-4 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-background border-b px-4 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between">
         <div 
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => setActiveTab('book')}

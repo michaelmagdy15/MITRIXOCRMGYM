@@ -378,15 +378,7 @@ export default function SubscriptionCheckout() {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleLanguage}
-            className="h-8 px-2.5 text-xs font-bold flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/40 hover:bg-muted text-foreground"
-          >
-            <span>🌐</span>
-            <span>{language === 'en' ? t('arabicBtn') : t('englishBtn')}</span>
-          </Button>
+
           <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 rounded-lg" title="Toggle Theme">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>

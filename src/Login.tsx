@@ -477,18 +477,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   // ── Main login view ──
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 md:p-12 font-sans relative overflow-y-auto">
-      {/* Language toggle — top-right corner */}
-      <div className="absolute top-4 right-4 z-10">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={toggleLanguage}
-          className="h-9 px-3 text-xs font-bold flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted/30 hover:bg-muted text-foreground backdrop-blur-sm"
-        >
-          <Globe className="h-3.5 w-3.5" />
-          <span>{language === 'en' ? 'العربية' : 'English'}</span>
-        </Button>
-      </div>
+
       <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* Logo */}
         <Logo />

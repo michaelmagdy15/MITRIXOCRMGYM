@@ -231,16 +231,7 @@ function AppContent() {
               <p className="text-xs font-bold text-foreground">{currentUser.name}</p>
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{currentUser.role}</p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={toggleLanguage}
-              className="h-8 px-2.5 text-xs font-bold flex items-center gap-1.5 rounded-lg border border-border/80 bg-muted/40 hover:bg-muted text-foreground"
-            >
-              <span>🌐</span>
-              <span className="hidden sm:inline">{language === 'en' ? 'العربية' : 'English'}</span>
-              <span className="sm:hidden">{language === 'en' ? 'AR' : 'EN'}</span>
-            </Button>
+
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8" title={t('common.toggle_theme')}>
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
@@ -892,10 +883,7 @@ function AppContent() {
               </div>
             </div>
             <div className="flex flex-col gap-2 pt-2 border-t mt-2">
-              <Button variant="outline" size="sm" onClick={toggleLanguage} className="w-full gap-2 h-9">
-                <span>🌐</span>
-                <span>{language === 'en' ? 'العربية' : 'English'}</span>
-              </Button>
+
               <div className="flex items-center justify-between">
                 <Button variant="outline" size="sm" onClick={toggleTheme} className="flex-1 me-2 gap-2 h-9">
                   {theme === 'dark' ? (
@@ -998,17 +986,7 @@ function AppContent() {
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-4 ms-auto">
-              {/* Language Toggle Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleLanguage}
-                className="h-8 px-2.5 text-xs font-bold flex items-center gap-1.5 rounded-lg border border-border bg-muted/40 hover:bg-muted text-foreground"
-              >
-                <span>🌐</span>
-                <span className="hidden sm:inline">{language === 'en' ? 'العربية' : 'English'}</span>
-                <span className="sm:hidden">{language === 'en' ? 'AR' : 'EN'}</span>
-              </Button>
+
 
               {/* Search trigger on mobile */}
               <div className="md:hidden">
