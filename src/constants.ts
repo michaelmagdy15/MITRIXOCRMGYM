@@ -10,7 +10,7 @@ export const PACKAGES = [
 ];
 
 export const SALES_MEMBERS = [
-  'Atef mitrixogymcrm',
+  'Atef Strike',
   'Youssef Emad',
   'Hassan Tarek',
   'Maison Mohamed',
@@ -30,10 +30,12 @@ export const ASSIGNABLE_ROLES = [
 ];
 
 export const SALES_NAME_MAPPING: Record<string, string> = {
-  // ---- Atef mitrixogymcrm ----
-  'Atef': 'Atef mitrixogymcrm',
-  'Atef mitrixogymcrm': 'Atef mitrixogymcrm',
-  'atefmitrixogymcrm': 'Atef mitrixogymcrm',
+  // ---- Atef Strike ----
+  'Atef': 'Atef Strike',
+  'Atef mitrixogymcrm': 'Atef Strike',
+  'atefmitrixogymcrm': 'Atef Strike',
+  'Atef Strike': 'Atef Strike',
+  'atef strike': 'Atef Strike',
 
   // ---- Youssef Emad (EL GOO) ----
   'EL GOO': 'Youssef Emad',

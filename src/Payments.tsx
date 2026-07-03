@@ -1431,10 +1431,10 @@ export default function Payments() {
                   paginatedPayments.map(payment => {
                     const client = clients.find(c => c.id === payment.clientId);
                     const recordedByUser = users.find(u => u.id === payment.recordedBy);
-                    // Fallback: use stored name, then default to Atef mitrixogymcrm for imported/unknown records
+                    // Fallback: use stored name, then default to Atef Strike for imported/unknown records
                     const recordedByLabel = recordedByUser?.name
                       || (payment as any).recordedByName
-                      || (users.find(u => u.name?.toLowerCase().includes('atef') && u.name?.toLowerCase().includes('mitrixogymcrm'))?.name ?? 'Atef mitrixogymcrm');
+                      || (users.find(u => u.name?.toLowerCase().includes('atef'))?.name ?? 'Atef Strike');
                     return (
                       <TableRow key={payment.id}>
                         <TableCell className="text-xs sm:text-sm">

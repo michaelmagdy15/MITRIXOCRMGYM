@@ -164,7 +164,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
     return (storefrontConfig?.sections || []).find(s => s.type === 'banner');
   }, [storefrontConfig?.sections]);
 
-  const getSlideImage = (slideId: string, customUrl?: string, index: number) => {
+  const getSlideImage = (slideId: string | undefined, customUrl: string | undefined, index: number) => {
     if (customUrl) return customUrl;
     if (index === 0) return isStrike ? "/strike_slide_outdoor.png" : "/mitrixogymcrm_sessions_slide.png";
     if (index === 1) return isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png";
