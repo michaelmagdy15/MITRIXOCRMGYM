@@ -18,7 +18,7 @@ import Constants from 'expo-constants';
 import { requestCameraPermissionsAsync } from 'expo-camera';
 
 let config = {
-  PRODUCTION_URL: 'https://strike.mitrixo.com/',
+  PRODUCTION_URL: 'https://strike-egy.com/',
   APP_NAME: 'STRIKE'
 };
 try {
