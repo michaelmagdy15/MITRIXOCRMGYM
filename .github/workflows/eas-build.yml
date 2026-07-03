@@ -15,12 +15,22 @@ on:
       profile:
         description: 'EAS build profile (configured in eas.json)'
         required: true
-        default: 'production'
+        default: 'production-strike'
         type: choice
         options:
+          - production-strike
+          - production-strikeboxing
           - production
           - preview
           - development
+      runner:
+        description: 'Where to run the build (Expo Cloud or Local macOS runner)'
+        required: true
+        default: 'eas-cloud'
+        type: choice
+        options:
+          - eas-cloud
+          - local
       submit:
         description: 'Automatically submit to App Store / Google Play'
         required: true
@@ -58,7 +68,7 @@ jobs:
           cd mobile
           npm ci
 
-      - name: Run EAS Local Build
+      - name: Run EAS Build
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
@@ -66,12 +76,23 @@ jobs:
           
           PLATFORM="${{ github.event.inputs.platform }}"
           PROFILE="${{ github.event.inputs.profile }}"
+          RUNNER="${{ github.event.inputs.runner }}"
+          SUBMIT="${{ github.event.inputs.submit }}"
           
-          echo "Building platform: $PLATFORM with profile: $PROFILE"
-          eas build --platform "$PLATFORM" --local --profile "$PROFILE" --non-interactive
+          echo "Building platform: $PLATFORM with profile: $PROFILE on runner: $RUNNER"
+          
+          if [ "$RUNNER" = "local" ]; then
+            eas build --platform "$PLATFORM" --local --profile "$PROFILE" --non-interactive
+          else
+            if [ "$SUBMIT" = "true" ]; then
+              eas build --platform "$PLATFORM" --profile "$PROFILE" --auto-submit --non-interactive
+            else
+              eas build --platform "$PLATFORM" --profile "$PROFILE" --non-interactive
+            fi
+          fi
 
-      - name: Submit to App Store / Google Play
-        if: ${{ github.event.inputs.submit == 'true' }}
+      - name: Submit Local Build to App Store / Google Play
+        if: ${{ github.event.inputs.submit == 'true' && github.event.inputs.runner == 'local' }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
