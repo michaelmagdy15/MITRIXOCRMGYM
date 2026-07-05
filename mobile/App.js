@@ -17,25 +17,16 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { requestCameraPermissionsAsync } from 'expo-camera';
 
-let config = {
-  PRODUCTION_URL: 'https://strike-egy.com/',
-  APP_NAME: 'STRIKE'
-};
-try {
-  config = require('./config.json');
-} catch (e) {
-  // Use default fallback configurations
-}
+// ─── Configuration ─────────────────────────────────────────────
+// Single source of truth: app.config.js reads env vars at build time
+// and passes them through Constants.expoConfig.extra.
+// Fallback chain: EAS env → config.json (white-label) → hardcoded default
+const PRODUCTION_URL =
+  Constants?.expoConfig?.extra?.PRODUCTION_URL || 'https://strike-egy.com/';
+const APP_NAME =
+  Constants?.expoConfig?.extra?.APP_NAME || 'STRIKE';
 
-// EAS build environment variables take priority over config.json
-// Each gym gets its own EAS build profile with these env vars set
-const PRODUCTION_URL = Constants?.expoConfig?.extra?.PRODUCTION_URL 
-  || process.env.PRODUCTION_URL 
-  || config.PRODUCTION_URL;
-const APP_NAME = Constants?.expoConfig?.extra?.APP_NAME 
-  || process.env.APP_NAME 
-  || config.APP_NAME;
-
+// ─── Notification Handler ──────────────────────────────────────
 // Configure notification behavior for when the app is in the foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -45,16 +36,60 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export default function App() {
+// ─── Error Boundary ────────────────────────────────────────────
+// Catches render errors and provides a recovery UI instead of white-screen
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[ErrorBoundary] Uncaught error:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaView style={styles.safeArea}>
+          <StatusBar style="light" backgroundColor="#0a0a0a" />
+          <View style={styles.offlineContainer}>
+            <View style={styles.offlineIconContainer}>
+              <Text style={styles.offlineIcon}>⚠️</Text>
+            </View>
+            <Text style={styles.offlineTitle}>Something went wrong</Text>
+            <Text style={styles.offlineMessage}>
+              The app encountered an unexpected error. Please restart to continue.
+            </Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => this.setState({ hasError: false, error: null })}
+            >
+              <Text style={styles.retryButtonText}>Restart App</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Main App ──────────────────────────────────────────────────
+function MainApp() {
   const webViewRef = useRef(null);
   const [isConnected, setIsConnected] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [key, setKey] = useState(0); // For reloading WebView
+  const [key, setKey] = useState(0);
   const [expoPushToken, setExpoPushToken] = useState('');
   const [hasLoadedSuccessfully, setHasLoadedSuccessfully] = useState(false);
 
-  // 1. Get Push Notification & Camera Permissions and Token
+  // 1. Push Notification Registration (camera is requested on-demand via bridge)
   useEffect(() => {
     registerForPushNotificationsAsync().then((token) => {
       if (token) {
@@ -62,25 +97,27 @@ export default function App() {
       }
     });
 
-    // Request camera permissions for QR code check-in scanner
-    (async () => {
-      const { status } = await requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        console.log('[Camera] Camera permission not granted');
-      }
-    })();
-
     // Listener for when a notification is received while app is running
-    const notificationListener = Notifications.addNotificationReceivedListener((notification) => {
-      console.log('Notification received:', notification);
-    });
+    const notificationListener = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        console.log('[Notification] Received:', notification.request.content.title);
+      }
+    );
 
-    // Listener for when a user taps/interacts with a notification
-    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log('Notification response:', response);
-      // You can inject JavaScript here to navigate to a specific tab on click if needed:
-      // webViewRef.current?.injectJavaScript(`window.handleNotificationClick(${JSON.stringify(response)});`);
-    });
+    // Listener for when a user taps/interacts with a notification — deep link into CRM
+    const responseListener = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response.notification.request.content.data;
+        console.log('[Notification] Tapped:', data);
+
+        // Deep link: if the push payload includes a url, navigate the WebView there
+        if (data?.url && webViewRef.current) {
+          webViewRef.current.injectJavaScript(
+            `window.location.href = ${JSON.stringify(String(data.url))};`
+          );
+        }
+      }
+    );
 
     return () => {
       Notifications.removeNotificationSubscription(notificationListener);
@@ -96,7 +133,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 3. Monitor Android hardware back button
+  // 3. Android hardware back button
   useEffect(() => {
     const backAction = () => {
       if (canGoBack && webViewRef.current) {
@@ -114,19 +151,22 @@ export default function App() {
     return () => backHandler.remove();
   }, [canGoBack]);
 
-  // 4. Inject push token dynamically when it changes
+  // 4. Re-inject push token when it changes
   useEffect(() => {
     if (expoPushToken && webViewRef.current) {
+      const safeToken = JSON.stringify(expoPushToken);
       const injectScript = `
-        window.expoPushToken = "${expoPushToken}";
+        window.expoPushToken = ${safeToken};
         if (window.dispatchEvent) {
-          window.dispatchEvent(new CustomEvent('expoPushTokenLoaded', { detail: "${expoPushToken}" }));
+          window.dispatchEvent(new CustomEvent('expoPushTokenLoaded', { detail: ${safeToken} }));
         }
+        true;
       `;
       webViewRef.current.injectJavaScript(injectScript);
     }
   }, [expoPushToken]);
 
+  // ─── Handlers ──────────────────────────────────────────
   const handleRetry = () => {
     NetInfo.fetch().then((state) => {
       setIsConnected(state.isConnected !== false);
@@ -134,18 +174,70 @@ export default function App() {
     });
   };
 
+  /**
+   * Native Bridge: handles messages FROM the web CRM via
+   * window.ReactNativeWebView.postMessage(JSON.stringify({ type, payload }))
+   *
+   * This is how CRM dashboard actions trigger native features.
+   */
+  const handleWebViewMessage = (event) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
 
+      switch (message.type) {
+        case 'REQUEST_CAMERA':
+          // On-demand camera permission (Apple compliance: only ask when contextually relevant)
+          (async () => {
+            const { status } = await requestCameraPermissionsAsync();
+            // Notify the web app of the result
+            webViewRef.current?.injectJavaScript(
+              `window.dispatchEvent(new CustomEvent('nativeCameraPermission', { detail: ${JSON.stringify(status)} })); true;`
+            );
+          })();
+          break;
 
-  // Script to inject into the WebView to make the push token globally accessible in your web app
+        case 'NAVIGATE':
+          // Navigate WebView to a specific URL
+          if (message.payload?.url) {
+            webViewRef.current?.injectJavaScript(
+              `window.location.href = ${JSON.stringify(String(message.payload.url))}; true;`
+            );
+          }
+          break;
+
+        case 'REFRESH':
+          // Force full WebView reload (e.g., after major CRM data changes)
+          setKey((prev) => prev + 1);
+          break;
+
+        case 'HAPTIC':
+          // Future: trigger native haptic feedback
+          break;
+
+        case 'LOG':
+          console.log('[WebView]', message.payload);
+          break;
+
+        default:
+          console.log('[Bridge] Unknown message type:', message.type);
+      }
+    } catch (e) {
+      // Non-JSON messages are ignored (e.g., third-party scripts)
+      console.warn('[Bridge] Invalid message:', e.message);
+    }
+  };
+
+  // Script injected before first paint — makes push token globally accessible
   const runBeforeFirstPaint = `
-    window.expoPushToken = "${expoPushToken}";
+    window.expoPushToken = ${JSON.stringify(expoPushToken)};
     true;
   `;
 
+  // ─── Offline Full Screen ──────────────────────────────
   if (!isConnected && !hasLoadedSuccessfully) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar style="dark" backgroundColor="#fff" />
+        <StatusBar style="dark" backgroundColor="#FFFFFF" />
         <View style={styles.offlineContainer}>
           <View style={styles.offlineIconContainer}>
             <Text style={styles.offlineIcon}>⚡</Text>
@@ -162,6 +254,7 @@ export default function App() {
     );
   }
 
+  // ─── Offline Banner ──────────────────────────────────
   const renderOfflineBanner = () => {
     if (isConnected) return null;
     return (
@@ -171,9 +264,10 @@ export default function App() {
     );
   };
 
+  // ─── Main Render ─────────────────────────────────────
   return (
-    <View style={styles.safeArea}>
-      <StatusBar style="light" backgroundColor="#000000" />
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" backgroundColor="#FFFFFF" />
       <View style={styles.container}>
         <WebView
           key={key}
@@ -181,47 +275,53 @@ export default function App() {
           source={{ uri: PRODUCTION_URL }}
           style={styles.webview}
           cacheMode="LOAD_CACHE_ELSE_NETWORK"
-          
+
           // Native performance and UX enhancements
           bounces={false}
           decelerationRate="normal"
           overScrollMode="never"
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
-          scalesPageToFit={false}
-          
+          // Note: scalesPageToFit removed — deprecated and no-op in modern RN WebView.
+          // Control scaling via <meta name="viewport"> in your web app instead.
+
           // Technical WebView configurations
           javaScriptEnabled={true}
           domStorageEnabled={true}
           allowsInlineMediaPlayback={true}
           mediaPlaybackRequiresUserAction={false}
-          originWhitelist={['*']}
-          
+
+          // Security: only allow HTTPS origins (blocks file://, data://, javascript:// schemes)
+          originWhitelist={['https://*']}
+
           // Native gestures for iOS (swipe from edge to navigate back/forward)
           allowsBackForwardNavigationGestures={true}
-          
+
           // Camera access configuration for iOS WebView
           mediaCapturePermissionGrantType="grant"
-          
+
           // Custom User-Agent suffix for Guideline 4.8 Apple Sign-In compliance
           applicationNameForUserAgent="mitrixogymcrmCRM-Mobile"
-          
+
           // Handle load errors
           onError={() => {
             if (!hasLoadedSuccessfully) {
               setIsConnected(false);
             }
           }}
-          
+
           // Inject the push token so the web client can read it
           injectedJavaScriptBeforeContentLoaded={runBeforeFirstPaint}
-          
+
+          // ─── Native Bridge: receive messages from the web CRM ───
+          onMessage={handleWebViewMessage}
+
           // Navigation State Monitor
           onNavigationStateChange={(navState) => {
             setCanGoBack(navState.canGoBack);
             setIsLoading(navState.loading);
           }}
-          
+
           onLoadStart={() => setIsLoading(true)}
           onLoadEnd={() => setIsLoading(false)}
           onLoad={() => {
@@ -236,11 +336,20 @@ export default function App() {
         )}
         {renderOfflineBanner()}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
-// Function to request permission and fetch the device's push token
+// ─── Root Export with Error Boundary ──────────────────────────
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <MainApp />
+    </ErrorBoundary>
+  );
+}
+
+// ─── Push Token Registration ─────────────────────────────────
 async function registerForPushNotificationsAsync() {
   let token;
 
@@ -256,14 +365,14 @@ async function registerForPushNotificationsAsync() {
   if (Device.isDevice) {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
-    
+
     if (existingStatus !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
-    
+
     if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notification!');
+      console.log('[Push] Permission not granted for push notifications');
       return '';
     }
 
@@ -271,29 +380,30 @@ async function registerForPushNotificationsAsync() {
       // Get the Expo Push Token using the project ID
       const projectId = Constants?.expoConfig?.extra?.eas?.projectId;
       token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      console.log('Generated Push Token:', token);
+      console.log('[Push] Token:', token);
     } catch (error) {
-      console.log('Error fetching Expo push token:', error);
+      console.log('[Push] Error fetching token:', error);
     }
   } else {
-    console.log('Must use physical device for Push Notifications');
+    console.log('[Push] Must use physical device for Push Notifications');
   }
 
   return token;
 }
 
+// ─── Styles ──────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#FFFFFF',
   },
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#FFFFFF',
   },
   webview: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#FFFFFF',
   },
 
   offlineContainer: {
@@ -363,6 +473,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000000',
+    backgroundColor: '#FFFFFF',
   },
 });

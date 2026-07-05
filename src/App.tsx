@@ -177,6 +177,14 @@ function AppContent() {
     return () => window.removeEventListener('expoPushTokenLoaded', handlePushTokenLoaded);
   }, [currentUser?.id]);
 
+  // 3. Expose native bridge globally so any component/service can call sendToNative()
+  React.useEffect(() => {
+    import('./utils/nativeBridge').then(({ sendToNative, isRunningInNativeApp }) => {
+      (window as any).__sendToNative = sendToNative;
+      (window as any).__isNativeApp = isRunningInNativeApp();
+    });
+  }, []);
+
   const handlePinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Allow entry if no PIN is configured OR the entered PIN matches
