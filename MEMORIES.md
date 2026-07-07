@@ -1,7 +1,7 @@
 # STRIKE CRM & Mobile App - Session Memory Log
 **Version:** 1.1.0  
 **Build Number:** 11  
-**Last Updated:** June 28, 2026
+**Last Updated:** July 7, 2026
 
 ---
 
@@ -44,6 +44,13 @@
 ## 7. Premium Offline Capabilities
 * **Offline Pill Banner:** Redesigned `OfflineBanner.tsx` with a premium glassmorphic top floating pill design, Lucide icons (`Wifi`, `WifiOff`), and slide-in animations.
 * **Global App Integration:** Rendered `<OfflineBanner />` globally in `App.tsx` to notify users dynamically when they lose or regain connectivity.
+
+---
+
+## 8. WebView Cache-Busting (App Store Fix without App Update)
+* **Aggressive WebView Caching Issue:** Resolved the issue where the App Store app loaded empty states ("Packages Coming Soon" and 0 sessions) by caching an old copy of `index.html` (e.g. from local developer testing or old database routes) that connected to the wrong or empty fallback database.
+* **Inline Cache-Buster Script:** Injected a lightweight inline script inside the `<head>` of [index.html](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/index.html) that detects the mobile app WebView (via custom User-Agent `mitrixogymcrmCRM-Mobile`) and automatically redirects to `?cb=<timestamp>` if the cache-buster is missing.
+* **No App Store Release Required:** This is a purely web-side fix. Staged and committed changes locally. Once pushed and deployed to Google Cloud Run, it will instantly force existing App Store app installations to bypass cache and load the latest configuration.
 
 ---
 
