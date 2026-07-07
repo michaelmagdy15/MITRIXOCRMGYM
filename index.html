@@ -25,6 +25,22 @@
 
     <title>mitrixogymcrm</title>
     <!-- FIREBASE_CONFIG_PLACEHOLDER -->
+    <script type="text/javascript">
+      // Force cache-busting on mobile WebViews to bypass stale cache
+      (function() {
+        var isWebView = /mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent);
+        if (isWebView && window.location.search.indexOf('cb=') === -1) {
+          var separator = window.location.search ? '&' : '?';
+          window.location.replace(
+            window.location.origin + 
+            window.location.pathname + 
+            window.location.search + 
+            separator + 
+            'cb=' + Date.now()
+          );
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
