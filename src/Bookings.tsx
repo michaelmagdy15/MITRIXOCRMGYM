@@ -159,6 +159,12 @@ export default function Bookings() {
         const sysPkg = packages.find(p => p.id === item.packageId || p.name.toLowerCase() === item.packageName.toLowerCase());
         const category = sysPkg ? resolveCategory(sysPkg) : 'Group Training';
 
+        const isKidsPackage = item.packageName.toLowerCase().includes('kids') || item.packageName.toLowerCase().includes('junior');
+        if (isKidsPackage && clientBranch !== 'Mivida') {
+          alert(`Booking rejected: "${item.packageName}" can only be booked at the Mivida branch.`);
+          return;
+        }
+
         await processPaymentTransaction({
           clientId: selectedRequest.clientId,
           clientName: clientName,

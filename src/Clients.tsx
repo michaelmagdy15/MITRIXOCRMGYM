@@ -245,6 +245,11 @@ export default function Clients() {
       return;
     }
     
+    if ((newMemberCategory?.toLowerCase().includes('kids') || newMemberCategory?.toLowerCase().includes('junior')) && newMemberBranch !== 'Mivida') {
+      alert('Kids and Junior members must be assigned to the Mivida branch.');
+      return;
+    }
+    
     addClient({
       id: Math.random().toString(36).substr(2, 9),
       name: newMemberName,
@@ -299,6 +304,12 @@ export default function Clients() {
     if (!client) return;
     const pkg = packages.find(p => p.name === upgradePkgName);
     if (!pkg) return;
+
+    const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
+    if (isKidsPackage && client.branch !== 'Mivida') {
+      alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
+      return;
+    }
     
     const prevActive = (client.packages || []).find(p => p.status === 'Active');
     const prevSysPkg = prevActive ? packages.find(p => p.name === prevActive.packageName) : null;
@@ -1873,6 +1884,37 @@ export default function Clients() {
                                   {rep.name || rep.email || 'Unknown'}
                                 </option>
                               ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1 col-span-2">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Linked Family Members (App Profile Switching)</Label>
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {(activeClient.linkedClientIds || []).map(linkedId => {
+                              const linkedC = clients.find(c => c.id === linkedId);
+                              return (
+                                <Badge key={linkedId} variant="secondary" className="flex items-center gap-1">
+                                  {linkedC?.name || linkedId}
+                                  <button onClick={() => updateClient(activeClient.id, { linkedClientIds: activeClient.linkedClientIds?.filter(id => id !== linkedId) })}>
+                                    <X className="h-3 w-3 hover:text-red-500" />
+                                  </button>
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                          <select
+                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                const newLinked = [...(activeClient.linkedClientIds || []), e.target.value];
+                                updateClient(activeClient.id, { linkedClientIds: Array.from(new Set(newLinked)) });
+                              }
+                            }}
+                          >
+                            <option value="">+ Link another client...</option>
+                            {clients.filter(c => c.id !== activeClient.id && !(activeClient.linkedClientIds || []).includes(c.id)).map(c => (
+                              <option key={c.id} value={c.id}>{c.name} ({c.phone || 'No Phone'})</option>
+                            ))}
                           </select>
                         </div>
                       </div>

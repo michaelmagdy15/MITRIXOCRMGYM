@@ -55,7 +55,7 @@ service cloud.firestore {
     }
 
     function ismitrixogymcrmStaff() {
-      return ismitrixogymcrmAdmin() || (userExists() && getUserRole() in ['rep', 'sales_rep', 'coach']);
+      return ismitrixogymcrmAdmin() || (userExists() && getUserRole() in ['rep', 'sales_rep', 'coach', 'sales']);
     }
 
     function isOwnClientRecord(clientId) {
@@ -443,6 +443,17 @@ service cloud.firestore {
                       request.resource.data.portalUserId == request.auth.uid
                     );
       allow delete: if ismitrixogymcrmAdmin();
+    }
+    match /clients/{clientId}/comments/{commentId} {
+      allow read, write: if ismitrixogymcrmStaff();
+    }
+    match /clients/{clientId}/interactions/{interactionId} {
+      allow read, write: if ismitrixogymcrmStaff();
+    }
+
+    match /payments/{paymentId} {
+      allow read, create, update: if ismitrixogymcrmStaff() || ismitrixogymcrmAdmin();
+      allow delete: if canmitrixogymcrmDeletePayments() || ismitrixogymcrmAdmin();
     }
 
     match /packages/{packageId} {

@@ -330,17 +330,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const visibleClients = useMemo(() => {
     if (!currentUser) return [];
-    let filtered = clients;
-    if (!canViewGlobalDashboard) {
-      filtered = clients.filter(c => isClientAssignedToRep(c, currentUser.id, currentUser.name || ''));
-    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(c => 
+      return clients.filter(c => 
         c.name.toLowerCase().includes(q) || 
         c.phone.includes(q) || 
         (c.memberId && c.memberId.includes(q))
       );
+    }
+    let filtered = clients;
+    if (!canViewGlobalDashboard) {
+      filtered = clients.filter(c => isClientAssignedToRep(c, currentUser.id, currentUser.name || ''));
     }
     return filtered;
   }, [clients, currentUser, searchQuery, canViewGlobalDashboard, isClientAssignedToRep]);

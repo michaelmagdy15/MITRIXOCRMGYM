@@ -285,18 +285,23 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     }
   };
 
-  // Filter classes for selected date
+  // Filter classes for selected date and client branch
   const filteredClasses = classes.filter(c => {
     try {
-      return isSameDay(parseISO(c.date), selectedDate);
+      const isDateMatch = isSameDay(parseISO(c.date), selectedDate);
+      const isBranchMatch = !c.branch || c.branch === 'ALL' || c.branch === client?.branch || !client?.branch;
+      return isDateMatch && isBranchMatch;
     } catch { return false; }
   });
 
   // Count classes per date for dot indicators
   const classCountByDate = new Map<string, number>();
   classes.forEach(c => {
-    const key = c.date;
-    classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);
+    const isBranchMatch = !c.branch || c.branch === 'ALL' || c.branch === client?.branch || !client?.branch;
+    if (isBranchMatch) {
+      const key = c.date;
+      classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);
+    }
   });
 
   if (loading) {
