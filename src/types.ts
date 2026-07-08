@@ -18,6 +18,7 @@ export interface Package {
   expiryDays: number;
   branch: Branch | 'ALL';
   type: 'Private' | 'Group' | 'Other';
+  imageUrl?: string;
 }
 
 export interface Coach {

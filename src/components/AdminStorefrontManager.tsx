@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 import { storage } from '../firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import ImageCropperDialog from './ImageCropperDialog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,9 @@ export default function AdminStorefrontManager() {
   const [uploading, setUploading] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadTarget, setUploadTarget] = useState<{ type: string; id: string; field: string } | null>(null);
+  const [cropSrc, setCropSrc] = useState('');
+  const [isCropOpen, setIsCropOpen] = useState(false);
+  const [cropAspectRatio, setCropAspectRatio] = useState(1);
 
   // Local working copy
   const [config, setConfig] = useState<StorefrontConfig>(storefrontConfig);
@@ -47,20 +51,37 @@ export default function AdminStorefrontManager() {
     }
   };
 
-  // Image upload handler
-  const handleImageUpload = useCallback(async (file: File, path: string): Promise<string> => {
-    const ref = storageRef(storage, `storefront/${path}_${Date.now()}`);
-    await uploadBytes(ref, file);
-    return getDownloadURL(ref);
-  }, []);
-
-  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !uploadTarget) return;
+
+    let ratio = 1;
+    if (uploadTarget.type === 'hero') {
+      ratio = 16 / 9;
+    } else if (uploadTarget.type === 'section') {
+      ratio = 2.5;
+    } else if (uploadTarget.type === 'offer') {
+      ratio = 2;
+    }
+    setCropAspectRatio(ratio);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropSrc(reader.result as string);
+      setIsCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCroppedUpload = async (blob: Blob) => {
+    if (!uploadTarget) return;
     setUploading(uploadTarget.id);
     try {
-      const url = await handleImageUpload(file, `${uploadTarget.type}/${uploadTarget.id}`);
-      
+      const path = `${uploadTarget.type}/${uploadTarget.id}_${Date.now()}.jpg`;
+      const ref = storageRef(storage, `storefront/${path}`);
+      await uploadBytes(ref, blob);
+      const url = await getDownloadURL(ref);
+
       if (uploadTarget.type === 'hero') {
         setConfig(prev => ({
           ...prev,
@@ -79,9 +100,12 @@ export default function AdminStorefrontManager() {
       }
     } catch (err: any) {
       console.error('Upload failed:', err);
+      alert('Upload failed: ' + err.message);
     } finally {
       setUploading(null);
       setUploadTarget(null);
+      setCropSrc('');
+      setIsCropOpen(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -723,6 +747,19 @@ export default function AdminStorefrontManager() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ImageCropperDialog
+        isOpen={isCropOpen}
+        onClose={() => {
+          setIsCropOpen(false);
+          setCropSrc('');
+          setUploadTarget(null);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }}
+        imageSrc={cropSrc}
+        aspectRatio={cropAspectRatio}
+        onCropComplete={handleCroppedUpload}
+      />
     </div>
   );
 }

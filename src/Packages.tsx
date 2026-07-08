@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAppContext } from './context';
 import { usePackages } from './hooks/usePackages';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,8 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Package, Branch } from './types';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Upload, X } from 'lucide-react';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { storage } from './firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import ImageCropperDialog from './components/ImageCropperDialog';
 
 export default function Packages() {
   const { currentUser, branches, features } = useAppContext();
@@ -28,6 +31,13 @@ export default function Packages() {
   const [expiryDays, setExpiryDays] = useState<number | ''>('');
   const [branch, setBranch] = useState<Branch | 'ALL'>('ALL');
   const [packageType, setPackageType] = useState<Package['type']>('Group');
+  const [imageUrl, setImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [cropSrc, setCropSrc] = useState('');
+  const [isCropOpen, setIsCropOpen] = useState(false);
+
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   if (currentUser?.role !== 'manager' && currentUser?.role !== 'admin' && currentUser?.role !== 'super_admin' && currentUser?.role !== 'crm_admin') {
     return (
@@ -37,6 +47,34 @@ export default function Packages() {
     );
   }
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCropSrc(reader.result as string);
+        setIsCropOpen(true);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCroppedImageUpload = async (blob: Blob) => {
+    setUploading(true);
+    try {
+      const path = `packages/pkg_${Date.now()}.jpg`;
+      const ref = storageRef(storage, path);
+      await uploadBytes(ref, blob);
+      const url = await getDownloadURL(ref);
+      setImageUrl(url);
+    } catch (err: any) {
+      console.error('Failed to upload image:', err);
+      alert('Upload failed: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleAdd = async () => {
     if (name && (unlimitedSessions || sessions !== '') && price !== '' && expiryDays !== '') {
       await addPackage({
@@ -45,7 +83,8 @@ export default function Packages() {
         price: Number(price),
         expiryDays: Number(expiryDays),
         branch,
-        type: packageType
+        type: packageType,
+        imageUrl: imageUrl || undefined
       });
       setIsAddOpen(false);
       resetForm();
@@ -60,7 +99,8 @@ export default function Packages() {
         price: Number(price),
         expiryDays: Number(expiryDays),
         branch,
-        type: packageType
+        type: packageType,
+        imageUrl: imageUrl || undefined
       });
       setIsEditOpen(false);
       setEditingPackage(null);
@@ -90,6 +130,7 @@ export default function Packages() {
     setExpiryDays(pkg.expiryDays);
     setBranch(pkg.branch);
     setPackageType(pkg.type || 'Group');
+    setImageUrl(pkg.imageUrl || '');
     setIsEditOpen(true);
   };
 
@@ -101,6 +142,8 @@ export default function Packages() {
     setExpiryDays('');
     setBranch('ALL');
     setPackageType('Group');
+    setImageUrl('');
+    setUploading(false);
   };
 
   return (
@@ -175,6 +218,46 @@ export default function Packages() {
                   </Select>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <Label>Package Image (optional)</Label>
+                <div className="flex items-center gap-3">
+                  {imageUrl ? (
+                    <div className="relative h-16 w-16 rounded-lg overflow-hidden border">
+                      <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+                      <button 
+                        type="button"
+                        className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white" 
+                        onClick={() => setImageUrl('')}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg border border-dashed flex items-center justify-center bg-muted/30">
+                      <span className="text-[10px] text-muted-foreground text-center">No image</span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    ref={addFileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                  />
+                  <Button 
+                    type="button"
+                    size="sm" 
+                    variant="outline" 
+                    className="gap-1.5"
+                    onClick={() => addFileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploading ? 'Uploading...' : 'Upload Image'}
+                  </Button>
+                </div>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
@@ -284,20 +367,60 @@ export default function Packages() {
               </div>
             </div>
              {features?.ptPackages !== false && (
-               <div className="space-y-2">
-                 <Label>Type</Label>
-                 <Select value={packageType} onValueChange={(v: any) => v && setPackageType(v)}>
-                   <SelectTrigger>
-                     <SelectValue />
-                   </SelectTrigger>
-                   <SelectContent>
-                     <SelectItem value="Private">Private</SelectItem>
-                     <SelectItem value="Group">Group</SelectItem>
-                     <SelectItem value="Other">Other</SelectItem>
-                   </SelectContent>
-                 </Select>
-               </div>
-             )}
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select value={packageType} onValueChange={(v: any) => v && setPackageType(v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Private">Private</SelectItem>
+                      <SelectItem value="Group">Group</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Package Image (optional)</Label>
+                <div className="flex items-center gap-3">
+                  {imageUrl ? (
+                    <div className="relative h-16 w-16 rounded-lg overflow-hidden border">
+                      <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+                      <button 
+                        type="button"
+                        className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white" 
+                        onClick={() => setImageUrl('')}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg border border-dashed flex items-center justify-center bg-muted/30">
+                      <span className="text-[10px] text-muted-foreground text-center">No image</span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    ref={editFileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                  />
+                  <Button 
+                    type="button"
+                    size="sm" 
+                    variant="outline" 
+                    className="gap-1.5"
+                    onClick={() => editFileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {uploading ? 'Uploading...' : 'Upload Image'}
+                  </Button>
+                </div>
+              </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
@@ -314,6 +437,19 @@ export default function Packages() {
         onConfirm={confirmDelete}
         variant="destructive"
         confirmText="Delete"
+      />
+
+      <ImageCropperDialog
+        isOpen={isCropOpen}
+        onClose={() => {
+          setIsCropOpen(false);
+          setCropSrc('');
+          if (addFileInputRef.current) addFileInputRef.current.value = '';
+          if (editFileInputRef.current) editFileInputRef.current.value = '';
+        }}
+        imageSrc={cropSrc}
+        aspectRatio={1}
+        onCropComplete={handleCroppedImageUpload}
       />
     </div>
   );

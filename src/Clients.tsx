@@ -1709,10 +1709,10 @@ export default function Clients() {
 
       {activeClient && (
         <Dialog open={!!activeClientId} onOpenChange={(open) => { if (!open) setActiveClientId(null); }}>
-          <DialogContent className="!w-full !max-w-4xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
+          <DialogContent className="w-[96vw] max-w-4xl max-h-[92vh] md:w-full overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
             {/* Header */}
-            <DialogHeader className="px-6 pt-5 pb-4 border-b bg-muted/20 flex-shrink-0">
-              <div className="flex items-center justify-between w-full">
+            <DialogHeader className="px-6 pr-12 sm:pr-6 pt-5 pb-4 border-b bg-muted/20 flex-shrink-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <User className="h-5 w-5 text-primary" />
@@ -1727,17 +1727,17 @@ export default function Clients() {
                     </p>
                   </div>
                 </div>
-                <div className="text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                <div className="text-left sm:text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0 self-start sm:self-auto">
                   <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>
-                  <span className="text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
+                  <span className="text-xl sm:text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
                 </div>
               </div>
             </DialogHeader>
 
             <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Modern scrollable horizontal tab pills */}
-              <div className="px-6 py-2 border-b flex-shrink-0 bg-muted/10">
-                <TabsList className="bg-transparent p-0 h-auto gap-1 w-full rounded-none border-none shadow-none flex flex-wrap">
+              <div className="px-6 py-2 border-b flex-shrink-0 bg-muted/10 overflow-x-auto no-scrollbar">
+                <TabsList className="bg-transparent p-0 h-auto gap-1 rounded-none border-none shadow-none flex flex-row whitespace-nowrap min-w-max">
                   {[
                     { value: 'overview', label: 'Overview', icon: <User className="h-3.5 w-3.5" /> },
                     { value: 'activity', label: 'Activity', icon: <MessageSquare className="h-3.5 w-3.5" /> },
@@ -1768,8 +1768,8 @@ export default function Clients() {
                     {/* Left: Editable fields */}
                     <div className="space-y-4 p-4 rounded-xl border bg-muted/20 text-left">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Member Details</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1 col-span-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1 col-span-1 sm:col-span-2">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Name</Label>
                           <Input
                             type="text"
@@ -1779,7 +1779,7 @@ export default function Clients() {
                             placeholder="Member name"
                           />
                         </div>
-                        <div className="space-y-1 col-span-2">
+                        <div className="space-y-1 col-span-1 sm:col-span-2">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Phone</Label>
                           <Input
                             type="text"
@@ -1868,7 +1868,7 @@ export default function Clients() {
                             <option value="Adults">Adults</option>
                           </select>
                         </div>
-                        <div className="space-y-1 col-span-2">
+                        <div className="space-y-1 col-span-1 sm:col-span-2">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Sales Rep</Label>
                           <select
                             className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
@@ -1886,7 +1886,7 @@ export default function Clients() {
                               ))}
                           </select>
                         </div>
-                        <div className="space-y-1 col-span-2">
+                        <div className="space-y-1 col-span-1 sm:col-span-2">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Linked Family Members (App Profile Switching)</Label>
                           <div className="flex flex-wrap gap-2 mb-2">
                             {(activeClient.linkedClientIds || []).map(linkedId => {
@@ -1921,7 +1921,7 @@ export default function Clients() {
 
                       {/* Additional whitelabeling fields */}
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground pt-4 border-t">Additional Information</p>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">National ID</Label>
                           <Input
@@ -1964,7 +1964,7 @@ export default function Clients() {
                             <option value="Military">Military</option>
                           </select>
                         </div>
-                        <div className="space-y-1 col-span-2">
+                        <div className="space-y-1 col-span-1 sm:col-span-2">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Lead Advertising Source</Label>
                           <select
                             className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -1983,7 +1983,7 @@ export default function Clients() {
                             <option value="Other">Other</option>
                           </select>
                         </div>
-                        <div className="space-y-1 col-span-2">
+                        <div className="space-y-1 col-span-1 sm:col-span-2">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referred By Name/ID</Label>
                           <Input
                             type="text"
@@ -2113,7 +2113,7 @@ export default function Clients() {
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
-                              <div className="grid grid-cols-3 gap-1.5 md:gap-2">
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <div>
                                   <p className="text-[9px] text-muted-foreground uppercase mb-0.5">Start</p>
                                   <Input

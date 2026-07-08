@@ -143,7 +143,26 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM/i.test(navigator.userAgent) || window.innerWidth < 768;
   const { addToCart } = useCart();
   const [preloaderState, setPreloaderState] = useState<'loading' | 'exiting' | 'hidden'>('hidden');
+  
+  const enabledTabs = React.useMemo(() => {
+    const list = [
+      { id: 'book', label: 'Book', icon: <Calendar className="h-4 w-4" /> },
+      { id: 'locations', label: 'Locations', icon: <MapPin className="h-4 w-4" /> },
+      { id: 'schedule', label: 'Schedule', icon: <Clock className="h-4 w-4" /> },
+      { id: 'announcements', label: 'Announcements', icon: <Bell className="h-4 w-4" /> }
+    ];
+    return list.filter(tab => storefrontConfig?.tabs?.[tab.id as keyof typeof storefrontConfig.tabs] !== false);
+  }, [storefrontConfig?.tabs]);
+
   const [activeTab, setActiveTab] = useState<'book' | 'locations' | 'schedule' | 'announcements'>('book');
+
+  // Adjust active tab if it's disabled in settings
+  useEffect(() => {
+    if (enabledTabs.length > 0 && !enabledTabs.some(t => t.id === activeTab)) {
+      setActiveTab(enabledTabs[0]!.id as any);
+    }
+  }, [enabledTabs, activeTab]);
+
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   
   // Slide index state for slideshow
@@ -373,14 +392,9 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       </header>
 
       {/* ── TABS ── */}
-      {(!isStrike || !isMobile) && (
+      {(!isStrike || !isMobile) && enabledTabs.length > 0 && (
         <div className="bg-card border-b px-2 flex overflow-x-auto no-scrollbar py-2 gap-2 sticky top-[calc(4rem+env(safe-area-inset-top))] z-30">
-          {[
-            { id: 'book', label: 'Book', icon: <Calendar className="h-4 w-4" /> },
-            { id: 'locations', label: 'Locations', icon: <MapPin className="h-4 w-4" /> },
-            { id: 'schedule', label: 'Schedule', icon: <Clock className="h-4 w-4" /> },
-            { id: 'announcements', label: 'Announcements', icon: <Bell className="h-4 w-4" /> }
-          ].map(tab => (
+          {enabledTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
@@ -507,175 +521,368 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               </div>
             </div>
 
-            {/* 2. KIDS PACKAGES SECTION (MAXIM COMPOUND) */}
-            {displayKids.length > 0 && (
-            <div ref={kidsSectionRef} className="px-4 pt-2">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-black tracking-tight uppercase">Kids Packages</h2>
-                <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
-              </div>
-              
-              {/* Kids Category Banner */}
-              <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
-                <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
-                  <h3 className="text-white font-extrabold text-sm uppercase">Kids Sparring & Kickboxing</h3>
-                  <p className="text-white/60 text-[10px] mt-0.5">Build confidence, discipline, and stamina.</p>
-                </div>
-                <img 
-                  src={isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png"} 
-                  alt="Kids Boxing" 
-                  className="w-full h-full object-cover"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                {displayKids.map(pkg => (
-                  <div 
-                    key={pkg.id} 
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      if ((e.target as HTMLElement).closest('button')) return;
-                      setSelectedPackage(pkg);
-                    }} 
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        if ((e.target as HTMLElement).closest('button')) return;
-                        setSelectedPackage(pkg);
-                      }
-                    }}
-                    className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                      <img 
-                        src={getPackageImage(pkg.name, pkg.sessions)} 
-                        alt={pkg.name} 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center">
-                      <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
-                      {getPackageTypeLabel(pkg.name) && (
-                        <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                          {getPackageTypeLabel(pkg.name)}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                          {isStrike && (
-                            <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                              +{Math.floor(pkg.price / 100)} Pts
-                            </Badge>
-                          )}
+            {/* DYNAMIC SECTIONS FROM CONFIG */}
+            {storefrontConfig?.sections && storefrontConfig.sections.length > 0 ? (
+              (storefrontConfig.sections)
+                .filter(sec => sec.enabled !== false)
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                .map((section) => {
+                  if (section.type === 'packages-kids' && displayKids.length > 0) {
+                    return (
+                      <div key={section.id} ref={kidsSectionRef} className="px-4 pt-2">
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-lg font-black tracking-tight uppercase">
+                            {section.title || "Kids Packages"}
+                          </h2>
+                          <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
                         </div>
-                        <Button 
-                          size="sm" 
-                          onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                          className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                        >
-                          <Info className="h-3 w-3 mr-1" /> View Details
-                        </Button>
+                        
+                        {/* Kids Category Banner */}
+                        <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
+                          <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
+                            <h3 className="text-white font-extrabold text-sm uppercase">{section.title || "Kids Sparring & Kickboxing"}</h3>
+                            <p className="text-white/60 text-[10px] mt-0.5">{section.subtitle || "Build confidence, discipline, and stamina."}</p>
+                          </div>
+                          <img 
+                            src={isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png"} 
+                            alt="Kids Boxing" 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
+                          {displayKids.map(pkg => (
+                            <div 
+                              key={pkg.id} 
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                if ((e.target as HTMLElement).closest('button')) return;
+                                setSelectedPackage(pkg);
+                              }} 
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  if ((e.target as HTMLElement).closest('button')) return;
+                                  setSelectedPackage(pkg);
+                                }
+                              }}
+                              className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            >
+                              <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
+                                <img 
+                                  src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
+                                  alt={pkg.name} 
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 flex flex-col justify-center">
+                                <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
+                                {getPackageTypeLabel(pkg.name) && (
+                                  <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                                    {getPackageTypeLabel(pkg.name)}
+                                  </p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
+                                <div className="mt-2 flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                                    {isStrike && (
+                                      <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                                        +{Math.floor(pkg.price / 100)} Pts
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <Button 
+                                    size="sm" 
+                                    onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                                    className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
+                                  >
+                                    <Info className="h-3 w-3 mr-1" /> View Details
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
+                    );
+                  }
+
+                  if (section.type === 'packages-adults' && displayAdults.length > 0) {
+                    return (
+                      <div key={section.id} ref={adultSectionRef} className="px-4 pt-2">
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-lg font-black tracking-tight uppercase">
+                            {section.title || "Adult Packages"}
+                          </h2>
+                          <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">{branding.companyName}</Badge>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
+                          {displayAdults.map(pkg => (
+                            <div 
+                              key={pkg.id} 
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                if ((e.target as HTMLElement).closest('button')) return;
+                                setSelectedPackage(pkg);
+                              }} 
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  if ((e.target as HTMLElement).closest('button')) return;
+                                  setSelectedPackage(pkg);
+                                }
+                              }}
+                              className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all items-center cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            >
+                              <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
+                                <img 
+                                  src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
+                                  alt={pkg.name} 
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 flex flex-col justify-center min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <Badge variant="outline" className="text-[8px] font-bold border-zinc-700 text-zinc-400 uppercase tracking-widest px-1.5 py-0">{pkg.type || 'Adults'}</Badge>
+                                </div>
+                                <h3 className="font-extrabold text-xs text-foreground uppercase mt-1 truncate">{pkg.name}</h3>
+                                {getPackageTypeLabel(pkg.name) && (
+                                  <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                                    {getPackageTypeLabel(pkg.name)}
+                                  </p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
+                                <div className="mt-2 flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                                    {isStrike && (
+                                      <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                                        +{Math.floor(pkg.price / 100)} Pts
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <Button 
+                                    size="sm" 
+                                    onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                                    className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
+                                  >
+                                    <Info className="h-3 w-3 mr-1" /> View Details
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (section.type === 'banner') {
+                    const bannerImg = section.imageUrl || (isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png");
+                    return (
+                      <div key={section.id} className="px-4 my-6">
+                        <div className="rounded-3xl overflow-hidden relative shadow-xl border">
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10" />
+                          <img 
+                            src={bannerImg} 
+                            alt={section.title || "Promotional Banner"} 
+                            className="w-full h-56 object-cover"
+                          />
+                          <div className="absolute inset-0 z-20 flex flex-col items-center justify-end p-6 text-center">
+                            <h2 className="text-3xl font-black tracking-tighter text-white uppercase">{section.title || "IMPACT"}</h2>
+                            <p className="text-white/80 text-[11px] mb-4 max-w-[240px] leading-relaxed">
+                              {section.subtitle || "Our premium sister company focusing on functional conditioning, adult fitness, and high intensity classes."}
+                            </p>
+                            <Button 
+                              variant="outline" 
+                              className="bg-white text-black border-none hover:bg-zinc-200 transition-colors rounded-xl font-bold text-xs h-10 px-8 w-full"
+                              onClick={() => scrollToSection(adultSectionRef)}
+                            >
+                              Discover More
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })
+            ) : (
+              <>
+                {/* Fallback to default sections if config has none */}
+                {displayKids.length > 0 && (
+                <div ref={kidsSectionRef} className="px-4 pt-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-black tracking-tight uppercase">Kids Packages</h2>
+                    <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
+                  </div>
+                  
+                  {/* Kids Category Banner */}
+                  <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
+                    <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
+                      <h3 className="text-white font-extrabold text-sm uppercase">Kids Sparring & Kickboxing</h3>
+                      <p className="text-white/60 text-[10px] mt-0.5">Build confidence, discipline, and stamina.</p>
+                    </div>
+                    <img 
+                      src={isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png"} 
+                      alt="Kids Boxing" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {displayKids.map(pkg => (
+                      <div 
+                        key={pkg.id} 
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('button')) return;
+                          setSelectedPackage(pkg);
+                        }} 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            if ((e.target as HTMLElement).closest('button')) return;
+                            setSelectedPackage(pkg);
+                          }
+                        }}
+                        className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
+                          <img 
+                            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
+                            alt={pkg.name} 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col justify-center">
+                          <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
+                          {getPackageTypeLabel(pkg.name) && (
+                            <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                              {getPackageTypeLabel(pkg.name)}
+                            </p>
+                          )}
+                          <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                              {isStrike && (
+                                <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                                  +{Math.floor(pkg.price / 100)} Pts
+                                </Badge>
+                              )}
+                            </div>
+                            <Button 
+                              size="sm" 
+                              onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                              className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
+                            >
+                              <Info className="h-3 w-3 mr-1" /> View Details
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {/* 3. IMPACT SISTER COMPANY */}
+                <div className="px-4 my-6">
+                  <div className="rounded-3xl overflow-hidden relative shadow-xl border">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10" />
+                    <img 
+                      src={getBannerImage()} 
+                      alt={bannerSection?.title || "IMPACT Sister Company"} 
+                      className="w-full h-56 object-cover"
+                    />
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-end p-6 text-center">
+                      <h2 className="text-3xl font-black tracking-tighter text-white uppercase">{bannerSection?.title || "IMPACT"}</h2>
+                      <p className="text-white/80 text-[11px] mb-4 max-w-[240px] leading-relaxed">
+                        {bannerSection?.subtitle || "Our premium sister company focusing on functional conditioning, adult fitness, and high intensity classes."}
+                      </p>
+                      <Button 
+                        variant="outline" 
+                        className="bg-white text-black border-none hover:bg-zinc-200 transition-colors rounded-xl font-bold text-xs h-10 px-8 w-full"
+                        onClick={() => scrollToSection(adultSectionRef)}
+                      >
+                        Discover More
+                      </Button>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-            )}
-
-            {/* 3. IMPACT SISTER COMPANY */}
-            <div className="px-4 my-6">
-              <div className="rounded-3xl overflow-hidden relative shadow-xl border">
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10" />
-                <img 
-                  src={getBannerImage()} 
-                  alt={bannerSection?.title || "IMPACT Sister Company"} 
-                  className="w-full h-56 object-cover"
-                />
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-end p-6 text-center">
-                  <h2 className="text-3xl font-black tracking-tighter text-white uppercase">{bannerSection?.title || "IMPACT"}</h2>
-                  <p className="text-white/80 text-[11px] mb-4 max-w-[240px] leading-relaxed">
-                    {bannerSection?.subtitle || "Our premium sister company focusing on functional conditioning, adult fitness, and high intensity classes."}
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    className="bg-white text-black border-none hover:bg-zinc-200 transition-colors rounded-xl font-bold text-xs h-10 px-8 w-full"
-                    onClick={() => scrollToSection(adultSectionRef)}
-                  >
-                    Discover More
-                  </Button>
                 </div>
-              </div>
-            </div>
 
-            {/* 4. ADULT PACKAGES */}
-            {displayAdults.length > 0 && (
-            <div ref={adultSectionRef} className="px-4 pt-2">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-black tracking-tight uppercase">Adult Packages</h2>
-                <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">{branding.companyName}</Badge>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                {displayAdults.map(pkg => (
-                  <div 
-                    key={pkg.id} 
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      if ((e.target as HTMLElement).closest('button')) return;
-                      setSelectedPackage(pkg);
-                    }} 
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        if ((e.target as HTMLElement).closest('button')) return;
-                        setSelectedPackage(pkg);
-                      }
-                    }}
-                    className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all items-center cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                      <img 
-                        src={getPackageImage(pkg.name, pkg.sessions)} 
-                        alt={pkg.name} 
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge variant="outline" className="text-[8px] font-bold border-zinc-700 text-zinc-400 uppercase tracking-widest px-1.5 py-0">{pkg.type || 'Adults'}</Badge>
-                      </div>
-                      <h3 className="font-extrabold text-xs text-foreground uppercase mt-1 truncate">{pkg.name}</h3>
-                      {getPackageTypeLabel(pkg.name) && (
-                        <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                          {getPackageTypeLabel(pkg.name)}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                          {isStrike && (
-                            <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                              +{Math.floor(pkg.price / 100)} Pts
-                            </Badge>
-                          )}
-                        </div>
-                        <Button 
-                          size="sm" 
-                          onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                          className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                        >
-                          <Info className="h-3 w-3 mr-1" /> View Details
-                        </Button>
-                      </div>
-                    </div>
+                {/* 4. ADULT PACKAGES */}
+                {displayAdults.length > 0 && (
+                <div ref={adultSectionRef} className="px-4 pt-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-black tracking-tight uppercase">Adult Packages</h2>
+                    <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">{branding.companyName}</Badge>
                   </div>
-                ))}
-              </div>
-            </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {displayAdults.map(pkg => (
+                      <div 
+                        key={pkg.id} 
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('button')) return;
+                          setSelectedPackage(pkg);
+                        }} 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            if ((e.target as HTMLElement).closest('button')) return;
+                            setSelectedPackage(pkg);
+                          }
+                        }}
+                        className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all items-center cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
+                          <img 
+                            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
+                            alt={pkg.name} 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col justify-center min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge variant="outline" className="text-[8px] font-bold border-zinc-700 text-zinc-400 uppercase tracking-widest px-1.5 py-0">{pkg.type || 'Adults'}</Badge>
+                          </div>
+                          <h3 className="font-extrabold text-xs text-foreground uppercase mt-1 truncate">{pkg.name}</h3>
+                          {getPackageTypeLabel(pkg.name) && (
+                            <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                              {getPackageTypeLabel(pkg.name)}
+                            </p>
+                          )}
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                              {isStrike && (
+                                <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                                  +{Math.floor(pkg.price / 100)} Pts
+                                </Badge>
+                              )}
+                            </div>
+                            <Button 
+                              size="sm" 
+                              onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                              className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
+                            >
+                              <Info className="h-3 w-3 mr-1" /> View Details
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                )}
+              </>
             )}
 
             {/* 5. CORPORATE / GROUP PACKAGES */}
@@ -1101,7 +1308,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             <div className="px-5 pt-2">
               <div className="h-48 rounded-2xl overflow-hidden border bg-zinc-900">
                 <img 
-                  src={getPackageImage(selectedPackage.name, selectedPackage.sessions)} 
+                  src={selectedPackage.imageUrl || getPackageImage(selectedPackage.name, selectedPackage.sessions)} 
                   alt={selectedPackage.name} 
                   className="w-full h-full object-cover"
                 />
@@ -1222,10 +1429,15 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               icon: isLoggedIn ? <LayoutDashboard className="h-5 w-5" /> : <LogIn className="h-5 w-5" />, 
               action: () => onSwitchToCRM(isLoggedIn ? 'profile' : undefined) 
             },
-            { id: 'book', label: 'Book', icon: <Calendar className="h-5 w-5" />, action: () => setActiveTab('book') },
-            { id: 'locations', label: 'Locations', icon: <MapPin className="h-5 w-5" />, action: () => setActiveTab('locations') },
-            { id: 'schedule', label: 'Schedule', icon: <Clock className="h-5 w-5" />, action: () => setActiveTab('schedule') },
-            { id: 'announcements', label: 'Announcements', icon: <Bell className="h-5 w-5" />, action: () => setActiveTab('announcements') }
+            ...enabledTabs.map(t => ({
+              id: t.id,
+              label: t.label,
+              icon: t.id === 'book' ? <Calendar className="h-5 w-5" /> :
+                    t.id === 'locations' ? <MapPin className="h-5 w-5" /> :
+                    t.id === 'schedule' ? <Clock className="h-5 w-5" /> :
+                    <Bell className="h-5 w-5" />,
+              action: () => setActiveTab(t.id as any)
+            }))
           ].map((item) => {
             const isActive = activeTab === item.id;
             return (
