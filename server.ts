@@ -84,7 +84,10 @@ const defaultFirebaseConfig = JSON.parse(
 );
 
 // Map hostnames to their respective database configurations.
-const strikeCrmConfig = { ...defaultFirebaseConfig };
+const strikeCrmConfig = { 
+  ...defaultFirebaseConfig,
+  tenantId: "strike"
+};
 delete strikeCrmConfig.firestoreDatabaseId;
 
 const tenantConfigs: Record<string, any> = {
@@ -95,10 +98,12 @@ const tenantConfigs: Record<string, any> = {
   "mitrixogymcrm-boxing.local": {
     ...defaultFirebaseConfig,
     projectId: "mitrixogymcrm-boxing-tenant-1",
+    tenantId: "mitrixogymcrm-boxing",
   },
   "other-gym.local": {
     ...defaultFirebaseConfig,
     projectId: "other-gym-tenant-2",
+    tenantId: "other-gym",
   }
 };
 
@@ -175,8 +180,12 @@ async function getTenantInfoForHost(hostname: string): Promise<{ config: any; st
         if (data) {
           const config = {
             ...defaultFirebaseConfig,
-            firestoreDatabaseId: data.databaseId
+            firestoreDatabaseId: data.databaseId === '(default)' ? undefined : data.databaseId,
+            tenantId: data.tenantId || docSnap.id
           };
+          if (config.firestoreDatabaseId === undefined) {
+            delete config.firestoreDatabaseId;
+          }
           cache[normalizedHost] = { config, status: data.status || 'active', expiresAt: Date.now() + CACHE_TTL_MS };
           return { config, status: data.status || 'active' };
         }
@@ -195,8 +204,12 @@ async function getTenantInfoForHost(hostname: string): Promise<{ config: any; st
           if (data) {
             const config = {
               ...defaultFirebaseConfig,
-              firestoreDatabaseId: data.databaseId
+              firestoreDatabaseId: data.databaseId === '(default)' ? undefined : data.databaseId,
+              tenantId: data.tenantId || subDoc.id
             };
+            if (config.firestoreDatabaseId === undefined) {
+              delete config.firestoreDatabaseId;
+            }
             cache[normalizedHost] = { config, status: data.status || 'active', expiresAt: Date.now() + CACHE_TTL_MS };
             return { config, status: data.status || 'active' };
           }
