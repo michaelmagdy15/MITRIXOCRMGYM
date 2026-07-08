@@ -424,6 +424,7 @@ export default function AdminStorefrontManager() {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="packages-kids">Kids Packages</SelectItem>
+                        <SelectItem value="packages-juniors">Junior Packages</SelectItem>
                         <SelectItem value="packages-adults">Adult Packages</SelectItem>
                         <SelectItem value="packages-all">All Packages</SelectItem>
                         <SelectItem value="banner">Promotional Banner</SelectItem>
@@ -440,7 +441,7 @@ export default function AdminStorefrontManager() {
                   </div>
                 </div>
 
-                {section.type === 'banner' && (
+                {(section.type === 'banner' || section.type.startsWith('packages-')) && (
                   <div className="flex items-center gap-3">
                     {section.imageUrl ? (
                       <div className="relative h-16 w-40 rounded-lg overflow-hidden border">

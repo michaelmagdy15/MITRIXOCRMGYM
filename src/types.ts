@@ -425,7 +425,7 @@ export interface HeroSlide {
 
 export interface StorefrontSection {
   id: string;
-  type: 'packages-kids' | 'packages-adults' | 'packages-all' | 'banner';
+  type: 'packages-kids' | 'packages-juniors' | 'packages-adults' | 'packages-all' | 'banner';
   title: string;
   subtitle?: string;
   imageUrl?: string;

@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard, Sun, Moon } from 'lucide-react';
+import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard, Sun, Moon, Sparkles } from 'lucide-react';
 import { Client, Package } from '../types';
 import { getTenantId, db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -197,7 +197,12 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
   // Refs for scrolling to sections
   const kidsSectionRef = useRef<HTMLDivElement>(null);
+  const juniorSectionRef = useRef<HTMLDivElement>(null);
   const adultSectionRef = useRef<HTMLDivElement>(null);
+  const corporateSectionRef = useRef<HTMLDivElement>(null);
+
+  // Category quick filter
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<'all' | 'kids' | 'juniors' | 'adults' | 'corporate'>('all');
   const dateScrollRef = useRef<HTMLDivElement>(null);
 
   const [classes, setClasses] = useState<any[]>([]);
@@ -262,20 +267,27 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   // ─── Show ALL packages from the database, grouped by category ───
   const primaryBranch = branches[0] || 'Main Branch';
 
-  // Kids/Juniors = name contains 'kid' or 'junior'
+  // Kids = name contains 'kid' but not 'junior'
   const kidsPackages = packages.filter(p => {
     const n = p.name.toLowerCase();
-    return n.includes('kid') || n.includes('junior');
+    return n.includes('kid') && !n.includes('junior');
   }).sort((a, b) => a.sessions - b.sessions);
 
-  // Adults = everything else
+  // Juniors = name contains 'junior'
+  const juniorPackages = packages.filter(p => {
+    const n = p.name.toLowerCase();
+    return n.includes('junior');
+  }).sort((a, b) => a.sessions - b.sessions);
+
+  // Adults = everything else (not kid, not junior, not group/corporate)
   const adultPackages = packages.filter(p => {
     const n = p.name.toLowerCase();
-    return !n.includes('kid') && !n.includes('junior');
+    return !n.includes('kid') && !n.includes('junior') && !n.includes('corporate') && !n.includes('company') && p.type !== 'Group';
   }).sort((a, b) => a.sessions - b.sessions);
 
   // Use real data only — no mock fallbacks
   const displayKids = kidsPackages;
+  const displayJuniors = juniorPackages;
   const displayAdults = adultPackages;
 
   // Corporate packages (type 'Group' or name contains 'corporate')
@@ -483,43 +495,69 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               </div>
             </div>
 
+            {/* CATEGORY FILTER BAR */}
+            <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-25 bg-background/95 backdrop-blur-md py-3 px-4 border-y flex gap-2 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap">
+              {[
+                { id: 'all', label: 'All Packages', icon: <Dumbbell className="h-3.5 w-3.5" /> },
+                { id: 'kids', label: 'Kids', icon: <Sparkles className="h-3.5 w-3.5" /> },
+                { id: 'juniors', label: 'Juniors', icon: <Tag className="h-3.5 w-3.5" /> },
+                { id: 'adults', label: 'Adults', icon: <User className="h-3.5 w-3.5" /> },
+                { id: 'corporate', label: 'Corporate', icon: <Building2 className="h-3.5 w-3.5" /> }
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategoryFilter(cat.id as any)}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full whitespace-nowrap text-xs font-black transition-all sf-interactive ${
+                    selectedCategoryFilter === cat.id 
+                      ? 'bg-primary text-primary-foreground shadow-md' 
+                      : 'bg-card border text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {cat.icon}
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
             {/* 1. SLIDESHOW HERO */}
-            <div className="px-4">
-              <div className="relative h-52 rounded-3xl overflow-hidden shadow-xl border">
-                <div className="absolute inset-0 bg-gradient-to-tr from-black/95 via-black/40 to-transparent z-10" />
-                <img 
-                  src={getSlideImage(activeSlides[slideIndex]?.id, activeSlides[slideIndex]?.imageUrl, slideIndex)} 
-                  alt="mitrixogymcrm Sessions" 
-                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 ease-out scale-105"
-                />
-                
-                <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
-                  {activeSlides.map((slide, idx) => {
-                    if (idx !== slideIndex) return null;
-                    return (
-                      <div key={slide.id} className="animate-in fade-in slide-in-from-bottom-3 duration-500">
-                        <Badge 
-                          className="mb-2" 
-                          style={{
-                            backgroundColor: slide.badgeColor === 'primary' ? 'var(--brand-accent)' : slide.badgeColor || 'white',
-                            color: slide.badgeColor === 'primary' ? 'white' : 'black'
-                          }}
-                        >
-                          {slide.badgeText || 'Featured'}
-                        </Badge>
-                        <h3 className="text-white font-black text-xl leading-tight uppercase">{slide.title}</h3>
-                        <p className="text-white/70 text-xs mt-1 mb-3">
-                          {slide.subtitle || `${primaryBranch} • Timings available now`}
-                        </p>
-                      </div>
-                    );
-                  })}
-                  <Button size="sm" className="w-full font-bold h-10 rounded-xl bg-white text-black hover:bg-zinc-200" onClick={() => scrollToSection(kidsSectionRef)}>
-                    {activeSlides[slideIndex]?.ctaText || 'Book Now!'}
-                  </Button>
+            {selectedCategoryFilter === 'all' && (
+              <div className="px-4">
+                <div className="relative h-52 rounded-3xl overflow-hidden shadow-xl border">
+                  <div className="absolute inset-0 bg-gradient-to-tr from-black/95 via-black/40 to-transparent z-10" />
+                  <img 
+                    src={getSlideImage(activeSlides[slideIndex]?.id, activeSlides[slideIndex]?.imageUrl, slideIndex)} 
+                    alt="mitrixogymcrm Sessions" 
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 ease-out scale-105"
+                  />
+                  
+                  <div className="absolute inset-0 z-20 flex flex-col justify-end p-6">
+                    {activeSlides.map((slide, idx) => {
+                      if (idx !== slideIndex) return null;
+                      return (
+                        <div key={slide.id} className="animate-in fade-in slide-in-from-bottom-3 duration-500">
+                          <Badge 
+                            className="mb-2" 
+                            style={{
+                              backgroundColor: slide.badgeColor === 'primary' ? 'var(--brand-accent)' : slide.badgeColor || 'white',
+                              color: slide.badgeColor === 'primary' ? 'white' : 'black'
+                            }}
+                          >
+                            {slide.badgeText || 'Featured'}
+                          </Badge>
+                          <h3 className="text-white font-black text-xl leading-tight uppercase">{slide.title}</h3>
+                          <p className="text-white/70 text-xs mt-1 mb-3">
+                            {slide.subtitle || `${primaryBranch} • Timings available now`}
+                          </p>
+                        </div>
+                      );
+                    })}
+                    <Button size="sm" className="w-full font-bold h-10 rounded-xl bg-white text-black hover:bg-zinc-200" onClick={() => scrollToSection(kidsSectionRef)}>
+                      {activeSlides[slideIndex]?.ctaText || 'Book Now!'}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* DYNAMIC SECTIONS FROM CONFIG */}
             {storefrontConfig?.sections && storefrontConfig.sections.length > 0 ? (
@@ -527,7 +565,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 .filter(sec => sec.enabled !== false)
                 .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
                 .map((section) => {
-                  if (section.type === 'packages-kids' && displayKids.length > 0) {
+                  if (section.type === 'packages-kids' && displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids')) {
                     return (
                       <div key={section.id} ref={kidsSectionRef} className="px-4 pt-2">
                         <div className="flex items-center justify-between mb-4">
@@ -538,17 +576,19 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                         </div>
                         
                         {/* Kids Category Banner */}
-                        <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
-                          <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
-                            <h3 className="text-white font-extrabold text-sm uppercase">{section.title || "Kids Sparring & Kickboxing"}</h3>
-                            <p className="text-white/60 text-[10px] mt-0.5">{section.subtitle || "Build confidence, discipline, and stamina."}</p>
+                        {(section.imageUrl || isStrike) && (
+                          <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
+                            <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
+                              <h3 className="text-white font-extrabold text-sm uppercase">{section.title || "Kids Sparring & Kickboxing"}</h3>
+                              <p className="text-white/60 text-[10px] mt-0.5">{section.subtitle || "Build confidence, discipline, and stamina."}</p>
+                            </div>
+                            <img 
+                              src={section.imageUrl || (isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png")} 
+                              alt="Kids Boxing" 
+                              className="w-full h-full object-cover"
+                            />
                           </div>
-                          <img 
-                            src={isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png"} 
-                            alt="Kids Boxing" 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
+                        )}
 
                         <div className="grid grid-cols-1 gap-3">
                           {displayKids.map(pkg => (
@@ -608,7 +648,90 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                     );
                   }
 
-                  if (section.type === 'packages-adults' && displayAdults.length > 0) {
+                  if (section.type === 'packages-juniors' && displayJuniors.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'juniors')) {
+                    return (
+                      <div key={section.id} ref={juniorSectionRef} className="px-4 pt-2">
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-lg font-black tracking-tight uppercase">
+                            {section.title || "Junior Packages"}
+                          </h2>
+                          <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
+                        </div>
+                        
+                        {/* Juniors Category Banner */}
+                        {(section.imageUrl || isStrike) && (
+                          <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
+                            <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
+                              <h3 className="text-white font-extrabold text-sm uppercase">{section.title || "Junior Training"}</h3>
+                              <p className="text-white/60 text-[10px] mt-0.5">{section.subtitle || "Advanced youth technique and speed."}</p>
+                            </div>
+                            <img 
+                              src={section.imageUrl || (isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png")} 
+                              alt="Junior Training" 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 gap-3">
+                          {displayJuniors.map(pkg => (
+                            <div 
+                              key={pkg.id} 
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                if ((e.target as HTMLElement).closest('button')) return;
+                                setSelectedPackage(pkg);
+                              }} 
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  if ((e.target as HTMLElement).closest('button')) return;
+                                  setSelectedPackage(pkg);
+                                }
+                              }}
+                              className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            >
+                              <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
+                                <img 
+                                  src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
+                                  alt={pkg.name} 
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 flex flex-col justify-center">
+                                <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
+                                {getPackageTypeLabel(pkg.name) && (
+                                  <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                                    {getPackageTypeLabel(pkg.name)}
+                                  </p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
+                                <div className="mt-2 flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                                    {isStrike && (
+                                      <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                                        +{Math.floor(pkg.price / 100)} Pts
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <Button 
+                                    size="sm" 
+                                    onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                                    className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
+                                  >
+                                    <Info className="h-3 w-3 mr-1" /> View Details
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (section.type === 'packages-adults' && displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults')) {
                     return (
                       <div key={section.id} ref={adultSectionRef} className="px-4 pt-2">
                         <div className="flex items-center justify-between mb-4">
@@ -617,6 +740,21 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                           </h2>
                           <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">{branding.companyName}</Badge>
                         </div>
+
+                        {/* Adults Category Banner */}
+                        {(section.imageUrl || isStrike) && (
+                          <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
+                            <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
+                              <h3 className="text-white font-extrabold text-sm uppercase">{section.title || "Adult Fitness & Conditioning"}</h3>
+                              <p className="text-white/60 text-[10px] mt-0.5">{section.subtitle || "Premium boxing, fitness, and training."}</p>
+                            </div>
+                            <img 
+                              src={section.imageUrl || (isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png")} 
+                              alt="Adult Fitness" 
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-1 gap-3">
                           {displayAdults.map(pkg => (
@@ -679,7 +817,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                     );
                   }
 
-                  if (section.type === 'banner') {
+                  if (section.type === 'banner' && selectedCategoryFilter === 'all') {
                     const bannerImg = section.imageUrl || (isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png");
                     return (
                       <div key={section.id} className="px-4 my-6">
@@ -713,7 +851,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             ) : (
               <>
                 {/* Fallback to default sections if config has none */}
-                {displayKids.length > 0 && (
+                {displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids') && (
                 <div ref={kidsSectionRef} className="px-4 pt-2">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-black tracking-tight uppercase">Kids Packages</h2>
@@ -790,33 +928,113 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 </div>
                 )}
 
-                {/* 3. IMPACT SISTER COMPANY */}
-                <div className="px-4 my-6">
-                  <div className="rounded-3xl overflow-hidden relative shadow-xl border">
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10" />
-                    <img 
-                      src={getBannerImage()} 
-                      alt={bannerSection?.title || "IMPACT Sister Company"} 
-                      className="w-full h-56 object-cover"
-                    />
-                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-end p-6 text-center">
-                      <h2 className="text-3xl font-black tracking-tighter text-white uppercase">{bannerSection?.title || "IMPACT"}</h2>
-                      <p className="text-white/80 text-[11px] mb-4 max-w-[240px] leading-relaxed">
-                        {bannerSection?.subtitle || "Our premium sister company focusing on functional conditioning, adult fitness, and high intensity classes."}
-                      </p>
-                      <Button 
-                        variant="outline" 
-                        className="bg-white text-black border-none hover:bg-zinc-200 transition-colors rounded-xl font-bold text-xs h-10 px-8 w-full"
-                        onClick={() => scrollToSection(adultSectionRef)}
-                      >
-                        Discover More
-                      </Button>
+                {/* Juniors Fallback */}
+                {displayJuniors.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'juniors') && (
+                <div ref={juniorSectionRef} className="px-4 pt-2">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-black tracking-tight uppercase">Junior Packages</h2>
+                    <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
+                  </div>
+                  
+                  {/* Juniors Category Banner */}
+                  <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
+                    <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
+                      <h3 className="text-white font-extrabold text-sm uppercase">Junior Training</h3>
+                      <p className="text-white/60 text-[10px] mt-0.5">Advanced youth technique and speed.</p>
                     </div>
+                    <img 
+                      src={isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png"} 
+                      alt="Junior Training" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {displayJuniors.map(pkg => (
+                      <div 
+                        key={pkg.id} 
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('button')) return;
+                          setSelectedPackage(pkg);
+                        }} 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            if ((e.target as HTMLElement).closest('button')) return;
+                            setSelectedPackage(pkg);
+                          }
+                        }}
+                        className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
+                          <img 
+                            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
+                            alt={pkg.name} 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col justify-center">
+                          <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
+                          {getPackageTypeLabel(pkg.name) && (
+                            <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                              {getPackageTypeLabel(pkg.name)}
+                            </p>
+                          )}
+                          <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
+                              {isStrike && (
+                                <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
+                                  +{Math.floor(pkg.price / 100)} Pts
+                                </Badge>
+                              )}
+                            </div>
+                            <Button 
+                              size="sm" 
+                              onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
+                              className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
+                            >
+                              <Info className="h-3 w-3 mr-1" /> View Details
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
+                )}
+
+                {/* 3. IMPACT SISTER COMPANY */}
+                {selectedCategoryFilter === 'all' && (
+                  <div className="px-4 my-6">
+                    <div className="rounded-3xl overflow-hidden relative shadow-xl border">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent z-10" />
+                      <img 
+                        src={getBannerImage()} 
+                        alt={bannerSection?.title || "IMPACT Sister Company"} 
+                        className="w-full h-56 object-cover"
+                      />
+                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-end p-6 text-center">
+                        <h2 className="text-3xl font-black tracking-tighter text-white uppercase">{bannerSection?.title || "IMPACT"}</h2>
+                        <p className="text-white/80 text-[11px] mb-4 max-w-[240px] leading-relaxed">
+                          {bannerSection?.subtitle || "Our premium sister company focusing on functional conditioning, adult fitness, and high intensity classes."}
+                        </p>
+                        <Button 
+                          variant="outline" 
+                          className="bg-white text-black border-none hover:bg-zinc-200 transition-colors rounded-xl font-bold text-xs h-10 px-8 w-full"
+                          onClick={() => scrollToSection(adultSectionRef)}
+                        >
+                          Discover More
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* 4. ADULT PACKAGES */}
-                {displayAdults.length > 0 && (
+                {displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults') && (
                 <div ref={adultSectionRef} className="px-4 pt-2">
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-lg font-black tracking-tight uppercase">Adult Packages</h2>
@@ -886,8 +1104,8 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             )}
 
             {/* 5. CORPORATE / GROUP PACKAGES */}
-            {corporatePackages.length > 0 && (
-            <div className="px-4 pt-4">
+            {corporatePackages.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'corporate') && (
+            <div ref={corporateSectionRef} className="px-4 pt-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-black tracking-tight uppercase flex items-center gap-2">
                   <Building2 className="h-5 w-5 text-primary" /> Corporate
