@@ -9,7 +9,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard, Sun, Moon, Sparkles } from 'lucide-react';
-import { Client, Package } from '../types';
+import { Client, Package, StorefrontConfig } from '../types';
 import { getTenantId, db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-fns';
@@ -92,8 +92,23 @@ export function getPackageTypeLabel(packageName: string): string | null {
   return null;
 }
 
-export function getBranchDetails(branchName: string) {
+export function getBranchDetails(branchName: string, storefrontConfig?: StorefrontConfig) {
   const nameLower = branchName.toLowerCase();
+  
+  if (storefrontConfig?.branchLocations) {
+    const customLoc = storefrontConfig.branchLocations.find(
+      loc => loc.branchName.toLowerCase() === nameLower
+    );
+    if (customLoc) {
+      return {
+        displayName: customLoc.displayName,
+        address: customLoc.address,
+        mapUrl: customLoc.mapUrl || null
+      };
+    }
+  }
+
+  // Fallbacks:
   if (nameLower.includes('complex') || nameLower.includes('maxim compound') || nameLower.includes('maxim country')) {
     return {
       displayName: 'Maxim Compound Branch',
@@ -1247,7 +1262,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             <h2 className="text-xl font-black uppercase tracking-tight mb-2">Our Locations</h2>
             
             {branches.map((branch, idx) => {
-              const details = getBranchDetails(branch);
+              const details = getBranchDetails(branch, storefrontConfig);
               return (
                 <div key={branch} className={`bg-card border rounded-2xl p-5 shadow-sm space-y-3 sf-card-stagger ${idx === 0 ? 'border-primary/20 bg-primary/5' : ''}`}>
                   <div className="flex items-center justify-between">

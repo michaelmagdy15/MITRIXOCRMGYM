@@ -454,6 +454,13 @@ export interface OfferEntry {
   order: number;
 }
 
+export interface BranchLocation {
+  branchName: string;
+  displayName: string;
+  address: string;
+  mapUrl?: string;
+}
+
 export interface StorefrontConfig {
   heroSlides: HeroSlide[];
   sections: StorefrontSection[];
@@ -475,4 +482,5 @@ export interface StorefrontConfig {
   };
   ctaText: string;
   ctaTextMember: string;
+  branchLocations?: BranchLocation[];
 }

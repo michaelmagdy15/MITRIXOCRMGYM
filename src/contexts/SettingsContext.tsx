@@ -97,6 +97,26 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     },
     ctaText: 'Member / Staff Login',
     ctaTextMember: 'My Portal',
+    branchLocations: [
+      {
+        branchName: 'Maxim Compound',
+        displayName: 'Maxim Compound Branch',
+        address: 'Maxim Country Club',
+        mapUrl: 'https://maps.app.goo.gl/8BPj5eG8EtsZD66c8'
+      },
+      {
+        branchName: 'Mvida Compound',
+        displayName: 'Mvida Compound Branch',
+        address: 'Lake District',
+        mapUrl: 'https://maps.app.goo.gl/hEM2eFL4fF2bqS8F7'
+      },
+      {
+        branchName: 'Impact by Strike',
+        displayName: 'Impact by Strike',
+        address: 'Maxim Mall',
+        mapUrl: 'https://maps.app.goo.gl/4VnA5jAgiZx1RhjQ8'
+      }
+    ]
   };
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>(DEFAULT_STOREFRONT);
 

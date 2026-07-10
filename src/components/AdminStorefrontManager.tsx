@@ -14,9 +14,9 @@ import { Switch } from '@/components/ui/switch';
 import { 
   Image as ImageIcon, Plus, Trash2, Save, GripVertical, Eye, EyeOff,
   Layout, Calendar, Gift, Settings2, Type, Upload, X, CheckCircle2,
-  ArrowUp, ArrowDown, Sparkles
+  ArrowUp, ArrowDown, Sparkles, Map
 } from 'lucide-react';
-import type { HeroSlide, StorefrontSection, ScheduleEntry, OfferEntry, StorefrontConfig } from '../types';
+import type { HeroSlide, StorefrontSection, ScheduleEntry, OfferEntry, StorefrontConfig, BranchLocation } from '../types';
 
 export default function AdminStorefrontManager() {
   const { storefrontConfig, updateStorefrontConfig, branches } = useSettings();
@@ -34,7 +34,10 @@ export default function AdminStorefrontManager() {
 
   // Sync when context changes
   React.useEffect(() => {
-    setConfig(storefrontConfig);
+    setConfig({
+      ...storefrontConfig,
+      branchLocations: storefrontConfig.branchLocations || []
+    });
   }, [storefrontConfig]);
 
   const handleSave = async () => {
@@ -230,6 +233,77 @@ export default function AdminStorefrontManager() {
     setConfig(prev => ({ ...prev, offers: prev.offers.filter(o => o.id !== id) }));
   };
 
+  // ── Location Helpers ──
+  const handleUpdateLocation = (branchName: string, updates: Partial<BranchLocation>) => {
+    setConfig(prev => {
+      const currentLocs = prev.branchLocations || [];
+      const exists = currentLocs.some(loc => loc.branchName === branchName);
+      let newLocs;
+      if (exists) {
+        newLocs = currentLocs.map(loc => loc.branchName === branchName ? { ...loc, ...updates } : loc);
+      } else {
+        newLocs = [...currentLocs, { branchName, displayName: branchName, address: '', mapUrl: '', ...updates }];
+      }
+      return { ...prev, branchLocations: newLocs };
+    });
+  };
+
+  const handleAddLocation = () => {
+    const newLocName = prompt("Enter the system branch name (must match branch settings exactly):");
+    if (!newLocName) return;
+    const nameTrim = newLocName.trim();
+    if (!nameTrim) return;
+
+    setConfig(prev => {
+      const currentLocs = prev.branchLocations || [];
+      if (currentLocs.some(loc => loc.branchName.toLowerCase() === nameTrim.toLowerCase())) {
+        alert("A location configuration for this branch already exists.");
+        return prev;
+      }
+      const newLoc: BranchLocation = {
+        branchName: nameTrim,
+        displayName: `${nameTrim} Branch`,
+        address: `${nameTrim}, Egypt`,
+        mapUrl: ''
+      };
+      return { ...prev, branchLocations: [...currentLocs, newLoc] };
+    });
+  };
+
+  const handleRemoveLocation = (branchName: string) => {
+    if (!confirm(`Are you sure you want to remove the location configuration for "${branchName}"?`)) return;
+    setConfig(prev => ({
+      ...prev,
+      branchLocations: (prev.branchLocations || []).filter(loc => loc.branchName !== branchName)
+    }));
+  };
+
+  const handleResetLocationsToDefault = () => {
+    setConfig(prev => ({
+      ...prev,
+      branchLocations: [
+        {
+          branchName: 'Maxim Compound',
+          displayName: 'Maxim Compound Branch',
+          address: 'Maxim Country Club',
+          mapUrl: 'https://maps.app.goo.gl/8BPj5eG8EtsZD66c8'
+        },
+        {
+          branchName: 'Mvida Compound',
+          displayName: 'Mvida Compound Branch',
+          address: 'Lake District',
+          mapUrl: 'https://maps.app.goo.gl/hEM2eFL4fF2bqS8F7'
+        },
+        {
+          branchName: 'Impact by Strike',
+          displayName: 'Impact by Strike',
+          address: 'Maxim Mall',
+          mapUrl: 'https://maps.app.goo.gl/4VnA5jAgiZx1RhjQ8'
+        }
+      ]
+    }));
+  };
+
   return (
     <div className="space-y-6">
       {/* Hidden file input for image uploads */}
@@ -265,11 +339,12 @@ export default function AdminStorefrontManager() {
 
       {/* Sub-tabs */}
       <Tabs defaultValue="hero" className="space-y-4">
-        <TabsList className="grid grid-cols-6 w-full">
+        <TabsList className="grid grid-cols-7 w-full">
           <TabsTrigger value="hero" className="text-xs gap-1"><ImageIcon className="h-3 w-3" /> Hero</TabsTrigger>
           <TabsTrigger value="sections" className="text-xs gap-1"><Layout className="h-3 w-3" /> Sections</TabsTrigger>
           <TabsTrigger value="schedule" className="text-xs gap-1"><Calendar className="h-3 w-3" /> Schedule</TabsTrigger>
           <TabsTrigger value="offers" className="text-xs gap-1"><Gift className="h-3 w-3" /> Offers</TabsTrigger>
+          <TabsTrigger value="locations" className="text-xs gap-1"><Map className="h-3 w-3" /> Locations</TabsTrigger>
           <TabsTrigger value="display" className="text-xs gap-1"><Settings2 className="h-3 w-3" /> Display</TabsTrigger>
           <TabsTrigger value="text" className="text-xs gap-1"><Type className="h-3 w-3" /> Text & CTA</TabsTrigger>
         </TabsList>
@@ -746,6 +821,108 @@ export default function AdminStorefrontManager() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ═══════════════════ LOCATIONS ═══════════════════ */}
+        <TabsContent value="locations" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold">Branch Locations</h3>
+              <p className="text-xs text-muted-foreground">Manage the addresses, display names, and Google Maps links for physical branches</p>
+            </div>
+            <Button onClick={handleAddLocation} size="sm" variant="outline" className="gap-1">
+              <Plus className="h-3 w-3" /> Add Custom Location
+            </Button>
+          </div>
+
+          <div className="space-y-4">
+            {(config.branchLocations || []).map((loc, idx) => (
+              <Card key={loc.branchName || idx}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[9px]">
+                        {loc.branchName}
+                      </Badge>
+                      <span className="font-semibold text-sm">{loc.displayName || 'Untitled Location'}</span>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive hover:text-destructive/80"
+                      onClick={() => handleRemoveLocation(loc.branchName)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-xs">System Branch Name</Label>
+                      <Select 
+                        value={loc.branchName} 
+                        onValueChange={(val: any) => handleUpdateLocation(loc.branchName, { branchName: val || '' })}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Select Branch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {branches.map(b => (
+                            <SelectItem key={b} value={b}>{b}</SelectItem>
+                          ))}
+                          {!branches.includes(loc.branchName) && (
+                            <SelectItem value={loc.branchName}>{loc.branchName}</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[10px] text-muted-foreground">Must match the branch name configured in settings</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Display Name</Label>
+                      <Input 
+                        value={loc.displayName}
+                        onChange={(e) => handleUpdateLocation(loc.branchName, { displayName: e.target.value })}
+                        placeholder="e.g. Strike Mivida Branch"
+                        className="h-9"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Address Description</Label>
+                      <Input 
+                        value={loc.address}
+                        onChange={(e) => handleUpdateLocation(loc.branchName, { address: e.target.value })}
+                        placeholder="e.g. Lake District, Mivida"
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs">Google Maps Link (mapUrl)</Label>
+                    <Input 
+                      value={loc.mapUrl || ''}
+                      onChange={(e) => handleUpdateLocation(loc.branchName, { mapUrl: e.target.value })}
+                      placeholder="e.g. https://maps.app.goo.gl/..."
+                      className="h-9"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {(!config.branchLocations || config.branchLocations.length === 0) && (
+              <Card>
+                <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                  No custom branch locations configured. The storefront is currently using system defaults.
+                  <Button onClick={handleResetLocationsToDefault} variant="link" className="text-primary mt-2 block mx-auto text-xs">
+                    Import Default Locations
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 
