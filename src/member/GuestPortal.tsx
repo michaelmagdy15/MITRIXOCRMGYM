@@ -576,10 +576,21 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
             {/* DYNAMIC SECTIONS FROM CONFIG */}
             {storefrontConfig?.sections && storefrontConfig.sections.length > 0 ? (
-              (storefrontConfig.sections)
-                .filter(sec => sec.enabled !== false)
-                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                .map((section) => {
+              (() => {
+                const list = [...storefrontConfig.sections];
+                if (!list.some(s => s.type === 'packages-juniors')) {
+                  list.push({
+                    id: 'auto-sec-juniors',
+                    type: 'packages-juniors',
+                    title: 'Junior Packages',
+                    enabled: true,
+                    order: 1.5
+                  });
+                }
+                return list
+                  .filter(sec => sec.enabled !== false)
+                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                  .map((section) => {
                   if (section.type === 'packages-kids' && displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids')) {
                     return (
                       <div key={section.id} ref={kidsSectionRef} className="px-4 pt-2">
@@ -862,7 +873,8 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   }
 
                   return null;
-                })
+                });
+              })()
             ) : (
               <>
                 {/* Fallback to default sections if config has none */}
@@ -1420,7 +1432,9 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                             </span>
                           </div>
                           <h4 className="text-xs font-black uppercase leading-snug tracking-tight text-foreground">{gymClass.name}</h4>
-                          <p className="text-[10px] text-muted-foreground">Led by <strong>{gymClass.coachName}</strong></p>
+                          {gymClass.coachName && gymClass.coachName.trim().toLowerCase() !== 'no coach' && (
+                            <p className="text-[10px] text-muted-foreground">Led by <strong>{gymClass.coachName}</strong></p>
+                          )}
                         </div>
 
                         <div className="text-right flex flex-col items-end">
