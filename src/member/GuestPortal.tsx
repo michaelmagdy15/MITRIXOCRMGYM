@@ -511,7 +511,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             </div>
 
             {/* CATEGORY FILTER BAR */}
-            <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-25 bg-background/95 backdrop-blur-md py-3 px-4 border-y flex gap-2 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap">
+            <div className="py-3 px-4 border-b flex gap-2 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap">
               {[
                 { id: 'all', label: 'All Packages', icon: <Dumbbell className="h-3.5 w-3.5" /> },
                 { id: 'kids', label: 'Kids', icon: <Sparkles className="h-3.5 w-3.5" /> },
