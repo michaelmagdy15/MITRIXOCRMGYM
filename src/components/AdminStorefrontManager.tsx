@@ -289,8 +289,8 @@ export default function AdminStorefrontManager() {
           mapUrl: 'https://maps.app.goo.gl/8BPj5eG8EtsZD66c8'
         },
         {
-          branchName: 'Mvida Compound',
-          displayName: 'Mvida Compound Branch',
+          branchName: 'Mivida Compound',
+          displayName: 'Mivida Compound Branch',
           address: 'Lake District',
           mapUrl: 'https://maps.app.goo.gl/hEM2eFL4fF2bqS8F7'
         },

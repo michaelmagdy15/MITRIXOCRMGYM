@@ -118,7 +118,7 @@ export function getBranchDetails(branchName: string, storefrontConfig?: Storefro
   }
   if (nameLower.includes('mivida') || nameLower.includes('mvida')) {
     return {
-      displayName: 'Mvida Compound Branch',
+      displayName: 'Mivida Compound Branch',
       address: 'Lake District',
       mapUrl: 'https://maps.app.goo.gl/hEM2eFL4fF2bqS8F7'
     };

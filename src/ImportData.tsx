@@ -377,7 +377,7 @@ export default function ImportData({ type }: ImportDataProps) {
 
         let branch: string | undefined;
         if (branchRaw.includes('COMPLEX') || branchRaw.includes('MAXIM')) branch = 'Maxim Compound';
-        else if (branchRaw.includes('MIVIDA') || branchRaw.includes('MVIDA')) branch = 'Mvida Compound';
+        else if (branchRaw.includes('MIVIDA') || branchRaw.includes('MVIDA')) branch = 'Mivida Compound';
         else if (branchRaw.includes('IMPACT') || branchRaw.includes('STRIKE')) branch = 'Impact by Strike';
 
         let paid = false;

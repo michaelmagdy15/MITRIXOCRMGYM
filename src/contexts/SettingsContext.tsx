@@ -51,7 +51,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     privatePackagesSold: 0,
     groupPackagesSold: 0,
   });
-  const [branches, setBranches] = useState<Branch[]>(['Maxim Compound', 'Mvida Compound', 'Impact by Strike']);
+  const [branches, setBranches] = useState<Branch[]>(['Maxim Compound', 'Mivida Compound', 'Impact by Strike']);
   const [commissionRates, setCommissionRates] = useState({ ptRate: 8, groupRate: 5 });
   const [features, setFeatures] = useState<FeatureFlags>({
     leads: true,
@@ -105,8 +105,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
         mapUrl: 'https://maps.app.goo.gl/8BPj5eG8EtsZD66c8'
       },
       {
-        branchName: 'Mvida Compound',
-        displayName: 'Mvida Compound Branch',
+        branchName: 'Mivida Compound',
+        displayName: 'Mivida Compound Branch',
         address: 'Lake District',
         mapUrl: 'https://maps.app.goo.gl/hEM2eFL4fF2bqS8F7'
       },
