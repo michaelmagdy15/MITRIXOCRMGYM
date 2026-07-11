@@ -236,6 +236,12 @@ export interface Client {
   civilianOrMilitary?: 'None' | 'Civilian' | 'Military';
   referredByName?: string;
   documents?: ClientDocument[];
+  emergencyContactName?: string;
+  civilStatus?: string;
+  barcode?: string;
+  cardId?: string;
+  legacyNotes?: string;
+  legacyMemberId?: string;
 }
 
 export interface ClientDocument {
@@ -258,6 +264,10 @@ export interface ClientPackage {
   holdDate?: string; // ISO string - when the hold was placed
   subscriptionType?: 'new' | 'renew' | 'upgrade' | 'wrongentry';
   isPendingConfirmation?: boolean;
+  salesRepName?: string;
+  trainerName?: string;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 export interface Attendance {

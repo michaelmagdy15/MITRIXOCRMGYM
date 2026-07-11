@@ -28,7 +28,7 @@ import RenewalPipeline from './components/RenewalPipeline';
 import ResyncAssignments from './components/ResyncAssignments';
 import ResyncPayments from './components/ResyncPayments';
 import { writeBatch, doc, collection, addDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, getTenantId } from './firebase';
 import { cleanData } from './utils';
 import { generateClientContract } from './utils/pdfGenerator';
 import { downloadFile } from './utils/download';
@@ -1996,6 +1996,65 @@ export default function Clients() {
                             placeholder="Referred by details"
                           />
                         </div>
+                        {getTenantId().toLowerCase().includes('inzan') && (
+                          <>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Emergency Contact Name</Label>
+                              <Input
+                                type="text"
+                                className="h-9 text-sm bg-background rounded-lg"
+                                defaultValue={activeClient.emergencyContactName || ''}
+                                onChange={(e) => debouncedUpdate(activeClient.id, { emergencyContactName: e.target.value })}
+                                placeholder="Emergency Contact Name"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Civil Status</Label>
+                              <select
+                                className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                defaultValue={activeClient.civilStatus || ''}
+                                onChange={(e) => updateClient(activeClient.id, { civilStatus: e.target.value })}
+                              >
+                                <option value="">Select status</option>
+                                <option value="Single">Single</option>
+                                <option value="Married">Married</option>
+                                <option value="Divorced">Divorced</option>
+                                <option value="Widowed">Widowed</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Barcode</Label>
+                              <Input
+                                type="text"
+                                className="h-9 text-sm bg-background rounded-lg"
+                                defaultValue={activeClient.barcode || ''}
+                                onChange={(e) => debouncedUpdate(activeClient.id, { barcode: e.target.value })}
+                                placeholder="Barcode"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Card ID</Label>
+                              <Input
+                                type="text"
+                                className="h-9 text-sm bg-background rounded-lg"
+                                defaultValue={activeClient.cardId || ''}
+                                onChange={(e) => debouncedUpdate(activeClient.id, { cardId: e.target.value })}
+                                placeholder="Card ID"
+                              />
+                            </div>
+                            {activeClient.legacyNotes && (
+                              <div className="space-y-1 col-span-1 sm:col-span-2">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Legacy Notes</Label>
+                                <Textarea
+                                  className="text-xs bg-background rounded-lg resize-none min-h-[80px]"
+                                  value={activeClient.legacyNotes}
+                                  readOnly
+                                  placeholder="Imported notes"
+                                />
+                              </div>
+                            )}
+                          </>
+                        )}
                       </div>
 
                       {/* Portal Access Control */}
