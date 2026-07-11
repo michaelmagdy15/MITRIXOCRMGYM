@@ -174,7 +174,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addComment,
     addInteraction,
     fetchClientDetails
-  } = useClients(currentUser);
+  } = useClients(currentUser, searchQuery);
 
   const { 
     payments, 

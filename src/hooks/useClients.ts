@@ -10,6 +10,12 @@ import {
   runTransaction,
   writeBatch,
   getDocs,
+  query,
+  where,
+  orderBy,
+  startAt,
+  endAt,
+  limit,
 } from 'firebase/firestore';
 import { db, createFirebaseUser, getMemberEmail } from '../firebase';
 import { Client, CRMComment, InteractionLog, User } from '../types';
@@ -111,43 +117,129 @@ function predictGender(clientName: string): 'Male' | 'Female' | null {
   return null;
 }
 
-export const useClients = (currentUser: User | null) => {
+export const useClients = (currentUser: User | null, searchTerm: string = '') => {
   const { effectiveRole } = useAuth();
-  const [baseClients, setBaseClients] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
+  const [membersList, setMembersList] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
+  const [leadsList, setLeadsList] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
+  const [searchResults, setSearchResults] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
   const [loading, setLoading] = useState(true);
 
   const clients = useMemo(() => {
-    return baseClients.map(c => ({
+    const combined = [...membersList, ...leadsList];
+    const existingIds = new Set(combined.map(c => c.id));
+    
+    searchResults.forEach(res => {
+      if (!existingIds.has(res.id)) {
+        combined.push(res);
+      }
+    });
+
+    return combined.map(c => ({
       ...c,
       comments: [],
       interactions: [],
     })) as Client[];
-  }, [baseClients]);
+  }, [membersList, leadsList, searchResults]);
 
+  // 1. Members Snapshot Listener (Active, Expired, Hold) - status != 'Lead'
   useEffect(() => {
     if (!currentUser) return;
-    // Members can only read their own client record — skip the global listener
     if (effectiveRole === 'client' || effectiveRole === 'coach') {
       setLoading(false);
       return;
     }
 
+    const q = query(collection(db, 'clients'), where('status', '!=', 'Lead'));
     const unsubClients = onSnapshot(
-      collection(db, 'clients'),
+      q,
       (snapshot) => {
-        setBaseClients(
+        setMembersList(
           snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
         );
         setLoading(false);
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'clients');
+        handleFirestoreError(error, OperationType.LIST, 'clients-members');
         setLoading(false);
       }
     );
 
     return () => unsubClients();
   }, [currentUser, effectiveRole]);
+
+  // 2. Active Leads Snapshot Listener (New, Trial, Follow Up) - status == 'Lead' & stage in ['New', 'Trial', 'Follow Up']
+  useEffect(() => {
+    if (!currentUser) return;
+    if (effectiveRole === 'client' || effectiveRole === 'coach') return;
+
+    const q = query(
+      collection(db, 'clients'),
+      where('status', '==', 'Lead'),
+      where('stage', 'in', ['New', 'Trial', 'Follow Up'])
+    );
+    const unsubLeads = onSnapshot(
+      q,
+      (snapshot) => {
+        setLeadsList(
+          snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
+        );
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'clients-leads');
+      }
+    );
+
+    return () => unsubLeads();
+  }, [currentUser, effectiveRole]);
+
+  // 3. On-demand search query for historical/lost leads
+  useEffect(() => {
+    if (!currentUser || !searchTerm || searchTerm.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    if (effectiveRole === 'client' || effectiveRole === 'coach') return;
+
+    const term = searchTerm.trim();
+    const delayDebounce = setTimeout(async () => {
+      try {
+        let resultsMap = new Map();
+
+        // Query by phone exact match
+        const qPhone = query(collection(db, 'clients'), where('phone', '==', term));
+        const phoneSnap = await getDocs(qPhone);
+        phoneSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+
+        // Query by memberId exact match
+        const qMemberId = query(collection(db, 'clients'), where('memberId', '==', term));
+        const memberIdSnap = await getDocs(qMemberId);
+        memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+
+        // Query by name prefix match (capitalized prefix logic)
+        const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
+        const qName = query(
+          collection(db, 'clients'),
+          orderBy('name'),
+          startAt(capitalizedTerm),
+          endAt(capitalizedTerm + '\uf8ff'),
+          limit(30)
+        );
+        const nameSnap = await getDocs(qName);
+        nameSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+
+        setSearchResults(
+          Array.from(resultsMap.entries()).map(([id, data]) => ({
+            ...data,
+            id
+          } as Omit<Client, 'comments' | 'interactions'>))
+        );
+      } catch (error) {
+        console.error('Error running on-demand search:', error);
+      }
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [currentUser, effectiveRole, searchTerm]);
 
   const fetchClientDetails = async (clientId: string) => {
     try {
