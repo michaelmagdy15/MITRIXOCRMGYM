@@ -802,6 +802,7 @@ export default function Clients() {
   const upcomingBirthdays = members.filter(c => {
     if (!c.dateOfBirth) return false;
     const dob = parseISO(c.dateOfBirth);
+    if (isNaN(dob.getTime())) return false;
     const dobThisYear = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
     return isAfter(dobThisYear, subDays(now, 1)) && isBefore(dobThisYear, addDays(now, 7));
   });
@@ -1073,7 +1074,7 @@ export default function Clients() {
           `"${c.packageType || ''}"`,
           `"${c.sessionsRemaining || ''}"`,
           `"${c.status}"`,
-          `"${c.membershipExpiry ? format(parseISO(c.membershipExpiry), 'yyyy-MM-dd') : ''}"`,
+          `"${c.membershipExpiry ? safeFormatDate(c.membershipExpiry, 'yyyy-MM-dd', '') : ''}"`,
           `"${totalPaid}"`,
           `"${assignedUser}"`
         ].join(',');
@@ -1137,7 +1138,7 @@ export default function Clients() {
                   {client.membershipExpiry && (
                     <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
                       <Calendar className="h-3 w-3" />
-                      {format(parseISO(client.membershipExpiry), 'MMM d, yy')}
+                      {safeFormatDate(client.membershipExpiry, 'MMM d, yy')}
                     </span>
                   )}
                   {assignedName && (
@@ -1257,7 +1258,7 @@ export default function Clients() {
                 {client.membershipExpiry ? (
                   <div className="flex items-center">
                     <Calendar className="h-3 w-3 mr-2 text-muted-foreground" />
-                    {format(parseISO(client.membershipExpiry), 'MMM d, yyyy')}
+                    {safeFormatDate(client.membershipExpiry, 'MMM d, yyyy')}
                   </div>
                 ) : (
                   <span className="text-muted-foreground text-sm">{t('leads.tabs.unassigned')}</span>
@@ -1854,7 +1855,7 @@ export default function Clients() {
                           <Input
                             type="date"
                             className="h-9 rounded-lg bg-background text-sm px-3"
-                            defaultValue={activeClient.dateOfBirth ? format(parseISO(activeClient.dateOfBirth), 'yyyy-MM-dd') : ''}
+                            defaultValue={activeClient.dateOfBirth ? safeFormatDate(activeClient.dateOfBirth, 'yyyy-MM-dd', '') : ''}
                             onChange={(e) => {
                               const val = e.target.value;
                               updateClient(activeClient.id, { dateOfBirth: val ? new Date(val).toISOString() : '' });
@@ -2200,7 +2201,7 @@ export default function Clients() {
                                   <Input
                                     type="date"
                                     className="h-7 text-[10px] px-1 font-mono bg-background"
-                                    value={pkg.startDate ? format(parseISO(pkg.startDate), 'yyyy-MM-dd') : ''}
+                                    value={pkg.startDate ? safeFormatDate(pkg.startDate, 'yyyy-MM-dd', '') : ''}
                                     onChange={(e) => {
                                       const updated = [...(activeClient.packages || [])];
                                       const cur = updated[idx];
@@ -2208,10 +2209,11 @@ export default function Clients() {
                                       const sysPkg = packages.find((p) => p.name === cur.packageName);
                                       const val = e.target.value;
                                       const ns = val ? new Date(val).toISOString() : '';
+                                      const parsedNs = ns ? parseISO(ns) : null;
                                       updated[idx] = {
                                         ...cur,
                                         startDate: ns,
-                                        endDate: sysPkg && ns ? addDays(parseISO(ns), sysPkg.expiryDays).toISOString() : cur.endDate,
+                                        endDate: sysPkg && parsedNs && !isNaN(parsedNs.getTime()) ? addDays(parsedNs, sysPkg.expiryDays).toISOString() : cur.endDate,
                                       };
                                       updateClientPackages(updated);
                                     }}
@@ -2222,7 +2224,7 @@ export default function Clients() {
                                   <Input
                                     type="date"
                                     className="h-7 text-[10px] px-1 font-mono bg-background"
-                                    value={pkg.endDate ? format(parseISO(pkg.endDate), 'yyyy-MM-dd') : ''}
+                                    value={pkg.endDate ? safeFormatDate(pkg.endDate, 'yyyy-MM-dd', '') : ''}
                                     onChange={(e) => {
                                       const updated = [...(activeClient.packages || [])];
                                       const cur = updated[idx];
@@ -2410,13 +2412,13 @@ export default function Clients() {
                                       {interaction.outcome}
                                     </Badge>
                                   </div>
-                                  <span className="text-[9px] text-muted-foreground">{format(parseISO(interaction.date), 'MMM d, h:mm a')}</span>
+                                  <span className="text-[9px] text-muted-foreground">{safeFormatDate(interaction.date, 'MMM d, h:mm a')}</span>
                                 </div>
                                 <p className="text-muted-foreground leading-relaxed italic">"{interaction.notes}"</p>
                                 {interaction.nextFollowUp && (
                                   <p className="text-amber-600 text-[9px] flex items-center gap-1">
                                     <Calendar className="h-3 w-3" />
-                                    Follow-up: {format(parseISO(interaction.nextFollowUp), 'MMM d')}
+                                    Follow-up: {safeFormatDate(interaction.nextFollowUp, 'MMM d')}
                                   </p>
                                 )}
                               </div>
@@ -2492,7 +2494,7 @@ export default function Clients() {
                                     <User className="h-3 w-3" />
                                     {comment.author}
                                   </span>
-                                  <span>{format(parseISO(comment.date), 'MMM d, h:mm a')}</span>
+                                  <span>{safeFormatDate(comment.date, 'MMM d, h:mm a')}</span>
                                 </div>
                               </div>
                             ))
@@ -2647,7 +2649,7 @@ export default function Clients() {
                                 .map((att) => (
                                   <TableRow key={att.id || Math.random().toString()} className="hover:bg-muted/20 border-b transition-colors">
                                     <TableCell className="py-2.5 px-3 text-xs">
-                                      {att.date ? format(parseISO(att.date), 'MMM d, yyyy - hh:mm a') : '—'}
+                                      {safeFormatDate(att.date, 'MMM d, yyyy - hh:mm a')}
                                     </TableCell>
                                     <TableCell className="py-2.5 px-3 text-xs max-w-[150px] truncate">{att.packageName || '—'}</TableCell>
                                     <TableCell className="py-2.5 px-3 text-xs capitalize">{att.branch || '—'}</TableCell>
@@ -2812,7 +2814,7 @@ export default function Clients() {
                                   <User className="h-3.5 w-3.5" />
                                   {log.userName || 'System'} ({log.action})
                                 </span>
-                                <span>{format(parseISO(log.timestamp), 'MMM d yyyy, h:mm a')}</span>
+                                <span>{safeFormatDate(log.timestamp, 'MMM d yyyy, h:mm a')}</span>
                               </div>
                               <p className="text-muted-foreground">{log.details}</p>
                             </div>
@@ -2914,7 +2916,7 @@ export default function Clients() {
                           return pointsLogs.map((log) => (
                             <div key={log.id} className="bg-background p-2.5 rounded border flex justify-between gap-4">
                               <p className="text-muted-foreground leading-snug">{log.details}</p>
-                              <span className="text-[9px] text-muted-foreground shrink-0">{format(parseISO(log.timestamp), 'dd MMM yyyy')}</span>
+                              <span className="text-[9px] text-muted-foreground shrink-0">{safeFormatDate(log.timestamp, 'dd MMM yyyy')}</span>
                             </div>
                           ));
                         } else {
@@ -3030,7 +3032,7 @@ export default function Clients() {
                               <FileText className="h-4 w-4 text-primary" />
                               <div>
                                 <p className="font-bold text-foreground">{doc.name}</p>
-                                <p className="text-[10px] text-muted-foreground">Logged on: {format(parseISO(doc.uploadDate), 'dd MMM yyyy')}</p>
+                                <p className="text-[10px] text-muted-foreground">Logged on: {safeFormatDate(doc.uploadDate, 'dd MMM yyyy')}</p>
                               </div>
                             </div>
                             <Button
@@ -3302,7 +3304,7 @@ export default function Clients() {
                   <div>
                     <p className="font-medium">{client.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {client.dateOfBirth ? format(parseISO(client.dateOfBirth), 'MMMM do') : ''}
+                      {client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'MMMM do', '') : ''}
                     </p>
                   </div>
                   <Button size="sm" variant="outline" className="text-pink-600 border-pink-200 hover:bg-pink-50">

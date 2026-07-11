@@ -14,6 +14,18 @@ import { differenceInDays, isSameDay, parseISO, isAfter, isBefore, addDays, subD
 import { useLanguage } from './contexts/LanguageContext';
 import { toast } from 'sonner';
 
+const safeParseISO = (dateStr: any): Date => {
+  if (!dateStr) return new Date(NaN);
+  try {
+    const parsed = parseISO(dateStr);
+    if (!isNaN(parsed.getTime())) return parsed;
+    const d = new Date(dateStr);
+    return d;
+  } catch {
+    return new Date(NaN);
+  }
+};
+
 const PRIVATE_PACKAGES = [
   'drop session pt', 
   '30 s pt',
@@ -294,15 +306,17 @@ export default function Dashboard() {
   const noAttendance = clients.filter(c => c.sessionsRemaining === 'no attend');
   
   // Reminders
-  const upcomingVisits = clients.filter(c => 
-    c.expectedVisitDate && 
-    isAfter(parseISO(c.expectedVisitDate), now) && 
-    isBefore(parseISO(c.expectedVisitDate), addDays(now, 3))
-  );
+  const upcomingVisits = clients.filter(c => {
+    if (!c.expectedVisitDate) return false;
+    const d = parseISO(c.expectedVisitDate);
+    if (isNaN(d.getTime())) return false;
+    return isAfter(d, now) && isBefore(d, addDays(now, 3));
+  });
   
   const upcomingBirthdays = clients.filter(c => {
     if (!c.dateOfBirth) return false;
     const dob = parseISO(c.dateOfBirth);
+    if (isNaN(dob.getTime())) return false;
     const dobThisYear = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
     return isAfter(dobThisYear, subDays(now, 1)) && isBefore(dobThisYear, addDays(now, 7));
   });
@@ -315,12 +329,18 @@ export default function Dashboard() {
     const latestComment = c.comments.reduce((latest, current) => {
       if (!latest || !latest.date) return current;
       if (!current || !current.date) return latest;
-      return isAfter(parseISO(current.date), parseISO(latest.date)) ? current : latest;
+      const l = safeParseISO(latest.date);
+      const cur = safeParseISO(current.date);
+      if (isNaN(l.getTime())) return current;
+      if (isNaN(cur.getTime())) return latest;
+      return isAfter(cur, l) ? current : latest;
     }, c.comments[0]);
 
     if (!latestComment || !latestComment.date) return false;
 
-    const daysSinceComment = differenceInDays(now, parseISO(latestComment.date));
+    const p = safeParseISO(latestComment.date);
+    if (isNaN(p.getTime())) return false;
+    const daysSinceComment = differenceInDays(now, p);
     return daysSinceComment >= 7;
   });
 
@@ -348,7 +368,12 @@ export default function Dashboard() {
   const filteredSalesData = React.useMemo(() => {
     let targetAmount = 0;
 
-    let relevantPayments = payments.filter(p => format(parseISO(p.date), 'yyyy-MM') === currentMonthStr);
+    let relevantPayments = payments.filter(p => {
+      if (!p.date) return false;
+      const d = parseISO(p.date);
+      if (isNaN(d.getTime())) return false;
+      return format(d, 'yyyy-MM') === currentMonthStr;
+    });
 
     if (canViewGlobalDashboard && effectiveRepId !== 'all') {
       // Manager viewing a specific rep
@@ -443,7 +468,8 @@ export default function Dashboard() {
       }
 
       const monthPayments = payments.filter(p => {
-        const pDate = parseISO(p.date);
+        const pDate = safeParseISO(p.date);
+        if (isNaN(pDate.getTime())) return false;
         if (!isWithinInterval(pDate, { start, end })) return false;
 
         if (currentUser?.role === 'rep') {
@@ -472,7 +498,11 @@ export default function Dashboard() {
     return months.map(date => {
       const start = startOfMonth(date);
       const end = endOfMonth(date);
-      const mp = payments.filter(p => isWithinInterval(parseISO(p.date), { start, end }));
+      const mp = payments.filter(p => {
+        const d = safeParseISO(p.date);
+        if (isNaN(d.getTime())) return false;
+        return isWithinInterval(d, { start, end });
+      });
       return {
         month: format(date, 'MMM yy'),
         Revenue: mp.reduce((s, p) => s + (Number(p.amount) || 0), 0),
@@ -486,7 +516,9 @@ export default function Dashboard() {
     return reps.map(rep => {
       const repTarget = userTargets.find(t => t.userId === rep.id && t.month === currentMonthStr);
       const repPayments = payments.filter(p => {
-        if (format(parseISO(p.date), 'yyyy-MM') !== currentMonthStr) return false;
+        const d = safeParseISO(p.date);
+        if (isNaN(d.getTime())) return false;
+        if (format(d, 'yyyy-MM') !== currentMonthStr) return false;
         return isPaymentAttributedToRep(p, rep.id, rep.name || '');
       });
       return {
@@ -503,7 +535,11 @@ export default function Dashboard() {
     return months.map(date => {
       const start = startOfMonth(date);
       const end = endOfMonth(date);
-      const mp = payments.filter(p => isWithinInterval(parseISO(p.date), { start, end }));
+      const mp = payments.filter(p => {
+        const d = safeParseISO(p.date);
+        if (isNaN(d.getTime())) return false;
+        return isWithinInterval(d, { start, end });
+      });
       return {
         month: format(date, 'MMM yy'),
         Cash: mp.filter(p => p.method === 'Cash').reduce((s, p) => s + (Number(p.amount) || 0), 0),
@@ -519,7 +555,11 @@ export default function Dashboard() {
     return months.map(date => {
       const start = startOfMonth(date);
       const end = endOfMonth(date);
-      const mp = payments.filter(p => isWithinInterval(parseISO(p.date), { start, end }));
+      const mp = payments.filter(p => {
+        const d = safeParseISO(p.date);
+        if (isNaN(d.getTime())) return false;
+        return isWithinInterval(d, { start, end });
+      });
       return {
         month: format(date, 'MMM yy'),
         Private: mp.filter(p => isPrivatePackage(p.packageType)).length,
@@ -615,25 +655,38 @@ export default function Dashboard() {
   const { newMembersCount, returningMembersCount } = React.useMemo(() => {
     const monthStart = startOfMonth(selectedMonth);
     const monthEnd = endOfMonth(selectedMonth);
-    const newCount = clients.filter(c =>
-      c.startDate && isWithinInterval(parseISO(c.startDate), { start: monthStart, end: monthEnd })
-    ).length;
-    const returningCount = clients.filter(c =>
-      (c.status === 'Active' || c.status === 'Nearly Expired') &&
-      c.startDate && parseISO(c.startDate) < monthStart
-    ).length;
+    const newCount = clients.filter(c => {
+      if (!c.startDate) return false;
+      const d = safeParseISO(c.startDate);
+      if (isNaN(d.getTime())) return false;
+      return isWithinInterval(d, { start: monthStart, end: monthEnd });
+    }).length;
+    const returningCount = clients.filter(c => {
+      if (!c.startDate) return false;
+      if (c.status !== 'Active' && c.status !== 'Nearly Expired') return false;
+      const d = safeParseISO(c.startDate);
+      if (isNaN(d.getTime())) return false;
+      return d < monthStart;
+    }).length;
     return { newMembersCount: newCount, returningMembersCount: returningCount };
   }, [clients, selectedMonth]);
 
   // Attendance heatmap: check-ins per day-of-week per branch over the last 90 days
   const attendanceHeatmap = React.useMemo(() => {
     const cutoff = subDays(now, 90);
-    const recent = attendances.filter(a => parseISO(a.date) >= cutoff);
+    const recent = attendances.filter(a => {
+      if (!a.date) return false;
+      const d = safeParseISO(a.date);
+      if (isNaN(d.getTime())) return false;
+      return d >= cutoff;
+    });
     const branchList = selectedBranch === 'all' ? branches : [selectedBranch as string];
     return branchList.map(branch => {
       const counts: number[] = [0, 0, 0, 0, 0, 0, 0];
       recent.filter(a => a.branch === branch).forEach(a => {
-        const dow = getDay(parseISO(a.date)); // 0 = Sun
+        const d = safeParseISO(a.date);
+        if (isNaN(d.getTime())) return;
+        const dow = getDay(d); // 0 = Sun
         const idx = dow === 0 ? 6 : dow - 1; // remap Mon=0 … Sun=6
         counts[idx] = (counts[idx] ?? 0) + 1;
       });
@@ -1166,7 +1219,26 @@ export default function Dashboard() {
                           >
                             {client.name}
                           </button>
-                          <p className="text-xs text-muted-foreground">{t('dashboard.last_comment')} {differenceInDays(now, parseISO(client.comments.reduce((latest: any, current: any) => isAfter(parseISO(current.date), parseISO(latest.date)) ? current : latest, client.comments[0]).date))} {t('dashboard.days_ago')}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {t('dashboard.last_comment')}{' '}
+                            {(() => {
+                              if (!client.comments || client.comments.length === 0) return '—';
+                              const latestComment = client.comments.reduce((latest: any, current: any) => {
+                                if (!latest || !latest.date) return current;
+                                if (!current || !current.date) return latest;
+                                const l = safeParseISO(latest.date);
+                                const cur = safeParseISO(current.date);
+                                if (isNaN(l.getTime())) return current;
+                                if (isNaN(cur.getTime())) return latest;
+                                return isAfter(cur, l) ? current : latest;
+                              }, client.comments[0]);
+                              if (!latestComment || !latestComment.date) return '—';
+                              const d = safeParseISO(latestComment.date);
+                              if (isNaN(d.getTime())) return '—';
+                              return differenceInDays(now, d);
+                            })()}{' '}
+                            {t('dashboard.days_ago')}
+                          </p>
                         </div>
                       </div>
                     )} 
