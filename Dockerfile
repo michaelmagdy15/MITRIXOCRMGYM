@@ -38,6 +38,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/dist-server ./dist-server
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/firebase-applet-config.json ./
+COPY --from=builder /app/root.crt ./
 
 # Install only production dependencies cleanly and ignore postinstall scripts that fail
 RUN npm ci --omit=dev --ignore-scripts
