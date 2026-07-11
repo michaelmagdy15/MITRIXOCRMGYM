@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { useState, useEffect, useCallback } from 'react';
+import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Payment, Client, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
@@ -16,25 +16,49 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchPayments = useCallback(async () => {
     if (!currentUser || currentUser.role === 'coach' || currentUser.role === 'client') {
       setPayments([]);
       setLoading(false);
       return;
     }
-    const unsub = onSnapshot(collection(db, 'payments'), (snapshot) => {
-      // Filter out soft-deleted payments (where deleted_at is not null)
-      setPayments(snapshot.docs
-        .map(d => ({ ...d.data(), id: d.id } as Payment))
-        .filter(p => !p.deleted_at)
-      );
+    try {
+      const token = await currentUser.getIdToken();
+      if (!token) return;
+
+      const res = await fetch('/api/payments', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setPayments(data.payments || []);
+    } catch (err) {
+      console.error('[Payments] Failed to fetch payments cache:', err);
+    } finally {
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'payments');
-      setLoading(false);
-    });
-    return () => unsub();
+    }
   }, [currentUser]);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
+
+  const invalidateCache = async () => {
+    try {
+      const token = await currentUser?.getIdToken();
+      if (!token) return;
+      await fetch('/api/payments/invalidate', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+    } catch (err) {
+      console.error('[Payments] Failed to invalidate cache:', err);
+    }
+  };
 
   const addPayment = async (payment: Omit<Payment, 'id' | 'client_name' | 'amount_paid' | 'created_at' | 'package_category_type' | 'deleted_at'>) => {
     if (!currentUser) return;
@@ -56,6 +80,10 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
 
       const docRef = await addDoc(collection(db, 'payments'), cleanData(paymentData));
       await addAuditLog('CREATE', 'PAYMENT', docRef.id, `Recorded payment of ${payment.amount} LE for ${clientName}`, currentUser?.name);
+      
+      // Invalidate cache and trigger reload
+      await invalidateCache();
+      await fetchPayments();
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'payments');
     }
@@ -74,6 +102,10 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
 
       await deleteDoc(doc(db, 'payments', id));
       await addAuditLog('DELETE', 'PAYMENT', id, `Deleted payment of ${amount} LE for ${clientName}`, currentUser?.name);
+      
+      // Invalidate cache and trigger reload
+      await invalidateCache();
+      await fetchPayments();
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `payments/${id}`);
     }
@@ -89,6 +121,10 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
 
       await updateDoc(doc(db, 'payments', id), cleanData(updates));
       await addAuditLog('UPDATE', 'PAYMENT', id, `Updated payment for ${clientName}`, currentUser?.name);
+      
+      // Invalidate cache and trigger reload
+      await invalidateCache();
+      await fetchPayments();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `payments/${id}`);
     }

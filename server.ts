@@ -81,6 +81,13 @@ interface ClientCacheEntry {
 }
 const clientsCache = new Map<string, ClientCacheEntry>();
 
+interface PaymentCacheEntry {
+  payments: any[];
+  timestamp: number;
+}
+const paymentsCache = new Map<string, PaymentCacheEntry>();
+
+
 async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
@@ -332,6 +339,51 @@ async function startServer() {
       return res.status(500).json({ error: (error as Error).message });
     }
   });
+
+  // Fetch all payments via memory cache
+  app.get("/api/payments", requireAuth, async (req, res) => {
+    try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const dbId = config?.firestoreDatabaseId || '(default)';
+      
+      const now = Date.now();
+      const cached = paymentsCache.get(dbId);
+      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+        return res.json({ payments: cached.payments, cached: true });
+      }
+
+      console.log(`[Cache] Cache miss for payments. Database: ${dbId}. Fetching from Firestore...`);
+      const db = await getDbForRequest(req);
+      const snap = await db.collection('payments').get();
+      const payments = snap.docs
+        .map(doc => ({ ...doc.data(), id: doc.id }))
+        .filter((p: any) => !p.deleted_at);
+
+      paymentsCache.set(dbId, { payments, timestamp: now });
+      return res.json({ payments, cached: false });
+    } catch (error) {
+      console.error('[API] Error fetching payments:', error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Invalidate payments cache
+  app.post("/api/payments/invalidate", requireAuth, async (req, res) => {
+    try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const dbId = config?.firestoreDatabaseId || '(default)';
+      
+      paymentsCache.delete(dbId);
+      console.log(`[Cache] Invalidated payments cache for database: ${dbId}`);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error('[API] Error invalidating payments cache:', error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
 
   // Provisioning endpoint for new gym onboarding
   app.post("/api/provision", requirePlatformAdmin, async (req, res) => {
