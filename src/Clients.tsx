@@ -1709,7 +1709,7 @@ export default function Clients() {
 
       {activeClient && (
         <Dialog open={!!activeClientId} onOpenChange={(open) => { if (!open) setActiveClientId(null); }}>
-          <DialogContent className="w-[96vw] max-w-4xl max-h-[92vh] md:w-full overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
+          <DialogContent className="w-[96vw] sm:max-w-4xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
             {/* Header */}
             <DialogHeader className="px-6 pr-12 sm:pr-6 pt-5 pb-4 border-b bg-muted/20 flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
