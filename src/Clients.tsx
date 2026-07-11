@@ -1709,7 +1709,7 @@ export default function Clients() {
 
       {activeClient && (
         <Dialog open={!!activeClientId} onOpenChange={(open) => { if (!open) setActiveClientId(null); }}>
-          <DialogContent className="w-[96vw] sm:max-w-4xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
+          <DialogContent className="w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
             {/* Header */}
             <DialogHeader className="px-6 pr-12 sm:pr-6 pt-5 pb-4 border-b bg-muted/20 flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
@@ -1734,10 +1734,10 @@ export default function Clients() {
               </div>
             </DialogHeader>
 
-            <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden min-h-0">
-              {/* Modern scrollable horizontal tab pills */}
-              <div className="px-6 py-2 border-b flex-shrink-0 bg-muted/10 overflow-x-auto no-scrollbar">
-                <TabsList className="bg-transparent p-0 h-auto gap-1 rounded-none border-none shadow-none flex flex-row whitespace-nowrap min-w-max">
+            <Tabs defaultValue="overview" className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+              {/* Sidebar Navigation: Vertical on desktop, horizontal scroll on mobile */}
+              <div className="w-full lg:w-56 border-b lg:border-b-0 lg:border-r bg-muted/5 flex-shrink-0 overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto no-scrollbar p-3">
+                <TabsList className="bg-transparent p-0 h-auto gap-1 rounded-none border-none shadow-none flex flex-row lg:flex-col whitespace-nowrap lg:whitespace-normal">
                   {[
                     { value: 'overview', label: 'Overview', icon: <User className="h-3.5 w-3.5" /> },
                     { value: 'activity', label: 'Activity', icon: <MessageSquare className="h-3.5 w-3.5" /> },
@@ -1752,7 +1752,7 @@ export default function Clients() {
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5"
+                      className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-2 text-xs font-bold transition-all flex items-center gap-1.5 w-auto lg:w-full lg:justify-start hover:bg-muted/50 cursor-pointer"
                     >
                       {tab.icon}
                       {tab.label}
