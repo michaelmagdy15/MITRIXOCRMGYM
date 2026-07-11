@@ -1,5 +1,5 @@
-import { collection, doc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, doc, addDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { db, auth, getTenantId } from '../firebase';
 import { 
   Payment, 
   Task, 
@@ -15,52 +15,175 @@ import { addAuditLog } from './auditService';
 
 // Payment Service
 export const addPayment = async (payment: Omit<Payment, 'id'>) => {
-  const docRef = await addDoc(collection(db, 'payments'), cleanData(payment));
-  await addAuditLog('CREATE', 'PAYMENT', docRef.id as PaymentId, `Recorded payment of ${payment.amount} for client ${payment.clientId}`);
-  return docRef.id as PaymentId;
+  const docId = doc(collection(db, 'payments')).id as PaymentId;
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/payments/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id: docId, payment: cleanData(payment) })
+    });
+  } else {
+    await setDoc(doc(db, 'payments', docId), cleanData(payment));
+  }
+  await addAuditLog('CREATE', 'PAYMENT', docId, `Recorded payment of ${payment.amount} for client ${payment.clientId}`);
+  return docId;
 };
 
 export const deletePayment = async (id: PaymentId) => {
-  await deleteDoc(doc(db, 'payments', id));
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/payments/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id })
+    });
+  } else {
+    await deleteDoc(doc(db, 'payments', id));
+  }
   await addAuditLog('DELETE', 'PAYMENT', id, `Deleted payment record: ${id}`);
 };
 
 // Task Service
 export const addTask = async (task: Omit<Task, 'id'>) => {
-  const docRef = await addDoc(collection(db, 'tasks'), cleanData(task));
-  // await addAuditLog('CREATE', 'TASK', docRef.id as TaskId, `Created task: ${task.title}`);
-  return docRef.id as TaskId;
+  const docId = doc(collection(db, 'tasks')).id as TaskId;
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/tasks/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id: docId, task: cleanData(task) })
+    });
+  } else {
+    await setDoc(doc(db, 'tasks', docId), cleanData(task));
+  }
+  return docId;
 };
 
 export const updateTask = async (id: TaskId, updates: Partial<Task>) => {
-  await updateDoc(doc(db, 'tasks', id), cleanData(updates));
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/tasks/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id, updates: cleanData(updates) })
+    });
+  } else {
+    await updateDoc(doc(db, 'tasks', id), cleanData(updates));
+  }
 };
 
 export const deleteTask = async (id: TaskId) => {
-  await deleteDoc(doc(db, 'tasks', id));
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/tasks/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id })
+    });
+  } else {
+    await deleteDoc(doc(db, 'tasks', id));
+  }
 };
 
 // Package Service
 export const addPackage = async (pkg: Omit<Package, 'id'>) => {
-  const docRef = await addDoc(collection(db, 'packages'), cleanData(pkg));
-  return docRef.id as PackageId;
+  const docId = doc(collection(db, 'packages')).id as PackageId;
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/packages/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id: docId, pkg: cleanData(pkg) })
+    });
+  } else {
+    await setDoc(doc(db, 'packages', docId), cleanData(pkg));
+  }
+  return docId;
 };
 
 export const updatePackage = async (id: PackageId, updates: Partial<Package>) => {
-  await updateDoc(doc(db, 'packages', id), cleanData(updates));
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/packages/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id, updates: cleanData(updates) })
+    });
+  } else {
+    await updateDoc(doc(db, 'packages', id), cleanData(updates));
+  }
 };
 
 export const deletePackage = async (id: PackageId) => {
-  await deleteDoc(doc(db, 'packages', id));
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/packages/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id })
+    });
+  } else {
+    await deleteDoc(doc(db, 'packages', id));
+  }
 };
 
 // Session Service
 export const addPrivateSession = async (session: Omit<PrivateSession, 'id'>) => {
-  const docRef = await addDoc(collection(db, 'sessions'), cleanData(session));
-  await addAuditLog('CREATE', 'SESSION', docRef.id as SessionId, `Scheduled session for client ${session.clientId}`);
-  return docRef.id as SessionId;
+  const docId = doc(collection(db, 'sessions')).id as SessionId;
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/sessions/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id: docId, session: cleanData(session) })
+    });
+  } else {
+    await setDoc(doc(db, 'sessions', docId), cleanData(session));
+  }
+  await addAuditLog('CREATE', 'SESSION', docId, `Scheduled session for client ${session.clientId}`);
+  return docId;
 };
 
 export const updatePrivateSession = async (id: SessionId, updates: Partial<PrivateSession>) => {
-  await updateDoc(doc(db, 'sessions', id), cleanData(updates));
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/sessions/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id, updates: cleanData(updates) })
+    });
+  } else {
+    await updateDoc(doc(db, 'sessions', id), cleanData(updates));
+  }
 };

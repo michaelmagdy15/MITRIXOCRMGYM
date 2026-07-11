@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Client,
   Payment,
@@ -17,8 +17,8 @@ import {
   ImportBatchId,
   UserId,
   ClientUpdates
-} from '../types';
-import { db } from '../firebase';
+ } from '../types';
+import { db, auth, getTenantId } from '../firebase';
 import { 
   collection, 
   onSnapshot, 
@@ -101,8 +101,86 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })) as Client[];
   }, [baseClients, allComments]);
 
+  const fetchAllData = useCallback(async () => {
+    if (getTenantId() !== 'inzanathletics' || !currentUser) return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      // 1. Fetch Clients
+      fetch('/api/clients', { headers })
+        .then(res => res.json())
+        .then(data => {
+          const allClients = data.clients || [];
+          setBaseClients(allClients);
+        });
+
+      // 2. Fetch Payments
+      fetch('/api/payments', { headers })
+        .then(res => res.json())
+        .then(data => {
+          const paymentsData = data.payments || [];
+          setPayments(paymentsData);
+          const total = paymentsData.reduce((acc: number, p: any) => acc + (p.amount || 0), 0);
+          const privateSold = paymentsData.filter((p: any) => p.packageType?.toLowerCase().includes('private')).length;
+          const groupSold = paymentsData.filter((p: any) => 
+            p.packageType?.toLowerCase().includes('group') || 
+            p.packageType?.toLowerCase().includes('gt')
+          ).length;
+          
+          setSalesTarget((prev) => ({
+            ...prev,
+            currentAmount: total,
+            privateSessionsSold: privateSold,
+            groupSessionsSold: groupSold
+          }));
+        });
+
+      // 3. Fetch Sessions
+      fetch('/api/sessions', { headers })
+        .then(res => res.json())
+        .then(data => setPrivateSessions(data.sessions || []));
+
+      // 4. Fetch Tasks
+      fetch('/api/tasks', { headers })
+        .then(res => res.json())
+        .then(data => setTasks(data.tasks || []));
+
+      // 5. Fetch Packages
+      fetch('/api/packages', { headers })
+        .then(res => res.json())
+        .then(data => setPackages(data.packages || []));
+
+      // 6. Fetch Import Batches
+      fetch('/api/import-batches', { headers })
+        .then(res => res.json())
+        .then(data => setImportBatches(data.importBatches || []));
+
+      // 7. Fetch User Targets
+      fetch('/api/user-targets', { headers })
+        .then(res => res.json())
+        .then(data => setUserTargets(data.userTargets || []));
+
+      // 8. Fetch Audit Logs
+      if (['manager', 'admin', 'super_admin', 'crm_admin'].includes(effectiveRole || '')) {
+        fetch('/api/audit-logs', { headers })
+          .then(res => res.json())
+          .then(data => setAuditLogs(data.auditLogs || []));
+      }
+    } catch (err) {
+      console.error('[CRMContext] Error fetching SQL data:', err);
+    }
+  }, [currentUser, effectiveRole, setSalesTarget]);
+
   useEffect(() => {
     if (!currentUser) return;
+
+    if (getTenantId() === 'inzanathletics') {
+      fetchAllData();
+      return;
+    }
 
     const unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
       setBaseClients(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id as ClientId } as Omit<Client, 'comments'>)));
@@ -177,7 +255,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubTargets();
       if (unsubAudit) unsubAudit();
     };
-  }, [currentUser, effectiveRole, setSalesTarget]);
+  }, [currentUser, effectiveRole, setSalesTarget, fetchAllData]);
 
   const visibleClients = useMemo(() => {
     if (!currentUser) return [];

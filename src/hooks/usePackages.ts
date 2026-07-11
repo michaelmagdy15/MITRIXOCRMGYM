@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, setDoc } from 'firebase/firestore';
+import { db, getTenantId, auth } from '../firebase';
 import { Package } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -13,7 +13,27 @@ export const usePackages = () => {
   const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchPackages = async () => {
+    if (getTenantId() !== 'inzanathletics') return;
+    try {
+      const res = await fetch('/api/packages');
+      if (res.ok) {
+        const data = await res.json();
+        setPackages(data.packages || []);
+      }
+    } catch (err) {
+      console.error('[Packages] Failed to fetch packages:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
+    if (getTenantId() === 'inzanathletics') {
+      fetchPackages();
+      return;
+    }
+
     // Guests (not logged in) — one-time public read of packages
     if (!currentUser) {
       getDocs(collection(db, 'packages'))
@@ -53,8 +73,22 @@ export const usePackages = () => {
 
   const addPackage = async (pkg: Omit<Package, 'id'>) => {
     try {
-      const docRef = await addDoc(collection(db, 'packages'), cleanData(pkg));
-      await addAuditLog('CREATE', 'CLIENT', docRef.id, `Created package: ${pkg.name}`);
+      const docId = doc(collection(db, 'packages')).id;
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/packages/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id: docId, pkg: cleanData(pkg) })
+        });
+        await fetchPackages();
+      } else {
+        await setDoc(doc(db, 'packages', docId), cleanData(pkg));
+      }
+      await addAuditLog('CREATE', 'CLIENT', docId, `Created package: ${pkg.name}`);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'packages');
     }
@@ -62,7 +96,20 @@ export const usePackages = () => {
 
   const updatePackage = async (id: string, updates: Partial<Package>) => {
     try {
-      await updateDoc(doc(db, 'packages', id), cleanData(updates));
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/packages/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id, updates: cleanData(updates) })
+        });
+        await fetchPackages();
+      } else {
+        await updateDoc(doc(db, 'packages', id), cleanData(updates));
+      }
       const pkgName = packages.find(p => p.id === id)?.name || id;
       await addAuditLog('UPDATE', 'CLIENT', id, `Updated package: ${pkgName}`);
     } catch (error) {
@@ -73,7 +120,20 @@ export const usePackages = () => {
   const deletePackage = async (id: string) => {
     try {
       const pkgName = packages.find(p => p.id === id)?.name || id;
-      await deleteDoc(doc(db, 'packages', id));
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/packages/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id })
+        });
+        await fetchPackages();
+      } else {
+        await deleteDoc(doc(db, 'packages', id));
+      }
       await addAuditLog('DELETE', 'CLIENT', id, `Deleted package: ${pkgName}`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `packages/${id}`);

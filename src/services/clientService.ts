@@ -8,7 +8,7 @@ import {
   runTransaction, 
   writeBatch 
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth, getTenantId } from '../firebase';
 import { Client, ClientId, UserId, SessionId } from '../types';
 import { cleanData } from '../utils';
 import { addAuditLog } from './auditService';
@@ -43,8 +43,22 @@ export const addClient = async (client: Client): Promise<ClientId> => {
 
   const docRef = doc(collection(db, 'clients'));
   const clientId = docRef.id as ClientId;
+  const finalData = { ...cleanData(clientData), id: clientId };
   
-  await setDoc(docRef, { ...cleanData(clientData), id: clientId });
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/clients/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id: clientId, client: finalData })
+    });
+  } else {
+    await setDoc(docRef, finalData);
+  }
+
   await addAuditLog(
     'CREATE', 
     client.status === 'Lead' ? 'LEAD' : 'CLIENT', 
@@ -57,24 +71,63 @@ export const addClient = async (client: Client): Promise<ClientId> => {
 export const updateClient = async (id: ClientId, updates: Partial<Client>, currentName?: string): Promise<void> => {
   const { comments: _, ...updateData } = updates;
   
-  await updateDoc(doc(db, 'clients', id), cleanData(updateData));
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/clients/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id, updates: cleanData(updateData) })
+    });
+  } else {
+    await updateDoc(doc(db, 'clients', id), cleanData(updateData));
+  }
+
   await addAuditLog('UPDATE', 'CLIENT', id, `Updated client/lead: ${currentName || id}`);
 };
 
 export const deleteClient = async (id: ClientId, clientName?: string): Promise<void> => {
-  await deleteDoc(doc(db, 'clients', id));
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/clients/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id })
+    });
+  } else {
+    await deleteDoc(doc(db, 'clients', id));
+  }
   await addAuditLog('DELETE', 'CLIENT', id, `Deleted client/lead: ${clientName || id}`);
 };
 
 export const addComment = async (clientId: ClientId, text: string, author: string): Promise<void> => {
-  await addDoc(collection(db, 'clients', clientId, 'comments'), {
+  const commentData = {
     text,
     date: new Date().toISOString(),
     author
-  });
-  await updateDoc(doc(db, 'clients', clientId), {
-    lastContactDate: new Date().toISOString()
-  });
+  };
+
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/clients/add-comment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ clientId, comment: commentData })
+    });
+  } else {
+    await addDoc(collection(db, 'clients', clientId, 'comments'), commentData);
+    await updateDoc(doc(db, 'clients', clientId), {
+      lastContactDate: new Date().toISOString()
+    });
+  }
 };
 
 export const bulkAddClients = async (newClients: Client[]) => {
@@ -98,6 +151,40 @@ export const bulkAddClients = async (newClients: Client[]) => {
       console.error("Error generating bulk member IDs:", error);
       nextMemberId = Math.floor(Math.random() * 10000);
     }
+  }
+
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: {row: number, reason: string}[] = [];
+
+    for (let i = 0; i < newClients.length; i++) {
+      try {
+        const client = newClients[i]!;
+        const { id: _, comments: __, ...clientData } = client;
+        if (clientData.status !== 'Lead' && !('memberId' in clientData)) {
+          (clientData as any).memberId = (nextMemberId++).toString();
+        }
+        const finalId = doc(collection(db, 'clients')).id as ClientId;
+        const finalData = { ...cleanData(clientData), id: finalId };
+        
+        await fetch('/api/clients/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id: finalId, client: finalData })
+        });
+        successCount++;
+      } catch (err: any) {
+        failedCount++;
+        errors.push({ row: i + 1, reason: err.message });
+      }
+    }
+    await addAuditLog('CREATE', 'CLIENT', 'bulk', `Bulk imported ${successCount} clients/leads`);
+    return { success: successCount, failed: failedCount, errors };
   }
 
   let batch = writeBatch(db);
@@ -151,40 +238,80 @@ export const recordSessionAttendance = async (
   client: Client,
   authorName: string
 ): Promise<void> => {
-  const batch = writeBatch(db);
-  const sessionRef = doc(db, 'sessions', sessionId);
-
-  // 1. Update session status
-  batch.update(sessionRef, { status });
-
-  // 2. Handle session deduction logic if attended — skip for unlimited packages
-  if (status === 'Attended' && 'sessionsRemaining' in client && typeof client.sessionsRemaining === 'number') {
-    const clientRef = doc(db, 'clients', clientId);
-    batch.update(clientRef, { 
-      sessionsRemaining: client.sessionsRemaining - 1,
-      lastContactDate: new Date().toISOString()
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/sessions/update', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ id: sessionId, updates: { status } })
     });
 
-    // 3. Automatically log comment
-    const commentRef = doc(collection(db, 'clients', clientId, 'comments'));
-    batch.set(commentRef, {
-      text: `Private Session Attended.`,
-      date: new Date().toISOString(),
-      author: authorName
-    });
-  } else if (status === 'Attended' && client.sessionsRemaining === 'unlimited') {
-    // Unlimited package: still log attendance comment, just don't decrement
-    const clientRef = doc(db, 'clients', clientId);
-    batch.update(clientRef, { lastContactDate: new Date().toISOString() });
-    const commentRef = doc(collection(db, 'clients', clientId, 'comments'));
-    batch.set(commentRef, {
-      text: `Private Session Attended (Unlimited Package).`,
-      date: new Date().toISOString(),
-      author: authorName
-    });
+    if (status === 'Attended') {
+      const commentData = {
+        text: client.sessionsRemaining === 'unlimited' ? `Private Session Attended (Unlimited Package).` : `Private Session Attended.`,
+        date: new Date().toISOString(),
+        author: authorName
+      };
+
+      await fetch('/api/clients/add-comment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ clientId, comment: commentData })
+      });
+
+      if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+        await fetch('/api/clients/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id: clientId, updates: { sessionsRemaining: client.sessionsRemaining - 1 } })
+        });
+      }
+    }
+  } else {
+    const batch = writeBatch(db);
+    const sessionRef = doc(db, 'sessions', sessionId);
+
+    // 1. Update session status
+    batch.update(sessionRef, { status });
+
+    // 2. Handle session deduction logic if attended — skip for unlimited packages
+    if (status === 'Attended' && 'sessionsRemaining' in client && typeof client.sessionsRemaining === 'number') {
+      const clientRef = doc(db, 'clients', clientId);
+      batch.update(clientRef, { 
+        sessionsRemaining: client.sessionsRemaining - 1,
+        lastContactDate: new Date().toISOString()
+      });
+
+      // 3. Automatically log comment
+      const commentRef = doc(collection(db, 'clients', clientId, 'comments'));
+      batch.set(commentRef, {
+        text: `Private Session Attended.`,
+        date: new Date().toISOString(),
+        author: authorName
+      });
+    } else if (status === 'Attended' && client.sessionsRemaining === 'unlimited') {
+      // Unlimited package: still log attendance comment, just don't decrement
+      const clientRef = doc(db, 'clients', clientId);
+      batch.update(clientRef, { lastContactDate: new Date().toISOString() });
+      const commentRef = doc(collection(db, 'clients', clientId, 'comments'));
+      batch.set(commentRef, {
+        text: `Private Session Attended (Unlimited Package).`,
+        date: new Date().toISOString(),
+        author: authorName
+      });
+    }
+
+    await batch.commit();
   }
-
-  await batch.commit();
 
   await addAuditLog(
     'UPDATE', 
@@ -195,10 +322,22 @@ export const recordSessionAttendance = async (
 };
 
 export const deleteMultipleClients = async (ids: ClientId[]): Promise<void> => {
-  const batch = writeBatch(db);
-  ids.forEach(id => {
-    batch.delete(doc(db, 'clients', id));
-  });
-  await batch.commit();
+  if (getTenantId() === 'inzanathletics') {
+    const token = await auth.currentUser?.getIdToken();
+    await fetch('/api/clients/delete-multiple', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ ids })
+    });
+  } else {
+    const batch = writeBatch(db);
+    ids.forEach(id => {
+      batch.delete(doc(db, 'clients', id));
+    });
+    await batch.commit();
+  }
   await addAuditLog('DELETE', 'CLIENT', 'multiple', `Bulk deleted ${ids.length} clients/leads`);
 };

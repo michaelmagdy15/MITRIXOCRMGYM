@@ -4,6 +4,9 @@ import fs from "fs";
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
+import * as sqlDb from './src/db/dbOperations.js';
+import { checkConnection } from './src/db/db.js';
+import { registerSqlRoutes } from './src/db/sqlApi.js';
 
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
@@ -91,16 +94,19 @@ const paymentsCache = new Map<string, PaymentCacheEntry>();
 async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized: Missing token' });
+    res.status(401).json({ error: 'Unauthorized: Missing token' });
+    return;
   }
   try {
     const token = authHeader.split('Bearer ')[1];
     const decodedToken = await admin.auth().verifyIdToken(token!);
     (req as any).user = decodedToken;
     next();
+    return;
   } catch (error) {
     console.error('[Auth] Token verification failed:', error);
-    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    return;
   }
 }
 
@@ -297,12 +303,20 @@ async function startServer() {
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
+      const tenantId = config?.tenantId;
       const dbId = config?.firestoreDatabaseId || '(default)';
       
       const now = Date.now();
       const cached = clientsCache.get(dbId);
       if (cached && now - cached.timestamp < CACHE_TTL_MS) {
         return res.json({ clients: cached.clients, cached: true });
+      }
+
+      if (tenantId === 'inzanathletics') {
+        console.log(`[Cache] Cache miss for CockroachDB. Database: Inzan-athletics. Fetching...`);
+        const clients = await sqlDb.getClientsFromSQL();
+        clientsCache.set(dbId, { clients, timestamp: now });
+        return res.json({ clients, cached: false });
       }
 
       console.log(`[Cache] Cache miss for database: ${dbId}. Fetching from Firestore...`);
@@ -345,12 +359,20 @@ async function startServer() {
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
+      const tenantId = config?.tenantId;
       const dbId = config?.firestoreDatabaseId || '(default)';
       
       const now = Date.now();
       const cached = paymentsCache.get(dbId);
       if (cached && now - cached.timestamp < CACHE_TTL_MS) {
         return res.json({ payments: cached.payments, cached: true });
+      }
+
+      if (tenantId === 'inzanathletics') {
+        console.log(`[Cache] Cache miss for payments. CockroachDB: Inzan-athletics. Fetching...`);
+        const payments = await sqlDb.getPaymentsFromSQL();
+        paymentsCache.set(dbId, { payments, timestamp: now });
+        return res.json({ payments, cached: false });
       }
 
       console.log(`[Cache] Cache miss for payments. Database: ${dbId}. Fetching from Firestore...`);
@@ -383,6 +405,17 @@ async function startServer() {
       return res.status(500).json({ error: (error as Error).message });
     }
   });
+
+  // Register all PostgreSQL / CockroachDB abstraction routes
+  registerSqlRoutes(
+    app,
+    requireAuth,
+    getRequestHostname,
+    getTenantInfoForHost,
+    getDbForRequest,
+    clientsCache,
+    paymentsCache
+  );
 
 
   // Provisioning endpoint for new gym onboarding
@@ -572,7 +605,121 @@ async function startServer() {
     }
 
     try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const tenantId = config?.tenantId;
       const db = await getDbForRequest(req);
+
+      if (tenantId === 'inzanathletics') {
+        // 1. Find client in SQL by id, memberId or phone
+        const clients = await sqlDb.getClientsFromSQL();
+        const client = clients.find(c => c.id === qrData || c.memberId === qrData || c.phone === qrData);
+        if (!client) {
+          return res.status(404).json({ error: "Member not found. Please check the QR code or ID." });
+        }
+        
+        if (client.status === 'Expired') {
+          return res.status(400).json({ error: `${client.name}'s membership is expired. They must head to the STRIKE branch to renew.` });
+        }
+        if (client.status === 'Hold') {
+          return res.status(400).json({ error: `${client.name}'s membership is currently on hold.` });
+        }
+
+        // Check double check-in
+        const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+        const attendances = await sqlDb.getAttendancesFromSQL();
+        const todayCheckins = attendances.filter(a => {
+          if (a.clientId !== client.id || !a.date) return false;
+          try {
+            return new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr;
+          } catch {
+            return false;
+          }
+        });
+        const checkinCount = todayCheckins.length;
+
+        // Count expected sessions from SQL
+        const sessions = await sqlDb.getSessionsFromSQL();
+        const ptSessionsCount = sessions.filter(s => {
+          return s.clientId === client.id && s.date === cairoDateStr && (s.status === 'Scheduled' || s.status === 'Attended');
+        }).length;
+
+        // Group classes count from Firestore
+        const classesSnap = await db.collection('classes')
+          .where('date', '==', cairoDateStr)
+          .get();
+        const groupClassesCount = classesSnap.docs.filter(docSnap => {
+          const attendees = docSnap.data().attendees || [];
+          return attendees.includes(client.id);
+        }).length;
+
+        const totalExpected = Math.max(1, ptSessionsCount + groupClassesCount);
+
+        if (checkinCount >= totalExpected) {
+          const msg = totalExpected === 1
+            ? `Double check-in blocked. ${client.name} has already checked in today.`
+            : `Double check-in blocked. ${client.name} has already checked in ${checkinCount} times today for ${totalExpected} scheduled sessions.`;
+          return res.status(400).json({ error: msg });
+        }
+
+        // 2. Add Attendance in SQL
+        const attendanceData = {
+          clientId: client.id,
+          branch: branch || 'MAIN',
+          date: new Date().toISOString(),
+          recordedBy: 'qr-reader',
+          packageName: client.packageType || '',
+        };
+        await sqlDb.recordAttendanceInSQL(attendanceData);
+
+        // 3. Mark matching scheduled PT sessions today to 'Attended'
+        const todayScheduledPTs = sessions.filter(s => {
+          return s.clientId === client.id && s.date === cairoDateStr && s.status === 'Scheduled';
+        });
+        for (const pt of todayScheduledPTs) {
+          await sqlDb.updateSessionInSQL(pt.id, { status: 'Attended' });
+        }
+
+        // 4. Decrement remaining sessions
+        const packagesCopy = client.packages ? [...client.packages] : [];
+        const activePkgIdx = packagesCopy.findIndex((p: any) => p.status === 'Active');
+        const updateData: any = {};
+
+        if (activePkgIdx !== -1) {
+          const activePkg = packagesCopy[activePkgIdx];
+          if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+            packagesCopy[activePkgIdx] = {
+              ...activePkg,
+              sessionsRemaining: activePkg.sessionsRemaining - 1
+            };
+            updateData.packages = packagesCopy;
+          }
+        }
+
+        if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+          updateData.sessionsRemaining = client.sessionsRemaining - 1;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await sqlDb.updateClientInSQL(client.id, updateData);
+        }
+
+        // Log audit trail
+        await sqlDb.addAuditLogToSQL({
+          action: 'CREATE',
+          entityType: 'ATTENDANCE',
+          entityId: client.id,
+          details: `Attendance recorded via QR: ${client.name} at ${branch || 'MAIN'}`,
+          timestamp: new Date().toISOString(),
+          userId: 'qr-reader',
+          userName: 'QR Reader API'
+        });
+
+        // Invalidate cache
+        clientsCache.delete(config.firestoreDatabaseId || '(default)');
+        
+        return res.json({ success: true, message: `Check-in recorded for ${client.name}`, clientName: client.name });
+      }
 
       // Search by ID first
       let clientSnap = await db.collection('clients').doc(qrData).get();
@@ -901,8 +1048,17 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    if (process.env.COCKROACH_DB_URL || process.env.DATABASE_URL) {
+      console.log("[DB] Testing connection to CockroachDB...");
+      const isConnected = await checkConnection();
+      if (isConnected) {
+        console.log("[DB] Connection to CockroachDB successful!");
+      } else {
+        console.error("[DB] Failed to connect to CockroachDB.");
+      }
+    }
   });
 }
 

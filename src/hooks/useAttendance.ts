@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, orderBy, getDocs, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth, getTenantId } from '../firebase';
 import { Attendance, Branch, Client, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { addAuditLog } from '../services/auditService';
@@ -12,7 +12,33 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchAttendances = useCallback(async () => {
+    if (getTenantId() !== 'inzanathletics') return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch('/api/attendance', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAttendances(data.attendances || []);
+      }
+    } catch (err) {
+      console.error('[Attendance] Failed to fetch attendances:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
   useEffect(() => {
+    if (getTenantId() === 'inzanathletics') {
+      if (currentUser) {
+        fetchAttendances();
+      }
+      return;
+    }
+
     if (!currentUser) return;
     // Members can't list all attendance — skip the global listener
     if (effectiveRole === 'client' || effectiveRole === 'coach') {
@@ -31,7 +57,7 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       }
     );
     return () => unsub();
-  }, [currentUser, effectiveRole]);
+  }, [currentUser, effectiveRole, fetchAttendances]);
 
   const recordAttendance = async (clientId: string, branch: Branch) => {
     if (!currentUser) return;
@@ -101,31 +127,73 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
         attendanceData.packageName = client.packageType;
       }
 
-      await addDoc(collection(db, 'attendance'), attendanceData);
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/attendance/record', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ attendance: attendanceData })
+        });
 
-      // Decrement sessions only for finite packages with sessions remaining
-      const packagesCopy = client.packages ? [...client.packages] : [];
-      const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
-      
-      const updateData: any = {};
-      
-      if (activePkgIdx !== -1) {
-        const activePkg = packagesCopy[activePkgIdx];
-        if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
-          packagesCopy[activePkgIdx] = {
-            ...activePkg,
-            sessionsRemaining: activePkg.sessionsRemaining - 1
-          } as any;
-          updateData.packages = packagesCopy;
+        const packagesCopy = client.packages ? [...client.packages] : [];
+        const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+        const updateData: any = {};
+        
+        if (activePkgIdx !== -1) {
+          const activePkg = packagesCopy[activePkgIdx];
+          if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+            packagesCopy[activePkgIdx] = {
+              ...activePkg,
+              sessionsRemaining: activePkg.sessionsRemaining - 1
+            } as any;
+            updateData.packages = packagesCopy;
+          }
         }
-      }
-      
-      if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-        updateData.sessionsRemaining = client.sessionsRemaining - 1;
-      }
-      
-      if (Object.keys(updateData).length > 0) {
-        await updateDoc(doc(db, 'clients', clientId), updateData);
+        
+        if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+          updateData.sessionsRemaining = client.sessionsRemaining - 1;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await fetch('/api/clients/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ id: clientId, updates: updateData })
+          });
+        }
+        await fetchAttendances();
+      } else {
+        // Decrement sessions only for finite packages with sessions remaining
+        const packagesCopy = client.packages ? [...client.packages] : [];
+        const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+        
+        const updateData: any = {};
+        
+        if (activePkgIdx !== -1) {
+          const activePkg = packagesCopy[activePkgIdx];
+          if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+            packagesCopy[activePkgIdx] = {
+              ...activePkg,
+              sessionsRemaining: activePkg.sessionsRemaining - 1
+            } as any;
+            updateData.packages = packagesCopy;
+          }
+        }
+        
+        if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+          updateData.sessionsRemaining = client.sessionsRemaining - 1;
+        }
+
+        await addDoc(collection(db, 'attendance'), attendanceData);
+        if (Object.keys(updateData).length > 0) {
+          await updateDoc(doc(db, 'clients', clientId), updateData);
+        }
       }
 
       await addAuditLog('CREATE', 'ATTENDANCE', clientId, `Attendance: ${client.name} at ${branch}`, currentUser?.name);

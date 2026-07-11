@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { db, auth, getTenantId } from '../firebase';
 import { Payment, Client, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -17,13 +17,14 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
   const [loading, setLoading] = useState(true);
 
   const fetchPayments = useCallback(async () => {
+    if (getTenantId() !== 'inzanathletics') return;
     if (!currentUser || currentUser.role === 'coach' || currentUser.role === 'client') {
       setPayments([]);
       setLoading(false);
       return;
     }
     try {
-      const token = await currentUser.getIdToken();
+      const token = await auth.currentUser?.getIdToken();
       if (!token) return;
 
       const res = await fetch('/api/payments', {
@@ -42,12 +43,35 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
   }, [currentUser]);
 
   useEffect(() => {
-    fetchPayments();
-  }, [fetchPayments]);
+    if (getTenantId() === 'inzanathletics') {
+      fetchPayments();
+      return;
+    }
+
+    if (!currentUser || currentUser.role === 'coach' || currentUser.role === 'client') {
+      setPayments([]);
+      setLoading(false);
+      return;
+    }
+
+    const unsub = onSnapshot(collection(db, 'payments'), (snapshot) => {
+      // Filter out soft-deleted payments (where deleted_at is not null)
+      setPayments(snapshot.docs
+        .map(d => ({ ...d.data(), id: d.id } as Payment))
+        .filter(p => !p.deleted_at)
+      );
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'payments');
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [currentUser, fetchPayments]);
 
   const invalidateCache = async () => {
+    if (getTenantId() !== 'inzanathletics') return;
     try {
-      const token = await currentUser?.getIdToken();
+      const token = await auth.currentUser?.getIdToken();
       if (!token) return;
       await fetch('/api/payments/invalidate', {
         method: 'POST',
@@ -78,8 +102,22 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
         deleted_at: null
       };
 
-      const docRef = await addDoc(collection(db, 'payments'), cleanData(paymentData));
-      await addAuditLog('CREATE', 'PAYMENT', docRef.id, `Recorded payment of ${payment.amount} LE for ${clientName}`, currentUser?.name);
+      const docId = doc(collection(db, 'payments')).id;
+
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/payments/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id: docId, payment: cleanData(paymentData) })
+        });
+      } else {
+        await addDoc(collection(db, 'payments'), cleanData(paymentData));
+      }
+      await addAuditLog('CREATE', 'PAYMENT', docId, `Recorded payment of ${payment.amount} LE for ${clientName}`, currentUser?.name);
       
       // Invalidate cache and trigger reload
       await invalidateCache();
@@ -100,7 +138,19 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
         : id;
       const amount = payment?.amount || 'unknown';
 
-      await deleteDoc(doc(db, 'payments', id));
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/payments/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id })
+        });
+      } else {
+        await deleteDoc(doc(db, 'payments', id));
+      }
       await addAuditLog('DELETE', 'PAYMENT', id, `Deleted payment of ${amount} LE for ${clientName}`, currentUser?.name);
       
       // Invalidate cache and trigger reload
@@ -119,7 +169,19 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
         ? (clients.find(c => c.id === payment.clientId)?.name || payment.clientId)
         : id;
 
-      await updateDoc(doc(db, 'payments', id), cleanData(updates));
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/payments/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id, updates: cleanData(updates) })
+        });
+      } else {
+        await updateDoc(doc(db, 'payments', id), cleanData(updates));
+      }
       await addAuditLog('UPDATE', 'PAYMENT', id, `Updated payment for ${clientName}`, currentUser?.name);
       
       // Invalidate cache and trigger reload

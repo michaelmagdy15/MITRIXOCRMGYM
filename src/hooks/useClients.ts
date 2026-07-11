@@ -17,7 +17,7 @@ import {
   endAt,
   limit,
 } from 'firebase/firestore';
-import { db, createFirebaseUser, getMemberEmail } from '../firebase';
+import { db, auth, createFirebaseUser, getMemberEmail, getTenantId } from '../firebase';
 import { Client, CRMComment, InteractionLog, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -149,13 +149,14 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
   // Fetch initial clients from backend cache
   useEffect(() => {
+    if (getTenantId() !== 'inzanathletics') return;
     if (!currentUser) return;
     if (effectiveRole === 'client' || effectiveRole === 'coach') return;
 
     let active = true;
     async function loadCache() {
       try {
-        const token = await currentUser?.getIdToken();
+        const token = await auth.currentUser?.getIdToken();
         if (!token) return;
 
         const res = await fetch('/api/clients', {
@@ -199,6 +200,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       return;
     }
 
+    if (getTenantId() === 'inzanathletics') {
+      return;
+    }
+
     const q = query(
       collection(db, 'clients'), 
       where('status', 'in', ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active'])
@@ -223,7 +228,45 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   const [loadingExpired, setLoadingExpired] = useState(false);
   const [expiredLoaded, setExpiredLoaded] = useState(false);
 
+  const refetchData = useCallback(async () => {
+    if (getTenantId() !== 'inzanathletics') return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      const resClients = await fetch('/api/clients', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (resClients.ok) {
+        const data = await resClients.json();
+        const allClients = data.clients || [];
+        const activeAndHold = allClients.filter((c: any) => 
+          ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active'].includes(c.status)
+        );
+        const expired = allClients.filter((c: any) => 
+          ['Expired', 'expired'].includes(c.status)
+        );
+        setMembersList(activeAndHold);
+        setExpiredMembersList(expired);
+      }
+
+      const resLeads = await fetch('/api/leads', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (resLeads.ok) {
+        const data = await resLeads.json();
+        setLeadsList(data.leads || []);
+      }
+    } catch (err) {
+      console.error('[Clients] Failed to refetch data:', err);
+    }
+  }, [currentUser]);
+
   const fetchExpiredMembers = useCallback(async () => {
+    if (getTenantId() === 'inzanathletics') {
+      setExpiredLoaded(true);
+      return;
+    }
     if (expiredLoaded || loadingExpired) return;
     setLoadingExpired(true);
     try {
@@ -243,6 +286,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     }
   }, [expiredLoaded, loadingExpired]);
 
+  // Load leads initially for CockroachDB tenant
+  useEffect(() => {
+    if (getTenantId() !== 'inzanathletics' || !currentUser) return;
+    refetchData();
+  }, [currentUser, refetchData]);
+
   // Trigger expired fetch if a search query is entered (so search results find expired members)
   useEffect(() => {
     if (searchTerm && searchTerm.trim().length >= 2 && !expiredLoaded && !loadingExpired) {
@@ -254,6 +303,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   useEffect(() => {
     if (!currentUser) return;
     if (effectiveRole === 'client' || effectiveRole === 'coach') return;
+    if (getTenantId() === 'inzanathletics') return;
 
     const q = query(
       collection(db, 'clients'),
@@ -465,23 +515,53 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         if (uid) finalData.portalUserId = uid;
       }
 
-      const batch = writeBatch(db);
-      batch.set(docRef, finalData);
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/clients/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id: docRef.id, client: finalData })
+        });
 
-      // Link siblings bidirectionally and sync sales rep
-      for (const sibling of siblings) {
-        const sibRef = doc(db, 'clients', sibling.id);
-        const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
-        const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
-        
-        if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
-          sibUpdates.salesRep = canonicalRep;
+        // Link siblings bidirectionally and sync sales rep
+        for (const sibling of siblings) {
+          const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
+          const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
+          if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
+            sibUpdates.salesRep = canonicalRep;
+          }
+          await fetch('/api/clients/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ id: sibling.id, updates: sibUpdates })
+          });
         }
-        batch.update(sibRef, sibUpdates);
-      }
+        refetchData();
+      } else {
+        const batch = writeBatch(db);
+        batch.set(docRef, finalData);
 
-      await batch.commit();
-      await invalidateServerCache();
+        // Link siblings bidirectionally and sync sales rep
+        for (const sibling of siblings) {
+          const sibRef = doc(db, 'clients', sibling.id);
+          const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
+          const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
+          
+          if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
+            sibUpdates.salesRep = canonicalRep;
+          }
+          batch.update(sibRef, sibUpdates);
+        }
+
+        await batch.commit();
+        await invalidateServerCache();
+      }
 
       await addAuditLog(
         'CREATE',
@@ -538,55 +618,99 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
     }
 
-    let batch = writeBatch(db);
-    let operationCount = 0;
+    if (getTenantId() === 'inzanathletics') {
+      const token = await auth.currentUser?.getIdToken();
+      for (let i = 0; i < validNewClients.length; i++) {
+        try {
+          const client = validNewClients[i];
+          if (!client) continue;
+          const { id, comments, ...clientData } = client;
 
-    for (let i = 0; i < validNewClients.length; i++) {
-      try {
-        const client = validNewClients[i];
+          if (!clientData.memberId) {
+            clientData.memberId = (nextMemberId++).toString();
+          }
+          if (clientData.paid === undefined) clientData.paid = false;
 
-        if (!client) continue;
-        const { id, comments, ...clientData } = client;
+          const finalId = id || doc(collection(db, 'clients')).id;
+          const finalClient = {
+            ...cleanData(clientData),
+            id: finalId,
+            createdAt: new Date().toISOString(),
+            portalUserId: ''
+          };
 
-        if (!clientData.memberId) {
-          clientData.memberId = (nextMemberId++).toString();
+          if (finalClient.memberId) {
+            const uid = await createPortalAccount(finalClient.memberId, finalClient.name, finalClient.phone);
+            if (uid) finalClient.portalUserId = uid;
+          }
+
+          await fetch('/api/clients/add', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ id: finalId, client: finalClient })
+          });
+
+          successCount++;
+        } catch (err) {
+          failedCount++;
+          errors.push({ row: i + 1, reason: err instanceof Error ? err.message : 'Unknown error' });
         }
-        if (clientData.paid === undefined) clientData.paid = false;
-
-        const docRef = id ? doc(db, 'clients', id) : doc(collection(db, 'clients'));
-        const finalClient = {
-          ...cleanData(clientData),
-          id: docRef.id,
-          createdAt: new Date().toISOString(),
-          portalUserId: ''
-        };
-
-        // Auto-create portal account in bulk
-        if (finalClient.memberId) {
-          const uid = await createPortalAccount(finalClient.memberId, finalClient.name, finalClient.phone);
-          if (uid) finalClient.portalUserId = uid;
-        }
-
-        batch.set(docRef, finalClient);
-        operationCount++;
-
-        if (operationCount === 500) {
-          await batch.commit();
-          batch = writeBatch(db);
-          operationCount = 0;
-        }
-
-        successCount++;
-      } catch (err) {
-        failedCount++;
-        errors.push({ row: i + 1, reason: err instanceof Error ? err.message : 'Unknown error' });
       }
-    }
+      refetchData();
+    } else {
+      let batch = writeBatch(db);
+      let operationCount = 0;
 
-    if (operationCount > 0) {
-      await batch.commit();
+      for (let i = 0; i < validNewClients.length; i++) {
+        try {
+          const client = validNewClients[i];
+
+          if (!client) continue;
+          const { id, comments, ...clientData } = client;
+
+          if (!clientData.memberId) {
+            clientData.memberId = (nextMemberId++).toString();
+          }
+          if (clientData.paid === undefined) clientData.paid = false;
+
+          const docRef = id ? doc(db, 'clients', id) : doc(collection(db, 'clients'));
+          const finalClient = {
+            ...cleanData(clientData),
+            id: docRef.id,
+            createdAt: new Date().toISOString(),
+            portalUserId: ''
+          };
+
+          // Auto-create portal account in bulk
+          if (finalClient.memberId) {
+            const uid = await createPortalAccount(finalClient.memberId, finalClient.name, finalClient.phone);
+            if (uid) finalClient.portalUserId = uid;
+          }
+
+          batch.set(docRef, finalClient);
+          operationCount++;
+
+          if (operationCount === 500) {
+            await batch.commit();
+            batch = writeBatch(db);
+            operationCount = 0;
+          }
+
+          successCount++;
+        } catch (err) {
+          failedCount++;
+          errors.push({ row: i + 1, reason: err instanceof Error ? err.message : 'Unknown error' });
+        }
+      }
+
+      if (operationCount > 0) {
+        await batch.commit();
+      }
+      await invalidateServerCache();
     }
-    await invalidateServerCache();
 
     await addAuditLog('CREATE', 'CLIENT', 'bulk', `Bulk imported ${successCount} clients/leads`, currentUser?.name);
     return { success: successCount, failed: failedCount, errors };
@@ -687,23 +811,53 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       }
 
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'clients', id), cleanData(updateData));
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/clients/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id, updates: cleanData(updateData) })
+        });
 
-      // Link back and sync sales rep to siblings
-      for (const sibling of siblings) {
-        const sibRef = doc(db, 'clients', sibling.id);
-        const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), id]));
-        const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
-        
-        if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
-          sibUpdates.salesRep = canonicalRep;
+        // Link back and sync sales rep to siblings
+        for (const sibling of siblings) {
+          const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), id]));
+          const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
+          if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
+            sibUpdates.salesRep = canonicalRep;
+          }
+          await fetch('/api/clients/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ id: sibling.id, updates: sibUpdates })
+          });
         }
-        batch.update(sibRef, sibUpdates);
-      }
+        refetchData();
+      } else {
+        const batch = writeBatch(db);
+        batch.update(doc(db, 'clients', id), cleanData(updateData));
 
-      await batch.commit();
-      await invalidateServerCache();
+        // Link back and sync sales rep to siblings
+        for (const sibling of siblings) {
+          const sibRef = doc(db, 'clients', sibling.id);
+          const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), id]));
+          const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
+          
+          if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
+            sibUpdates.salesRep = canonicalRep;
+          }
+          batch.update(sibRef, sibUpdates);
+        }
+
+        await batch.commit();
+        await invalidateServerCache();
+      }
 
       const clientName = baseClients.find(c => c.id === id)?.name || id;
       addAuditLog('UPDATE', 'CLIENT', id, `Updated client/lead: ${clientName}`, currentUser?.name);
@@ -715,8 +869,21 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   const deleteClient = async (id: string) => {
     try {
       const clientName = clients.find(c => c.id === id)?.name || id;
-      await deleteDoc(doc(db, 'clients', id));
-      await invalidateServerCache();
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/clients/delete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ id })
+        });
+        refetchData();
+      } else {
+        await deleteDoc(doc(db, 'clients', id));
+        await invalidateServerCache();
+      }
       await addAuditLog('DELETE', 'CLIENT', id, `Deleted client/lead: ${clientName}`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `clients/${id}`);
@@ -725,19 +892,32 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
   const deleteMultipleClients = async (ids: string[]) => {
     try {
-      let batch = writeBatch(db);
-      let count = 0;
-      for (const id of ids) {
-        batch.delete(doc(db, 'clients', id));
-        count++;
-        if (count === 500) {
-          await batch.commit();
-          batch = writeBatch(db);
-          count = 0;
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/clients/delete-multiple', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ ids })
+        });
+        refetchData();
+      } else {
+        let batch = writeBatch(db);
+        let count = 0;
+        for (const id of ids) {
+          batch.delete(doc(db, 'clients', id));
+          count++;
+          if (count === 500) {
+            await batch.commit();
+            batch = writeBatch(db);
+            count = 0;
+          }
         }
+        if (count > 0) await batch.commit();
+        await invalidateServerCache();
       }
-      if (count > 0) await batch.commit();
-      await invalidateServerCache();
       await addAuditLog('DELETE', 'CLIENT', 'bulk', `Deleted ${ids.length} clients/leads`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'clients/bulk');
@@ -747,14 +927,29 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   const addComment = async (clientId: string, text: string, author?: string) => {
     try {
       const commentAuthor = author || currentUser?.name || 'Admin';
-      await addDoc(collection(db, 'clients', clientId, 'comments'), {
+      const commentData = {
         text,
         date: new Date().toISOString(),
         author: commentAuthor,
-      });
-      await updateDoc(doc(db, 'clients', clientId), {
-        lastContactDate: new Date().toISOString(),
-      });
+      };
+
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/clients/add-comment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ clientId, comment: commentData })
+        });
+        refetchData();
+      } else {
+        await addDoc(collection(db, 'clients', clientId, 'comments'), commentData);
+        await updateDoc(doc(db, 'clients', clientId), {
+          lastContactDate: new Date().toISOString(),
+        });
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/comments`);
     }
@@ -783,9 +978,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   };
 
   const invalidateServerCache = useCallback(async () => {
+    if (getTenantId() !== 'inzanathletics') return;
     try {
       if (!currentUser) return;
-      const token = await currentUser.getIdToken();
+      const token = await auth.currentUser?.getIdToken();
       await fetch('/api/clients/invalidate', {
         method: 'POST',
         headers: {
