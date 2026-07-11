@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   collection,
   doc,
@@ -174,28 +174,35 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     return () => unsubClients();
   }, [currentUser, effectiveRole]);
 
-  // 2. Expired Members - One-off Fetch (status == 'Expired')
+  const [loadingExpired, setLoadingExpired] = useState(false);
+  const [expiredLoaded, setExpiredLoaded] = useState(false);
+
+  const fetchExpiredMembers = useCallback(async () => {
+    if (expiredLoaded || loadingExpired) return;
+    setLoadingExpired(true);
+    try {
+      const q = query(
+        collection(db, 'clients'),
+        where('status', 'in', ['Expired', 'expired'])
+      );
+      const snap = await getDocs(q);
+      setExpiredMembersList(
+        snap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
+      );
+      setExpiredLoaded(true);
+    } catch (error) {
+      console.error('Error fetching expired members:', error);
+    } finally {
+      setLoadingExpired(false);
+    }
+  }, [expiredLoaded, loadingExpired]);
+
+  // Trigger expired fetch if a search query is entered (so search results find expired members)
   useEffect(() => {
-    if (!currentUser) return;
-    if (effectiveRole === 'client' || effectiveRole === 'coach') return;
-
-    const fetchExpired = async () => {
-      try {
-        const q = query(
-          collection(db, 'clients'),
-          where('status', 'in', ['Expired', 'expired'])
-        );
-        const snap = await getDocs(q);
-        setExpiredMembersList(
-          snap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
-        );
-      } catch (error) {
-        console.error('Error fetching expired members:', error);
-      }
-    };
-
-    fetchExpired();
-  }, [currentUser, effectiveRole]);
+    if (searchTerm && searchTerm.trim().length >= 2 && !expiredLoaded && !loadingExpired) {
+      fetchExpiredMembers();
+    }
+  }, [searchTerm, expiredLoaded, loadingExpired, fetchExpiredMembers]);
 
   // 2. Active Leads Snapshot Listener (New, Trial, Follow Up) - status == 'Lead' & stage in ['New', 'Trial', 'Follow Up']
   useEffect(() => {
@@ -727,6 +734,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   return {
     clients,
     loading,
+    loadingExpired,
+    expiredLoaded,
+    fetchExpiredMembers,
     addClient,
     bulkAddClients,
     updateClient,

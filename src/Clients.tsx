@@ -33,6 +33,22 @@ import { cleanData } from './utils';
 import { generateClientContract } from './utils/pdfGenerator';
 import { downloadFile } from './utils/download';
 
+const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => {
+  if (!dateStr) return fallback;
+  try {
+    const parsed = parseISO(dateStr);
+    if (isNaN(parsed.getTime())) {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) return format(d, formatStr);
+      return fallback;
+    }
+    return format(parsed, formatStr);
+  } catch (error) {
+    console.error('Error formatting date:', dateStr, error);
+    return fallback;
+  }
+};
+
 // Migrate legacy packageType to new packages array format
 const migratePackageData = (client: Client, systemPackages: any[]): Partial<Client> => {
   if (client.packages && client.packages.length > 0) return {}; // Already migrated
@@ -68,7 +84,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, auditLogs, features, attendances } = useAppContext();
+  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, auditLogs, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded } = useAppContext();
   const { packages } = usePackages();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
@@ -167,6 +183,12 @@ export default function Clients() {
       }
     }
   }, [activeClientId, clients, packages]);
+
+  React.useEffect(() => {
+    if (activeTab === 'expired') {
+      fetchExpiredMembers();
+    }
+  }, [activeTab, fetchExpiredMembers]);
 
   const [isNewMemberOpen, setIsNewMemberOpen] = useState(false);
   const [isRecalculateConfirmOpen, setIsRecalculateConfirmOpen] = useState(false);
@@ -2338,13 +2360,13 @@ export default function Clients() {
                             {activeClient.startDate && (
                               <div>
                                 <span className="text-[9px] uppercase text-muted-foreground block">Start</span>
-                                <span className="font-semibold">{format(parseISO(activeClient.startDate), 'dd MMM yyyy')}</span>
+                                <span className="font-semibold">{safeFormatDate(activeClient.startDate, 'dd MMM yyyy')}</span>
                               </div>
                             )}
                             {activeClient.membershipExpiry && (
                               <div>
                                 <span className="text-[9px] uppercase text-muted-foreground block">Expires</span>
-                                <span className="font-semibold">{format(parseISO(activeClient.membershipExpiry), 'dd MMM yyyy')}</span>
+                                <span className="font-semibold">{safeFormatDate(activeClient.membershipExpiry, 'dd MMM yyyy')}</span>
                               </div>
                             )}
                           </div>
@@ -2524,8 +2546,8 @@ export default function Clients() {
                                   .map((pkg) => (
                                     <TableRow key={pkg.id} className="hover:bg-muted/20 border-b transition-colors">
                                       <TableCell className="py-2.5 px-3 text-xs font-medium">{pkg.packageName || '—'}</TableCell>
-                                      <TableCell className="py-2.5 px-3 text-xs">{pkg.startDate ? format(parseISO(pkg.startDate), 'dd MMM yyyy') : '—'}</TableCell>
-                                      <TableCell className="py-2.5 px-3 text-xs">{pkg.endDate ? format(parseISO(pkg.endDate), 'dd MMM yyyy') : '—'}</TableCell>
+                                      <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</TableCell>
+                                      <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</TableCell>
                                       <TableCell className="py-2.5 px-3 text-xs text-center">
                                         {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} / ${pkg.sessionsTotal ?? '?'}` : '—'}
                                       </TableCell>
@@ -2573,8 +2595,8 @@ export default function Clients() {
                                   return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
                                 })
                                 .map((payment) => (
-                                  <TableRow key={payment.id} className="hover:bg-muted/20 border-b transition-colors">
-                                    <TableCell className="py-2.5 px-3 text-xs">{format(parseISO(payment.date), 'MMM d, yyyy')}</TableCell>
+                                    <TableRow key={payment.id} className="hover:bg-muted/20 border-b transition-colors">
+                                      <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(payment.date, 'MMM d, yyyy')}</TableCell>
                                     <TableCell className="py-2.5 px-3 text-right">
                                       <span className="text-xs font-bold text-green-600">
                                         {payment.amount.toLocaleString()} {t('payments.currency_le')}

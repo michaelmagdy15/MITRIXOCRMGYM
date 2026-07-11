@@ -54,6 +54,9 @@ export interface AppContextType {
   logout: () => Promise<void>;
   clients: Client[];
   loadingClients: boolean;
+  loadingExpired: boolean;
+  expiredLoaded: boolean;
+  fetchExpiredMembers: () => Promise<void>;
   salesTarget: SalesTarget;
   payments: Payment[];
   loadingPayments: boolean;
@@ -166,6 +169,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const {
     clients,
     loading: loadingClients,
+    loadingExpired,
+    expiredLoaded,
+    fetchExpiredMembers,
     addClient,
     bulkAddClients,
     updateClient,
@@ -583,6 +589,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logout,
     clients: visibleClients,
     loadingClients,
+    loadingExpired,
+    expiredLoaded,
+    fetchExpiredMembers,
     salesTarget: salesStats,
     payments: visiblePayments,
     loadingPayments,
@@ -660,6 +669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     createClientAccount
   }), [
     currentUser, effectiveRole, users, visibleClients, loadingClients,
+    loadingExpired, expiredLoaded, fetchExpiredMembers,
     salesStats, visiblePayments, loadingPayments, ptPackageRecords,
     auditLogs, visibleTasks, allTasks, packages, loadingPackages,
     coaches, importBatches, userTargets, searchQuery, activeTab, activeClientId, prefilledLeadData, isAuthReady, branding,
