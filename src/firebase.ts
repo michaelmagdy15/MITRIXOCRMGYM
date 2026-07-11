@@ -7,7 +7,7 @@ import {
   sendPasswordResetEmail,
   fetchSignInMethodsForEmail,
 } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { initializeFirestore, memoryLocalCache } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -68,9 +68,7 @@ const app = initializeApp(activeConfig);
 export const auth = getAuth(app);
 
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
+  localCache: memoryLocalCache()
 }, (activeConfig as any).firestoreDatabaseId);
 
 export const storage = getStorage(app);

@@ -120,12 +120,16 @@ function predictGender(clientName: string): 'Male' | 'Female' | null {
 export const useClients = (currentUser: User | null, searchTerm: string = '') => {
   const { effectiveRole } = useAuth();
   const [membersList, setMembersList] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
+  const [expiredMembersList, setExpiredMembersList] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
   const [leadsList, setLeadsList] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
   const [searchResults, setSearchResults] = useState<Omit<Client, 'comments' | 'interactions'>[]>([]);
   const [loading, setLoading] = useState(true);
 
   const clients = useMemo(() => {
-    const combined = [...membersList, ...leadsList];
+    const activeIds = new Set(membersList.map(c => c.id));
+    const cleanExpired = expiredMembersList.filter(c => !activeIds.has(c.id));
+    
+    const combined = [...membersList, ...cleanExpired, ...leadsList];
     const existingIds = new Set(combined.map(c => c.id));
     
     searchResults.forEach(res => {
@@ -139,9 +143,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       comments: [],
       interactions: [],
     })) as Client[];
-  }, [membersList, leadsList, searchResults]);
+  }, [membersList, expiredMembersList, leadsList, searchResults]);
 
-  // 1. Members Snapshot Listener (Active, Expired, Hold) - status != 'Lead'
+  // 1. Active Members Snapshot Listener (Active, Hold, Nearly Expired)
   useEffect(() => {
     if (!currentUser) return;
     if (effectiveRole === 'client' || effectiveRole === 'coach') {
@@ -149,7 +153,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       return;
     }
 
-    const q = query(collection(db, 'clients'), where('status', '!=', 'Lead'));
+    const q = query(
+      collection(db, 'clients'), 
+      where('status', 'in', ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active'])
+    );
     const unsubClients = onSnapshot(
       q,
       (snapshot) => {
@@ -165,6 +172,29 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     );
 
     return () => unsubClients();
+  }, [currentUser, effectiveRole]);
+
+  // 2. Expired Members - One-off Fetch (status == 'Expired')
+  useEffect(() => {
+    if (!currentUser) return;
+    if (effectiveRole === 'client' || effectiveRole === 'coach') return;
+
+    const fetchExpired = async () => {
+      try {
+        const q = query(
+          collection(db, 'clients'),
+          where('status', 'in', ['Expired', 'expired'])
+        );
+        const snap = await getDocs(q);
+        setExpiredMembersList(
+          snap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
+        );
+      } catch (error) {
+        console.error('Error fetching expired members:', error);
+      }
+    };
+
+    fetchExpired();
   }, [currentUser, effectiveRole]);
 
   // 2. Active Leads Snapshot Listener (New, Trial, Follow Up) - status == 'Lead' & stage in ['New', 'Trial', 'Follow Up']
