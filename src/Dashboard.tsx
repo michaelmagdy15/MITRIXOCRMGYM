@@ -391,7 +391,7 @@ export default function Dashboard() {
       }
     }
 
-    const currentAmount = relevantPayments.reduce((acc, p) => acc + p.amount, 0);
+    const currentAmount = relevantPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
     const privatePayments = relevantPayments.filter(p => isPrivatePackage(p.packageType));
     const groupPayments = relevantPayments.filter(p => isGroupPackage(p.packageType));
 
@@ -453,9 +453,9 @@ export default function Dashboard() {
         return true;
       });
 
-      const achievedAmount = monthPayments.reduce((sum, p) => sum + p.amount, 0);
-      const privateRevenue = monthPayments.filter(p => isPrivatePackage(p.packageType)).reduce((s, p) => s + p.amount, 0);
-      const groupRevenue = monthPayments.filter(p => isGroupPackage(p.packageType)).reduce((s, p) => s + p.amount, 0);
+      const achievedAmount = monthPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      const privateRevenue = monthPayments.filter(p => isPrivatePackage(p.packageType)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const groupRevenue = monthPayments.filter(p => isGroupPackage(p.packageType)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
       return {
         month: format(date, 'MMM yy'),
@@ -475,7 +475,7 @@ export default function Dashboard() {
       const mp = payments.filter(p => isWithinInterval(parseISO(p.date), { start, end }));
       return {
         month: format(date, 'MMM yy'),
-        Revenue: mp.reduce((s, p) => s + p.amount, 0),
+        Revenue: mp.reduce((s, p) => s + (Number(p.amount) || 0), 0),
       };
     });
   }, [payments]);
@@ -491,7 +491,7 @@ export default function Dashboard() {
       });
       return {
         name: (rep.name || rep.email || 'Unknown').split(' ')[0],
-        Revenue: repPayments.reduce((s, p) => s + p.amount, 0),
+        Revenue: repPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
         Target: repTarget?.targetAmount || 0,
       };
     });
@@ -506,9 +506,9 @@ export default function Dashboard() {
       const mp = payments.filter(p => isWithinInterval(parseISO(p.date), { start, end }));
       return {
         month: format(date, 'MMM yy'),
-        Cash: mp.filter(p => p.method === 'Cash').reduce((s, p) => s + p.amount, 0),
-        Visa: mp.filter(p => p.method === 'Credit Card').reduce((s, p) => s + p.amount, 0),
-        Instapay: mp.filter(p => p.method === 'Instapay').reduce((s, p) => s + p.amount, 0),
+        Cash: mp.filter(p => p.method === 'Cash').reduce((s, p) => s + (Number(p.amount) || 0), 0),
+        Visa: mp.filter(p => p.method === 'Credit Card').reduce((s, p) => s + (Number(p.amount) || 0), 0),
+        Instapay: mp.filter(p => p.method === 'Instapay').reduce((s, p) => s + (Number(p.amount) || 0), 0),
       };
     });
   }, [payments]);

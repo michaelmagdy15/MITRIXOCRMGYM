@@ -138,7 +138,7 @@ export default function Reports() {
           const parsed = safeParseDate(p.date);
           return parsed ? isSameMonth(parsed, now) : false;
         })
-        .reduce((sum, p) => sum + (p.amount_paid || p.amount || 0), 0),
+        .reduce((sum, p) => sum + (Number(p.amount_paid) || Number(p.amount) || 0), 0),
     [payments]
   );
 
@@ -167,7 +167,7 @@ export default function Reports() {
         const converted = leads.filter(c => c.status !== 'Lead');
         const revenue = payments
           .filter(p => !p.deleted_at && leads.some(c => c.id === p.clientId))
-          .reduce((sum, p) => sum + (p.amount_paid || p.amount || 0), 0);
+          .reduce((sum, p) => sum + (Number(p.amount_paid) || Number(p.amount) || 0), 0);
         return {
           source,
           leads: leads.length,

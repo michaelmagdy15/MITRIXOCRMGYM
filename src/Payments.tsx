@@ -812,7 +812,7 @@ export default function Payments() {
     const map: Record<string, number> = {};
     for (const p of filteredPayments) {
       if (p.coachName) {
-        map[p.coachName] = (map[p.coachName] || 0) + p.amount;
+        map[p.coachName] = (map[p.coachName] || 0) + (Number(p.amount) || 0);
       }
     }
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
@@ -843,8 +843,8 @@ export default function Payments() {
       if (!totals[branch]) totals[branch] = { Cash: 0, 'Credit Card': 0, 'Bank Transfer': 0, Instapay: 0, Other: 0, Total: 0 };
       const row = totals[branch]!;
       const m = (METHODS as readonly string[]).includes(p.method) ? p.method : 'Other';
-      row[m] = (row[m] || 0) + p.amount;
-      row.Total = (row.Total || 0) + p.amount;
+      row[m] = (row[m] || 0) + (Number(p.amount) || 0);
+      row.Total = (row.Total || 0) + (Number(p.amount) || 0);
     }
     return totals;
   }, [canViewBranchTotals, filteredPayments, clients]);

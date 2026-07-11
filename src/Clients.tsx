@@ -1046,7 +1046,7 @@ export default function Clients() {
     // Pre-calculate payments to O(N) map to avoid O(N*M) performance crash on large datasets
     const paymentTotals = new Map<string, number>();
     for (const p of payments) {
-      paymentTotals.set(p.clientId, (paymentTotals.get(p.clientId) || 0) + p.amount);
+      paymentTotals.set(p.clientId, (paymentTotals.get(p.clientId) || 0) + (Number(p.amount) || 0));
     }
     
     // Using a map for users for O(N) lookup
@@ -1103,7 +1103,7 @@ export default function Clients() {
         {clientList.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">{t('members.no_members')}</div>
         ) : clientList.map(client => {
-          const totalPaid = payments.filter(p => p.clientId === client.id).reduce((s, p) => s + p.amount, 0);
+          const totalPaid = payments.filter(p => p.clientId === client.id).reduce((s, p) => s + (Number(p.amount) || 0), 0);
           const assignedName = (() => {
             if (!client.assignedTo) return client.salesName || null;
             const u = users.find(u => u.id === client.assignedTo);
@@ -1203,7 +1203,7 @@ export default function Clients() {
         <TableBody>
           {clientList.map(client => {
             const clientPayments = payments.filter(p => p.clientId === client.id);
-            const totalPaid = clientPayments.reduce((sum, p) => sum + p.amount, 0);
+            const totalPaid = clientPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             
             return (
             <TableRow key={client.id}>

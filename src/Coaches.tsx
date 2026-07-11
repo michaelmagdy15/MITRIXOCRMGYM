@@ -201,11 +201,11 @@ export default function Coaches() {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
 
-    const total = coachPayments.reduce((acc, p) => acc + (p.amount_paid || p.amount || 0), 0);
+    const total = coachPayments.reduce((acc, p) => acc + (Number(p.amount_paid) || Number(p.amount) || 0), 0);
     const thisMonth = coachPayments.reduce((acc, p) => {
       const pDate = p.date ? new Date(p.date) : p.created_at ? new Date(p.created_at) : null;
       if (pDate && pDate.getFullYear() === currentYear && pDate.getMonth() === currentMonth) {
-        return acc + (p.amount_paid || p.amount || 0);
+        return acc + (Number(p.amount_paid) || Number(p.amount) || 0);
       }
       return acc;
     }, 0);

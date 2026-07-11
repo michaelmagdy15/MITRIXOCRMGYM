@@ -367,7 +367,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [tasks, currentUser, isManagerOrSama]);
 
   const salesStats = useMemo(() => {
-    const total = visiblePayments.reduce((acc: number, p: Payment) => acc + (p.amount || 0), 0);
+    const total = visiblePayments.reduce((acc: number, p: Payment) => acc + (Number(p.amount) || 0), 0);
     const privateSold = visiblePayments.filter((p: Payment) => p.packageType?.toLowerCase().includes('private') || p.packageType?.toLowerCase().includes('pt')).length;
     const groupSold = visiblePayments.filter((p: Payment) => p.packageType?.toLowerCase().includes('group') || p.packageType?.toLowerCase().includes('gt')).length;
     

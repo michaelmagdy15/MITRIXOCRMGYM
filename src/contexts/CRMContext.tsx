@@ -123,7 +123,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .then(data => {
           const paymentsData = data.payments || [];
           setPayments(paymentsData);
-          const total = paymentsData.reduce((acc: number, p: any) => acc + (p.amount || 0), 0);
+          const total = paymentsData.reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
           const privateSold = paymentsData.filter((p: any) => p.packageType?.toLowerCase().includes('private')).length;
           const groupSold = paymentsData.filter((p: any) => 
             p.packageType?.toLowerCase().includes('group') || 
@@ -202,7 +202,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const paymentsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id as PaymentId } as Payment));
       setPayments(paymentsData);
       
-      const total = paymentsData.reduce((acc, p) => acc + (p.amount || 0), 0);
+      const total = paymentsData.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
       const privateSold = paymentsData.filter(p => p.packageType?.toLowerCase().includes('private')).length;
       const groupSold = paymentsData.filter(p => 
         p.packageType?.toLowerCase().includes('group') || 
@@ -410,7 +410,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const date = new Date(p.date || Date.now());
       if (date.getFullYear() === currentYear) {
         const monthName = months[date.getMonth()]!;
-        acc[monthName] = (acc[monthName] || 0) + p.amount;
+        acc[monthName] = (acc[monthName] || 0) + (Number(p.amount) || 0);
       }
       return acc;
     }, {} as Record<string, number>);
