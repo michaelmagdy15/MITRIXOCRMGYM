@@ -37,7 +37,21 @@ export async function getClientsFromSQL() {
     assignedTo: row.assigned_to,
     createdAt: row.created_at,
     backupPhone: row.backup_phone,
-    nationalId: row.national_id
+    nationalId: row.national_id,
+    expectedVisitDate: row.expected_visit_date,
+    trialDate: row.trial_date,
+    membershipExpiry: row.membership_expiry,
+    activityLevel: row.activity_level,
+    workoutTimes: row.workout_times || [],
+    fitnessTarget: row.fitness_target,
+    aiTokens: row.ai_tokens,
+    referralCode: row.referral_code,
+    referredBy: row.referred_by,
+    emergencyContactName: row.emergency_contact_name,
+    civilStatus: row.civil_status,
+    cardId: row.card_id,
+    legacyNotes: row.legacy_notes,
+    legacyMemberId: row.legacy_member_id
   }));
 }
 
@@ -74,7 +88,21 @@ export async function getLeadsFromSQL() {
     assignedTo: row.assigned_to,
     createdAt: row.created_at,
     backupPhone: row.backup_phone,
-    nationalId: row.national_id
+    nationalId: row.national_id,
+    expectedVisitDate: row.expected_visit_date,
+    trialDate: row.trial_date,
+    membershipExpiry: row.membership_expiry,
+    activityLevel: row.activity_level,
+    workoutTimes: row.workout_times || [],
+    fitnessTarget: row.fitness_target,
+    aiTokens: row.ai_tokens,
+    referralCode: row.referral_code,
+    referredBy: row.referred_by,
+    emergencyContactName: row.emergency_contact_name,
+    civilStatus: row.civil_status,
+    cardId: row.card_id,
+    legacyNotes: row.legacy_notes,
+    legacyMemberId: row.legacy_member_id
   }));
 }
 
@@ -85,13 +113,19 @@ export async function addClientToSQL(id: string, client: any) {
        start_date, branch, sessions_remaining, assigned_to, created_at, national_id, email, backup_phone,
        is_blacklisted, photo_url, advertising_source, country, city, address, home_phone, nationality,
        job_title, guest_serial, civilian_or_military, referred_by_name, linked_account, linked_client_ids,
-       portal_user_id, packages, comments, interactions, import_batch_id, last_contact_date, personal_email
+       portal_user_id, packages, comments, interactions, import_batch_id, last_contact_date, personal_email,
+       stage, interest, category, source, expected_visit_date, trial_date, membership_expiry, height, weight, activity_level,
+       workout_times, fitness_target, ai_tokens, referral_code, referred_by, emergency_contact_name, civil_status,
+       barcode, card_id, legacy_notes, legacy_member_id
      ) VALUES (
        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
        $11, $12, $13, $14, $15, $16, $17, $18,
        $19, $20, $21, $22, $23, $24, $25, $26,
        $27, $28, $29, $30, $31, $32,
-       $33, $34, $35, $36, $37, $38, $39
+       $33, $34, $35, $36, $37, $38, $39,
+       $40, $41, $42, $43, $44, $45, $46, $47, $48, $49,
+       $50, $51, $52, $53, $54, $55, $56,
+       $57, $58, $59, $60
      )`,
     [
       id,
@@ -132,7 +166,28 @@ export async function addClientToSQL(id: string, client: any) {
       JSON.stringify(client.interactions || []),
       client.importBatchId || null,
       client.lastContactDate || null,
-      client.personalEmail || null
+      client.personalEmail || null,
+      client.stage || null,
+      client.interest || null,
+      client.category || null,
+      client.source || null,
+      client.expectedVisitDate || null,
+      client.trialDate || null,
+      client.membershipExpiry || null,
+      client.height || null,
+      client.weight || null,
+      client.activityLevel || null,
+      client.workoutTimes || null,
+      client.fitnessTarget || null,
+      client.aiTokens || 0,
+      client.referralCode || null,
+      client.referredBy || null,
+      client.emergencyContactName || null,
+      client.civilStatus || null,
+      client.barcode || null,
+      client.cardId || null,
+      client.legacyNotes || null,
+      client.legacyMemberId || null
     ]
   );
 }
@@ -186,6 +241,27 @@ export async function updateClientInSQL(id: string, updates: any) {
   mapField('importBatchId', 'import_batch_id');
   mapField('lastContactDate', 'last_contact_date');
   mapField('personalEmail', 'personal_email');
+  mapField('stage', 'stage');
+  mapField('interest', 'interest');
+  mapField('category', 'category');
+  mapField('source', 'source');
+  mapField('expectedVisitDate', 'expected_visit_date');
+  mapField('trialDate', 'trial_date');
+  mapField('membershipExpiry', 'membership_expiry');
+  mapField('height', 'height');
+  mapField('weight', 'weight');
+  mapField('activityLevel', 'activity_level');
+  mapField('workoutTimes', 'workout_times');
+  mapField('fitnessTarget', 'fitness_target');
+  mapField('aiTokens', 'ai_tokens');
+  mapField('referralCode', 'referral_code');
+  mapField('referredBy', 'referred_by');
+  mapField('emergencyContactName', 'emergency_contact_name');
+  mapField('civilStatus', 'civil_status');
+  mapField('barcode', 'barcode');
+  mapField('cardId', 'card_id');
+  mapField('legacyNotes', 'legacy_notes');
+  mapField('legacyMemberId', 'legacy_member_id');
 
   if (fields.length === 0) return;
 

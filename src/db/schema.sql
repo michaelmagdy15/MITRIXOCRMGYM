@@ -61,7 +61,28 @@ CREATE TABLE IF NOT EXISTS clients (
     interactions JSONB,
     import_batch_id VARCHAR(50),
     last_contact_date VARCHAR(50),
-    personal_email VARCHAR(255)
+    personal_email VARCHAR(255),
+    stage VARCHAR(50),
+    interest VARCHAR(100),
+    category VARCHAR(100),
+    source VARCHAR(100),
+    expected_visit_date VARCHAR(50),
+    trial_date VARCHAR(50),
+    membership_expiry VARCHAR(50),
+    height NUMERIC(6, 2),
+    weight NUMERIC(6, 2),
+    activity_level VARCHAR(50),
+    workout_times TEXT[],
+    fitness_target VARCHAR(100),
+    ai_tokens INT DEFAULT 0,
+    referral_code VARCHAR(50),
+    referred_by VARCHAR(50),
+    emergency_contact_name VARCHAR(255),
+    civil_status VARCHAR(50),
+    barcode VARCHAR(100),
+    card_id VARCHAR(100),
+    legacy_notes TEXT,
+    legacy_member_id VARCHAR(50)
 );
 
 -- Indexes for clients table to ensure instant lookup speeds
