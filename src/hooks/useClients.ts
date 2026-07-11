@@ -145,6 +145,52 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     })) as Client[];
   }, [membersList, expiredMembersList, leadsList, searchResults]);
 
+  const baseClients = clients;
+
+  // Fetch initial clients from backend cache
+  useEffect(() => {
+    if (!currentUser) return;
+    if (effectiveRole === 'client' || effectiveRole === 'coach') return;
+
+    let active = true;
+    async function loadCache() {
+      try {
+        const token = await currentUser?.getIdToken();
+        if (!token) return;
+
+        const res = await fetch('/api/clients', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        
+        if (!active) return;
+        
+        const allClients = data.clients || [];
+        
+        const activeAndHold = allClients.filter((c: any) => 
+          ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active'].includes(c.status)
+        );
+        const expired = allClients.filter((c: any) => 
+          ['Expired', 'expired'].includes(c.status)
+        );
+
+        setMembersList(activeAndHold);
+        setExpiredMembersList(expired);
+        setExpiredLoaded(true);
+      } catch (err) {
+        console.error('[Clients] Failed to fetch cache:', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadCache();
+    return () => { active = false; };
+  }, [currentUser, effectiveRole]);
+
   // 1. Active Members Snapshot Listener (Active, Hold, Nearly Expired)
   useEffect(() => {
     if (!currentUser) return;
@@ -435,6 +481,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
 
       await batch.commit();
+      await invalidateServerCache();
 
       await addAuditLog(
         'CREATE',
@@ -539,6 +586,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     if (operationCount > 0) {
       await batch.commit();
     }
+    await invalidateServerCache();
 
     await addAuditLog('CREATE', 'CLIENT', 'bulk', `Bulk imported ${successCount} clients/leads`, currentUser?.name);
     return { success: successCount, failed: failedCount, errors };
@@ -655,6 +703,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
 
       await batch.commit();
+      await invalidateServerCache();
 
       const clientName = baseClients.find(c => c.id === id)?.name || id;
       addAuditLog('UPDATE', 'CLIENT', id, `Updated client/lead: ${clientName}`, currentUser?.name);
@@ -667,6 +716,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     try {
       const clientName = clients.find(c => c.id === id)?.name || id;
       await deleteDoc(doc(db, 'clients', id));
+      await invalidateServerCache();
       await addAuditLog('DELETE', 'CLIENT', id, `Deleted client/lead: ${clientName}`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `clients/${id}`);
@@ -687,6 +737,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       }
       if (count > 0) await batch.commit();
+      await invalidateServerCache();
       await addAuditLog('DELETE', 'CLIENT', 'bulk', `Deleted ${ids.length} clients/leads`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, 'clients/bulk');
@@ -730,6 +781,22 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/interactions`);
     }
   };
+
+  const invalidateServerCache = useCallback(async () => {
+    try {
+      if (!currentUser) return;
+      const token = await currentUser.getIdToken();
+      await fetch('/api/clients/invalidate', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      console.log('[Cache] Server cache invalidated successfully.');
+    } catch (err) {
+      console.error('[Cache] Failed to invalidate server cache:', err);
+    }
+  }, [currentUser]);
 
   return {
     clients,

@@ -75,6 +75,28 @@ async function requirePlatformAdmin(req: express.Request, res: express.Response,
   }
 }
 
+interface ClientCacheEntry {
+  clients: any[];
+  timestamp: number;
+}
+const clientsCache = new Map<string, ClientCacheEntry>();
+
+async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Missing token' });
+  }
+  try {
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await admin.auth().verifyIdToken(token!);
+    (req as any).user = decodedToken;
+    next();
+  } catch (error) {
+    console.error('[Auth] Token verification failed:', error);
+    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+  }
+}
+
 // Use process.cwd() instead of __dirname to avoid ESM/CJS path resolution issues on Windows
 const __dirname = process.cwd();
 
@@ -261,6 +283,54 @@ async function startServer() {
   // API routes go here
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // Fetch all clients (members) via memory cache
+  app.get("/api/clients", requireAuth, async (req, res) => {
+    try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const dbId = config?.firestoreDatabaseId || '(default)';
+      
+      const now = Date.now();
+      const cached = clientsCache.get(dbId);
+      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+        return res.json({ clients: cached.clients, cached: true });
+      }
+
+      console.log(`[Cache] Cache miss for database: ${dbId}. Fetching from Firestore...`);
+      const db = await getDbForRequest(req);
+      const snap = await db.collection('clients').where('status', '!=', 'Lead').get();
+      const clients = snap.docs.map(doc => {
+        const data = doc.data();
+        // Exclude large subcollections to keep memory consumption minimal
+        delete data.comments;
+        delete data.interactions;
+        return { ...data, id: doc.id };
+      });
+
+      clientsCache.set(dbId, { clients, timestamp: now });
+      return res.json({ clients, cached: false });
+    } catch (error) {
+      console.error('[API] Error fetching clients:', error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Invalidate clients cache
+  app.post("/api/clients/invalidate", requireAuth, async (req, res) => {
+    try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const dbId = config?.firestoreDatabaseId || '(default)';
+      
+      clientsCache.delete(dbId);
+      console.log(`[Cache] Invalidated cache for database: ${dbId}`);
+      return res.json({ success: true });
+    } catch (error) {
+      console.error('[API] Error invalidating cache:', error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
   });
 
   // Provisioning endpoint for new gym onboarding
