@@ -6,7 +6,18 @@ import { query } from './db.js';
 
 export async function getClientsFromSQL() {
   const res = await query(
-    `SELECT * FROM clients WHERE status != 'Lead' ORDER BY name ASC`
+    `SELECT 
+       id, name, phone, status, member_id, gender, date_of_birth, sales_name, sales_rep, package_type,
+       start_date, branch, sessions_remaining, assigned_to, created_at, national_id, email, backup_phone,
+       is_blacklisted, photo_url, advertising_source, country, city, address, home_phone, nationality,
+       job_title, guest_serial, civilian_or_military, referred_by_name, linked_account, linked_client_ids,
+       portal_user_id, packages, import_batch_id, last_contact_date, personal_email, stage, interest,
+       category, source, expected_visit_date, trial_date, membership_expiry, height, weight, activity_level,
+       workout_times, fitness_target, ai_tokens, referral_code, referred_by, emergency_contact_name, civil_status,
+       barcode, card_id, legacy_notes, legacy_member_id
+     FROM clients 
+     WHERE status != 'Lead' 
+     ORDER BY name ASC`
   );
   return res.rows.map(row => ({
     ...row,
@@ -22,8 +33,8 @@ export async function getClientsFromSQL() {
     linkedClientIds: row.linked_client_ids || [],
     portalUserId: row.portal_user_id,
     packages: row.packages || [],
-    comments: row.comments || [],
-    interactions: row.interactions || [],
+    comments: [],
+    interactions: [],
     importBatchId: row.import_batch_id,
     lastContactDate: row.last_contact_date,
     personalEmail: row.personal_email,
@@ -57,7 +68,18 @@ export async function getClientsFromSQL() {
 
 export async function getLeadsFromSQL() {
   const res = await query(
-    `SELECT * FROM clients WHERE status = 'Lead' AND stage IN ('New', 'Trial', 'Follow Up') ORDER BY name ASC`
+    `SELECT 
+       id, name, phone, status, member_id, gender, date_of_birth, sales_name, sales_rep, package_type,
+       start_date, branch, sessions_remaining, assigned_to, created_at, national_id, email, backup_phone,
+       is_blacklisted, photo_url, advertising_source, country, city, address, home_phone, nationality,
+       job_title, guest_serial, civilian_or_military, referred_by_name, linked_account, linked_client_ids,
+       portal_user_id, packages, import_batch_id, last_contact_date, personal_email, stage, interest,
+       category, source, expected_visit_date, trial_date, membership_expiry, height, weight, activity_level,
+       workout_times, fitness_target, ai_tokens, referral_code, referred_by, emergency_contact_name, civil_status,
+       barcode, card_id, legacy_notes, legacy_member_id
+     FROM clients 
+     WHERE status = 'Lead' AND stage IN ('New', 'Trial', 'Follow Up') 
+     ORDER BY name ASC`
   );
   return res.rows.map(row => ({
     ...row,
@@ -73,8 +95,8 @@ export async function getLeadsFromSQL() {
     linkedClientIds: row.linked_client_ids || [],
     portalUserId: row.portal_user_id,
     packages: row.packages || [],
-    comments: row.comments || [],
-    interactions: row.interactions || [],
+    comments: [],
+    interactions: [],
     importBatchId: row.import_batch_id,
     lastContactDate: row.last_contact_date,
     personalEmail: row.personal_email,
@@ -295,7 +317,10 @@ export async function addCommentToSQL(clientId: string, comment: any) {
 
 export async function getPaymentsFromSQL() {
   const res = await query(
-    `SELECT * FROM payments WHERE deleted_at IS NULL ORDER BY created_at DESC`
+    `SELECT * FROM payments 
+     WHERE deleted_at IS NULL 
+       AND (date IS NULL OR date = '' OR date::timestamp >= NOW() - INTERVAL '12 months')
+     ORDER BY created_at DESC`
   );
   return res.rows.map(row => ({
     ...row,
@@ -395,6 +420,7 @@ export async function getAttendancesFromSQL() {
     `SELECT a.*, c.name as client_name 
      FROM attendance a
      LEFT JOIN clients c ON a.client_id = c.id
+     WHERE a.date::timestamp >= NOW() - INTERVAL '90 days'
      ORDER BY a.date DESC`
   );
   return res.rows.map(row => ({
