@@ -301,13 +301,12 @@ export async function deleteMultipleClientsFromSQL(ids: string[]) {
 }
 
 export async function addCommentToSQL(clientId: string, comment: any) {
-  const res = await query(`SELECT comments FROM clients WHERE id = $1`, [clientId]);
-  const comments = res.rows[0]?.comments || [];
-  comments.push(comment);
-  
   await query(
-    `UPDATE clients SET comments = $1, last_contact_date = $2 WHERE id = $3`,
-    [JSON.stringify(comments), new Date().toISOString(), clientId]
+    `UPDATE clients 
+     SET comments = COALESCE(comments, '[]'::jsonb) || $1::jsonb, 
+         last_contact_date = $2 
+     WHERE id = $3`,
+    [JSON.stringify([comment]), new Date().toISOString(), clientId]
   );
 }
 
@@ -814,4 +813,107 @@ export async function addAuditLogToSQL(log: any) {
       log.userName || null
     ]
   );
+}
+
+// =========================================================================
+// Optimized Targeted SQL Queries for QR Check-In
+// =========================================================================
+
+export async function getClientByQrCodeFromSQL(qrData: string) {
+  const res = await query(
+    `SELECT 
+       id, name, phone, status, member_id, gender, date_of_birth, sales_name, sales_rep, package_type,
+       start_date, branch, sessions_remaining, assigned_to, created_at, national_id, email, backup_phone,
+       is_blacklisted, photo_url, advertising_source, country, city, address, home_phone, nationality,
+       job_title, guest_serial, civilian_or_military, referred_by_name, linked_account, linked_client_ids,
+       portal_user_id, packages, import_batch_id, last_contact_date, personal_email, stage, interest,
+       category, source, expected_visit_date, trial_date, membership_expiry, height, weight, activity_level,
+       workout_times, fitness_target, ai_tokens, referral_code, referred_by, emergency_contact_name, civil_status,
+       barcode, card_id, legacy_notes, legacy_member_id
+     FROM clients 
+     WHERE id = $1 OR member_id = $1 OR phone = $1
+     LIMIT 1`,
+    [qrData]
+  );
+  if (res.rows.length === 0) return null;
+  const row = res.rows[0];
+  return {
+    ...row,
+    isBlacklisted: row.is_blacklisted,
+    photoURL: row.photo_url,
+    advertisingSource: row.advertising_source,
+    homePhone: row.home_phone,
+    jobTitle: row.job_title,
+    guestSerial: row.guest_serial,
+    civilianOrMilitary: row.civilian_or_military,
+    referredByName: row.referred_by_name,
+    linkedAccount: row.linked_account,
+    linkedClientIds: row.linked_client_ids || [],
+    portalUserId: row.portal_user_id,
+    packages: row.packages || [],
+    comments: [],
+    interactions: [],
+    importBatchId: row.import_batch_id,
+    lastContactDate: row.last_contact_date,
+    personalEmail: row.personal_email,
+    memberId: row.member_id,
+    packageType: row.package_type,
+    startDate: row.start_date,
+    dateOfBirth: row.date_of_birth,
+    salesName: row.sales_name,
+    salesRep: row.sales_rep,
+    sessionsRemaining: row.sessions_remaining,
+    assignedTo: row.assigned_to,
+    createdAt: row.created_at,
+    backupPhone: row.backup_phone,
+    nationalId: row.national_id,
+    expectedVisitDate: row.expected_visit_date,
+    trialDate: row.trial_date,
+    membershipExpiry: row.membership_expiry,
+    activityLevel: row.activity_level,
+    workoutTimes: row.workout_times || [],
+    fitnessTarget: row.fitness_target,
+    aiTokens: row.ai_tokens,
+    referralCode: row.referral_code,
+    referredBy: row.referred_by,
+    emergencyContactName: row.emergency_contact_name,
+    civilStatus: row.civil_status,
+    cardId: row.card_id,
+    legacyNotes: row.legacy_notes,
+    legacyMemberId: row.legacy_member_id
+  };
+}
+
+export async function getAttendancesForClientFromSQL(clientId: string) {
+  const res = await query(
+    `SELECT a.*, c.name as client_name 
+     FROM attendance a
+     LEFT JOIN clients c ON a.client_id = c.id
+     WHERE a.client_id = $1
+     ORDER BY a.date DESC`,
+    [clientId]
+  );
+  return res.rows.map(row => ({
+    ...row,
+    clientId: row.client_id,
+    packageName: row.package_name,
+    recordedBy: row.recorded_by,
+    clientName: row.client_name
+  }));
+}
+
+export async function getSessionsForClientAndDateFromSQL(clientId: string, dateStr: string) {
+  const res = await query(
+    `SELECT * FROM sessions 
+     WHERE client_id = $1 AND date = $2`,
+    [clientId, dateStr]
+  );
+  return res.rows.map(row => ({
+    ...row,
+    clientId: row.client_id,
+    clientName: row.client_name,
+    coachId: row.coach_id,
+    coachName: row.coach_name,
+    createdAt: row.created_at
+  }));
 }

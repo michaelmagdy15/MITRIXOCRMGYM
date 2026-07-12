@@ -11,8 +11,10 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   
   const invalidateCache = (config: any) => {
     const dbId = config?.firestoreDatabaseId || '(default)';
-    clientsCache.delete(dbId);
-    paymentsCache.delete(dbId);
+    const tenantId = config?.tenantId || 'default';
+    const cacheKey = `${tenantId}:${dbId}`;
+    clientsCache.delete(cacheKey);
+    paymentsCache.delete(cacheKey);
   };
 
   // Leads route

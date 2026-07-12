@@ -44,9 +44,10 @@ if (localCertPath && fs.existsSync(localCertPath)) {
 export const pool = new pg.Pool({
   connectionString,
   ssl: connectionString ? sslConfig : undefined,
-  max: 20, // limit connections
-  idleTimeoutMillis: 30000,
+  max: 5, // limit connections per instance safer for Cloud Run scaling
+  idleTimeoutMillis: 120000, // 2 minutes to reduce TLS connection renegotiation overhead
   connectionTimeoutMillis: 5000,
+  statement_timeout: 10000, // 10 seconds timeout to prevent hanging queries
 });
 
 pool.on('error', (err) => {

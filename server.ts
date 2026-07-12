@@ -310,15 +310,16 @@ async function startServer() {
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       const dbId = config?.firestoreDatabaseId || '(default)';
+      const cacheKey = `${tenantId || 'default'}:${dbId}`;
       
       const now = Date.now();
-      const cached = clientsCache.get(dbId);
+      const cached = clientsCache.get(cacheKey);
       if (cached && now - cached.timestamp < CACHE_TTL_MS) {
         return res.json({ clients: cached.clients, cached: true });
       }
 
       // Check if there is an in-flight promise for this database
-      let fetchPromise = clientsFetchPromises.get(dbId);
+      let fetchPromise = clientsFetchPromises.get(cacheKey);
       if (!fetchPromise) {
         fetchPromise = (async () => {
           if (tenantId === 'inzanathletics') {
@@ -336,15 +337,15 @@ async function startServer() {
             return { ...data, id: doc.id } as any;
           });
         })();
-        clientsFetchPromises.set(dbId, fetchPromise);
+        clientsFetchPromises.set(cacheKey, fetchPromise);
       }
 
       try {
         const clients = await fetchPromise;
-        clientsCache.set(dbId, { clients, timestamp: Date.now() });
+        clientsCache.set(cacheKey, { clients, timestamp: Date.now() });
         return res.json({ clients, cached: false });
       } finally {
-        clientsFetchPromises.delete(dbId);
+        clientsFetchPromises.delete(cacheKey);
       }
     } catch (error) {
       console.error('[API] Error fetching clients:', error);
@@ -357,10 +358,12 @@ async function startServer() {
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
+      const tenantId = config?.tenantId;
       const dbId = config?.firestoreDatabaseId || '(default)';
+      const cacheKey = `${tenantId || 'default'}:${dbId}`;
       
-      clientsCache.delete(dbId);
-      console.log(`[Cache] Invalidated cache for database: ${dbId}`);
+      clientsCache.delete(cacheKey);
+      console.log(`[Cache] Invalidated cache for: ${cacheKey}`);
       return res.json({ success: true });
     } catch (error) {
       console.error('[API] Error invalidating cache:', error);
@@ -375,15 +378,16 @@ async function startServer() {
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       const dbId = config?.firestoreDatabaseId || '(default)';
+      const cacheKey = `${tenantId || 'default'}:${dbId}`;
       
       const now = Date.now();
-      const cached = paymentsCache.get(dbId);
+      const cached = paymentsCache.get(cacheKey);
       if (cached && now - cached.timestamp < CACHE_TTL_MS) {
         return res.json({ payments: cached.payments, cached: true });
       }
 
       // Check if there is an in-flight promise for this database
-      let fetchPromise = paymentsFetchPromises.get(dbId);
+      let fetchPromise = paymentsFetchPromises.get(cacheKey);
       if (!fetchPromise) {
         fetchPromise = (async () => {
           if (tenantId === 'inzanathletics') {
@@ -397,15 +401,15 @@ async function startServer() {
             .map(doc => ({ ...doc.data(), id: doc.id } as any))
             .filter((p: any) => !p.deleted_at);
         })();
-        paymentsFetchPromises.set(dbId, fetchPromise);
+        paymentsFetchPromises.set(cacheKey, fetchPromise);
       }
 
       try {
         const payments = await fetchPromise;
-        paymentsCache.set(dbId, { payments, timestamp: Date.now() });
+        paymentsCache.set(cacheKey, { payments, timestamp: Date.now() });
         return res.json({ payments, cached: false });
       } finally {
-        paymentsFetchPromises.delete(dbId);
+        paymentsFetchPromises.delete(cacheKey);
       }
     } catch (error) {
       console.error('[API] Error fetching payments:', error);
@@ -418,10 +422,12 @@ async function startServer() {
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
+      const tenantId = config?.tenantId;
       const dbId = config?.firestoreDatabaseId || '(default)';
+      const cacheKey = `${tenantId || 'default'}:${dbId}`;
       
-      paymentsCache.delete(dbId);
-      console.log(`[Cache] Invalidated payments cache for database: ${dbId}`);
+      paymentsCache.delete(cacheKey);
+      console.log(`[Cache] Invalidated payments cache for: ${cacheKey}`);
       return res.json({ success: true });
     } catch (error) {
       console.error('[API] Error invalidating payments cache:', error);
@@ -686,13 +692,24 @@ async function startServer() {
         return res.status(403).json({ error: "Forbidden: Only admins can create users." });
       }
 
-      // Create Firebase Auth user using Admin SDK
-      const userRecord = await admin.auth().createUser({
-        email,
-        password
-      });
+      // Check if user already exists first to prevent duplicate accounts
+      let userRecord;
+      try {
+        userRecord = await admin.auth().getUserByEmail(email);
+        console.log(`[Server] Auth account already exists for ${email} with UID: ${userRecord.uid}`);
+      } catch (err: any) {
+        if (err.code === 'auth/user-not-found') {
+          // Create Firebase Auth user using Admin SDK
+          userRecord = await admin.auth().createUser({
+            email,
+            password
+          });
+          console.log(`[Server] Auth account created: ${email} with UID: ${userRecord.uid} by caller: ${callerUid}`);
+        } else {
+          throw err;
+        }
+      }
 
-      console.log(`[Server] Auth account created: ${email} with UID: ${userRecord.uid} by caller: ${callerUid}`);
       return res.json({ success: true, uid: userRecord.uid });
     } catch (error) {
       console.error("[Server] Tenant create-auth-user error:", error);
@@ -790,9 +807,8 @@ async function startServer() {
       const db = await getDbForRequest(req);
 
       if (tenantId === 'inzanathletics') {
-        // 1. Find client in SQL by id, memberId or phone
-        const clients = await sqlDb.getClientsFromSQL();
-        const client = clients.find(c => c.id === qrData || c.memberId === qrData || c.phone === qrData);
+        // 1. Find client in SQL by id, memberId or phone using indexed search
+        const client = await sqlDb.getClientByQrCodeFromSQL(qrData);
         if (!client) {
           return res.status(404).json({ error: "Member not found. Please check the QR code or ID." });
         }
@@ -804,11 +820,11 @@ async function startServer() {
           return res.status(400).json({ error: `${client.name}'s membership is currently on hold.` });
         }
 
-        // Check double check-in
+        // Check double check-in ( Cairo Timezone )
         const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-        const attendances = await sqlDb.getAttendancesFromSQL();
+        const attendances = await sqlDb.getAttendancesForClientFromSQL(client.id);
         const todayCheckins = attendances.filter(a => {
-          if (a.clientId !== client.id || !a.date) return false;
+          if (!a.date) return false;
           try {
             return new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr;
           } catch {
@@ -817,10 +833,10 @@ async function startServer() {
         });
         const checkinCount = todayCheckins.length;
 
-        // Count expected sessions from SQL
-        const sessions = await sqlDb.getSessionsFromSQL();
+        // Count expected sessions from SQL (only this client's sessions today)
+        const sessions = await sqlDb.getSessionsForClientAndDateFromSQL(client.id, cairoDateStr);
         const ptSessionsCount = sessions.filter(s => {
-          return s.clientId === client.id && s.date === cairoDateStr && (s.status === 'Scheduled' || s.status === 'Attended');
+          return s.status === 'Scheduled' || s.status === 'Attended';
         }).length;
 
         // Group classes count from Firestore
@@ -852,9 +868,7 @@ async function startServer() {
         await sqlDb.recordAttendanceInSQL(attendanceData);
 
         // 3. Mark matching scheduled PT sessions today to 'Attended'
-        const todayScheduledPTs = sessions.filter(s => {
-          return s.clientId === client.id && s.date === cairoDateStr && s.status === 'Scheduled';
-        });
+        const todayScheduledPTs = sessions.filter(s => s.status === 'Scheduled');
         for (const pt of todayScheduledPTs) {
           await sqlDb.updateSessionInSQL(pt.id, { status: 'Attended' });
         }
@@ -895,7 +909,8 @@ async function startServer() {
         });
 
         // Invalidate cache
-        clientsCache.delete(config.firestoreDatabaseId || '(default)');
+        const cacheKey = `${tenantId}:${config.firestoreDatabaseId || '(default)'}`;
+        clientsCache.delete(cacheKey);
         
         return res.json({ success: true, message: `Check-in recorded for ${client.name}`, clientName: client.name });
       }

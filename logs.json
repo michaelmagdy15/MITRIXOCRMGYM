@@ -1,0 +1,3433 @@
+﻿[
+  {
+    "httpRequest": {
+      "latency": "0.060123706s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "104.23.223.80",
+      "requestMethod": "GET",
+      "requestSize": "633",
+      "requestUrl": "https://strike-egy.com/wp-admin/install.php?step=1",
+      "responseSize": "3279",
+      "serverIp": "216.239.38.21",
+      "status": 200,
+      "userAgent": "http://strike-egy.com/wp-admin/install.php?step=1"
+    },
+    "insertId": "6a535d1c00085249febd0871",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:23:40.752269009Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "1237d70b424a708e",
+    "timestamp": "2026-07-12T09:23:40.482401Z",
+    "trace": "projects/bengarab/traces/4846024ed02bb0e5ad29a935f5c5ab57"
+  },
+  {
+    "httpRequest": {
+      "latency": "0s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "141.101.76.95",
+      "requestMethod": "GET",
+      "requestSize": "629",
+      "requestUrl": "http://strike-egy.com/wp-admin/install.php?step=1",
+      "serverIp": "216.239.36.21",
+      "status": 302,
+      "userAgent": "http://strike-egy.com/wp-admin/install.php?step=1"
+    },
+    "insertId": "6a535d1c000648e8729a4a54",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:23:40.419017619Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "128239f7f7e15c4a",
+    "timestamp": "2026-07-12T09:23:40.406361Z",
+    "trace": "projects/bengarab/traces/73d370bc6bcec3526150d3c19ea7ce38",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.194789228s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "172.69.58.253",
+      "requestMethod": "GET",
+      "requestSize": "641",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/",
+      "responseSize": "3293",
+      "serverIp": "34.143.76.2",
+      "status": 200,
+      "userAgent": "Hello from Palo Alto Networks, find out more about our scans in https://docs-cortex.paloaltonetworks.com/r/1/Cortex-Xpanse/Scanning-activity"
+    },
+    "insertId": "6a535beb000c1d2f8ff42343",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:18:35.800797936Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "b3f6f5dc5fb6025d",
+    "timestamp": "2026-07-12T09:18:35.591856Z",
+    "trace": "projects/bengarab/traces/284588ea8524851c047a8038b55ec9af",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.354662231s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "172.69.17.157",
+      "requestMethod": "GET",
+      "requestSize": "665",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/.well-known/security.txt",
+      "responseSize": "3293",
+      "serverIp": "34.143.72.2",
+      "status": 200,
+      "userAgent": "Hello from Palo Alto Networks, find out more about our scans in https://docs-cortex.paloaltonetworks.com/r/1/Cortex-Xpanse/Scanning-activity"
+    },
+    "insertId": "6a535a0e000f10fca490653b",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:10:38.993805991Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "1fef06067f9b0ec8",
+    "timestamp": "2026-07-12T09:10:38.622261Z",
+    "trace": "projects/bengarab/traces/5dcaab7658c4fa775e24c0298bda46f0",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6a53596f000001b9f1bc7c89",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:59.298338313Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[DB] Failed to connect to CockroachDB.",
+    "timestamp": "2026-07-12T09:07:59.000441Z"
+  },
+  {
+    "insertId": "6a53596e000c252ca314357e",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-07-12T09:07:58.991903726Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Default STARTUP TCP probe succeeded after 1 attempt for container \"mitrixogymcrm-1\" on port 8080.",
+    "timestamp": "2026-07-12T09:07:58.795948Z"
+  },
+  {
+    "insertId": "6a53596e000c164c53ca91e7",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-07-12T09:07:59.117893018Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[DB] Testing connection to CockroachDB...",
+    "timestamp": "2026-07-12T09:07:58.792140Z"
+  },
+  {
+    "insertId": "6a53596e000c1616e39bce87",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-07-12T09:07:59.117893018Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "Server running on http://localhost:8080",
+    "timestamp": "2026-07-12T09:07:58.792086Z"
+  },
+  {
+    "insertId": "6a53596e000be6b357157b67",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-07-12T09:07:58.783076754Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[DB] Found CA root.crt at project root.",
+    "timestamp": "2026-07-12T09:07:58.779955Z"
+  },
+  {
+    "insertId": "6a53596d00082daa3006777d",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd474ef510c41a9ccfb44ab1c6f42e49657bca7f2b06c5ac4216c6cdd2225e947efb070e5df06d01fd48a2545c4ad8d4d3efd9795dd0fc6f72c7b9a777010ff513a6a52125fc7f6fe1128860",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run",
+      "scaling_reason": "MANUAL_OR_CUSTOMER_MIN_INSTANCE"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-07-12T09:07:57.661756449Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "textPayload": "Starting new instance. Reason: MANUAL_OR_CUSTOMER_MIN_INSTANCE - Instance started because of customer-configured min-instances or manual scaling.",
+    "timestamp": "2026-07-12T09:07:57.535978Z"
+  },
+  {
+    "insertId": "6a53596c000ad5f5ccd5a879",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "container_name": "mitrixogymcrm-1",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-07-12T09:07:56.995322755Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "WARNING",
+    "textPayload": "Container terminated on signal 6.",
+    "timestamp": "2026-07-12T09:07:56.710125912Z"
+  },
+  {
+    "insertId": "6a53596c000a0649fe0d7a84",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fvarlog%2Fsystem",
+    "receiveTimestamp": "2026-07-12T09:07:56.659453394Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "textPayload": "Uncaught signal: 6, pid=1, tid=1, fault_addr=0.",
+    "timestamp": "2026-07-12T09:07:56.656939947Z"
+  },
+  {
+    "insertId": "6a53596c000a058175ab6d08",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "18: 0x195e476  [node]",
+    "timestamp": "2026-07-12T09:07:56.656769Z"
+  },
+  {
+    "insertId": "6a53596c000a020a61cf2b01",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "17: 0x11ba86e v8::internal::Runtime_DefineNamedOwnIC_Slow(int, unsigned long*, v8::internal::Isolate*) [node]",
+    "timestamp": "2026-07-12T09:07:56.655882Z"
+  },
+  {
+    "insertId": "6a53596c0009ff1c6d4ad5c7",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "16: 0x1336541 v8::internal::JSObject::CreateDataProperty(v8::internal::LookupIterator*, v8::internal::Handle<v8::internal::Object>, v8::Maybe<v8::internal::ShouldThrow>) [node]",
+    "timestamp": "2026-07-12T09:07:56.655132Z"
+  },
+  {
+    "insertId": "6a53596c0009faa44fa81b0a",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "15: 0x13bb3c3 v8::internal::Object::TransitionAndWriteDataProperty(v8::internal::LookupIterator*, v8::internal::Handle<v8::internal::Object>, v8::internal::PropertyAttributes, v8::Maybe<v8::internal::ShouldThrow>, v8::internal::StoreOrigin) [node]",
+    "timestamp": "2026-07-12T09:07:56.653988Z"
+  },
+  {
+    "insertId": "6a53596c0009f77d0387918d",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "14: 0x13a3aa9 v8::internal::LookupIterator::ApplyTransitionToDataProperty(v8::internal::Handle<v8::internal::JSReceiver>) [node]",
+    "timestamp": "2026-07-12T09:07:56.653181Z"
+  },
+  {
+    "insertId": "6a53596c0009f4051fc027b8",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "13: 0x133ee55 v8::internal::JSObject::MigrateToMap(v8::internal::Isolate*, v8::internal::Handle<v8::internal::JSObject>, v8::internal::Handle<v8::internal::Map>, int) [node]",
+    "timestamp": "2026-07-12T09:07:56.652293Z"
+  },
+  {
+    "insertId": "6a53596c0009f0fca10bbad1",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "12: 0x10b7fb4 v8::internal::FactoryBase<v8::internal::Factory>::NewFixedArrayWithFiller(v8::internal::Handle<v8::internal::Map>, int, v8::internal::Handle<v8::internal::Oddball>, v8::internal::AllocationType) [node]",
+    "timestamp": "2026-07-12T09:07:56.651516Z"
+  },
+  {
+    "insertId": "6a53596c0009ee6506f2caf2",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "11: 0x10b7e4a v8::internal::FactoryBase<v8::internal::Factory>::AllocateRawArray(int, v8::internal::AllocationType, v8::internal::AllocationAlignment) [node]",
+    "timestamp": "2026-07-12T09:07:56.650853Z"
+  },
+  {
+    "insertId": "6a53596c0009eafb0832198b",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "10: 0x10c69a6 v8::internal::Factory::AllocateRaw(int, v8::internal::AllocationType, v8::internal::AllocationAlignment) [node]",
+    "timestamp": "2026-07-12T09:07:56.649979Z"
+  },
+  {
+    "insertId": "6a53596c0009e8201cb0e2b6",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 9: 0x10ea385 v8::internal::HeapAllocator::AllocateRawWithRetryOrFailSlowPath(int, v8::internal::AllocationType, v8::internal::AllocationOrigin, v8::internal::AllocationAlignment) [node]",
+    "timestamp": "2026-07-12T09:07:56.649248Z"
+  },
+  {
+    "insertId": "6a53596c0009e4915fb27a8b",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 8: 0x10e91f1 v8::internal::HeapAllocator::AllocateRawWithLightRetrySlowPath(int, v8::internal::AllocationType, v8::internal::AllocationOrigin, v8::internal::AllocationAlignment) [node]",
+    "timestamp": "2026-07-12T09:07:56.648337Z"
+  },
+  {
+    "insertId": "6a53596c0009e173e0a8b9f1",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 7: 0x1112e9c v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason, v8::GCCallbackFlags) [node]",
+    "timestamp": "2026-07-12T09:07:56.647539Z"
+  },
+  {
+    "insertId": "6a53596c0009dfbc02c166c5",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 6: 0x1112684 v8::internal::Heap::PerformGarbageCollection(v8::internal::GarbageCollector, v8::internal::GarbageCollectionReason, char const*) [node]",
+    "timestamp": "2026-07-12T09:07:56.647100Z"
+  },
+  {
+    "insertId": "6a53596c0009db81a0068ac5",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 5: 0x10fb794 v8::internal::Heap::RecomputeLimits(v8::internal::GarbageCollector) [node]",
+    "timestamp": "2026-07-12T09:07:56.646017Z"
+  },
+  {
+    "insertId": "6a53596c0009d871757539ea",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 4: 0x10fb205  [node]",
+    "timestamp": "2026-07-12T09:07:56.645233Z"
+  },
+  {
+    "insertId": "6a53596c0009d58db8703d17",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 3: 0xee85e7 v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [node]",
+    "timestamp": "2026-07-12T09:07:56.644493Z"
+  },
+  {
+    "insertId": "6a53596c0009d30e1389a7a7",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 2: 0xee8300 v8::Utils::ReportOOMFailure(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [node]",
+    "timestamp": "2026-07-12T09:07:56.643854Z"
+  },
+  {
+    "insertId": "6a53596c0009d038039385bb",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": " 1: 0xb78db3 node::OOMErrorHandler(char const*, v8::OOMDetails const&) [node]",
+    "timestamp": "2026-07-12T09:07:56.643128Z"
+  },
+  {
+    "insertId": "6a53596c00099b2dd7893eba",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "----- Native stack trace -----",
+    "timestamp": "2026-07-12T09:07:56.629549Z"
+  },
+  {
+    "insertId": "6a53596c00099b27c3b5e1cb",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.968510774Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory",
+    "timestamp": "2026-07-12T09:07:56.629543Z"
+  },
+  {
+    "insertId": "6a53596c00099acb626d0c3a",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.633043476Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "<--- JS stacktrace --->",
+    "timestamp": "2026-07-12T09:07:56.629451Z"
+  },
+  {
+    "insertId": "6a53596c00099ac6067d7da9",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.633043476Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[1:0x572a170] 38790410 ms: Scavenge (reduce) 249.2 (257.9) -> 249.0 (258.1) MB, 2.04 / 0.00 ms  (average mu = 0.265, current mu = 0.247) allocation failure; ",
+    "timestamp": "2026-07-12T09:07:56.629446Z"
+  },
+  {
+    "insertId": "6a53596c00099ac2cad6330a",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.633043476Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[1:0x572a170] 38790405 ms: Scavenge (reduce) 248.3 (257.4) -> 248.1 (257.9) MB, 2.16 / 0.00 ms  (average mu = 0.265, current mu = 0.247) allocation failure; ",
+    "timestamp": "2026-07-12T09:07:56.629442Z"
+  },
+  {
+    "insertId": "6a53596c00099abe6b8b1122",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.633043476Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[1:0x572a170] 38790402 ms: Scavenge (reduce) 248.2 (257.4) -> 248.1 (257.4) MB, 2.78 / 0.00 ms  (average mu = 0.265, current mu = 0.247) allocation failure; ",
+    "timestamp": "2026-07-12T09:07:56.629438Z"
+  },
+  {
+    "insertId": "6a53596c00099aa80d85095b",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstderr",
+    "receiveTimestamp": "2026-07-12T09:07:56.633043476Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "<--- Last few GCs --->",
+    "timestamp": "2026-07-12T09:07:56.629416Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "2.832485054s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.9.29",
+      "requestMethod": "GET",
+      "requestSize": "892",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/geist-cyrillic-wght-normal-CHSlOQsW.woff2",
+      "responseSize": "67",
+      "serverIp": "34.143.73.2",
+      "status": 503,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53596c000a5cef1ca5e428",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:56.871513786Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "36c9e86ca81cb2d1",
+    "textPayload": "The request failed because either the HTTP response was malformed or connection to the instance had an error. Additional troubleshooting documentation can be found at: https://cloud.google.com/run/docs/troubleshooting#malformed-response-or-connection-error",
+    "timestamp": "2026-07-12T09:07:53.844445Z",
+    "trace": "projects/bengarab/traces/af9c68e53aa2e2222da36931869e86bd"
+  },
+  {
+    "httpRequest": {
+      "latency": "6.093388896s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "907",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/packages",
+      "responseSize": "67",
+      "serverIp": "34.143.74.2",
+      "status": 503,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53596c000a5c37235dc2cd",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:56.871513786Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "6c8b51aec4ecc82b",
+    "textPayload": "The request failed because either the HTTP response was malformed or connection to the instance had an error. Additional troubleshooting documentation can be found at: https://cloud.google.com/run/docs/troubleshooting#malformed-response-or-connection-error",
+    "timestamp": "2026-07-12T09:07:50.583930Z",
+    "trace": "projects/bengarab/traces/6ed49230fc47ec4a3aceaedf2d5121ff"
+  },
+  {
+    "httpRequest": {
+      "latency": "6.100805135s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "907",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/packages",
+      "responseSize": "67",
+      "serverIp": "34.143.74.2",
+      "status": 503,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53596c000a5c455ddb13e0",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:56.871513786Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "e3b279065eaf7e56",
+    "textPayload": "The request failed because either the HTTP response was malformed or connection to the instance had an error. Additional troubleshooting documentation can be found at: https://cloud.google.com/run/docs/troubleshooting#malformed-response-or-connection-error",
+    "timestamp": "2026-07-12T09:07:50.576567Z",
+    "trace": "projects/bengarab/traces/c3c56b643ee8d6673aceaedf2d51202b"
+  },
+  {
+    "httpRequest": {
+      "latency": "9.522629438s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2050",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/leads",
+      "responseSize": "67",
+      "serverIp": "34.143.74.2",
+      "status": 503,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53596c000a5d3f321c93d4",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:56.871513786Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "0166b741250fd80e",
+    "textPayload": "The request failed because either the HTTP response was malformed or connection to the instance had an error. Additional troubleshooting documentation can be found at: https://cloud.google.com/run/docs/troubleshooting#malformed-response-or-connection-error",
+    "timestamp": "2026-07-12T09:07:47.154876Z",
+    "trace": "projects/bengarab/traces/0948c953525bc88e298c8ee721e820e6"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.212483252s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2050",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/leads",
+      "responseSize": "209",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5359630002014c962c4fdf",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:47.211967783Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "aa247f6e3721860b",
+    "timestamp": "2026-07-12T09:07:46.917024Z",
+    "trace": "projects/bengarab/traces/613cbeef0e5f9ead298c8ee721e828b3",
+    "traceSampled": true
+  },
+  {
+    "insertId": "6a5359450007b00020f04e48",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-07-12T09:07:17.827508548Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[Cache] Cache miss for CockroachDB. Database: Inzan-athletics. Fetching...",
+    "timestamp": "2026-07-12T09:07:17.503808Z"
+  },
+  {
+    "insertId": "6a5359450007ab53acb97d19",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-07-12T09:07:17.827508548Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[Cache] Cache miss for CockroachDB. Database: Inzan-athletics. Fetching...",
+    "timestamp": "2026-07-12T09:07:17.502611Z"
+  },
+  {
+    "insertId": "6a5359450007a6438f8fc8f9",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-07-12T09:07:17.827508548Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[Cache] Cache miss for CockroachDB. Database: Inzan-athletics. Fetching...",
+    "timestamp": "2026-07-12T09:07:17.501315Z"
+  },
+  {
+    "insertId": "6a5359450007a4088b34be21",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-07-12T09:07:17.827508548Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[Cache] Cache miss for CockroachDB. Database: Inzan-athletics. Fetching...",
+    "timestamp": "2026-07-12T09:07:17.500744Z"
+  },
+  {
+    "insertId": "6a53594500076b3843be3e13",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Fstdout",
+    "receiveTimestamp": "2026-07-12T09:07:17.491237718Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "textPayload": "[Cache] Cache miss for payments. CockroachDB: Inzan-athletics. Fetching...",
+    "timestamp": "2026-07-12T09:07:17.486200Z"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.036298472s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.70.216.90",
+      "requestMethod": "GET",
+      "requestSize": "1005",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/nativeBridge-DPrzpdCK.js",
+      "responseSize": "589",
+      "serverIp": "34.143.79.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53594500074d93f4f4f96d",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:17.517369333Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "adbcb50ff4ca6d84",
+    "timestamp": "2026-07-12T09:07:17.440475Z",
+    "trace": "projects/bengarab/traces/2d93b11f964e84115fd7a421cee69d4a"
+  },
+  {
+    "httpRequest": {
+      "latency": "39.241865525s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2055",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/attendance",
+      "responseSize": "67",
+      "serverIp": "34.143.74.2",
+      "status": 503,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53596c000a5e12de6464d1",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:56.871513786Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "ERROR",
+    "spanId": "2fc7ca8d8958641a",
+    "textPayload": "The request failed because either the HTTP response was malformed or connection to the instance had an error. Additional troubleshooting documentation can be found at: https://cloud.google.com/run/docs/troubleshooting#malformed-response-or-connection-error",
+    "timestamp": "2026-07-12T09:07:17.435687Z",
+    "trace": "projects/bengarab/traces/5184fb71783103a9dca9f50dbe0c898b"
+  },
+  {
+    "httpRequest": {
+      "latency": "28.951165148s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2052",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/clients",
+      "responseSize": "17852378",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5359620005e8c30c3090e6",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:46.545456408Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "bb3f0f7b76fa5f56",
+    "timestamp": "2026-07-12T09:07:17.434986Z",
+    "trace": "projects/bengarab/traces/e2b60aa7728cc970dca9f50dbe0c8896"
+  },
+  {
+    "httpRequest": {
+      "latency": "29.385289513s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2051",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/clients",
+      "responseSize": "17852378",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a535962000c85ceb3e5159a",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:46.881214677Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "d46a0dbdc65e6d14",
+    "timestamp": "2026-07-12T09:07:17.434116Z",
+    "trace": "projects/bengarab/traces/eef9edc9dc70e514dca9f50dbe0c81fa"
+  },
+  {
+    "httpRequest": {
+      "latency": "28.856217637s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2052",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/clients",
+      "responseSize": "17852378",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a535962000470a1e60319c8",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:46.545456408Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "a19eab6cd4bc3d07",
+    "timestamp": "2026-07-12T09:07:17.433520Z",
+    "trace": "projects/bengarab/traces/6cf9a24b6d23fc59dca9f50dbe0c86ac"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.646301366s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2051",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/coaches",
+      "responseSize": "373",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53594600013c49bf7b44f7",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:18.183687478Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "8d95872a966c2aee",
+    "timestamp": "2026-07-12T09:07:17.433211Z",
+    "trace": "projects/bengarab/traces/289cda6111ed2905dca9f50dbe0c8b5e"
+  },
+  {
+    "httpRequest": {
+      "latency": "28.758348016s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2052",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/clients",
+      "responseSize": "17852378",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5359620002f2266ddfbfc6",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:46.212822685Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "acf703754cf69ac5",
+    "timestamp": "2026-07-12T09:07:17.432179Z",
+    "trace": "projects/bengarab/traces/b44cdbc14c10f2a3dca9f50dbe0c8010"
+  },
+  {
+    "httpRequest": {
+      "latency": "28.441508103s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "2053",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/payments",
+      "responseSize": "8749314",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a535961000d5a2d94cf044e",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:45.885331967Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "87c4c6a032b71f12",
+    "timestamp": "2026-07-12T09:07:17.431873Z",
+    "trace": "projects/bengarab/traces/52c4924aab49eadddca9f50dbe0c84c2"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.731283650s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "854",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/api/packages",
+      "responseSize": "30464",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a535946000165efd2df252c",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:18.183687478Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "03d9d73392ccfcc6",
+    "timestamp": "2026-07-12T09:07:17.358839Z",
+    "trace": "projects/bengarab/traces/46608cc16691aec3dca9f50dbe0c8868"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.003122730s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.9.159",
+      "requestMethod": "GET",
+      "requestSize": "997",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/sw.js",
+      "responseSize": "888",
+      "serverIp": "34.143.72.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593e0002209516b5c8ab",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:10.189830822Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "1d4f40320ea99f05",
+    "timestamp": "2026-07-12T09:07:10.134394Z",
+    "trace": "projects/bengarab/traces/bb89b7e2b858eeb305ea3119a240e50c"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002733120s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.126",
+      "requestMethod": "GET",
+      "requestSize": "866",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/manifest.webmanifest",
+      "responseSize": "769",
+      "serverIp": "34.143.72.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d000df7c4bd26d18e",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:10.189830822Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "9f0597f9eab61f6a",
+    "timestamp": "2026-07-12T09:07:09.910886Z",
+    "trace": "projects/bengarab/traces/07e340aabc24a5dade9fe5c2c6fc3efd"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002604380s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "162.158.130.91",
+      "requestMethod": "GET",
+      "requestSize": "977",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/geist-latin-wght-normal-Dm3htQBi.woff2",
+      "responseSize": "28656",
+      "serverIp": "34.143.76.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d000afb0ed99d8041",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.856455620Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "9674b257702a4bac",
+    "timestamp": "2026-07-12T09:07:09.713465Z",
+    "trace": "projects/bengarab/traces/1da514ab515566f7347d6cda07165866"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.003418740s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.24",
+      "requestMethod": "GET",
+      "requestSize": "1008",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/vendor-charts-ady606MC.js",
+      "responseSize": "390538",
+      "serverIp": "34.143.79.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0004b2fb5275f27e",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "33e0f5fee5996c6f",
+    "timestamp": "2026-07-12T09:07:09.298776Z",
+    "trace": "projects/bengarab/traces/330509689bda09484f81a551243578e0"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.003000559s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.70.216.128",
+      "requestMethod": "GET",
+      "requestSize": "1013",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/firebase-firestore-BLNhYtqe.js",
+      "responseSize": "449698",
+      "serverIp": "34.143.79.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0004986ceb343a0f",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "79f4d150ffceaec5",
+    "timestamp": "2026-07-12T09:07:09.296463Z",
+    "trace": "projects/bengarab/traces/a85d71745f87ff112dcd680b85375b2f"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.003760710s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.9.154",
+      "requestMethod": "GET",
+      "requestSize": "1009",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/firebase-storage-BbIX-kcU.js",
+      "responseSize": "34012",
+      "serverIp": "34.143.76.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d000431ad0b633248",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "19113e1e621d2a61",
+    "timestamp": "2026-07-12T09:07:09.269494Z",
+    "trace": "projects/bengarab/traces/a2f5ab67cd83b773f6f66e6b45bff095"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002407370s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.70.216.20",
+      "requestMethod": "GET",
+      "requestSize": "1008",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/firebase-auth-Bt8AsuVQ.js",
+      "responseSize": "128585",
+      "serverIp": "34.143.77.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0003e90883df13cd",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "002ff78906eba276",
+    "timestamp": "2026-07-12T09:07:09.252472Z",
+    "trace": "projects/bengarab/traces/cd7b920fcab0eb63b99d009d58abf730"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002401670s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.9.152",
+      "requestMethod": "GET",
+      "requestSize": "1005",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/vendor-dates-ByyetH4E.js",
+      "responseSize": "51153",
+      "serverIp": "34.143.72.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0003cf1c099263d2",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "3806187fe8461fb0",
+    "timestamp": "2026-07-12T09:07:09.244807Z",
+    "trace": "projects/bengarab/traces/1e8196ed381cf14c199eb096e2475f9a"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002326370s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.174",
+      "requestMethod": "GET",
+      "requestSize": "945",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/registerSW.js",
+      "responseSize": "413",
+      "serverIp": "34.143.77.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0003b34284c3d538",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "4d8399997181c467",
+    "timestamp": "2026-07-12T09:07:09.238654Z",
+    "trace": "projects/bengarab/traces/4442ed7f85808e9473ca5a5cccb5e7cd"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002812099s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.9.54",
+      "requestMethod": "GET",
+      "requestSize": "1007",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/firebase-core-C2bO5XtF.js",
+      "responseSize": "56924",
+      "serverIp": "34.143.73.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0003616b016ffc80",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "9ef301b43937c361",
+    "timestamp": "2026-07-12T09:07:09.216320Z",
+    "trace": "projects/bengarab/traces/f82d68cfc2ac2b901cfc6c661cdef46e"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.004434349s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.9.131",
+      "requestMethod": "GET",
+      "requestSize": "1014",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/index-BFFCbhWB.css",
+      "responseSize": "223792",
+      "serverIp": "34.143.75.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0002fb082c25b969",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "9a0b4230f3bfcb04",
+    "timestamp": "2026-07-12T09:07:09.189450Z",
+    "trace": "projects/bengarab/traces/17b5cad8cb070d2248fd3574af9e145e"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.011798859s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "162.158.129.247",
+      "requestMethod": "GET",
+      "requestSize": "912",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/index-DZqbTEZD.js",
+      "responseSize": "2405840",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0003112619c6a667",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.525658526Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "19bb4e238909a9dc",
+    "timestamp": "2026-07-12T09:07:09.187500Z",
+    "trace": "projects/bengarab/traces/df43c0612e2deb295278555ad7dcaea0"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.003809810s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://inzanathletics.mitrixo.com/",
+      "remoteIp": "172.69.68.160",
+      "requestMethod": "GET",
+      "requestSize": "1007",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/assets/vendor-react-CBZnGaWR.js",
+      "responseSize": "295142",
+      "serverIp": "34.143.75.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593d0001d030912d7a92",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:09.191301831Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "15d9afd6cd482396",
+    "timestamp": "2026-07-12T09:07:09.113065Z",
+    "trace": "projects/bengarab/traces/e6d21e2acd942bc9da55823ccb53145e"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.148374541s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "172.69.68.149",
+      "requestMethod": "GET",
+      "requestSize": "856",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/",
+      "responseSize": "3329",
+      "serverIp": "34.143.74.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a53593c000d0297d344de30",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:07:08.858266308Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "2f6ba78fd74398b8",
+    "timestamp": "2026-07-12T09:07:08.696755Z",
+    "trace": "projects/bengarab/traces/92ee5519a801f18fc8a806df65fc9817",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.152412689s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "162.158.189.84",
+      "requestMethod": "GET",
+      "requestSize": "905",
+      "requestUrl": "https://mitrixogymcrm-430356395102.europe-west1.run.app/",
+      "responseSize": "3293",
+      "serverIp": "34.143.76.2",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5357ef000f078ad773b6f1",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T09:01:35.990279293Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "298c0b20fae39fc1",
+    "timestamp": "2026-07-12T09:01:35.823896Z",
+    "trace": "projects/bengarab/traces/47495d91acdc6a595c7dcfedcb922f37",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002318890s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "216.73.216.7",
+      "requestMethod": "GET",
+      "requestSize": "324",
+      "requestUrl": "https://strike-egy.com/sitemap.xml",
+      "responseSize": "3279",
+      "serverIp": "216.239.34.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)"
+    },
+    "insertId": "6a535501000c8c9adee1a64b",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:49:06.047006550Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "91fbdef5c35203fa",
+    "timestamp": "2026-07-12T08:49:05.815753Z",
+    "trace": "projects/bengarab/traces/7f7420a26be63e45588c54fa2d2a7223"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.114325035s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "216.73.216.7",
+      "requestMethod": "GET",
+      "requestSize": "324",
+      "requestUrl": "https://strike-egy.com/robots.txt",
+      "responseSize": "3279",
+      "serverIp": "216.239.34.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)"
+    },
+    "insertId": "6a535501000acfc43c448f4c",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:49:05.713539499Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "3118cd14819b3db6",
+    "timestamp": "2026-07-12T08:49:05.588961Z",
+    "trace": "projects/bengarab/traces/844f2e4605ad4f2c588c54fa2d2a72b8",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002244110s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "193.148.56.148",
+      "requestMethod": "GET",
+      "requestSize": "279",
+      "requestUrl": "https://strike-egy.com/components/com_sppagebuilder/sppagebuilder.xml",
+      "responseSize": "3279",
+      "serverIp": "216.239.36.21",
+      "status": 200,
+      "userAgent": "python-requests/2.34.2"
+    },
+    "insertId": "6a534ea200002537ded17f79",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:21:54.234439113Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "8a4284a4d77c0cb5",
+    "timestamp": "2026-07-12T08:21:54.005599Z",
+    "trace": "projects/bengarab/traces/7126b2cc983e0fcda66345eeff4347ab"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002144620s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "193.148.56.148",
+      "requestMethod": "GET",
+      "requestSize": "292",
+      "requestUrl": "https://strike-egy.com/administrator/components/com_sppagebuilder/sppagebuilder.xml",
+      "responseSize": "3279",
+      "serverIp": "216.239.36.21",
+      "status": 200,
+      "userAgent": "python-requests/2.34.2"
+    },
+    "insertId": "6a534ea1000ef54050b18480",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:21:54.234439113Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "e68cea49bdc45259",
+    "timestamp": "2026-07-12T08:21:53.976875Z",
+    "trace": "projects/bengarab/traces/8406a5692efa2389a66345eeff434b24"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002076470s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "193.148.56.148",
+      "requestMethod": "GET",
+      "requestSize": "265",
+      "requestUrl": "https://strike-egy.com/administrator/components/com_jce/",
+      "responseSize": "3279",
+      "serverIp": "216.239.36.21",
+      "status": 200,
+      "userAgent": "python-requests/2.34.2"
+    },
+    "insertId": "6a534ea1000e00c434b1ce35",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:21:54.234439113Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "5de4fdf5ddc02430",
+    "timestamp": "2026-07-12T08:21:53.913381Z",
+    "trace": "projects/bengarab/traces/88ee16e50c71f5cf499db2cd214b0194"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002660650s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "193.148.56.148",
+      "requestMethod": "GET",
+      "requestSize": "259",
+      "requestUrl": "https://strike-egy.com/plugins/editors/jce/jce.xml",
+      "responseSize": "3279",
+      "serverIp": "216.239.36.21",
+      "status": 200,
+      "userAgent": "python-requests/2.34.2"
+    },
+    "insertId": "6a534ea1000da5d2edf4ad50",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:21:53.899691150Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "a893514e956f8984",
+    "timestamp": "2026-07-12T08:21:53.885477Z",
+    "trace": "projects/bengarab/traces/e17c39ad7ef879e1499db2cd214b07e2",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002491340s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "193.148.56.148",
+      "requestMethod": "GET",
+      "requestSize": "313",
+      "requestUrl": "https://strike-egy.com/media/system/js/core.js",
+      "responseSize": "3279",
+      "serverIp": "216.239.34.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0"
+    },
+    "insertId": "6a534d9c0000c359a327845d",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:17:32.237680980Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "311b641b2e2a3d01",
+    "timestamp": "2026-07-12T08:17:32.046448Z",
+    "trace": "projects/bengarab/traces/1eab64a180b09c0c6286a2ee98adf709"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002185890s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "193.148.56.148",
+      "requestMethod": "GET",
+      "requestSize": "378",
+      "requestUrl": "https://strike-egy.com/administrator/components/com_jce/",
+      "responseSize": "3279",
+      "serverIp": "216.239.34.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a534d9b000e64fd5946b7b1",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:17:32.237680980Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "09f10fbbd301cec2",
+    "timestamp": "2026-07-12T08:17:31.939892Z",
+    "trace": "projects/bengarab/traces/cc8c5a9fccb7c9506286a2ee98adf6b2"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.002500820s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "193.148.56.148",
+      "requestMethod": "GET",
+      "requestSize": "338",
+      "requestUrl": "https://strike-egy.com/plugins/editors/jce/jce.xml",
+      "responseSize": "3279",
+      "serverIp": "216.239.34.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    },
+    "insertId": "6a534d9b000d9b2e0bf88a00",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:17:31.898724766Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "2220aa95125920cf",
+    "timestamp": "2026-07-12T08:17:31.887768Z",
+    "trace": "projects/bengarab/traces/687057195f8829006286a2ee98adf158",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.109457784s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://www.bing.com/",
+      "remoteIp": "193.148.56.148",
+      "requestMethod": "GET",
+      "requestSize": "484",
+      "requestUrl": "https://strike-egy.com/",
+      "responseSize": "3279",
+      "serverIp": "216.239.34.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    },
+    "insertId": "6a534d770000cc467502f29d",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T08:16:55.058335208Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "e3dcafea166507c4",
+    "timestamp": "2026-07-12T08:16:54.937127Z",
+    "trace": "projects/bengarab/traces/5a791e6b3c455dd38d9bc478f7b93a5e",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.004094530s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "104.23.221.69",
+      "requestMethod": "GET",
+      "requestSize": "635",
+      "requestUrl": "https://strike-egy.com/wp-admin/install.php?step=1",
+      "responseSize": "3279",
+      "serverIp": "216.239.38.21",
+      "status": 200,
+      "userAgent": "http://strike-egy.com/wp-admin/install.php?step=1"
+    },
+    "insertId": "6a53455d0000a8cab5921ce1",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:42:21.292387016Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "c243afa64657683c",
+    "timestamp": "2026-07-12T07:42:21.034706Z",
+    "trace": "projects/bengarab/traces/555269cb816fb7042b211023776ec11c"
+  },
+  {
+    "httpRequest": {
+      "latency": "0s",
+      "protocol": "HTTP/1.1",
+      "remoteIp": "104.23.221.69",
+      "requestMethod": "GET",
+      "requestSize": "631",
+      "requestUrl": "http://strike-egy.com/wp-admin/install.php?step=1",
+      "serverIp": "216.239.32.21",
+      "status": 302,
+      "userAgent": "http://strike-egy.com/wp-admin/install.php?step=1"
+    },
+    "insertId": "6a53455c000e8ef4114c3f47",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:42:20.960393921Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "9eae9700d1379773",
+    "timestamp": "2026-07-12T07:42:20.944225Z",
+    "trace": "projects/bengarab/traces/a7c2f0e066324e9c6a9376077f98ecc1",
+    "traceSampled": true
+  },
+  {
+    "httpRequest": {
+      "latency": "0.014984510s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "698",
+      "requestUrl": "https://strike-egy.com/Adults%20(Mivida,%20Maxim,%20Impact)/Maxim/ADLUT%2030.jpg",
+      "responseSize": "195992",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00097c26b17abfb5",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "50e79221b4bf24d6",
+    "timestamp": "2026-07-12T07:39:27.605600Z",
+    "trace": "projects/bengarab/traces/6a5f520c21f8342e1c3fe211cef63b3e"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.021856480s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "697",
+      "requestUrl": "https://strike-egy.com/Adults%20(Mivida,%20Maxim,%20Impact)/Maxim/ADLUT%2020.jpg",
+      "responseSize": "207218",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af000989102e40367d",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "8d07a7591e5b419d",
+    "timestamp": "2026-07-12T07:39:27.601914Z",
+    "trace": "projects/bengarab/traces/b11ae9cfd5b0a0401c3fe211cef63a3c"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.030124800s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "698",
+      "requestUrl": "https://strike-egy.com/Adults%20(Mivida,%20Maxim,%20Impact)/Maxim/ADLUT%2010.jpg",
+      "responseSize": "273875",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00097ecd48b6ea41",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "312d3b101b716d52",
+    "timestamp": "2026-07-12T07:39:27.590806Z",
+    "trace": "projects/bengarab/traces/dbe8f6bb4b1a8cfa1c3fe211cef638b9"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.034255990s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "693",
+      "requestUrl": "https://strike-egy.com/Adults%20(Mivida,%20Maxim,%20Impact)/Maxim/ADLUT.jpg",
+      "responseSize": "204581",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af000977edc58255d5",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "8e7cc67ec55dfb0a",
+    "timestamp": "2026-07-12T07:39:27.581811Z",
+    "trace": "projects/bengarab/traces/db8e162391caacd91c3fe211cef637b7"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.039038900s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "698",
+      "requestUrl": "https://strike-egy.com/Juniors-Juniors%20Pro/Juniors%2030%20sessions%20(pro).jpg",
+      "responseSize": "271035",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00095b5ce7fd74bb",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "7d8e0db5f5f32a47",
+    "timestamp": "2026-07-12T07:39:27.572533Z",
+    "trace": "projects/bengarab/traces/6c42e5f0a537c0781c3fe211cef635b3"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.049456140s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "690",
+      "requestUrl": "https://strike-egy.com/Juniors-Juniors%20Pro/Juniors%2030%20sessions%20.jpg",
+      "responseSize": "400481",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00097e74308e1ec4",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "10fe5f01c9421a10",
+    "timestamp": "2026-07-12T07:39:27.568049Z",
+    "trace": "projects/bengarab/traces/ed966df12bcc91261c3fe211cef633af"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.043247159s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "689",
+      "requestUrl": "https://strike-egy.com/Juniors-Juniors%20Pro/Juniors%2020sessions%20.jpg",
+      "responseSize": "356407",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00092d22a7cbd4e3",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "524f5df19a607b8b",
+    "timestamp": "2026-07-12T07:39:27.557121Z",
+    "trace": "projects/bengarab/traces/f5351540f5ed2b731c3fe211cef63028"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.047007559s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "697",
+      "requestUrl": "https://strike-egy.com/Juniors-Juniors%20Pro/Juniors%2020%20sessions%20(pro).jpg",
+      "responseSize": "266165",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00092a5ac6b4ee78",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "965a3964ebf74c45",
+    "timestamp": "2026-07-12T07:39:27.552735Z",
+    "trace": "projects/bengarab/traces/88b20efab1566e131c3fe211cef63f26"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.041290179s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "692",
+      "requestUrl": "https://strike-egy.com/Juniors-Juniors%20Pro/Juniors%2010%20sessions%20.jpg",
+      "responseSize": "331808",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af000913b12a98b218",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "ea19752030ba2052",
+    "timestamp": "2026-07-12T07:39:27.552431Z",
+    "trace": "projects/bengarab/traces/28950becce12f4911c3fe211cef63e24"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.050869829s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "698",
+      "requestUrl": "https://strike-egy.com/Juniors-Juniors%20Pro/Juniors%2010%20sessions%20(pro).jpg",
+      "responseSize": "312780",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00092a6015289e9a",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "36c56e36030e6c90",
+    "timestamp": "2026-07-12T07:39:27.546581Z",
+    "trace": "projects/bengarab/traces/66a7663ae54460471c3fe211cef63ca1"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.031219259s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "692",
+      "requestUrl": "https://strike-egy.com/Kids%20Pro-%20Kids/Kids%2030%20sessions%20(pro).jpg",
+      "responseSize": "333256",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af0008c50216c182fe",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "29a7dc895f874945",
+    "timestamp": "2026-07-12T07:39:27.541463Z",
+    "trace": "projects/bengarab/traces/a7cefd459dd7ae5d1c3fe211cef63b9f"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.037608609s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "683",
+      "requestUrl": "https://strike-egy.com/Kids%20Pro-%20Kids/Kids%2030%20sessions.jpg",
+      "responseSize": "386288",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af0008c3c41caf38ab",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "bdef8c650591b9cb",
+    "timestamp": "2026-07-12T07:39:27.535200Z",
+    "trace": "projects/bengarab/traces/9ae6b745a1f4e3661c3fe211cef63a9d"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.026491970s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "692",
+      "requestUrl": "https://strike-egy.com/Kids%20Pro-%20Kids/Kids%2020%20sessions%20(pro).jpg",
+      "responseSize": "333112",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00088d48b0f78c70",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "d0b564707dcb3202",
+    "timestamp": "2026-07-12T07:39:27.532625Z",
+    "trace": "projects/bengarab/traces/8aa25dddf227aad91c3fe211cef6399b"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.017612900s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "683",
+      "requestUrl": "https://strike-egy.com/Kids%20Pro-%20Kids/Kids%2020%20sessions.jpg",
+      "responseSize": "254342",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00085956532da668",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.564551387Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "b8d113f15685da1b",
+    "timestamp": "2026-07-12T07:39:27.527779Z",
+    "trace": "projects/bengarab/traces/91613381a011289c1c3fe211cef63899"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.022308080s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "690",
+      "requestUrl": "https://strike-egy.com/Kids%20Pro-%20Kids/Kids%2010%20sessions%20(pro).jpg",
+      "responseSize": "361603",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af00085e6d07d3ff1d",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.564551387Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "e26381735bf8b1dd",
+    "timestamp": "2026-07-12T07:39:27.524572Z",
+    "trace": "projects/bengarab/traces/4339f63b7947af3d1c3fe211cef63716"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.015708150s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "682",
+      "requestUrl": "https://strike-egy.com/Kids%20Pro-%20Kids/Kids%2010%20sessions.jpg",
+      "responseSize": "328334",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af000831a28004b9ae",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.564551387Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "f8e18c82a74f8462",
+    "timestamp": "2026-07-12T07:39:27.518656Z",
+    "trace": "projects/bengarab/traces/9cecbb98d372a6001c3fe211cef63491"
+  },
+  {
+    "httpRequest": {
+      "latency": "0.070055249s",
+      "protocol": "HTTP/1.1",
+      "referer": "https://strike-egy.com/",
+      "remoteIp": "41.37.112.144",
+      "requestMethod": "GET",
+      "requestSize": "664",
+      "requestUrl": "https://strike-egy.com/strike_kids_outdoor.png",
+      "responseSize": "1138970",
+      "serverIp": "216.239.32.21",
+      "status": 200,
+      "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Mobile/15E148 Safari/604.1"
+    },
+    "insertId": "6a5344af000900d6b671649e",
+    "labels": {
+      "commit-sha": "9bcb6485fd0cf38c133574721c0e7558413f17c0",
+      "gcb-build-id": "0aae8506-ba21-4bf2-b96d-a186571eb3c4",
+      "gcb-trigger-id": "a2caa8ca-0a46-4e7d-8998-7b1971d4766d",
+      "gcb-trigger-region": "global",
+      "instanceId": "002f8ffd4741412775e5be0679a404de45f836e3e67b7aa1bbc817124dbff749b93c30caad655bdfe20f14da6adf2497603419703392114c8498ca4b220dc60cfd97d3133b4e6958daecb9ce4926c6",
+      "managed-by": "gcp-cloud-build-deploy-cloud-run"
+    },
+    "logName": "projects/bengarab/logs/run.googleapis.com%2Frequests",
+    "receiveTimestamp": "2026-07-12T07:39:27.901101678Z",
+    "resource": {
+      "labels": {
+        "configuration_name": "mitrixogymcrm",
+        "location": "europe-west1",
+        "project_id": "bengarab",
+        "revision_name": "mitrixogymcrm-00181-fzd",
+        "service_name": "mitrixogymcrm"
+      },
+      "type": "cloud_run_revision"
+    },
+    "severity": "INFO",
+    "spanId": "d9bdc6865215dbdb",
+    "timestamp": "2026-07-12T07:39:27.516809Z",
+    "trace": "projects/bengarab/traces/6077ab71b0dc53011c3fe211cef6338f"
+  }
+]

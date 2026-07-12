@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { User, UserId, UserRole, isSuperAdmin, isAdmin, BrandingSettings, PendingAccount, PasswordResetRequest, Client, Coach } from '../types';
-import { auth, db, signInWithEmail, logOut, createFirebaseUser, sendPasswordReset } from '../firebase';
+import { auth, db, signInWithEmail, logOut, createFirebaseUser, sendPasswordReset, getMemberEmail } from '../firebase';
 import { onAuthStateChanged, updatePassword as fbUpdatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
   doc,
@@ -381,7 +381,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const createClientAccount = async (clientId: string, memberId: string, clientName: string, phone?: string) => {
-    const email = `member-${memberId.toLowerCase()}@mitrixogymcrm-member.local`;
+    const email = getMemberEmail(memberId);
     const uid = await createFirebaseUser(email, '12345678');
     const newUser: User = {
       id: uid,
