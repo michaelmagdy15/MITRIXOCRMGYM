@@ -156,6 +156,7 @@ interface CacheEntry {
 
 const cache: Record<string, CacheEntry> = {};
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
+const DATA_CACHE_TTL_MS = 30 * 1000; // 30 seconds cache TTL for clients/payments to prevent cache drift on Cloud Run
 
 const SUSPENDED_HTML = `
 <!DOCTYPE html>
@@ -314,7 +315,7 @@ async function startServer() {
       
       const now = Date.now();
       const cached = clientsCache.get(cacheKey);
-      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+      if (cached && now - cached.timestamp < DATA_CACHE_TTL_MS) {
         return res.json({ clients: cached.clients, cached: true });
       }
 
@@ -382,7 +383,7 @@ async function startServer() {
       
       const now = Date.now();
       const cached = paymentsCache.get(cacheKey);
-      if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+      if (cached && now - cached.timestamp < DATA_CACHE_TTL_MS) {
         return res.json({ payments: cached.payments, cached: true });
       }
 
