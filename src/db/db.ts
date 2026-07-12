@@ -81,7 +81,7 @@ export async function checkConnection(): Promise<boolean> {
   }
   try {
     const res = await query('SELECT 1 as connected');
-    return res.rows[0]?.connected === 1;
+    return Number(res.rows[0]?.connected) === 1;
   } catch (err: any) {
     console.error('[DB] Connection check failed:', err.message);
     return false;

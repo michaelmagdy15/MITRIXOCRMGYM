@@ -9,7 +9,7 @@ import {
   where,
   getDocs
 } from 'firebase/firestore';
-import { db, createFirebaseUser } from '../firebase';
+import { db, auth, createFirebaseUser } from '../firebase';
 import { User, UserRole, UserId } from '../types';
 import { cleanData } from '../utils';
 import { addAuditLog } from './auditService';
@@ -62,24 +62,28 @@ export const activatePendingUser = async (
   role: UserRole,
   name: string
 ): Promise<UserId> => {
-  // Create Firebase Auth account with default password
-  const uid = await createFirebaseUser(email, '12345678');
-
-  const newUser: User = {
-    id: uid,
-    name,
-    email,
-    role,
-  };
-
-  // Write user doc under the real Auth UID
-  await setDoc(doc(db, 'users', uid), newUser);
-
-  // Remove the old placeholder doc if it has a different ID
-  if (pendingDocId !== uid) {
-    await deleteDoc(doc(db, 'users', pendingDocId));
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) {
+    throw new Error("No authorization token found. You must be signed in.");
   }
 
+  const response = await fetch('/api/tenant/activate-user', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ pendingDocId, email, role, name })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Server returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  const uid = data.uid as UserId;
+
   await addAuditLog('UPDATE', 'CLIENT', uid as any, `Activated pending user account: ${email}`);
-  return uid as UserId;
+  return uid;
 };

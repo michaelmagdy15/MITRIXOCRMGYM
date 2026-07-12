@@ -32,6 +32,7 @@ import { db, getTenantId } from './firebase';
 import { cleanData } from './utils';
 import { generateClientContract } from './utils/pdfGenerator';
 import { downloadFile } from './utils/download';
+import { InzanMemberShow } from './components/InzanMemberShow';
 
 const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => {
   if (!dateStr) return fallback;
@@ -1800,7 +1801,24 @@ export default function Clients() {
 
       {activeClient && (
         <Dialog open={!!activeClientId} onOpenChange={(open) => { if (!open) setActiveClientId(null); }}>
-          <DialogContent className="w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
+          {getTenantId() === 'inzanathletics' ? (
+            <DialogContent className="p-0 border-none shadow-none max-w-7xl w-[96vw] bg-transparent">
+              <InzanMemberShow
+                client={activeClient}
+                onClose={() => setActiveClientId(null)}
+                onUpdateClient={updateClient}
+                payments={payments}
+                attendances={attendances}
+                users={users}
+                packages={packages}
+                currentUser={currentUser}
+                setUpgradeDialogClientId={setUpgradeDialogClientId}
+                setUpgradePkgName={setUpgradePkgName}
+                setUpgradeStartDate={setUpgradeStartDate}
+              />
+            </DialogContent>
+          ) : (
+            <DialogContent className="w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
             {/* Header */}
             <DialogHeader className="px-6 pr-12 sm:pr-6 pt-5 pb-4 border-b bg-muted/20 flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
@@ -3260,7 +3278,8 @@ export default function Clients() {
                 </TabsContent>
               </div>
             </Tabs>
-          </DialogContent>
+            </DialogContent>
+          )}
         </Dialog>
       )}
       

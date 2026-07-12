@@ -133,13 +133,29 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     if (data.logoUrl) {
       const img = new Image();
       img.src = data.logoUrl;
+      let finished = false;
+      const timeout = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          setBranding(mergedData);
+          onComplete();
+        }
+      }, 1500);
       img.onload = () => {
-        setBranding(mergedData);
-        onComplete();
+        clearTimeout(timeout);
+        if (!finished) {
+          finished = true;
+          setBranding(mergedData);
+          onComplete();
+        }
       };
       img.onerror = () => {
-        setBranding(mergedData);
-        onComplete();
+        clearTimeout(timeout);
+        if (!finished) {
+          finished = true;
+          setBranding(mergedData);
+          onComplete();
+        }
       };
     } else {
       setBranding(mergedData);
@@ -150,49 +166,54 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   // Branding — load or subscribe to branding settings
   useEffect(() => {
     let active = true;
+
+    const safetyTimeout = setTimeout(() => {
+      if (active) {
+        console.warn('Branding load safety timeout triggered');
+        setIsBrandingLoaded(true);
+      }
+    }, 2500);
+
+    const handleSuccess = (snapshot: any) => {
+      clearTimeout(safetyTimeout);
+      if (active) {
+        if (snapshot.exists()) {
+          applyBrandAccent(snapshot.data()?.brandAccentColor);
+          preloadBrandingLogo(snapshot.data() as BrandingSettings, () => {
+            if (active) setIsBrandingLoaded(true);
+          });
+        } else {
+          setIsBrandingLoaded(true);
+        }
+      }
+    };
+
+    const handleError = (err: any) => {
+      clearTimeout(safetyTimeout);
+      console.warn('Could not load branding:', err.code || err.message);
+      if (active) setIsBrandingLoaded(true);
+    };
+
     if (!isAuthenticated || role === 'client' || role === 'coach') {
       // One-time read for unauthenticated/members/coaches
       getDoc(doc(db, 'settings', 'branding'))
-        .then((snapshot) => {
-          if (active) {
-            if (snapshot.exists()) {
-              applyBrandAccent(snapshot.data()?.brandAccentColor);
-              preloadBrandingLogo(snapshot.data() as BrandingSettings, () => {
-                if (active) setIsBrandingLoaded(true);
-              });
-            } else {
-              setIsBrandingLoaded(true);
-            }
-          }
-        })
-        .catch((err) => {
-          console.warn('Could not load branding:', err.code || err.message);
-          if (active) setIsBrandingLoaded(true);
-        });
-      return () => { active = false; };
+        .then(handleSuccess)
+        .catch(handleError);
+      return () => {
+        active = false;
+        clearTimeout(safetyTimeout);
+      };
     }
+
     // Real-time listener for staff/admin
     const unsubBranding = onSnapshot(
       doc(db, 'settings', 'branding'),
-      (snapshot) => {
-        if (active) {
-          if (snapshot.exists()) {
-            applyBrandAccent((snapshot.data() as BrandingSettings).brandAccentColor);
-            preloadBrandingLogo(snapshot.data() as BrandingSettings, () => {
-              if (active) setIsBrandingLoaded(true);
-            });
-          } else {
-            setIsBrandingLoaded(true);
-          }
-        }
-      },
-      (error) => {
-        console.warn('Firestore Error (branding):', error.code || error.message);
-        if (active) setIsBrandingLoaded(true);
-      }
+      handleSuccess,
+      handleError
     );
     return () => {
       active = false;
+      clearTimeout(safetyTimeout);
       unsubBranding();
     };
   }, [role, isAuthenticated, preloadBrandingLogo]);

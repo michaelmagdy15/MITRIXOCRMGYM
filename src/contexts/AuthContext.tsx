@@ -95,6 +95,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser]);
 
   useEffect(() => {
+    let active = true;
+
+    const safetyTimeout = setTimeout(() => {
+      if (active && !isAuthReady) {
+        console.warn('Auth state safety timeout triggered');
+        setIsAuthReady(true);
+      }
+    }, 3000);
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const userId = firebaseUser.uid as UserId;
@@ -110,6 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setCurrentUser(null);
               setAuthError("This account has been deactivated.");
               await logOut();
+              clearTimeout(safetyTimeout);
               setIsAuthReady(true);
               return;
             }
@@ -223,9 +233,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setCurrentUser(null);
         setAuthError(null);
       }
+      clearTimeout(safetyTimeout);
       setIsAuthReady(true);
     });
-    return () => unsubscribe();
+    return () => {
+      active = false;
+      clearTimeout(safetyTimeout);
+      unsubscribe();
+    };
   }, []);
 
   // Presence heartbeat

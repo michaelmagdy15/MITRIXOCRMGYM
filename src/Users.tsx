@@ -17,7 +17,7 @@ import { UserPerformanceDialog } from './components/UserPerformanceDialog';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 
 export default function Users() {
   const { users, currentUser, updateUser, inviteUser, deleteUser, activatePendingUser, passwordResetRequests, approvePasswordResetRequest, denyPasswordResetRequest } = useAuth();
@@ -172,9 +172,23 @@ export default function Users() {
 
     setForcingResetUserId(user.id);
     try {
-      const functions = getFunctions();
-      const forceReset = httpsCallable(functions, 'forcePasswordReset');
-      await forceReset({ userId: user.id });
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("No authorization token found. You must be signed in.");
+
+      const response = await fetch('/api/tenant/reset-user-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ targetUserId: user.id })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned ${response.status}`);
+      }
+
       window.alert(`Done! ${user.name}'s password has been reset to "12345678". They will be prompted to change it on next login.`);
     } catch (err: any) {
       window.alert(`Failed to reset password: ${err?.message || 'Unknown error'}`);

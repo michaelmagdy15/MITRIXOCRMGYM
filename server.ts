@@ -7,7 +7,7 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 import * as sqlDb from './src/db/dbOperations.js';
-import { checkConnection } from './src/db/db.js';
+import { checkConnection, query } from './src/db/db.js';
 import { registerSqlRoutes } from './src/db/sqlApi.js';
 import { fixMigrationData } from './src/db/fixMigration.js';
 
@@ -616,6 +616,147 @@ async function startServer() {
       return res.json({ success: true, message: 'Password has been reset to the default temporary password.' });
     } catch (error) {
       console.error("[Server] Password reset error:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Tenant-level endpoint to force-reset another user's password
+  app.post("/api/tenant/reset-user-password", requireAuth, async (req, res) => {
+    const { targetUserId } = req.body;
+    const DEFAULT_PASSWORD = '12345678';
+
+    if (!targetUserId) {
+      return res.status(400).json({ error: "Missing required field: targetUserId" });
+    }
+
+    try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const dbId = config?.firestoreDatabaseId || '(default)';
+      
+      const callerUid = (req as any).user.uid;
+      
+      const db = getFirestore(dbId);
+      const callerDoc = await db.collection("users").doc(callerUid).get();
+      const callerRole = callerDoc.data()?.role || "";
+
+      const ADMIN_ROLES = ["admin", "super_admin", "crm_admin", "manager"];
+      if (!ADMIN_ROLES.includes(callerRole?.toLowerCase())) {
+        return res.status(403).json({ error: "Forbidden: Only admins can reset user passwords." });
+      }
+
+      if (targetUserId === callerUid) {
+        return res.status(400).json({ error: "You cannot force-reset your own password." });
+      }
+
+      // Reset the password in Firebase Auth using Admin SDK
+      await admin.auth().updateUser(targetUserId, { password: DEFAULT_PASSWORD });
+
+      // Update Firestore user document to flag mustChangePassword
+      await db.collection("users").doc(targetUserId).update({ mustChangePassword: true });
+
+      console.log(`[Server] Force reset password for user: ${targetUserId} by caller: ${callerUid}`);
+      return res.json({ success: true, message: 'Password has been reset to "12345678".' });
+    } catch (error) {
+      console.error("[Server] Tenant password reset error:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Tenant-level endpoint to create a Firebase Auth user
+  app.post("/api/tenant/create-auth-user", requireAuth, async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: "Missing required fields: email or password" });
+    }
+
+    try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const dbId = config?.firestoreDatabaseId || '(default)';
+      
+      const callerUid = (req as any).user.uid;
+      
+      const db = getFirestore(dbId);
+      const callerDoc = await db.collection("users").doc(callerUid).get();
+      const callerRole = callerDoc.data()?.role || "";
+
+      const ADMIN_ROLES = ["admin", "super_admin", "crm_admin", "manager"];
+      if (!ADMIN_ROLES.includes(callerRole?.toLowerCase())) {
+        return res.status(403).json({ error: "Forbidden: Only admins can create users." });
+      }
+
+      // Create Firebase Auth user using Admin SDK
+      const userRecord = await admin.auth().createUser({
+        email,
+        password
+      });
+
+      console.log(`[Server] Auth account created: ${email} with UID: ${userRecord.uid} by caller: ${callerUid}`);
+      return res.json({ success: true, uid: userRecord.uid });
+    } catch (error) {
+      console.error("[Server] Tenant create-auth-user error:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Tenant-level endpoint to activate a pending user account
+  app.post("/api/tenant/activate-user", requireAuth, async (req, res) => {
+    const { pendingDocId, email, role, name } = req.body;
+    const DEFAULT_PASSWORD = '12345678';
+
+    if (!pendingDocId || !email || !role || !name) {
+      return res.status(400).json({ error: "Missing required fields: pendingDocId, email, role, or name" });
+    }
+
+    try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const dbId = config?.firestoreDatabaseId || '(default)';
+      
+      const callerUid = (req as any).user.uid;
+      
+      const db = getFirestore(dbId);
+      const callerDoc = await db.collection("users").doc(callerUid).get();
+      const callerRole = callerDoc.data()?.role || "";
+
+      const ADMIN_ROLES = ["admin", "super_admin", "crm_admin", "manager"];
+      if (!ADMIN_ROLES.includes(callerRole?.toLowerCase())) {
+        return res.status(403).json({ error: "Forbidden: Only admins can activate users." });
+      }
+
+      // Check if user already exists in Firebase Auth
+      let uid = "";
+      try {
+        const userRecord = await admin.auth().getUserByEmail(email);
+        uid = userRecord.uid;
+      } catch (authErr: any) {
+        if (authErr?.code === 'auth/user-not-found') {
+          // Create new user in Firebase Auth
+          const userRecord = await admin.auth().createUser({
+            email,
+            password: DEFAULT_PASSWORD,
+            displayName: name
+          });
+          uid = userRecord.uid;
+        } else {
+          throw authErr;
+        }
+      }
+
+      // Write/update user in Firestore
+      const newUser = { id: uid, name, email, role };
+      await db.collection("users").doc(uid).set(newUser);
+
+      // Clean up pending doc in Firestore if it has a different ID
+      if (pendingDocId !== uid) {
+        await db.collection("users").doc(pendingDocId).delete();
+      }
+
+      console.log(`[Server] User account activated: ${email} with UID: ${uid}`);
+      return res.json({ success: true, uid });
+    } catch (error) {
+      console.error("[Server] Tenant activate user error:", error);
       return res.status(500).json({ error: (error as Error).message });
     }
   });

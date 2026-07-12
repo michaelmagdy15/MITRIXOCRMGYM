@@ -86,14 +86,27 @@ export const sendPasswordReset = async (email: string) => {
  * Uses a temporary secondary app instance that gets deleted after creation.
  */
 export const createFirebaseUser = async (email: string, password: string): Promise<string> => {
-  const tempApp = initializeApp(activeConfig as any, `temp-${Date.now()}`);
-  const tempAuth = getAuth(tempApp);
-  try {
-    const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
-    return cred.user.uid;
-  } finally {
-    await deleteApp(tempApp);
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) {
+    throw new Error("No authorization token found. You must be signed in.");
   }
+
+  const response = await fetch('/api/tenant/create-auth-user', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ email, password })
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error || `Server returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.uid;
 };
 
 /**
