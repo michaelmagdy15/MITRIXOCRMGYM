@@ -63,7 +63,7 @@ const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.co
 function AppContent() {
   const { currentUser: authUser } = useAuth();
   const canUseQuoteGenerator = QUOTE_GENERATOR_EMAILS.includes((authUser?.email || '').toLowerCase());
-  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features, clients, activeTab, setActiveTab, activeClientId, setActiveClientId, setPrefilledLeadData } = useAppContext();
+  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features, clients, activeTab, setActiveTab, activeClientId, setActiveClientId, setPrefilledLeadData, loadingClients, loadingPayments, loadingPackages } = useAppContext();
   const { theme, toggleTheme } = useTheme();
   const { t, language, toggleLanguage, isRtl } = useLanguage();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
@@ -586,6 +586,50 @@ function AppContent() {
     );
   }
 
+  const isSyncingData = clients.length === 0 && (loadingClients || loadingPayments);
+
+  if (isSyncingData) {
+    const isInzan = getTenantId() === 'inzanathletics';
+    return (
+      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.08)_0%,transparent_65%)] pointer-events-none" />
+        
+        <div className="relative flex flex-col items-center z-10 p-8 rounded-2xl bg-zinc-950/40 border border-white/5 backdrop-blur-xl max-w-sm w-full text-center shadow-2xl">
+          <div className="h-14 w-14 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/20 mb-6 relative">
+            <Activity className="h-6 w-6 text-amber-500 animate-pulse" />
+            <div className="absolute inset-0 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+          </div>
+          
+          <h2 className="text-lg font-bold text-white mb-2">
+            {isInzan ? 'Syncing SQL Database' : 'Loading CRM Data'}
+          </h2>
+          <p className="text-xs text-zinc-400 leading-relaxed mb-6">
+            {isInzan 
+              ? 'Connecting to CockroachDB and pulling the latest member accounts and payment transactions...'
+              : 'Syncing latest client profiles, package information, and financial records...'}
+          </p>
+          
+          {/* Animated loading progress bar */}
+          <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden border border-white/5 relative">
+            <div className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full absolute left-0 w-1/3 animate-[slideProgress_2s_infinite_ease-in-out]" />
+          </div>
+          
+          <span className="text-[10px] tracking-[0.2em] text-zinc-500 uppercase mt-4 font-bold block animate-pulse">
+            Pulling secure data...
+          </span>
+        </div>
+
+        <style>{`
+          @keyframes slideProgress {
+            0% { left: -35%; }
+            50% { left: 100%; }
+            100% { left: -35%; }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   const isPlatformAdmin = PLATFORM_ADMIN_EMAILS.includes(currentUser?.email?.toLowerCase());
 
   const navItems = [
@@ -1032,6 +1076,26 @@ function AppContent() {
               </div>
             </div>
           </header>
+
+          {/* Subtle Top Loading Bar */}
+          {(loadingClients || loadingPayments || loadingPackages) && (
+            <div className="w-full h-[3px] bg-zinc-950/20 overflow-hidden relative flex-shrink-0 z-50">
+              <div 
+                className="h-full bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 absolute top-0 rounded-full"
+                style={{
+                  width: '35%',
+                  animation: 'loadingBarProgress 1.8s infinite ease-in-out'
+                }}
+              />
+              <style>{`
+                @keyframes loadingBarProgress {
+                  0% { left: -35%; }
+                  50% { left: 100%; }
+                  100% { left: -35%; }
+                }
+              `}</style>
+            </div>
+          )}
 
           {/* Mobile search bar if toggled */}
           <div id="mobile-search" className="hidden md:hidden bg-card border-b p-2 flex-shrink-0">
