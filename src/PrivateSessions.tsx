@@ -328,7 +328,7 @@ export default function PrivateSessions() {
                   <SelectValue placeholder="Select trainer" />
                 </SelectTrigger>
                 <SelectContent>
-                   {users.filter(u => u.role === 'coach' || coaches.some(c => c.active && c.userId === u.id)).map(user => (
+                   {users.filter(u => (u.role === 'coach' || coaches.some(c => c.active && c.userId === u.id)) && u.status !== 'nonworking').map(user => (
                     <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
                   ))}
                 </SelectContent>

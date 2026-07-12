@@ -86,6 +86,7 @@ export interface User {
   mustChangePassword?: boolean; // true = forced change on next login
   photoURL?: string;           // avatar image URL
   dismissedNotifications?: string[];
+  status?: 'working' | 'nonworking';
 }
 
 export interface PTPackageRecord {

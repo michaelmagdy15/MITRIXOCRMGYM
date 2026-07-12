@@ -171,9 +171,12 @@ export default function Clients() {
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
   const [whatsAppClient, setWhatsAppClient] = useState<Client | null>(null);
 
+  const [isEditing, setIsEditing] = useState(false);
+
   React.useEffect(() => {
     if (activeClientId) {
       loadClientDetails(activeClientId);
+      setIsEditing(false);
       const client = clients.find(c => c.id === activeClientId);
       if (client) {
         const migrationData = migratePackageData(client, packages);
@@ -207,6 +210,13 @@ export default function Clients() {
   const [upgradePaymentMethod, setUpgradePaymentMethod] = useState('Cash');
   const [upgradeInstapayRef, setUpgradeInstapayRef] = useState('');
   const [upgradeSalesRep, setUpgradeSalesRep] = useState('unassigned');
+
+  const [renewDialogClientId, setRenewDialogClientId] = useState<string | null>(null);
+  const [renewPkgName, setRenewPkgName] = useState('');
+  const [renewStartDate, setRenewStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [renewPaymentMethod, setRenewPaymentMethod] = useState('Cash');
+  const [renewInstapayRef, setRenewInstapayRef] = useState('');
+  const [renewSalesRep, setRenewSalesRep] = useState('unassigned');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBranch, setFilterBranch] = useState('All');
@@ -378,6 +388,64 @@ export default function Clients() {
       setUpgradePaymentMethod('Cash');
       setUpgradeInstapayRef('');
       setUpgradeSalesRep('unassigned');
+    }
+  };
+
+  const handleRenewPackage = async () => {
+    if (!renewDialogClientId || !renewPkgName) return;
+    const client = clients.find(c => c.id === renewDialogClientId);
+    if (!client) return;
+    const pkg = packages.find(p => p.name === renewPkgName);
+    if (!pkg) return;
+
+    const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
+    if (isKidsPackage && client.branch !== 'Mivida') {
+      alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
+      return;
+    }
+    
+    const amountToPay = pkg.price; // Full price for renewal!
+
+    const repId = renewSalesRep !== 'unassigned' ? renewSalesRep : (currentUser?.id || '');
+    const repName = users.find(u => u.id === repId)?.name || '';
+
+    if (renewPaymentMethod === 'Instapay' && renewInstapayRef && !/^\d{12}$/.test(renewInstapayRef)) {
+      alert('Please enter a valid 12-digit Instapay reference number.');
+      return;
+    }
+
+    try {
+      await processPaymentTransaction({
+        clientId: client.id,
+        clientName: client.name,
+        clientBranch: client.branch,
+        clientStatus: client.status,
+        clientPackages: client.packages,
+        amount: amountToPay,
+        method: renewPaymentMethod as any,
+        instapayRef: renewPaymentMethod === 'Instapay' ? renewInstapayRef : undefined,
+        packageType: pkg.name,
+        packageCategory: pkg.name.toLowerCase().includes('pt') || pkg.name.toLowerCase().includes('private') ? 'Private Training' : 'Group Training',
+        sales_rep_id: repId,
+        salesName: repName,
+        recordedBy: currentUser?.id || '',
+        recordedByName: currentUser?.name || '',
+        paymentDate: new Date(renewStartDate).toISOString(),
+        startDate: new Date(renewStartDate).toISOString(),
+        systemPackage: pkg,
+        previousPackageName: undefined,
+        isUpgradePayment: false
+      });
+    } catch (error) {
+      console.error("Error during renewal transaction:", error);
+      alert(error instanceof Error ? error.message : "Failed to process renewal. Please try again.");
+    } finally {
+      setRenewDialogClientId(null);
+      setRenewPkgName('');
+      setRenewStartDate(format(new Date(), 'yyyy-MM-dd'));
+      setRenewPaymentMethod('Cash');
+      setRenewInstapayRef('');
+      setRenewSalesRep('unassigned');
     }
   };
 
@@ -1277,7 +1345,7 @@ export default function Clients() {
                     onChange={(e) => updateClient(client.id, { assignedTo: e.target.value === 'unassigned' ? '' : e.target.value })}
                   >
                     <option value="unassigned">{t('leads.tabs.unassigned')}</option>
-                    {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
+                    {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === client.assignedTo)).map(rep => (
                       <option key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</option>
                     ))}
                   </select>
@@ -1413,7 +1481,7 @@ export default function Clients() {
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
                       <SelectItem value="unassigned" className="rounded-xl py-3 px-4">{t('leads.tabs.unassigned')}</SelectItem>
-                      {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
+                      {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === newMemberAssignedTo)).map(rep => (
                         <SelectItem key={rep.id} value={rep.id} className="rounded-xl py-3 px-4">{rep.name || rep.email}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1790,7 +1858,19 @@ export default function Clients() {
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                     {/* Left: Editable fields */}
                     <div className="space-y-4 p-4 rounded-xl border bg-muted/20 text-left">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Member Details</p>
+                      <div className="flex items-center justify-between border-b pb-2 mb-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Member Details</p>
+                        {getTenantId().toLowerCase().includes('inzan') && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs font-semibold px-2"
+                            onClick={() => setIsEditing(!isEditing)}
+                          >
+                            {isEditing ? 'Cancel' : 'Edit'}
+                          </Button>
+                        )}
+                      </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1 col-span-1 sm:col-span-2">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Name</Label>
@@ -1798,6 +1878,7 @@ export default function Clients() {
                             type="text"
                             className="h-9 text-sm bg-background rounded-lg"
                             defaultValue={activeClient.name}
+                            disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => debouncedUpdate(activeClient.id, { name: e.target.value })}
                             placeholder="Member name"
                           />
@@ -1808,6 +1889,7 @@ export default function Clients() {
                             type="text"
                             className="h-9 text-sm bg-background rounded-lg"
                             defaultValue={activeClient.phone}
+                            disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => debouncedUpdate(activeClient.id, { phone: e.target.value })}
                             placeholder="Phone number"
                           />
@@ -1815,8 +1897,9 @@ export default function Clients() {
                         <div className="space-y-1">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</Label>
                           <select
-                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
                             defaultValue={activeClient.status}
+                            disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => updateClient(activeClient.id, { status: e.target.value as any })}
                           >
                             <option value="Active">Active</option>
@@ -1828,8 +1911,9 @@ export default function Clients() {
                         <div className="space-y-1">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Branch</Label>
                           <select
-                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
                             defaultValue={activeClient.branch || ''}
+                            disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => updateClient(activeClient.id, { branch: e.target.value as any })}
                           >
                             <option value="" disabled>Select Branch</option>
@@ -1847,6 +1931,7 @@ export default function Clients() {
                             className="h-9 rounded-lg bg-background text-sm px-3"
                             defaultValue={activeClient.points}
                             placeholder="0"
+                            disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => updateClient(activeClient.id, { points: parseInt(e.target.value) || 0 })}
                           />
                         </div>
@@ -1856,6 +1941,7 @@ export default function Clients() {
                             type="date"
                             className="h-9 rounded-lg bg-background text-sm px-3"
                             defaultValue={activeClient.dateOfBirth ? safeFormatDate(activeClient.dateOfBirth, 'yyyy-MM-dd', '') : ''}
+                            disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => {
                               const val = e.target.value;
                               updateClient(activeClient.id, { dateOfBirth: val ? new Date(val).toISOString() : '' });
@@ -1865,8 +1951,9 @@ export default function Clients() {
                         <div className="space-y-1">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Gender</Label>
                           <select
-                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
                             value={activeClient.gender || ''}
+                            disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => updateClient(activeClient.id, { gender: e.target.value as any })}
                           >
                             <option value="" disabled>Select Gender</option>
@@ -1879,8 +1966,9 @@ export default function Clients() {
                         <div className="space-y-1">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Category</Label>
                           <select
-                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
                             value={activeClient.memberCategory || ''}
+                            disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => updateClient(activeClient.id, { memberCategory: e.target.value as any })}
                           >
                             <option value="" disabled>Select Category</option>
@@ -1896,12 +1984,12 @@ export default function Clients() {
                           <select
                             className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
                             value={activeClient.assignedTo || 'unassigned'}
-                            disabled={currentUser?.role === 'rep' && !!activeClient.assignedTo}
+                            disabled={(currentUser?.role === 'rep' && !!activeClient.assignedTo) || (getTenantId().toLowerCase().includes('inzan') && !isEditing)}
                             onChange={(e) => updateClient(activeClient.id, { assignedTo: e.target.value === 'unassigned' ? '' : e.target.value })}
                           >
                             <option value="unassigned">Unassigned</option>
                             {users
-                              .filter((u) => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || ''))
+                              .filter((u) => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === activeClient.assignedTo))
                               .map((rep) => (
                                 <option key={rep.id} value={rep.id}>
                                   {rep.name || rep.email || 'Unknown'}
@@ -2145,6 +2233,18 @@ export default function Clients() {
                             }}
                           >
                             <ArrowUpDown className="h-3 w-3 mr-1" /> Upgrade
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[10px] bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200"
+                            onClick={() => {
+                              setRenewDialogClientId(activeClient.id);
+                              setRenewPkgName('');
+                              setRenewStartDate(format(new Date(), 'yyyy-MM-dd'));
+                            }}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" /> Renew
                           </Button>
                           <Button
                             variant="outline"
@@ -3265,7 +3365,7 @@ export default function Clients() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned">Unassigned</SelectItem>
-                          {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
+                          {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === upgradeSalesRep)).map(rep => (
                             <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
                           ))}
                         </SelectContent>
@@ -3284,6 +3384,104 @@ export default function Clients() {
             </Button>
             <Button className="flex-1 rounded-xl font-bold" disabled={!upgradePkgName} onClick={handleUpgradePackage}>
               Confirm Upgrade
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!renewDialogClientId} onOpenChange={(open) => { if (!open) { setRenewDialogClientId(null); setRenewPkgName(''); setRenewStartDate(format(new Date(), 'yyyy-MM-dd')); } }}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Renew Package</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Select Package</Label>
+              <Select value={renewPkgName} onValueChange={v => v && setRenewPkgName(v)}>
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue placeholder="Select package" />
+                </SelectTrigger>
+                <SelectContent>
+                  {visiblePackages.map(p => (
+                    <SelectItem key={p.id} value={p.name}>{p.name} ({p.price.toLocaleString()} LE)</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Start Date</Label>
+              <Input
+                type="date"
+                className="h-11 rounded-xl"
+                value={renewStartDate}
+                onChange={e => setRenewStartDate(e.target.value)}
+              />
+            </div>
+            {renewPkgName && renewStartDate && (() => {
+              const pkg = packages.find(p => p.name === renewPkgName);
+              if (!pkg) return null;
+              const endDate = format(addDays(new Date(renewStartDate), pkg.expiryDays), 'dd MMM yyyy');
+              return (
+                <div className="rounded-xl bg-muted/30 p-3 text-sm space-y-1.5">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Price:</span><span className="font-semibold">{pkg.price.toLocaleString()} LE</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Sessions:</span><span className="font-semibold">{pkg.sessions === 0 ? 'Unlimited' : pkg.sessions}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Expires:</span><span className="font-semibold">{endDate}</span></div>
+                </div>
+              );
+            })()}
+            {renewPkgName && (
+              <div className="space-y-4 pt-2 border-t">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Payment Method</Label>
+                  <Select value={renewPaymentMethod} onValueChange={(val) => val && setRenewPaymentMethod(val)}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Select Method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="Credit Card">Credit Card</SelectItem>
+                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="Instapay">Instapay</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {renewPaymentMethod === 'Instapay' && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Instapay Ref (12 digits)</Label>
+                    <Input
+                      placeholder="123456789012"
+                      maxLength={12}
+                      value={renewInstapayRef}
+                      onChange={(e) => setRenewInstapayRef(e.target.value.replace(/\D/g, ''))}
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Sales Representative</Label>
+                  <Select value={renewSalesRep} onValueChange={(val) => val && setRenewSalesRep(val)}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Select Sales Rep" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === renewSalesRep)).map(rep => (
+                        <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">Renewal registers a new package and a corresponding payment record for the client.</p>
+          </div>
+          <div className="flex gap-3 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { setRenewDialogClientId(null); setRenewPkgName(''); setRenewStartDate(format(new Date(), 'yyyy-MM-dd')); setRenewPaymentMethod('Cash'); setRenewSalesRep('unassigned'); }}>
+              Cancel
+            </Button>
+            <Button className="flex-1 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!renewPkgName} onClick={handleRenewPackage}>
+              Confirm Renewal
             </Button>
           </div>
         </DialogContent>

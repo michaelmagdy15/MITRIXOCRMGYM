@@ -107,7 +107,9 @@ CREATE TABLE IF NOT EXISTS payments (
     package_category_type VARCHAR(100),
     created_at VARCHAR(50),
     deleted_at VARCHAR(50),
-    date VARCHAR(50)
+    date VARCHAR(50),
+    recorded_by VARCHAR(50),
+    recorded_by_name VARCHAR(255)
 );
 
 CREATE INDEX IF NOT EXISTS idx_payments_client_id ON payments(client_id);

@@ -300,8 +300,14 @@ export async function getPaymentsFromSQL() {
   return res.rows.map(row => ({
     ...row,
     clientId: row.client_id,
-    discountValue: row.discount_value,
+    // Convert NUMERIC(12,2) strings to proper JS numbers (removes trailing .00)
+    amount: parseFloat(row.amount) || 0,
+    amount_paid: parseFloat(row.amount_paid) || 0,
+    discountValue: parseFloat(row.discount_value) || 0,
     sales_rep_id: row.sales_rep_id,
+    // Map sales_rep_id → recordedBy so the frontend table displays the correct user
+    recordedBy: row.recorded_by || row.sales_rep_id,
+    recordedByName: row.recorded_by_name || null,
     packageType: row.package_type,
     created_at: row.created_at,
     deleted_at: row.deleted_at
@@ -313,8 +319,8 @@ export async function addPaymentToSQL(id: string, payment: any) {
     `INSERT INTO payments (
        id, client_id, client_name, amount, amount_paid, discount_value, method, notes,
        currency, receipt_serial, sales_rep_id, package_type, package_category_type,
-       created_at, deleted_at, date
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+       created_at, deleted_at, date, recorded_by, recorded_by_name
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
     [
       id,
       payment.clientId || null,
@@ -331,7 +337,9 @@ export async function addPaymentToSQL(id: string, payment: any) {
       payment.package_category_type || null,
       payment.created_at || new Date().toISOString(),
       null,
-      payment.date || null
+      payment.date || null,
+      payment.recordedBy || null,
+      payment.recordedByName || null
     ]
   );
 }
@@ -360,6 +368,8 @@ export async function updatePaymentInSQL(id: string, updates: any) {
   mapField('package_category_type', 'package_category_type');
   mapField('deleted_at', 'deleted_at');
   mapField('date', 'date');
+  mapField('recordedBy', 'recorded_by');
+  mapField('recordedByName', 'recorded_by_name');
 
   if (fields.length === 0) return;
 
@@ -472,7 +482,10 @@ export async function getPackagesFromSQL() {
   const res = await query(`SELECT * FROM packages ORDER BY name ASC`);
   return res.rows.map(row => ({
     ...row,
-    expiryDays: row.expiry_days,
+    // Convert NUMERIC strings to proper JS numbers
+    price: parseFloat(row.price) || 0,
+    sessions: parseInt(row.sessions, 10) || 0,
+    expiryDays: parseInt(row.expiry_days, 10) || 0,
     imageUrl: row.image_url
   }));
 }

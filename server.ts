@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -7,6 +9,7 @@ import { provisionNewGym } from "./provisioning";
 import * as sqlDb from './src/db/dbOperations.js';
 import { checkConnection } from './src/db/db.js';
 import { registerSqlRoutes } from './src/db/sqlApi.js';
+import { fixMigrationData } from './src/db/fixMigration.js';
 
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
@@ -613,6 +616,21 @@ async function startServer() {
       return res.json({ success: true, message: 'Password has been reset to the default temporary password.' });
     } catch (error) {
       console.error("[Server] Password reset error:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // ─── Fix Migration Data (backfill referrals, prices, recordedBy) ───
+  app.post("/api/admin/fix-migration", requirePlatformAdmin, async (req, res) => {
+    try {
+      console.log('[Admin] Running migration data fix...');
+      const results = await fixMigrationData();
+      // Invalidate caches after fix
+      clientsCache.clear();
+      paymentsCache.clear();
+      return res.json({ success: true, results });
+    } catch (error) {
+      console.error('[Admin] Migration fix error:', error);
       return res.status(500).json({ error: (error as Error).message });
     }
   });

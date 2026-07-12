@@ -42,6 +42,7 @@ export default function Users() {
   const [editCanAccessSettings, setEditCanAccessSettings] = useState(false);
   const [editPhone, setEditPhone] = useState('');
   const [editClientRecordId, setEditClientRecordId] = useState('');
+  const [editStatus, setEditStatus] = useState<'working' | 'nonworking'>('working');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
@@ -75,6 +76,7 @@ export default function Users() {
     setEditCanAccessSettings(user.can_access_settings_and_history || false);
     setEditPhone(user.phone || '');
     setEditClientRecordId(user.clientRecordId || '');
+    setEditStatus(user.status || 'working');
   };
 
   const handleUpdateUserDetails = () => {
@@ -93,6 +95,7 @@ export default function Users() {
         updates.can_delete_payments = editCanDeletePayments;
         updates.can_view_global_dashboard = editCanViewGlobalDashboard;
         updates.can_access_settings_and_history = editCanAccessSettings;
+        updates.status = editStatus;
       }
 
       updateUser(editingUser.id, updates);
@@ -314,6 +317,9 @@ export default function Users() {
                           <UserIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                           <span>{user.name}</span>
                           {user.id === currentUser.id && <Badge variant="outline" className="ml-1">You</Badge>}
+                          {user.status === 'nonworking' && (
+                            <Badge variant="destructive" className="ml-1 bg-red-50 text-red-700 border-red-200">Non-Working</Badge>
+                          )}
                           {user.isPending && (
                             <Badge variant="outline" className="ml-1 text-amber-600 border-amber-400 bg-amber-50 gap-1">
                               <Clock className="h-3 w-3" /> Pending Invite
@@ -672,6 +678,18 @@ export default function Users() {
                     onChange={(e) => setEditTarget(e.target.value)} 
                     placeholder="Leave blank to use global target"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Employment Status</Label>
+                  <Select value={editStatus} onValueChange={(val: any) => val && setEditStatus(val)}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Select Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="working">Working</SelectItem>
+                      <SelectItem value="nonworking">Non-Working</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-4 pt-4 border-t">
                   <Label className="text-base">Granular Permissions</Label>

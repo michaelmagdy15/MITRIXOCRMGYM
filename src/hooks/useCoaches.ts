@@ -128,12 +128,13 @@ export const useCoaches = () => {
       const isNowActive = updates.active === true || (existing?.active === true && updates.active === undefined);
       const hasNoUser = !existing?.userId && !updates.userId;
 
-      // Sync phone or name changes to linked user if user already exists
-      if (existing?.userId && (updates.phone !== undefined || updates.name !== undefined)) {
+      // Sync phone, name, or active status changes to linked user if user already exists
+      if (existing?.userId && (updates.phone !== undefined || updates.name !== undefined || updates.active !== undefined)) {
         try {
           const userUpdates: Partial<User> = {};
           if (updates.phone !== undefined) userUpdates.phone = updates.phone;
           if (updates.name !== undefined) userUpdates.name = updates.name;
+          if (updates.active !== undefined) userUpdates.status = updates.active ? 'working' : 'nonworking';
           await updateDoc(doc(db, 'users', existing.userId), cleanData(userUpdates));
         } catch (syncErr) {
           console.error("Failed to sync coach info to user account:", syncErr);

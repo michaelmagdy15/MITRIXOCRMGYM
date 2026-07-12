@@ -724,7 +724,7 @@ export default function Leads() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
-                      {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
+                      {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === lead.assignedTo)).map(rep => (
                         <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
                       ))}
                     </SelectContent>
@@ -1311,7 +1311,7 @@ export default function Leads() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
-                        {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
+                        {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && u.status !== 'nonworking').map(rep => (
                           <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown'}</SelectItem>
                         ))}
                       </SelectContent>
@@ -1463,7 +1463,7 @@ export default function Leads() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
+                    {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && u.status !== 'nonworking').map(rep => (
                       <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
                     ))}
                   </SelectContent>

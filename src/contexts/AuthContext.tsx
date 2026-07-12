@@ -106,6 +106,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (userDoc.exists()) {
             userData = userDoc.data() as User;
             userData.id = userId;
+            if (userData.status === 'nonworking') {
+              setCurrentUser(null);
+              setAuthError("This account has been deactivated.");
+              await logOut();
+              setIsAuthReady(true);
+              return;
+            }
             const OWNER_EMAILS = [
               'magd.gallab@gmail.com',
               'admin@mitrixogymcrm.eg',
