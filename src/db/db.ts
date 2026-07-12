@@ -2,6 +2,9 @@ import pg from 'pg';
 import path from 'path';
 import fs from 'fs';
 
+// Parse CockroachDB NUMERIC (OID 1700) as float to avoid trailing .00 strings in UI
+pg.types.setTypeParser(1700, (val) => val === null ? null : parseFloat(val));
+
 const connectionString = process.env.COCKROACH_DB_URL || process.env.DATABASE_URL;
 
 const sslConfig: any = {

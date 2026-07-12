@@ -83,12 +83,14 @@ interface ClientCacheEntry {
   timestamp: number;
 }
 const clientsCache = new Map<string, ClientCacheEntry>();
+const clientsFetchPromises = new Map<string, Promise<any[]>>();
 
 interface PaymentCacheEntry {
   payments: any[];
   timestamp: number;
 }
 const paymentsCache = new Map<string, PaymentCacheEntry>();
+const paymentsFetchPromises = new Map<string, Promise<any[]>>();
 
 
 async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
@@ -312,26 +314,35 @@ async function startServer() {
         return res.json({ clients: cached.clients, cached: true });
       }
 
-      if (tenantId === 'inzanathletics') {
-        console.log(`[Cache] Cache miss for CockroachDB. Database: Inzan-athletics. Fetching...`);
-        const clients = await sqlDb.getClientsFromSQL();
-        clientsCache.set(dbId, { clients, timestamp: now });
-        return res.json({ clients, cached: false });
+      // Check if there is an in-flight promise for this database
+      let fetchPromise = clientsFetchPromises.get(dbId);
+      if (!fetchPromise) {
+        fetchPromise = (async () => {
+          if (tenantId === 'inzanathletics') {
+            console.log(`[Cache] Fetching clients from CockroachDB (Inzan)...`);
+            return await sqlDb.getClientsFromSQL();
+          }
+          console.log(`[Cache] Fetching clients from Firestore (${dbId})...`);
+          const db = await getDbForRequest(req);
+          const snap = await db.collection('clients').where('status', '!=', 'Lead').get();
+          return snap.docs.map(doc => {
+            const data = doc.data();
+            // Exclude large subcollections to keep memory consumption minimal
+            delete data.comments;
+            delete data.interactions;
+            return { ...data, id: doc.id } as any;
+          });
+        })();
+        clientsFetchPromises.set(dbId, fetchPromise);
       }
 
-      console.log(`[Cache] Cache miss for database: ${dbId}. Fetching from Firestore...`);
-      const db = await getDbForRequest(req);
-      const snap = await db.collection('clients').where('status', '!=', 'Lead').get();
-      const clients = snap.docs.map(doc => {
-        const data = doc.data();
-        // Exclude large subcollections to keep memory consumption minimal
-        delete data.comments;
-        delete data.interactions;
-        return { ...data, id: doc.id };
-      });
-
-      clientsCache.set(dbId, { clients, timestamp: now });
-      return res.json({ clients, cached: false });
+      try {
+        const clients = await fetchPromise;
+        clientsCache.set(dbId, { clients, timestamp: Date.now() });
+        return res.json({ clients, cached: false });
+      } finally {
+        clientsFetchPromises.delete(dbId);
+      }
     } catch (error) {
       console.error('[API] Error fetching clients:', error);
       return res.status(500).json({ error: (error as Error).message });
@@ -368,22 +379,31 @@ async function startServer() {
         return res.json({ payments: cached.payments, cached: true });
       }
 
-      if (tenantId === 'inzanathletics') {
-        console.log(`[Cache] Cache miss for payments. CockroachDB: Inzan-athletics. Fetching...`);
-        const payments = await sqlDb.getPaymentsFromSQL();
-        paymentsCache.set(dbId, { payments, timestamp: now });
-        return res.json({ payments, cached: false });
+      // Check if there is an in-flight promise for this database
+      let fetchPromise = paymentsFetchPromises.get(dbId);
+      if (!fetchPromise) {
+        fetchPromise = (async () => {
+          if (tenantId === 'inzanathletics') {
+            console.log(`[Cache] Fetching payments from CockroachDB (Inzan)...`);
+            return await sqlDb.getPaymentsFromSQL();
+          }
+          console.log(`[Cache] Fetching payments from Firestore (${dbId})...`);
+          const db = await getDbForRequest(req);
+          const snap = await db.collection('payments').get();
+          return snap.docs
+            .map(doc => ({ ...doc.data(), id: doc.id } as any))
+            .filter((p: any) => !p.deleted_at);
+        })();
+        paymentsFetchPromises.set(dbId, fetchPromise);
       }
 
-      console.log(`[Cache] Cache miss for payments. Database: ${dbId}. Fetching from Firestore...`);
-      const db = await getDbForRequest(req);
-      const snap = await db.collection('payments').get();
-      const payments = snap.docs
-        .map(doc => ({ ...doc.data(), id: doc.id }))
-        .filter((p: any) => !p.deleted_at);
-
-      paymentsCache.set(dbId, { payments, timestamp: now });
-      return res.json({ payments, cached: false });
+      try {
+        const payments = await fetchPromise;
+        paymentsCache.set(dbId, { payments, timestamp: Date.now() });
+        return res.json({ payments, cached: false });
+      } finally {
+        paymentsFetchPromises.delete(dbId);
+      }
     } catch (error) {
       console.error('[API] Error fetching payments:', error);
       return res.status(500).json({ error: (error as Error).message });
