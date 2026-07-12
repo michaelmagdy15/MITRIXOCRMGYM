@@ -1216,6 +1216,18 @@ async function startServer() {
     });
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    const templatePath = path.join(distPath, "index.html");
+    
+    // Read production index.html once on startup
+    let productionTemplate = "";
+    try {
+      if (fs.existsSync(templatePath)) {
+        productionTemplate = fs.readFileSync(templatePath, "utf-8");
+        console.log("[Server] Loaded production index.html template into memory cache.");
+      }
+    } catch (err) {
+      console.error("[Server] Failed to pre-load production index.html:", err);
+    }
     
     // Serve static assets, but do not serve index.html statically (index: false)
     app.use(express.static(distPath, { index: false }));
@@ -1228,8 +1240,11 @@ async function startServer() {
           return res.status(402).set({ "Content-Type": "text/html" }).end(SUSPENDED_HTML);
         }
         
-        const templatePath = path.join(distPath, "index.html");
-        const template = fs.readFileSync(templatePath, "utf-8");
+        // Use cached template if available, fallback to reading from disk
+        let template = productionTemplate;
+        if (!template) {
+          template = fs.readFileSync(templatePath, "utf-8");
+        }
         
         // Inject dynamic config into production index.html
         const html = await injectFirebaseConfig(template, hostname);

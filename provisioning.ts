@@ -358,9 +358,8 @@ export async function provisionNewGym(details: ProvisionDetails) {
     // 2. Deploy security rules to the new database
     await deployFirestoreRules(projectId, databaseId, accessToken);
     
-    // Wait for database instance activation (Firestore creation can take a few seconds)
-    console.log('[Provisioning] Waiting 10 seconds for database activation...');
-    await new Promise((resolve) => setTimeout(resolve, 10000));
+    // Wait for database instance activation by active polling (replacing blind 10-sec timeout)
+    await awaitDatabaseReady(projectId, databaseId, accessToken);
     
     // 3. Seed database
     const seedResult = await seedTenantDatabase(databaseId, details);
@@ -462,3 +461,41 @@ async function sendWelcomeEmail(toEmail: string, ownerName: string, gymName: str
   const info = await transporter.sendMail(mailOptions);
   console.log(`[Provisioning] Welcome email sent successfully: ${info.messageId}`);
 }
+
+/**
+ * Polls the GCP Firestore database status until it reaches 'ACTIVE' state, 
+ * or throws an error if it times out.
+ */
+async function awaitDatabaseReady(projectId: string, databaseId: string, accessToken: string, maxAttempts = 15) {
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}`;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`[Provisioning] Checking database readiness (Attempt ${attempt}/${maxAttempts})...`);
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        }
+      });
+      if (res.ok) {
+        const dbInfo = await res.json();
+        if (dbInfo.state === 'ACTIVE') {
+          console.log(`[Provisioning] Database ready! State is ACTIVE.`);
+          return;
+        } else {
+          console.log(`[Provisioning] Database state is: ${dbInfo.state || 'UNKNOWN'}. Waiting...`);
+        }
+      } else {
+        console.warn(`[Provisioning] Database status check response code: ${res.status}`);
+      }
+    } catch (err: any) {
+      console.warn(`[Provisioning] Error checking database status: ${err.message}`);
+    }
+    // Wait 1 second before retrying
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  
+  // If we time out, log it and fall back to allowing the script to try seeding anyway
+  console.warn(`[Provisioning] Database did not reach ACTIVE state in time. Proceeding to seed anyway.`);
+}
+

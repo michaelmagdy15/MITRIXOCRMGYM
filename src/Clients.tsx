@@ -1802,7 +1802,7 @@ export default function Clients() {
       {activeClient && (
         <Dialog open={!!activeClientId} onOpenChange={(open) => { if (!open) setActiveClientId(null); }}>
           {getTenantId() === 'inzanathletics' ? (
-            <DialogContent className="p-0 border-none shadow-none max-w-7xl w-[96vw] bg-transparent">
+            <DialogContent className="p-0 border border-border shadow-2xl w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col bg-background rounded-2xl">
               <InzanMemberShow
                 client={activeClient}
                 onClose={() => setActiveClientId(null)}
