@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "RedGits Database Extractor",
+  "version": "2.0",
+  "description": "Extract all database records (members, payments, staff, reports, etc.) from RedGits CRM for migration to Mitrixo GYM CRM.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.redgits.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}

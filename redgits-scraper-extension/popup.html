@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --card: #18181c;
+      --card-border: #26262f;
+      --text: #f3f3f5;
+      --text-muted: #8e8e9f;
+      --primary: #fbbf24; /* Premium gold */
+      --primary-hover: #f59e0b;
+      --secondary: #222227;
+      --secondary-hover: #2d2d34;
+      --success: #10b981;
+      --danger: #ef4444;
+      --info: #3b82f6;
+    }
+
+    body {
+      width: 360px;
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      box-sizing: border-box;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .header h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--primary);
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+
+    .status-box {
+      background-color: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .status-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .label {
+      color: var(--text-muted);
+    }
+
+    .val {
+      font-weight: 500;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background-color 0.2s, transform 0.1s;
+      margin-bottom: 8px;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: #000;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background-color: var(--secondary);
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--secondary-hover);
+    }
+
+    .btn-danger {
+      background-color: transparent;
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-danger:hover {
+      background-color: rgba(239, 68, 68, 0.1);
+    }
+
+    .database-stats {
+      background-color: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .database-stats h4 {
+      margin: 0 0 8px 0;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-cols: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .stat-item {
+      background: var(--bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 8px;
+      text-align: center;
+    }
+
+    .stat-count {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .divider {
+      height: 1px;
+      background-color: var(--card-border);
+      margin: 12px 0;
+    }
+
+    .instructions {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .instructions ol {
+      margin: 4px 0 0 0;
+      padding-left: 16px;
+    }
+
+    .detected-type {
+      background-color: rgba(251, 191, 36, 0.1);
+      color: var(--primary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h3>👑 RedGits DB Migrator</h3>
+  </div>
+  <div class="subtitle">Extract entire databases (Members, Payments, Call Logs, Staff, Lost & Found) for direct import.</div>
+
+  <div class="status-box">
+    <div class="status-row">
+      <span class="label">Target Gym Domain:</span>
+      <span class="val" id="domain-val">Checking...</span>
+    </div>
+    <div class="status-row">
+      <span class="label">Detected Page Type:</span>
+      <span class="val" id="page-type-val"><span class="detected-type">Detecting...</span></span>
+    </div>
+    <div class="status-row">
+      <span class="label">Last Action:</span>
+      <span class="val" id="status-val" style="color: var(--text-muted);">Inactive</span>
+    </div>
+  </div>
+
+  <div class="database-stats">
+    <h4>📦 Extracted Database Inventory</h4>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-count" id="count-members">0</div>
+        <div class="stat-label">Members</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-count" id="count-payments">0</div>
+        <div class="stat-label">Payments / Incomes</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-count" id="count-callcenter">0</div>
+        <div class="stat-label">Call Logs</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-count" id="count-lostfound">0</div>
+        <div class="stat-label">Lost & Found</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-count" id="count-complaints">0</div>
+        <div class="stat-label">Complaints</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-count" id="count-staff">0</div>
+        <div class="stat-label">Staff / Coaches</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-scrape">
+    ⚡ Extract Current Table / Page
+  </button>
+
+  <button class="btn btn-secondary" id="btn-download-all" disabled>
+    📥 Export Consolidated DB (.JSON)
+  </button>
+
+  <button class="btn btn-danger" id="btn-clear">
+    🗑️ Reset Scraped Database
+  </button>
+
+  <div class="divider"></div>
+
+  <div class="instructions">
+    <strong>Migration Process:</strong>
+    <ol>
+      <li>Go to RedGits pages (e.g. <b>View Members -> Active</b>, <b>Finance -> Incomes</b>, <b>Call Center</b>).</li>
+      <li>Click <b>Extract Current Table / Page</b>.</li>
+      <li>Repeat for each section to build the full dataset.</li>
+      <li>Click <b>Export Consolidated DB</b> when done.</li>
+    </ol>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
