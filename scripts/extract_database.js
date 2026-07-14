@@ -10,7 +10,7 @@ const CONFIG = {
   outputDir: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/redgits_pages',
   progressFile: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/redgits_pages/migration_progress.json',
   finalFile: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/redgits_pages/redgits_inzan_database.json',
-  concurrency: 5
+  concurrency: 20
 };
 
 // Ensure output directories exist
@@ -179,8 +179,8 @@ async function extractDataTableFull(page, tableSelector) {
  */
 async function scrapeMemberProfile(page, url) {
   console.log(`Scraping profile: ${url}`);
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-  await page.waitForTimeout(1000);
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+  await page.waitForTimeout(100);
 
   const memberIdMatch = url.match(/\/view\/(\d+)/);
   const redgitsId = memberIdMatch ? memberIdMatch[1] : '';
@@ -354,6 +354,15 @@ async function scrapeMemberProfile(page, url) {
     // Spawn workers to crawl profile details concurrently
     for (let i = 0; i < CONFIG.concurrency; i++) {
       const workerPage = await context.newPage();
+      // Block stylesheet, image, font, media to speed up extraction by 10x
+      await workerPage.route('**/*', (route) => {
+        const type = route.request().resourceType();
+        if (['image', 'stylesheet', 'media', 'font'].includes(type)) {
+          route.abort();
+        } else {
+          route.continue();
+        }
+      });
       workerPromises.push((async () => {
         while (codesToCrawl.length > 0) {
           const code = codesToCrawl.pop();
