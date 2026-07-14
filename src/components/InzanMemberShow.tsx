@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Client, Payment, Attendance, User, Package } from '../types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,15 +11,63 @@ import {
   Unlock, 
   Plus, 
   AlertCircle,
-  FileCheck
+  FileCheck,
+  Camera,
+  Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Textarea } from '@/components/ui/textarea';
-import { db } from '../firebase';
+import { db, storage } from '../firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, query, where, onSnapshot, addDoc, orderBy } from 'firebase/firestore';
 import { SalesTransferLog, TrainerTransferLog } from '../types';
 import { toast } from 'sonner';
 import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette } from 'lucide-react';
+
+const MAX_PX = 400;
+const TARGET_KB = 150;
+const MIN_QUALITY = 0.30;
+
+async function compressImage(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      let { width, height } = img;
+      if (width > MAX_PX || height > MAX_PX) {
+        if (width > height) { height = Math.round((height / width) * MAX_PX); width = MAX_PX; }
+        else               { width  = Math.round((width / height) * MAX_PX); height = MAX_PX; }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+
+      const tryCompress = (quality: number) => {
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { reject(new Error('Canvas toBlob failed')); return; }
+            if (blob.size / 1024 <= TARGET_KB || quality <= MIN_QUALITY) {
+              resolve(blob);
+            } else {
+              tryCompress(Math.max(MIN_QUALITY, quality - 0.15));
+            }
+          },
+          'image/jpeg',
+          quality,
+        );
+      };
+
+      tryCompress(0.75);
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Failed to load image')); };
+    img.src = objectUrl;
+  });
+}
 
 interface InzanMemberShowProps {
   client: Client;
@@ -63,6 +111,44 @@ export function InzanMemberShow({
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Client>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoUploadStatus, setPhotoUploadStatus] = useState<string | null>(null);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file.');
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    setPhotoUploadStatus('Compressing...');
+    try {
+      const compressed = await compressImage(file);
+      setPhotoUploadStatus('Uploading...');
+      const fileRef = storageRef(storage, `member_photos/${client.id}`);
+      await uploadBytes(fileRef, compressed, { contentType: 'image/jpeg' });
+      const url = await getDownloadURL(fileRef);
+      
+      await onUpdateClient(client.id, { photoURL: url });
+      
+      if (isEditing) {
+        setFormData(prev => ({ ...prev, photoURL: url }));
+      }
+      
+      toast.success('Member photo updated successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to upload member photo.');
+    } finally {
+      setIsUploadingPhoto(false);
+      setPhotoUploadStatus(null);
+    }
+  };
 
   // Premium features state
   const [newComment, setNewComment] = useState('');
@@ -137,7 +223,8 @@ export function InzanMemberShow({
       emergencyContactName: client.emergencyContactName || '',
       civilStatus: client.civilStatus || '',
       cardId: client.cardId || '',
-      civilianOrMilitary: client.civilianOrMilitary || 'None'
+      civilianOrMilitary: client.civilianOrMilitary || 'None',
+      photoURL: client.photoURL || ''
     });
     setIsEditing(true);
   };
@@ -385,17 +472,47 @@ export function InzanMemberShow({
               <div className="md:col-span-1 space-y-4">
                 {/* Profile Card */}
                 <div className="border border-border rounded-xl p-4 bg-muted/10 flex flex-col items-center justify-center text-center">
-                  {client.photoURL ? (
-                    <img 
-                      src={client.photoURL} 
-                      alt={client.name} 
-                      className="h-28 w-28 rounded-full border-2 border-primary object-cover mb-3"
-                    />
-                  ) : (
-                    <div className="h-28 w-28 rounded-full bg-muted border flex items-center justify-center text-muted-foreground mb-3">
-                      <UserIcon className="h-12 w-12" />
+                  <div className="relative group cursor-pointer mb-3">
+                    {client.photoURL ? (
+                      <img 
+                        src={client.photoURL} 
+                        alt={client.name} 
+                        className="h-28 w-28 rounded-full border-2 border-primary object-cover"
+                      />
+                    ) : (
+                      <div className="h-28 w-28 rounded-full bg-muted border flex items-center justify-center text-muted-foreground">
+                        <UserIcon className="h-12 w-12" />
+                      </div>
+                    )}
+                    
+                    {/* Hover Overlay */}
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-all duration-200 border border-primary/40"
+                    >
+                      {isUploadingPhoto ? (
+                        <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      ) : (
+                        <>
+                          <Camera className="h-6 w-6 text-white mb-1" />
+                          <span className="text-[9px] text-white/90 font-bold uppercase tracking-wider">Upload</span>
+                        </>
+                      )}
                     </div>
+                  </div>
+
+                  {photoUploadStatus && (
+                    <span className="text-[10px] text-primary font-bold animate-pulse mb-2">{photoUploadStatus}</span>
                   )}
+
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handlePhotoUpload} 
+                    accept="image/*" 
+                    className="hidden" 
+                  />
+
                   <h3 className="font-bold text-sm text-foreground">{client.name}</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">{client.phone}</p>
                   <Badge className="mt-2 bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30">
