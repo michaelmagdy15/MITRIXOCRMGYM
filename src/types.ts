@@ -241,6 +241,13 @@ export interface Client {
   civilStatus?: string;
   barcode?: string;
   cardId?: string;
+  medicalInfo?: string;
+  preferredTime?: 'Morning' | 'Afternoon' | 'Evening' | 'Night';
+  colorLabel?: string;
+  comeFromType?: string;
+  invitedByType?: 'Staff' | 'Member';
+  invitedById?: string;
+  staffAssignments?: Record<string, { staffId: string; staffName: string }>;
   legacyNotes?: string;
   legacyMemberId?: string;
 }
@@ -408,6 +415,106 @@ export interface FeatureFlags {
   debtors?: boolean;
   unconfirmedMemberships?: boolean;
   frozenMembers?: boolean;
+  // Premium Tier Modules
+  callCenter?: boolean;
+  lostAndFound?: boolean;
+  complaints?: boolean;
+  advancedReports?: boolean;
+  surveys?: boolean;
+  serviceCategoryTargets?: boolean;
+}
+
+export interface CallCenterLog {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberPhone: string;
+  memberStatus: string;
+  packageData?: string;
+  callType: 'Answer' | 'Not Interested' | 'No Answer' | 'Interested' | 'Social Media' | 'Follow Up';
+  comment: string;
+  source?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  branch?: string;
+}
+
+export interface LostFoundCategory {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface LostFoundItem {
+  id: string;
+  itemName: string;
+  name: string;
+  description?: string;
+  categoryId?: string;
+  categoryName?: string;
+  category?: string;
+  foundDate: string;
+  foundBy?: string;
+  branch: string;
+  photoURL?: string;
+  status: 'Found' | 'Claimed' | 'Disposed';
+  claimedBy?: string;
+  claimedByName?: string;
+  claimedDate?: string;
+  disposedDate?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ComplaintCategory {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface Complaint {
+  id: string;
+  title: string;
+  description: string;
+  categoryId?: string;
+  categoryName?: string;
+  category?: string;
+  priority: 'Low' | 'Medium' | 'High' | 'Critical';
+  status: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+  memberId?: string;
+  memberName?: string;
+  branch?: string;
+  resolutionNotes?: string;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+}
+
+export interface SalesTransferLog {
+  id: string;
+  clientId: string;
+  fromSalesId: string;
+  fromSalesName: string;
+  toSalesId: string;
+  toSalesName: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+}
+
+export interface TrainerTransferLog {
+  id: string;
+  clientId: string;
+  fromTrainerId: string;
+  fromTrainerName: string;
+  toTrainerId: string;
+  toTrainerName: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
 }
 
 export interface Tenant {
@@ -495,3 +602,4 @@ export interface StorefrontConfig {
   ctaTextMember: string;
   branchLocations?: BranchLocation[];
 }
+

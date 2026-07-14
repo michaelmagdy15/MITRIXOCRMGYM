@@ -69,7 +69,13 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     wallet: true,
     debtors: false,
     unconfirmedMemberships: false,
-    frozenMembers: false
+    frozenMembers: false,
+    callCenter: false,
+    lostAndFound: false,
+    complaints: false,
+    advancedReports: false,
+    surveys: false,
+    serviceCategoryTargets: false
   });
 
   // Storefront CMS config

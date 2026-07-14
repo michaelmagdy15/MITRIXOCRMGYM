@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
-import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, FileText, Coffee, Package, Smartphone } from 'lucide-react';
+import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, FileText, Coffee, Package, Smartphone, Phone, Search as SearchIcon, MessageSquare, Star, ClipboardList, Target } from 'lucide-react';
 
 import { activeConfig } from './firebase';
 
@@ -25,6 +25,12 @@ export default function AdminHub() {
   const [quotes, setQuotes] = useState(features.quotes !== false);
   const [operations, setOperations] = useState(features.operations !== false);
   const [mobileApp, setMobileApp] = useState(features.mobileApp === true);
+  const [callCenter, setCallCenter] = useState(features.callCenter === true);
+  const [lostAndFound, setLostAndFound] = useState(features.lostAndFound === true);
+  const [complaints, setComplaints] = useState(features.complaints === true);
+  const [advancedReports, setAdvancedReports] = useState(features.advancedReports === true);
+  const [surveys, setSurveys] = useState(features.surveys === true);
+  const [serviceCategoryTargets, setServiceCategoryTargets] = useState(features.serviceCategoryTargets === true);
 
   const handleSave = async () => {
     setIsLoading(true);
@@ -39,7 +45,13 @@ export default function AdminHub() {
         reports,
         quotes,
         operations,
-        mobileApp
+        mobileApp,
+        callCenter,
+        lostAndFound,
+        complaints,
+        advancedReports,
+        surveys,
+        serviceCategoryTargets
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -209,6 +221,111 @@ export default function AdminHub() {
                   </div>
                 </div>
                 <Switch checked={mobileApp} onCheckedChange={setMobileApp} disabled={isLoading} />
+              </div>
+
+              {/* ── Premium Modules Section ── */}
+              <div className="pt-6 pb-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <Star className="h-5 w-5 text-amber-500 fill-amber-500" />
+                  <h3 className="text-sm font-black uppercase tracking-wider text-amber-500">Premium Modules</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">Advanced features available on the Premium plan.</p>
+              </div>
+
+              {/* Call Center */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-500/10 rounded-lg mt-0.5">
+                    <Phone className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Call Center</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Manage outbound/inbound call logs, follow-ups, and lead conversion tracking.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={callCenter} onCheckedChange={setCallCenter} disabled={isLoading} />
+              </div>
+
+              {/* Advanced Reports */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-500/10 rounded-lg mt-0.5">
+                    <BarChart3 className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Advanced Reports</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Unlock detailed analytics, custom report builders, and export capabilities.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={advancedReports} onCheckedChange={setAdvancedReports} disabled={isLoading} />
+              </div>
+
+              {/* Lost & Found */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-500/10 rounded-lg mt-0.5">
+                    <SearchIcon className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Lost &amp; Found</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Track found items, manage claims, and categorize lost property across branches.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={lostAndFound} onCheckedChange={setLostAndFound} disabled={isLoading} />
+              </div>
+
+              {/* Complaints & Suggestions */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-500/10 rounded-lg mt-0.5">
+                    <MessageSquare className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Complaints &amp; Suggestions</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Receive, categorize, and resolve member complaints with priority tracking.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={complaints} onCheckedChange={setComplaints} disabled={isLoading} />
+              </div>
+
+              {/* Member Surveys */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-500/10 rounded-lg mt-0.5">
+                    <ClipboardList className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Member Surveys</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Create and distribute surveys to gather member feedback and satisfaction data.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={surveys} onCheckedChange={setSurveys} disabled={isLoading} />
+              </div>
+
+              {/* Service Category Targets */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-500/10 rounded-lg mt-0.5">
+                    <Target className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Service Category Targets</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Set and track sales targets per service category and package type.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={serviceCategoryTargets} onCheckedChange={setServiceCategoryTargets} disabled={isLoading} />
               </div>
             </div>
 

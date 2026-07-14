@@ -14,6 +14,12 @@ import {
   FileCheck
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Textarea } from '@/components/ui/textarea';
+import { db } from '../firebase';
+import { collection, query, where, onSnapshot, addDoc, orderBy } from 'firebase/firestore';
+import { SalesTransferLog, TrainerTransferLog } from '../types';
+import { toast } from 'sonner';
+import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette } from 'lucide-react';
 
 interface InzanMemberShowProps {
   client: Client;
@@ -36,7 +42,9 @@ type TabType =
   | 'freezing'
   | 'activities'
   | 'files'
-  | 'others';
+  | 'others'
+  | 'comments'
+  | 'transfers';
 
 export function InzanMemberShow({
   client,
@@ -55,6 +63,51 @@ export function InzanMemberShow({
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Client>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // Premium features state
+  const [newComment, setNewComment] = useState('');
+  const [isSavingComment, setIsSavingComment] = useState(false);
+  const [salesTransfers, setSalesTransfers] = useState<SalesTransferLog[]>([]);
+  const [trainerTransfers, setTrainerTransfers] = useState<TrainerTransferLog[]>([]);
+
+  // Fetch sales transfer logs
+  React.useEffect(() => {
+    const q = query(collection(db, 'salesTransferLogs'), where('clientId', '==', client.id), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, snap => {
+      setSalesTransfers(snap.docs.map(d => ({ id: d.id, ...d.data() } as SalesTransferLog)));
+    }, () => setSalesTransfers([]));
+    return unsub;
+  }, [client.id]);
+
+  // Fetch trainer transfer logs
+  React.useEffect(() => {
+    const q2 = query(collection(db, 'trainerTransferLogs'), where('clientId', '==', client.id), orderBy('createdAt', 'desc'));
+    const unsub2 = onSnapshot(q2, snap => {
+      setTrainerTransfers(snap.docs.map(d => ({ id: d.id, ...d.data() } as TrainerTransferLog)));
+    }, () => setTrainerTransfers([]));
+    return unsub2;
+  }, [client.id]);
+
+  // Calculate unpaid
+  const unpaidAmount = payments.filter(p => p.clientId === client.id && !p.deleted_at).reduce((sum, p) => sum + (p.amount - p.amount_paid), 0);
+
+  // Add comment handler
+  const handleAddComment = async () => {
+    if (!newComment.trim()) return;
+    setIsSavingComment(true);
+    try {
+      const comments = [...(client.comments || []), {
+        id: Math.random().toString(36).substring(7),
+        text: newComment.trim(),
+        date: new Date().toISOString(),
+        author: currentUser?.name || 'System'
+      }];
+      await onUpdateClient(client.id, { comments });
+      setNewComment('');
+      toast.success('Comment added');
+    } catch { toast.error('Failed to add comment'); }
+    setIsSavingComment(false);
+  };
 
   // Initialize edit form
   const startEditing = () => {
@@ -190,7 +243,9 @@ export function InzanMemberShow({
             { id: 'freezing', label: 'Freezing List' },
             { id: 'activities', label: 'Activities' },
             { id: 'files', label: 'Files' },
-            { id: 'others', label: 'Others' }
+            { id: 'others', label: 'Others' },
+            { id: 'comments', label: 'Comments Log' },
+            { id: 'transfers', label: 'Transfer History' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -241,12 +296,20 @@ export function InzanMemberShow({
             <div>
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                 View Member Info - ( {client.name} )
+                {client.colorLabel && (
+                  <span className={`inline-block h-3 w-3 rounded-full ml-1`} style={{ backgroundColor: client.colorLabel }} />
+                )}
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {client.phone} · {client.branch || 'No branch'} ·{' '}
                 <Badge className={client.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/10 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/10 border border-rose-500/20'}>
                   {client.status}
                 </Badge>
+                {unpaidAmount > 0 && (
+                  <Badge className="bg-red-500/10 text-red-500 hover:bg-red-500/10 border border-red-500/20 ml-2">
+                    Unpaid: {unpaidAmount.toLocaleString()} LE
+                  </Badge>
+                )}
               </p>
             </div>
           </div>
@@ -400,6 +463,23 @@ export function InzanMemberShow({
                     { value: 'Military', label: 'Military' }
                   ])}
                   {renderField('Card ID', client.cardId, 'cardId')}
+                  {renderField('Medical Info', client.medicalInfo, 'medicalInfo')}
+                  {renderField('Preferred Time', client.preferredTime, 'preferredTime', 'select', [
+                    { value: 'Morning', label: 'Morning' },
+                    { value: 'Afternoon', label: 'Afternoon' },
+                    { value: 'Evening', label: 'Evening' },
+                    { value: 'Night', label: 'Night' }
+                  ])}
+                  {renderField('Color Label', client.colorLabel, 'colorLabel', 'select', [
+                    { value: 'red', label: '🔴 Red' },
+                    { value: 'green', label: '🟢 Green' },
+                    { value: 'blue', label: '🔵 Blue' },
+                    { value: 'purple', label: '🟣 Purple' },
+                    { value: 'yellow', label: '🟡 Yellow' },
+                    { value: 'orange', label: '🟠 Orange' },
+                    { value: 'pink', label: '🩷 Pink' },
+                    { value: 'brown', label: '🟤 Brown' }
+                  ])}
                   {renderField('Created On', client.createdAt ? format(new Date(client.createdAt), 'yyyy-MM-dd HH:mm:ss') : '—')}
                 </div>
               </div>
@@ -737,6 +817,107 @@ export function InzanMemberShow({
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Lead Source:</span>
                 <span className="font-bold text-foreground">{client.source || '—'}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'comments' && (
+          <div className="space-y-4 text-left">
+            <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3">Comments & Notes Timeline</h3>
+            <div className="flex gap-2">
+              <Textarea
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                placeholder="Add a comment..."
+                className="text-xs min-h-[60px]"
+              />
+              <Button
+                onClick={handleAddComment}
+                disabled={isSavingComment || !newComment.trim()}
+                className="bg-primary text-primary-foreground font-bold text-xs h-auto"
+              >
+                {isSavingComment ? '...' : 'Add'}
+              </Button>
+            </div>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              {client.comments && client.comments.length > 0 ? (
+                [...client.comments].reverse().map((c, i) => (
+                  <div key={c.id || i} className="bg-muted/10 border border-border rounded-lg p-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs font-bold text-foreground">#{client.comments!.length - i} — {c.author}</span>
+                      <span className="text-[10px] text-muted-foreground">{c.date ? format(new Date(c.date), 'dd MMM yyyy HH:mm') : '—'}</span>
+                    </div>
+                    <p className="text-xs text-foreground/80">{c.text}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="bg-muted/5 p-8 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs">
+                  No comments recorded.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'transfers' && (
+          <div className="space-y-6 text-left">
+            <div>
+              <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3 mb-3">Sales Rep Transfer History</h3>
+              <div className="rounded-xl border border-border bg-background overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-muted/20 border-b border-border">
+                    <TableRow>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">#</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">From Sales</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">To Sales</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created On</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {salesTransfers.length > 0 ? salesTransfers.map((t, i) => (
+                      <TableRow key={t.id} className="hover:bg-muted/50 border-b border-border/50">
+                        <TableCell className="py-3 px-4 text-xs">{i + 1}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs">{t.fromSalesName}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs font-bold text-foreground">{t.toSalesName}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdByName || t.createdBy}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdAt ? format(new Date(t.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No sales transfer records.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3 mb-3">Trainer Transfer History</h3>
+              <div className="rounded-xl border border-border bg-background overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-muted/20 border-b border-border">
+                    <TableRow>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">#</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">From Trainer</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">To Trainer</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created On</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {trainerTransfers.length > 0 ? trainerTransfers.map((t, i) => (
+                      <TableRow key={t.id} className="hover:bg-muted/50 border-b border-border/50">
+                        <TableCell className="py-3 px-4 text-xs">{i + 1}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs">{t.fromTrainerName}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs font-bold text-foreground">{t.toTrainerName}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdByName || t.createdBy}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdAt ? format(new Date(t.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No trainer transfer records.</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </div>
           </div>

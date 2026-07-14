@@ -33,7 +33,7 @@ import Debtors from './Debtors';
 import UnconfirmedMemberships from './UnconfirmedMemberships';
 import Bookings from './Bookings';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart } from 'lucide-react';
+import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,6 +54,10 @@ import CommandPalette from './components/CommandPalette';
 import OnboardingWizard from './OnboardingWizard';
 import AdminHub from './AdminHub';
 import SuperAdminHub from './SuperAdminHub';
+import AdvancedReports from './AdvancedReports';
+import CallCenter from './CallCenter';
+import LostAndFound from './LostAndFound';
+import Complaints from './Complaints';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
 
@@ -697,6 +701,31 @@ function AppContent() {
       label: t('nav.admin-hub'),
       icon: ShieldAlert,
       show: isManagerOrSama && effectiveRole !== 'admin'
+    },
+    // --- Premium Modules (gated by feature flags) ---
+    {
+      id: 'advanced-reports',
+      label: 'Premium Reports',
+      icon: Star,
+      show: features.advancedReports === true && !!(isManagerOrSama && currentUser.role !== 'admin')
+    },
+    {
+      id: 'call-center',
+      label: 'Call Center',
+      icon: Phone,
+      show: features.callCenter === true && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+    },
+    {
+      id: 'lost-and-found',
+      label: 'Lost & Found',
+      icon: Search,
+      show: features.lostAndFound === true && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+    },
+    {
+      id: 'complaints',
+      label: 'Complaints',
+      icon: MessageSquare,
+      show: features.complaints === true && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
     }
   ];
 
@@ -1202,6 +1231,31 @@ function AppContent() {
             {isPlatformAdmin && (
               <TabsContent value="admin-hub" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
                 <AdminHub />
+              </TabsContent>
+            )}
+
+            {/* Premium Modules — only render when flag is enabled */}
+            {features.advancedReports === true && (
+              <TabsContent value="advanced-reports" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <AdvancedReports />
+              </TabsContent>
+            )}
+
+            {features.callCenter === true && (
+              <TabsContent value="call-center" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <CallCenter />
+              </TabsContent>
+            )}
+
+            {features.lostAndFound === true && (
+              <TabsContent value="lost-and-found" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <LostAndFound />
+              </TabsContent>
+            )}
+
+            {features.complaints === true && (
+              <TabsContent value="complaints" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <Complaints />
               </TabsContent>
             )}
 
