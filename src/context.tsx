@@ -88,8 +88,8 @@ export interface AppContextType {
   addComment: (clientId: string, text: string, author?: string) => Promise<void>;
   addInteraction: (clientId: string, interaction: Omit<InteractionLog, 'id' | 'author'>) => Promise<void>;
   addPayment: (payment: Omit<Payment, 'id' | 'client_name' | 'amount_paid' | 'created_at' | 'package_category_type' | 'deleted_at'>) => Promise<void>;
-  updateSalesTarget: (target: number) => Promise<void>;
-  updateUserTarget: (userId: string, month: string, total: number) => Promise<void>;
+  updateSalesTarget: (target: number, ptTarget?: number, classesTarget?: number, membershipsTarget?: number) => Promise<void>;
+  updateUserTarget: (userId: string, month: string, total: number, ptTarget?: number, classesTarget?: number, membershipsTarget?: number) => Promise<void>;
   addPTPackageRecord: (session: Omit<PTPackageRecord, 'id'>) => Promise<void>;
   updatePTPackageRecord: (id: string, updates: Partial<PTPackageRecord>) => Promise<void>;
   addTask: (task: Omit<Task, 'id' | 'createdAt' | 'createdBy'>) => Promise<void>;

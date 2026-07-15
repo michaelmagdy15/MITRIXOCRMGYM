@@ -1,10 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, orderBy, getDocs, where } from 'firebase/firestore';
-import { db, auth, getTenantId } from '../firebase';
+import { auth } from '../firebase';
 import { Attendance, Branch, Client, User } from '../types';
-import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { addAuditLog } from '../services/auditService';
-import { isBefore, parseISO, startOfDay } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 
 export const useAttendance = (currentUser: User | null, clients: Client[]) => {
@@ -13,7 +10,6 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
   const [loading, setLoading] = useState(true);
 
   const fetchAttendances = useCallback(async () => {
-    if (getTenantId() !== 'inzanathletics') return;
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
@@ -29,34 +25,19 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, []);
 
   useEffect(() => {
-    if (getTenantId() === 'inzanathletics') {
-      if (currentUser) {
-        fetchAttendances();
-      }
+    if (!currentUser) {
+      setLoading(false);
       return;
     }
-
-    if (!currentUser) return;
-    // Members can't list all attendance — skip the global listener
+    // Members can't list all attendance
     if (effectiveRole === 'client' || effectiveRole === 'coach') {
       setLoading(false);
       return;
     }
-    const unsub = onSnapshot(
-      query(collection(db, 'attendance'), orderBy('date', 'desc')),
-      (snapshot) => {
-        setAttendances(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Attendance)));
-        setLoading(false);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'attendance');
-        setLoading(false);
-      }
-    );
-    return () => unsub();
+    fetchAttendances();
   }, [currentUser, effectiveRole, fetchAttendances]);
 
   const recordAttendance = async (clientId: string, branch: Branch) => {
@@ -65,47 +46,55 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       const client = clients.find(c => c.id === clientId);
       if (!client) throw new Error('Client not found');
 
-      // Block expired members from checking in
       if (client.status === 'Expired') {
         throw new Error(`${client.name}'s membership is expired. They must head to the STRIKE branch to renew.`);
       }
 
-      // Count existing check-ins for today in local Egypt time
       const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-      const attendanceRef = collection(db, 'attendance');
-      const attendanceSnap = await getDocs(
-        query(attendanceRef, where('clientId', '==', clientId))
-      );
-      const todayCheckins = attendanceSnap.docs.filter(docSnap => {
-        const data = docSnap.data();
-        if (!data.date) return false;
-        try {
-          const checkinCairoDate = new Date(data.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-          return checkinCairoDate === cairoDateStr;
-        } catch {
-          return false;
-        }
+      
+      const token = await auth.currentUser?.getIdToken();
+
+      // Check attendance
+      const attendanceRes = await fetch(`/api/attendance?clientId=${clientId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+      let todayCheckins: any[] = [];
+      if (attendanceRes.ok) {
+        const attData = await attendanceRes.json();
+        todayCheckins = (attData.attendances || []).filter((a: any) => {
+          if (!a.date) return false;
+          try {
+            return new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr;
+          } catch {
+            return false;
+          }
+        });
+      }
       const checkinCount = todayCheckins.length;
 
-      // Count expected sessions today
-      const sessionsRef = collection(db, 'sessions');
-      const sessionsSnap = await getDocs(
-        query(sessionsRef, where('clientId', '==', clientId), where('date', '==', cairoDateStr))
-      );
-      const ptSessionsCount = sessionsSnap.docs.filter(docSnap => {
-        const status = docSnap.data().status;
-        return status === 'Scheduled' || status === 'Attended';
-      }).length;
+      // Fetch sessions today
+      const sessionsRes = await fetch(`/api/sessions?clientId=${clientId}&date=${cairoDateStr}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      let ptSessionsCount = 0;
+      if (sessionsRes.ok) {
+        const sessionsData = await sessionsRes.json();
+        ptSessionsCount = (sessionsData.sessions || []).filter((s: any) => 
+          s.status === 'Scheduled' || s.status === 'Attended'
+        ).length;
+      }
 
-      const classesRef = collection(db, 'classes');
-      const classesSnap = await getDocs(
-        query(classesRef, where('date', '==', cairoDateStr))
-      );
-      const groupClassesCount = classesSnap.docs.filter(docSnap => {
-        const attendees = docSnap.data().attendees || [];
-        return attendees.includes(clientId);
-      }).length;
+      // Fetch classes today
+      const classesRes = await fetch(`/api/classes?date=${cairoDateStr}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      let groupClassesCount = 0;
+      if (classesRes.ok) {
+        const classesData = await classesRes.json();
+        groupClassesCount = (classesData.classes || []).filter((c: any) => 
+          (c.attendees || []).includes(clientId)
+        ).length;
+      }
 
       const totalExpectedSessions = Math.max(1, ptSessionsCount + groupClassesCount);
 
@@ -127,78 +116,49 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
         attendanceData.packageName = client.packageType;
       }
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/attendance/record', {
+      await fetch('/api/attendance/record', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ attendance: attendanceData })
+      });
+
+      const packagesCopy = client.packages ? [...client.packages] : [];
+      const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
+      const updateData: any = {};
+      
+      if (activePkgIdx !== -1) {
+        const activePkg = packagesCopy[activePkgIdx];
+        if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+          packagesCopy[activePkgIdx] = {
+            ...activePkg,
+            sessionsRemaining: activePkg.sessionsRemaining - 1
+          } as any;
+          updateData.packages = packagesCopy;
+        }
+      }
+      
+      if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+        updateData.sessionsRemaining = client.sessionsRemaining - 1;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await fetch('/api/clients/update', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ attendance: attendanceData })
+          body: JSON.stringify({ id: clientId, updates: updateData })
         });
-
-        const packagesCopy = client.packages ? [...client.packages] : [];
-        const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
-        const updateData: any = {};
-        
-        if (activePkgIdx !== -1) {
-          const activePkg = packagesCopy[activePkgIdx];
-          if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
-            packagesCopy[activePkgIdx] = {
-              ...activePkg,
-              sessionsRemaining: activePkg.sessionsRemaining - 1
-            } as any;
-            updateData.packages = packagesCopy;
-          }
-        }
-        
-        if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-          updateData.sessionsRemaining = client.sessionsRemaining - 1;
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await fetch('/api/clients/update', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ id: clientId, updates: updateData })
-          });
-        }
-        await fetchAttendances();
-      } else {
-        // Decrement sessions only for finite packages with sessions remaining
-        const packagesCopy = client.packages ? [...client.packages] : [];
-        const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
-        
-        const updateData: any = {};
-        
-        if (activePkgIdx !== -1) {
-          const activePkg = packagesCopy[activePkgIdx];
-          if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
-            packagesCopy[activePkgIdx] = {
-              ...activePkg,
-              sessionsRemaining: activePkg.sessionsRemaining - 1
-            } as any;
-            updateData.packages = packagesCopy;
-          }
-        }
-        
-        if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-          updateData.sessionsRemaining = client.sessionsRemaining - 1;
-        }
-
-        await addDoc(collection(db, 'attendance'), attendanceData);
-        if (Object.keys(updateData).length > 0) {
-          await updateDoc(doc(db, 'clients', clientId), updateData);
-        }
       }
-
+      
+      await fetchAttendances();
       await addAuditLog('CREATE', 'ATTENDANCE', clientId, `Attendance: ${client.name} at ${branch}`, currentUser?.name);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'attendance');
+      console.error('Failed to record attendance', error);
       throw error;
     }
   };

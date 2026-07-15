@@ -305,6 +305,9 @@ export interface Task {
 
 export interface SalesTarget {
   targetAmount: number;
+  ptTarget?: number;
+  classesTarget?: number;
+  membershipsTarget?: number;
   currentAmount: number;
   privatePackagesSold: number;
   groupPackagesSold: number;
@@ -322,6 +325,9 @@ export interface UserSalesTarget {
   month: string; // 'YYYY-MM'
   month_year: string; // 'YYYY-MM'
   targetAmount: number;
+  ptTarget?: number;
+  classesTarget?: number;
+  membershipsTarget?: number;
   setBy: string; // manager userId
   createdAt: string; // ISO string
 }

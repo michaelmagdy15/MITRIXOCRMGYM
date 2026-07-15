@@ -8,8 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
 import { useLanguage } from './contexts/LanguageContext';
-import { db } from './firebase';
-import { collection, query, onSnapshot, addDoc, orderBy } from 'firebase/firestore';
+import { db, auth } from './firebase';
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
 import { Client, CallCenterLog } from './types';
 import { downloadFile } from './utils/download';
 import { format, parseISO } from 'date-fns';
@@ -150,23 +150,26 @@ export default function CallCenter() {
   const [searchResults, setSearchResults] = useState<Client[]>([]);
   const [showResults, setShowResults] = useState(false);
 
-  /* ── Real-time listener for callCenterLogs ── */
-  useEffect(() => {
-    const q = query(collection(db, 'callCenterLogs'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        setCallLogs(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() } as CallCenterLog)),
-        );
-      },
-      (error) => {
-        console.error('Error listening to callCenterLogs:', error);
-        toast.error('Failed to load call logs');
-      },
-    );
-    return unsub;
+  /* ── Fetch call logs from SQL ── */
+  const fetchCallLogs = useCallback(async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch('/api/call-center', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setCallLogs(data.logs || []);
+    } catch (error) {
+      console.error('Error fetching call logs:', error);
+      toast.error('Failed to load call logs');
+    }
   }, []);
+
+  useEffect(() => {
+    fetchCallLogs();
+  }, [fetchCallLogs]);
 
   /* ── Unpaid amount for selected client ── */
   const unpaidAmount = useMemo(() => {
@@ -260,7 +263,9 @@ export default function CallCenter() {
 
     setIsSaving(true);
     try {
-      const logEntry: Omit<CallCenterLog, 'id'> = {
+      const newId = crypto.randomUUID();
+      const logEntry: CallCenterLog = {
+        id: newId,
         memberId: selectedClient.memberId || selectedClient.id,
         memberName: selectedClient.name || '',
         memberPhone: selectedClient.phone || '',
@@ -275,7 +280,19 @@ export default function CallCenter() {
         branch: selectedClient.branch || '',
       };
 
-      await addDoc(collection(db, 'callCenterLogs'), logEntry);
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/call-center/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ log: logEntry })
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      
+      // Update local state immediately
+      setCallLogs(prev => [logEntry, ...prev]);
       toast.success('Call log saved successfully');
       setCallType('');
       setComment('');

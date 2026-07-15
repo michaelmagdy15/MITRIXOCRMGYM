@@ -518,7 +518,7 @@ async function migrateAttendance(validClientIds: Set<string>) {
   });
   console.log(`[Migration] Found ${docs.length} valid attendance records. Orphans skipped: ${snap.size - docs.length}`);
 
-  await query('DELETE FROM attendance');
+  await query('TRUNCATE TABLE attendance');
 
   const batchSize = 1000; // 1000 * 5 = 5000 parameters
   let count = 0;
@@ -950,7 +950,7 @@ async function migrateAuditLogs() {
   const snap = await firestoreDb.collection('auditLogs').get();
   console.log(`[Migration] Found ${snap.size} audit logs. Migrating...`);
 
-  await query('DELETE FROM audit_logs');
+  await query('TRUNCATE TABLE audit_logs');
 
   const docs = snap.docs;
   const batchSize = 1000;

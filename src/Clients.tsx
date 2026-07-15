@@ -226,6 +226,7 @@ export default function Clients() {
   const [filterDiscount, setFilterDiscount] = useState('All');
   const [filterGender, setFilterGender] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
+  const [filterCoach, setFilterCoach] = useState('All');
 
   // Interaction Logging State
   const [interactionType, setInteractionType] = useState<InteractionType>('Call');
@@ -267,6 +268,7 @@ export default function Clients() {
   const deferredFilterDiscount = useDeferredValue(filterDiscount);
   const deferredFilterGender = useDeferredValue(filterGender);
   const deferredFilterCategory = useDeferredValue(filterCategory);
+  const deferredFilterCoach = useDeferredValue(filterCoach);
 
   const handleAddMember = () => {
     if (!newMemberName || newMemberName.trim().length < 2) {
@@ -948,6 +950,22 @@ export default function Clients() {
       filtered = filtered.filter(m => getMemberCategory(m) === deferredFilterCategory);
     }
 
+    // Coach filter
+    if (deferredFilterCoach && deferredFilterCoach !== 'All') {
+      filtered = filtered.filter(m => {
+        // A member matches if any of their active/expired packages are assigned to this coach
+        if (!m.packages) return false;
+        return m.packages.some(pkg => {
+          if (!pkg.trainerName) return false;
+          // check if trainerName matches the selected coach's name or ID
+          // We look up the selected coach object to compare names
+          const coachUser = users.find(u => u.id === deferredFilterCoach);
+          if (coachUser && coachUser.name && pkg.trainerName.toLowerCase() === coachUser.name.toLowerCase()) return true;
+          return false;
+        });
+      });
+    }
+
     // Sort
     filtered = [...filtered].sort((a, b) => {
       if (deferredSortBy === 'id-asc') return (Number(a.memberId) || 0) - (Number(b.memberId) || 0);
@@ -974,6 +992,7 @@ export default function Clients() {
     deferredFilterDiscount,
     deferredFilterGender,
     deferredFilterCategory,
+    deferredFilterCoach,
     deferredSortBy
   ]);
 
@@ -1636,6 +1655,20 @@ export default function Clients() {
               </select>
             </div>
           )}
+
+          <div className="w-full md:w-[200px] space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground ml-1">Assigned Coach</Label>
+            <select
+              className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring border-none"
+              value={filterCoach}
+              onChange={(e) => setFilterCoach(e.target.value)}
+            >
+              <option value="All">All Coaches</option>
+              {users.filter(u => u.role?.toLowerCase() === 'coach' || u.role?.toLowerCase() === 'trainer').map(coach => (
+                <option key={coach.id} value={coach.id}>{coach.name || coach.email}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">

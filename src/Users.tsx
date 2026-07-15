@@ -16,8 +16,7 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { UserPerformanceDialog } from './components/UserPerformanceDialog';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db, auth } from './firebase';
+import { auth } from './firebase';
 
 export default function Users() {
   const { users, currentUser, updateUser, inviteUser, deleteUser, activatePendingUser, passwordResetRequests, approvePasswordResetRequest, denyPasswordResetRequest } = useAuth();
@@ -116,39 +115,34 @@ export default function Users() {
     }
     setIsSearching(true);
     try {
-      const results: User[] = [];
-      const usersRef = collection(db, 'users');
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("No authorization token found");
       
-      // 1. If it's a number, query by clientRecordId
-      if (/^\d+$/.test(term)) {
-        const q1 = query(usersRef, where('role', '==', 'client'), where('clientRecordId', '==', term));
-        const snap1 = await getDocs(q1);
-        snap1.forEach(doc => {
-          results.push({ ...doc.data(), id: doc.id } as User);
-        });
-      }
-      
-      // 2. Query by email (exact match)
-      const q2 = query(usersRef, where('role', '==', 'client'), where('email', '==', term.toLowerCase()));
-      const snap2 = await getDocs(q2);
-      snap2.forEach(doc => {
-        if (!results.some(r => r.id === doc.id)) {
-          results.push({ ...doc.data(), id: doc.id } as User);
-        }
+      const res = await fetch('/api/users', {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
+      if (!res.ok) throw new Error("Failed to fetch users");
+      const data = await res.json();
+      const allUsers: User[] = data.users || [];
 
-      // 3. Query by Name (prefix search - title cased prefix)
+      const results: User[] = [];
+      const termLower = term.toLowerCase();
       const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
-      const q3 = query(
-        usersRef, 
-        where('name', '>=', capitalizedTerm),
-        where('name', '<=', capitalizedTerm + '\uf8ff')
-      );
-      const snap3 = await getDocs(q3);
-      snap3.forEach(doc => {
-        const data = doc.data();
-        if (data.role === 'client' && !results.some(r => r.id === doc.id)) {
-          results.push({ ...data, id: doc.id } as User);
+
+      allUsers.forEach((u: User) => {
+        if (u.role !== 'client') return;
+        let match = false;
+        
+        if (/^\d+$/.test(term) && String(u.clientRecordId) === term) {
+          match = true;
+        } else if (u.email?.toLowerCase() === termLower) {
+          match = true;
+        } else if (u.name?.startsWith(capitalizedTerm)) {
+          match = true;
+        }
+
+        if (match && !results.some(r => r.id === u.id)) {
+          results.push(u);
         }
       });
       

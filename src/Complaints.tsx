@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
 import { Complaint, ComplaintCategory } from './types';
 import { downloadCSV } from './utils/download';
@@ -83,15 +83,24 @@ export default function Complaints() {
   const [filterCategory, setFilterCategory] = useState('All');
 
   // ── Firestore listeners ──
+  const fetchComplaints = async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch('/api/complaints', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setComplaints(data.complaints || []);
+    } catch (error) {
+      console.error('Error fetching complaints:', error);
+      toast.error('Failed to load complaints');
+    }
+  };
+
   useEffect(() => {
-    const q = query(collection(db, 'complaints'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Complaint));
-      setComplaints(data);
-    }, (err) => {
-      console.error('complaints listener error:', err);
-    });
-    return () => unsub();
+    fetchComplaints();
   }, []);
 
   useEffect(() => {
@@ -139,19 +148,34 @@ export default function Complaints() {
       return;
     }
     try {
-      await addDoc(collection(db, 'complaints'), {
+      const newId = crypto.randomUUID();
+      const complaintData: Complaint = {
+        id: newId,
         title: newComplaint.title.trim(),
         description: newComplaint.description.trim(),
         category: newComplaint.category || '',
-        priority: newComplaint.priority,
+        categoryId: '',
+        categoryName: newComplaint.category || '',
+        priority: newComplaint.priority as any,
         status: 'Open',
         memberId: newComplaint.memberId || '',
         memberName: newComplaint.memberName || '',
         branch: newComplaint.branch || '',
         resolutionNotes: '',
         createdAt: new Date().toISOString(),
-        createdBy: currentUser?.name || '',
+        createdBy: currentUser?.id || '',
+        createdByName: currentUser?.name || '',
+      };
+
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/complaints/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ complaint: complaintData })
       });
+      if (!res.ok) throw new Error('Failed to save');
+      
+      setComplaints(prev => [complaintData, ...prev]);
       toast.success('Complaint submitted successfully');
       setAddOpen(false);
       setNewComplaint({ ...defaultNewComplaint });
@@ -172,7 +196,15 @@ export default function Complaints() {
         updates.resolvedAt = new Date().toISOString();
         updates.resolvedBy = currentUser?.name || '';
       }
-      await updateDoc(doc(db, 'complaints', detailComplaint.id), updates);
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/complaints/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ id: detailComplaint.id, updates })
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      
+      setComplaints(prev => prev.map(c => c.id === detailComplaint.id ? { ...c, ...updates } as Complaint : c));
       toast.success('Complaint updated');
       setDetailComplaint(null);
     } catch (err: any) {
@@ -184,7 +216,15 @@ export default function Complaints() {
   const handleDeleteComplaint = async (complaint: Complaint) => {
     if (!window.confirm(`Delete complaint "${complaint.title}"? This cannot be undone.`)) return;
     try {
-      await deleteDoc(doc(db, 'complaints', complaint.id));
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/complaints/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ id: complaint.id })
+      });
+      if (!res.ok) throw new Error('Failed to delete');
+      
+      setComplaints(prev => prev.filter(c => c.id !== complaint.id));
       toast.success('Complaint deleted');
     } catch (err: any) {
       toast.error('Failed to delete: ' + (err.message || 'Unknown error'));

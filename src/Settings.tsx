@@ -3,9 +3,9 @@ import { useAppContext } from './context';
 import { useAuth } from './contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { storage, db } from './firebase';
+import { storage, db, auth } from './firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection as fbCollection, getDocs as fbGetDocs, addDoc, doc as fbDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -117,13 +117,26 @@ export default function Settings() {
   const [isSavingAnnouncement, setIsSavingAnnouncement] = useState(false);
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null);
 
+  const getAuthHeaders = async () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  };
+
   const fetchAnnouncements = async () => {
     setLoadingAnnouncements(true);
     try {
-      const snapshot = await fbGetDocs(fbCollection(db, 'announcements'));
-      const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AnnouncementRecord));
-      list.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-      setAnnouncements(list);
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/announcements', { headers });
+      if (response.ok) {
+        const data = await response.json();
+        const list = data.announcements || [];
+        list.sort((a: any, b: any) => (b.priority || 0) - (a.priority || 0));
+        setAnnouncements(list);
+      }
     } catch (err) {
       console.warn('Could not load announcements:', err);
     } finally {
@@ -149,11 +162,22 @@ export default function Settings() {
         endDate: announcementForm.endDate,
         createdBy: currentUser?.email || 'admin',
       };
+      
+      const headers = await getAuthHeaders();
+      
       if (editingAnnouncementId) {
-        await updateDoc(fbDoc(db, 'announcements', editingAnnouncementId), data);
+        await fetch('/api/announcements/update', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ id: editingAnnouncementId, updates: data })
+        });
         setEditingAnnouncementId(null);
       } else {
-        await addDoc(fbCollection(db, 'announcements'), data);
+        await fetch('/api/announcements/add', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ announcement: data })
+        });
       }
       setAnnouncementForm({ title: '', body: '', imageUrl: '', linkUrl: '', priority: 1, startDate: new Date().toISOString().split('T')[0], endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] });
       await fetchAnnouncements();
@@ -167,7 +191,12 @@ export default function Settings() {
   const handleDeleteAnnouncement = async (id: string) => {
     if (!window.confirm('Delete this announcement?')) return;
     try {
-      await deleteDoc(fbDoc(db, 'announcements', id));
+      const headers = await getAuthHeaders();
+      await fetch('/api/announcements/delete', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ id })
+      });
       setAnnouncements(prev => prev.filter(a => a.id !== id));
     } catch (err) {
       console.error('Failed to delete announcement:', err);

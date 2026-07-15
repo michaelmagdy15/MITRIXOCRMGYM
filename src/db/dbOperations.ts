@@ -755,33 +755,226 @@ export async function updateImportBatchInSQL(id: string, updates: any) {
 // =========================================================================
 
 export async function getUserTargetsFromSQL() {
-  const res = await query(`SELECT * FROM user_targets`);
+  const res = await query('SELECT * FROM user_targets');
   return res.rows.map(row => ({
     ...row,
     userId: row.user_id,
-    userName: row.user_name
+    userName: row.user_name,
+    targetAmount: row.amount,
+    ptTarget: row.pt_target,
+    classesTarget: row.classes_target,
+    membershipsTarget: row.memberships_target
   }));
 }
 
 export async function saveUserTargetToSQL(id: string, target: any) {
   await query(
-    `INSERT INTO user_targets (id, user_id, user_name, amount, month, year)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO user_targets (id, user_id, user_name, amount, pt_target, classes_target, memberships_target, month, year)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (id) DO UPDATE SET
        user_id = EXCLUDED.user_id,
        user_name = EXCLUDED.user_name,
        amount = EXCLUDED.amount,
+       pt_target = EXCLUDED.pt_target,
+       classes_target = EXCLUDED.classes_target,
+       memberships_target = EXCLUDED.memberships_target,
        month = EXCLUDED.month,
        year = EXCLUDED.year`,
     [
       id,
       target.userId || '',
       target.userName || '',
-      target.amount || 0,
+      target.targetAmount || target.amount || 0,
+      target.ptTarget || 0,
+      target.classesTarget || 0,
+      target.membershipsTarget || 0,
       target.month || '',
       target.year || new Date().getFullYear()
     ]
   );
+}
+
+// =========================================================================
+// Users Operations
+// =========================================================================
+
+export async function getUsersFromSQL() {
+  const res = await query('SELECT * FROM users');
+  return res.rows.map(row => ({
+    ...row,
+    salesTarget: row.sales_target,
+    canDeletePayments: row.can_delete_payments,
+    canViewGlobalDashboard: row.can_view_global_dashboard,
+    canAccessSettingsAndHistory: row.can_access_settings_and_history,
+    canDeleteRecords: row.can_delete_records,
+    canAssignLeads: row.can_assign_leads,
+    lastSeen: row.last_seen,
+    isPending: row.is_pending,
+    coachId: row.coach_id,
+    clientRecordId: row.client_record_id,
+    clientDocId: row.client_doc_id,
+    mustChangePassword: row.must_change_password,
+    photoURL: row.photo_url,
+    dismissedNotifications: row.dismissed_notifications
+  }));
+}
+
+export async function addUserToSQL(id: string, user: any) {
+  await query(
+    `INSERT INTO users (
+      id, name, role, email, branch, sales_target, can_delete_payments,
+      can_view_global_dashboard, can_access_settings_and_history, can_delete_records,
+      can_assign_leads, last_seen, is_pending, coach_id, client_record_id,
+      client_doc_id, phone, must_change_password, photo_url, dismissed_notifications, status
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+    [
+      id, user.name || '', user.role || 'rep', user.email || '', JSON.stringify(user.branch || null),
+      user.salesTarget || null, user.can_delete_payments || false, user.can_view_global_dashboard || false,
+      user.can_access_settings_and_history || false, user.can_delete_records || false,
+      user.can_assign_leads || false, user.lastSeen || null, user.isPending || false,
+      user.coachId || null, user.clientRecordId || null, user.clientDocId || null,
+      user.phone || null, user.mustChangePassword || false, user.photoURL || null,
+      JSON.stringify(user.dismissedNotifications || []), user.status || 'working'
+    ]
+  );
+}
+
+export async function updateUserInSQL(id: string, updates: any) {
+  const setClauses: string[] = [];
+  const values: any[] = [];
+  let paramIdx = 1;
+
+  const mapping: Record<string, string> = {
+    name: 'name',
+    role: 'role',
+    email: 'email',
+    branch: 'branch',
+    salesTarget: 'sales_target',
+    can_delete_payments: 'can_delete_payments',
+    can_view_global_dashboard: 'can_view_global_dashboard',
+    can_access_settings_and_history: 'can_access_settings_and_history',
+    can_delete_records: 'can_delete_records',
+    can_assign_leads: 'can_assign_leads',
+    lastSeen: 'last_seen',
+    isPending: 'is_pending',
+    coachId: 'coach_id',
+    clientRecordId: 'client_record_id',
+    clientDocId: 'client_doc_id',
+    phone: 'phone',
+    mustChangePassword: 'must_change_password',
+    photoURL: 'photo_url',
+    dismissedNotifications: 'dismissed_notifications',
+    status: 'status'
+  };
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (mapping[key]) {
+      setClauses.push(`${mapping[key]} = $${paramIdx}`);
+      if (typeof value === 'object' && value !== null) {
+         values.push(JSON.stringify(value));
+      } else {
+         values.push(value);
+      }
+      paramIdx++;
+    }
+  }
+
+  if (setClauses.length > 0) {
+    values.push(id);
+    await query(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $${paramIdx}`, values);
+  }
+}
+
+export async function deleteUserFromSQL(id: string) {
+  await query('DELETE FROM users WHERE id = $1', [id]);
+}
+
+// =========================================================================
+// Settings Operations
+// =========================================================================
+
+export async function getSettingsFromSQL() {
+  const res = await query('SELECT key, value FROM settings');
+  const settings: Record<string, any> = {};
+  for (const row of res.rows) {
+    settings[row.key] = row.value;
+  }
+  return settings;
+}
+
+export async function updateSettingInSQL(key: string, value: any) {
+  await query(
+    `INSERT INTO settings (key, value) VALUES ($1, $2)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [key, JSON.stringify(value)]
+  );
+}
+
+// =========================================================================
+// Announcements Operations
+// =========================================================================
+
+export async function getAnnouncementsFromSQL() {
+  const res = await query(`SELECT * FROM announcements ORDER BY priority DESC, start_date DESC`);
+  return res.rows.map(row => ({
+    ...row,
+    imageUrl: row.image_url,
+    linkUrl: row.link_url,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    createdBy: row.created_by
+  }));
+}
+
+export async function addAnnouncementToSQL(announcement: any) {
+  const newId = announcement.id || Math.random().toString(36).substr(2, 9);
+  await query(
+    `INSERT INTO announcements (id, title, body, image_url, link_url, priority, start_date, end_date, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      newId,
+      announcement.title || '',
+      announcement.body || '',
+      announcement.imageUrl || null,
+      announcement.linkUrl || null,
+      announcement.priority || 1,
+      announcement.startDate || null,
+      announcement.endDate || null,
+      announcement.createdBy || null
+    ]
+  );
+  return newId;
+}
+
+export async function updateAnnouncementInSQL(id: string, updates: any) {
+  const fields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  const mapField = (tsField: string, sqlField: string) => {
+    if (updates[tsField] !== undefined) {
+      fields.push(`${sqlField} = $${paramIndex++}`);
+      values.push(updates[tsField]);
+    }
+  };
+
+  mapField('title', 'title');
+  mapField('body', 'body');
+  mapField('imageUrl', 'image_url');
+  mapField('linkUrl', 'link_url');
+  mapField('priority', 'priority');
+  mapField('startDate', 'start_date');
+  mapField('endDate', 'end_date');
+
+  if (fields.length === 0) return;
+
+  values.push(id);
+  const queryText = `UPDATE announcements SET ${fields.join(', ')} WHERE id = $${paramIndex}`;
+  await query(queryText, values);
+}
+
+export async function deleteAnnouncementFromSQL(id: string) {
+  await query(`DELETE FROM announcements WHERE id = $1`, [id]);
 }
 
 // =========================================================================
@@ -916,4 +1109,322 @@ export async function getSessionsForClientAndDateFromSQL(clientId: string, dateS
     coachName: row.coach_name,
     createdAt: row.created_at
   }));
+}
+
+// =========================================================================
+// Operational Modules: Call Center, Complaints, Lost & Found, Calendar, Bookings, Club Operations
+// =========================================================================
+
+export async function getCallCenterLogs() {
+  const res = await query(`SELECT * FROM call_center_logs ORDER BY created_at DESC`);
+  return res.rows.map(row => ({
+    id: row.id, memberId: row.member_id, memberName: row.member_name, memberPhone: row.member_phone,
+    memberStatus: row.member_status, packageData: row.package_data, callType: row.call_type,
+    comment: row.comment, source: row.source, createdBy: row.created_by, createdByName: row.created_by_name,
+    createdAt: row.created_at, branch: row.branch
+  }));
+}
+
+export async function addCallCenterLog(log: any) {
+  await query(
+    `INSERT INTO call_center_logs (id, member_id, member_name, member_phone, member_status, package_data, call_type, comment, source, created_by, created_by_name, created_at, branch) 
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+    [log.id, log.memberId, log.memberName, log.memberPhone, log.memberStatus, log.packageData, log.callType, log.comment, log.source, log.createdBy, log.createdByName, log.createdAt, log.branch]
+  );
+}
+
+export async function getComplaints() {
+  const res = await query(`SELECT * FROM complaints ORDER BY created_at DESC`);
+  return res.rows.map(row => ({
+    id: row.id, title: row.title, description: row.description, categoryId: row.category_id,
+    categoryName: row.category_name, category: row.category, priority: row.priority, status: row.status,
+    memberId: row.member_id, memberName: row.member_name, branch: row.branch, resolutionNotes: row.resolution_notes,
+    resolvedAt: row.resolved_at, resolvedBy: row.resolved_by, createdBy: row.created_by, createdByName: row.created_by_name,
+    createdAt: row.created_at
+  }));
+}
+
+export async function addComplaint(complaint: any) {
+  await query(
+    `INSERT INTO complaints (id, title, description, category_id, category_name, category, priority, status, member_id, member_name, branch, resolution_notes, resolved_at, resolved_by, created_by, created_by_name, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+    [complaint.id, complaint.title, complaint.description, complaint.categoryId, complaint.categoryName, complaint.category, complaint.priority, complaint.status, complaint.memberId, complaint.memberName, complaint.branch, complaint.resolutionNotes, complaint.resolvedAt, complaint.resolvedBy, complaint.createdBy, complaint.createdByName, complaint.createdAt]
+  );
+}
+
+export async function updateComplaint(id: string, updates: any) {
+  const fields = [];
+  const values = [];
+  let paramIndex = 1;
+  const mappedKeys: any = {
+    title: 'title', description: 'description', categoryId: 'category_id', categoryName: 'category_name', category: 'category',
+    priority: 'priority', status: 'status', memberId: 'member_id', memberName: 'member_name', branch: 'branch',
+    resolutionNotes: 'resolution_notes', resolvedAt: 'resolved_at', resolvedBy: 'resolved_by'
+  };
+  for (const [key, val] of Object.entries(updates)) {
+    if (mappedKeys[key]) {
+      fields.push(`${mappedKeys[key]} = $${paramIndex++}`);
+      values.push(val);
+    }
+  }
+  if (fields.length === 0) return;
+  values.push(id);
+  await query(`UPDATE complaints SET ${fields.join(', ')} WHERE id = $${paramIndex}`, values);
+}
+
+export async function deleteComplaint(id: string) {
+  await query(`DELETE FROM complaints WHERE id = $1`, [id]);
+}
+export async function getLostAndFound() {
+  const res = await query(`SELECT * FROM lost_and_found ORDER BY found_date DESC`);
+  return res.rows.map(row => ({
+    id: row.id, itemName: row.item_name, name: row.name, description: row.description, categoryId: row.category_id,
+    categoryName: row.category_name, category: row.category, foundDate: row.found_date, foundBy: row.found_by,
+    branch: row.branch, photoURL: row.photo_url, status: row.status, claimedBy: row.claimed_by, claimedByName: row.claimed_by_name,
+    claimedDate: row.claimed_date, disposedDate: row.disposed_date, createdBy: row.created_by, createdAt: row.created_at
+  }));
+}
+
+export async function addLostAndFound(item: any) {
+  await query(
+    `INSERT INTO lost_and_found (id, item_name, name, description, category_id, category_name, category, found_date, found_by, branch, photo_url, status, claimed_by, claimed_by_name, claimed_date, disposed_date, created_by, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+    [item.id, item.itemName, item.name, item.description, item.categoryId, item.categoryName, item.category, item.foundDate, item.foundBy, item.branch, item.photoURL, item.status, item.claimedBy, item.claimedByName, item.claimedDate, item.disposedDate, item.createdBy, item.createdAt]
+  );
+}
+
+export async function updateLostAndFound(id: string, updates: any) {
+  const fields = [];
+  const values = [];
+  let paramIndex = 1;
+  const mappedKeys: any = {
+    itemName: 'item_name', name: 'name', description: 'description', categoryId: 'category_id', categoryName: 'category_name', category: 'category',
+    foundDate: 'found_date', foundBy: 'found_by', branch: 'branch', photoURL: 'photo_url', status: 'status', claimedBy: 'claimed_by',
+    claimedByName: 'claimed_by_name', claimedDate: 'claimed_date', disposedDate: 'disposed_date'
+  };
+  for (const [key, val] of Object.entries(updates)) {
+    if (mappedKeys[key]) {
+      fields.push(`${mappedKeys[key]} = $${paramIndex++}`);
+      values.push(val);
+    }
+  }
+  if (fields.length === 0) return;
+  values.push(id);
+  await query(`UPDATE lost_and_found SET ${fields.join(', ')} WHERE id = $${paramIndex}`, values);
+}
+
+export async function deleteLostAndFound(id: string) {
+  await query(`DELETE FROM lost_and_found WHERE id = $1`, [id]);
+}
+export async function getCalendarEvents() {
+  const res = await query(`SELECT * FROM calendar_events`);
+  return res.rows.map(row => ({
+    id: row.id, name: row.title, description: row.description, date: row.start_time,
+    time: row.end_time, type: row.type, branch: row.branch, createdBy: row.created_by, createdAt: row.created_at,
+    coachName: row.coach_name, capacity: row.capacity, attendees: row.attendees
+  }));
+}
+
+export async function addCalendarEvent(event: any) {
+  await query(
+    `INSERT INTO calendar_events (id, title, description, start_time, end_time, type, branch, created_by, created_at, coach_name, capacity, attendees)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    [event.id, event.name, event.description, event.date, event.time, event.type, event.branch, event.createdBy, event.createdAt, event.coachName, event.capacity, JSON.stringify(event.attendees || [])]
+  );
+}
+
+export async function deleteCalendarEvent(id: string) {
+  await query(`DELETE FROM calendar_events WHERE id = $1`, [id]);
+}
+
+export async function getBookingRequests() {
+  const res = await query(`SELECT * FROM booking_requests ORDER BY created_at DESC`);
+  return res.rows.map(row => ({
+    id: row.id,
+    clientName: row.client_name,
+    clientPhone: row.client_phone,
+    clientEmail: row.client_email,
+    clientId: row.client_id,
+    items: row.items,
+    totalPrice: Number(row.total_price),
+    paymentMethod: row.payment_method,
+    instapayRef: row.instapay_ref,
+    status: row.status,
+    createdAt: row.created_at
+  }));
+}
+
+export async function updateBookingRequestStatus(id: string, status: string) {
+  await query(`UPDATE booking_requests SET status = $1 WHERE id = $2`, [status, id]);
+}
+
+export async function updateClient(id: string, fields: any) {
+  const updates = [];
+  const values = [];
+  let i = 1;
+  for (const key of Object.keys(fields)) {
+    let col = key;
+    if (key === 'lastContactDate') col = 'last_contact_date';
+    updates.push(`${col} = $${i}`);
+    values.push(fields[key]);
+    i++;
+  }
+  values.push(id);
+  await query(`UPDATE clients SET ${updates.join(', ')} WHERE id = $${i}`, values);
+}
+
+export async function addTask(task: any) {
+  await query(
+    `INSERT INTO tasks (id, title, description, status, due_date, assigned_to, type, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [task.id, task.title, task.description, task.status, task.dueDate, task.assignedTo, task.type, task.createdAt]
+  );
+}
+
+export async function getBookings() {
+  const res = await query(`SELECT * FROM bookings ORDER BY booking_date DESC`);
+  return res.rows.map(row => ({
+    id: row.id, memberId: row.member_id, memberName: row.member_name, classId: row.class_id, className: row.class_name,
+    bookingDate: row.booking_date, bookingTime: row.booking_time, status: row.status, branch: row.branch,
+    createdBy: row.created_by, createdAt: row.created_at
+  }));
+}
+
+export async function addBooking(booking: any) {
+  await query(
+    `INSERT INTO bookings (id, member_id, member_name, class_id, class_name, booking_date, booking_time, status, branch, created_by, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+    [booking.id, booking.memberId, booking.memberName, booking.classId, booking.className, booking.bookingDate, booking.bookingTime, booking.status, booking.branch, booking.createdBy, booking.createdAt]
+  );
+}
+
+export async function updateBooking(id: string, updates: any) {
+  const fields = [];
+  const values = [];
+  let paramIndex = 1;
+  const mappedKeys: any = { status: 'status' };
+  for (const [key, val] of Object.entries(updates)) {
+    if (mappedKeys[key]) {
+      fields.push(`${mappedKeys[key]} = $${paramIndex++}`);
+      values.push(val);
+    }
+  }
+  if (fields.length === 0) return;
+  values.push(id);
+  await query(`UPDATE bookings SET ${fields.join(', ')} WHERE id = $${paramIndex}`, values);
+}
+
+export async function getClubOperations() {
+  const res = await query(`SELECT * FROM club_operations ORDER BY created_at DESC`);
+  return res.rows.map(row => ({
+    id: row.id, taskName: row.task_name, description: row.description, taskType: row.task_type, status: row.status,
+    priority: row.priority, assignedTo: row.assigned_to, assignedToName: row.assigned_to_name, dueDate: row.due_date,
+    completedAt: row.completed_at, completedBy: row.completed_by, branch: row.branch, createdBy: row.created_by, createdAt: row.created_at
+  }));
+}
+
+export async function addClubOperation(op: any) {
+  await query(
+    `INSERT INTO club_operations (id, task_name, description, task_type, status, priority, assigned_to, assigned_to_name, due_date, completed_at, completed_by, branch, created_by, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    [op.id, op.taskName, op.description, op.taskType, op.status, op.priority, op.assignedTo, op.assignedToName, op.dueDate, op.completedAt, op.completedBy, op.branch, op.createdBy, op.createdAt]
+  );
+}
+
+export async function updateClubOperation(id: string, updates: any) {
+  const fields = [];
+  const values = [];
+  let paramIndex = 1;
+  const mappedKeys: any = { status: 'status', completedAt: 'completed_at', completedBy: 'completed_by', assignedTo: 'assigned_to', assignedToName: 'assigned_to_name' };
+  for (const [key, val] of Object.entries(updates)) {
+    if (mappedKeys[key]) {
+      fields.push(`${mappedKeys[key]} = $${paramIndex++}`);
+      values.push(val);
+    }
+  }
+  if (fields.length === 0) return;
+  values.push(id);
+  await query(`UPDATE club_operations SET ${fields.join(', ')} WHERE id = $${paramIndex}`, values);
+}
+
+export async function getJuiceBarOrders() {
+  const res = await query(`SELECT * FROM juice_bar_orders`);
+  return res.rows.map(row => ({
+    id: row.id, memberId: row.member_id, memberName: row.member_name, items: row.items,
+    totalPrice: Number(row.total_price), status: row.status, orderedAt: row.ordered_at
+  }));
+}
+
+export async function updateJuiceBarOrder(id: string, status: string) {
+  await query(`UPDATE juice_bar_orders SET status = $1 WHERE id = $2`, [status, id]);
+}
+
+export async function getLockers() {
+  const res = await query(`SELECT * FROM lockers`);
+  return res.rows.map(row => ({
+    id: row.id, lockerNumber: row.locker_number, branch: row.branch, status: row.status,
+    assignedTo: row.assigned_to, assignedName: row.assigned_name, pinCode: row.pin_code
+  }));
+}
+
+export async function addLocker(locker: any) {
+  await query(
+    `INSERT INTO lockers (id, locker_number, branch, status) VALUES ($1, $2, $3, $4)`,
+    [locker.id, locker.lockerNumber, locker.branch, locker.status]
+  );
+}
+
+export async function updateLocker(id: string, fields: any) {
+  const updates = [];
+  const values = [];
+  let i = 1;
+  for (const key of Object.keys(fields)) {
+    let col = key;
+    if (key === 'lockerNumber') col = 'locker_number';
+    if (key === 'assignedTo') col = 'assigned_to';
+    if (key === 'assignedName') col = 'assigned_name';
+    if (key === 'pinCode') col = 'pin_code';
+    updates.push(`${col} = $${i}`);
+    values.push(fields[key]);
+    i++;
+  }
+  if (updates.length === 0) return;
+  values.push(id);
+  await query(`UPDATE lockers SET ${updates.join(', ')} WHERE id = $${i}`, values);
+}
+
+export async function deleteLocker(id: string) {
+  await query(`DELETE FROM lockers WHERE id = $1`, [id]);
+}
+
+export async function getLockerRequests() {
+  const res = await query(`SELECT * FROM locker_requests`);
+  return res.rows.map(row => ({
+    id: row.id, clientId: row.client_id, clientName: row.client_name, branch: row.branch,
+    duration: row.duration, status: row.status, requestedAt: row.requested_at
+  }));
+}
+
+export async function updateLockerRequest(id: string, status: string) {
+  await query(`UPDATE locker_requests SET status = $1 WHERE id = $2`, [status, id]);
+}
+
+export async function getGuestInvites() {
+  const res = await query(`SELECT * FROM guest_invites`);
+  return res.rows.map(row => ({
+    id: row.id, guestName: row.guest_name, guestPhone: row.guest_phone, invitedById: row.invited_by_id,
+    invitedByName: row.invited_by_name, visitDate: row.visit_date, status: row.status, notes: row.notes, createdAt: row.created_at
+  }));
+}
+
+export async function updateGuestInvite(id: string, status: string) {
+  await query(`UPDATE guest_invites SET status = $1 WHERE id = $2`, [status, id]);
+}
+
+export async function addAuditLog(log: any) {
+  await query(
+    `INSERT INTO audit_logs (id, action, entity_type, entity_id, details, user_id, user_name, timestamp)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [log.id, log.action, log.entityType, log.entityId, log.details, log.userId, log.userName, log.timestamp]
+  );
 }

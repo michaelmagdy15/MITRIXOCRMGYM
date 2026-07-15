@@ -157,6 +157,9 @@ export default function Dashboard() {
   };
   const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
   const [newTarget, setNewTarget] = useState(salesTarget.targetAmount.toString());
+  const [newPtTarget, setNewPtTarget] = useState((salesTarget.ptTarget || 0).toString());
+  const [newClassesTarget, setNewClassesTarget] = useState((salesTarget.classesTarget || 0).toString());
+  const [newMembershipsTarget, setNewMembershipsTarget] = useState((salesTarget.membershipsTarget || 0).toString());
   const [selectedRepId, setSelectedRepId] = useState<string>('all');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedMonthOffset, setSelectedMonthOffset] = useState(0);
@@ -346,14 +349,18 @@ export default function Dashboard() {
 
   const handleUpdateTarget = () => {
     const target = parseFloat(newTarget);
+    const pt = parseFloat(newPtTarget) || 0;
+    const classes = parseFloat(newClassesTarget) || 0;
+    const memberships = parseFloat(newMembershipsTarget) || 0;
+
     if (!isNaN(target) && target > 0) {
       if (canViewGlobalDashboard && effectiveRepId !== 'all') {
-        updateUserTarget(effectiveRepId, currentMonthStr, target);
+        updateUserTarget(effectiveRepId, currentMonthStr, target, pt, classes, memberships);
       } else {
         if (canViewGlobalDashboard) {
-          updateUserTarget('global', currentMonthStr, target);
+          updateUserTarget('global', currentMonthStr, target, pt, classes, memberships);
         }
-        updateSalesTarget(target);
+        updateSalesTarget(target, pt, classes, memberships);
       }
       setIsTargetDialogOpen(false);
     }
@@ -367,6 +374,9 @@ export default function Dashboard() {
   
   const filteredSalesData = React.useMemo(() => {
     let targetAmount = 0;
+    let ptTarget = 0;
+    let classesTarget = 0;
+    let membershipsTarget = 0;
 
     let relevantPayments = payments.filter(p => {
       if (!p.date) return false;
@@ -382,6 +392,9 @@ export default function Dashboard() {
         (t.month === currentMonthStr || t.month_year === currentMonthStr)
       );
       targetAmount = repTarget?.targetAmount ?? 0;
+      ptTarget = repTarget?.ptTarget ?? 0;
+      classesTarget = repTarget?.classesTarget ?? 0;
+      membershipsTarget = repTarget?.membershipsTarget ?? 0;
 
       const selectedUser = users.find(u => u.id === effectiveRepId);
       const repName = selectedUser?.name || '';
@@ -394,6 +407,9 @@ export default function Dashboard() {
 
       if (globalMonthlyTarget) {
         targetAmount = globalMonthlyTarget.targetAmount;
+        ptTarget = globalMonthlyTarget.ptTarget ?? 0;
+        classesTarget = globalMonthlyTarget.classesTarget ?? 0;
+        membershipsTarget = globalMonthlyTarget.membershipsTarget ?? 0;
       } else {
         // Manager viewing all reps — sum every active rep's target for the selected month
         const monthTargets = userTargets.filter(t =>
@@ -402,6 +418,9 @@ export default function Dashboard() {
         targetAmount = monthTargets.length > 0
           ? monthTargets.reduce((sum, t) => sum + (t.targetAmount || 0), 0)
           : salesTarget.targetAmount;
+        ptTarget = monthTargets.length > 0 ? monthTargets.reduce((sum, t) => sum + (t.ptTarget || 0), 0) : (salesTarget.ptTarget || 0);
+        classesTarget = monthTargets.length > 0 ? monthTargets.reduce((sum, t) => sum + (t.classesTarget || 0), 0) : (salesTarget.classesTarget || 0);
+        membershipsTarget = monthTargets.length > 0 ? monthTargets.reduce((sum, t) => sum + (t.membershipsTarget || 0), 0) : (salesTarget.membershipsTarget || 0);
       }
     } else if (!canViewGlobalDashboard && currentUser) {
       // Rep viewing their own data
@@ -411,6 +430,9 @@ export default function Dashboard() {
       );
       if (repTarget) {
         targetAmount = repTarget.targetAmount;
+        ptTarget = repTarget.ptTarget ?? 0;
+        classesTarget = repTarget.classesTarget ?? 0;
+        membershipsTarget = repTarget.membershipsTarget ?? 0;
       } else if (currentUser.salesTarget) {
         targetAmount = currentUser.salesTarget;
       }
@@ -419,11 +441,14 @@ export default function Dashboard() {
     const currentAmount = relevantPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
     const privatePayments = relevantPayments.filter(p => isPrivatePackage(p.packageType));
     const groupPayments = relevantPayments.filter(p => isGroupPackage(p.packageType));
+    const membershipPayments = relevantPayments.filter(p => !isPrivatePackage(p.packageType) && !isGroupPackage(p.packageType));
 
     const privateSessionsSold = privatePayments.length;
     const groupSessionsSold = groupPayments.length;
+    const membershipsSold = membershipPayments.length;
     const privateRevenue = privatePayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
     const groupRevenue = groupPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+    const membershipsRevenue = membershipPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
     
     const cash = relevantPayments.filter(p => p.method === 'Cash').reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
     const visa = relevantPayments.filter(p => p.method === 'Credit Card').reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
@@ -431,11 +456,16 @@ export default function Dashboard() {
 
     return {
       targetAmount,
+      ptTarget,
+      classesTarget,
+      membershipsTarget,
       currentAmount,
       privateSessionsSold,
       groupSessionsSold,
+      membershipsSold,
       privateRevenue,
       groupRevenue,
+      membershipsRevenue,
       cash,
       visa,
       instapay,
@@ -448,9 +478,10 @@ export default function Dashboard() {
   const totalVisa = filteredSalesData.visa;
   const totalInstapay = filteredSalesData.instapay;
 
-  const totalPackagesSold = filteredSalesData.privateSessionsSold + filteredSalesData.groupSessionsSold;
+  const totalPackagesSold = filteredSalesData.privateSessionsSold + filteredSalesData.groupSessionsSold + filteredSalesData.membershipsSold;
   const privatePercentage = totalPackagesSold > 0 ? Math.round((filteredSalesData.privateSessionsSold / totalPackagesSold) * 100) : 0;
   const groupPercentage = totalPackagesSold > 0 ? Math.round((filteredSalesData.groupSessionsSold / totalPackagesSold) * 100) : 0;
+  const membershipsPercentage = totalPackagesSold > 0 ? Math.round((filteredSalesData.membershipsSold / totalPackagesSold) * 100) : 0;
 
   // Chart Data (personal - for rep view)
   const chartData = React.useMemo(() => {
@@ -798,7 +829,15 @@ export default function Dashboard() {
               <CardTitle className="text-sm font-medium">{t('dashboard.sales_target')}</CardTitle>
               {canAccessSettings && (
                 <CardAction>
-                  <Dialog open={isTargetDialogOpen} onOpenChange={setIsTargetDialogOpen}>
+                  <Dialog open={isTargetDialogOpen} onOpenChange={(open) => {
+                    setIsTargetDialogOpen(open);
+                    if (open) {
+                      setNewTarget(filteredSalesData.targetAmount.toString());
+                      setNewPtTarget(filteredSalesData.ptTarget.toString());
+                      setNewClassesTarget(filteredSalesData.classesTarget.toString());
+                      setNewMembershipsTarget(filteredSalesData.membershipsTarget.toString());
+                    }
+                  }}>
                     <DialogTrigger
                       render={
                         <Button variant="ghost" size="icon" className="h-6 w-6">
@@ -812,11 +851,35 @@ export default function Dashboard() {
                       </DialogHeader>
                       <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                          <Label>{t('dashboard.new_target_amount')}</Label>
+                          <Label>{t('dashboard.new_target_amount')} (Total)</Label>
                           <Input 
                             type="number" 
                             value={newTarget} 
                             onChange={(e) => setNewTarget(e.target.value)} 
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>PT Target (LE)</Label>
+                          <Input 
+                            type="number" 
+                            value={newPtTarget} 
+                            onChange={(e) => setNewPtTarget(e.target.value)} 
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Classes Target (LE)</Label>
+                          <Input 
+                            type="number" 
+                            value={newClassesTarget} 
+                            onChange={(e) => setNewClassesTarget(e.target.value)} 
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Memberships Target (LE)</Label>
+                          <Input 
+                            type="number" 
+                            value={newMembershipsTarget} 
+                            onChange={(e) => setNewMembershipsTarget(e.target.value)} 
                           />
                         </div>
                         <Button onClick={handleUpdateTarget} className="w-full">{t('dashboard.save_target')}</Button>
@@ -846,7 +909,9 @@ export default function Dashboard() {
                       <div>
                         <span className="text-muted-foreground block text-[11px] mb-0.5">{t('dashboard.pt_packages')}</span>
                         <span className="text-lg font-bold">
-                          {filteredSalesData.privateRevenue.toLocaleString()} <span className="text-xs font-normal">LE</span>
+                          {filteredSalesData.privateRevenue.toLocaleString()} 
+                          {filteredSalesData.ptTarget > 0 && <span className="text-sm font-normal text-muted-foreground"> / {filteredSalesData.ptTarget.toLocaleString()}</span>}
+                          <span className="text-xs font-normal"> LE</span>
                         </span>
                       </div>
                       <div className="text-right">
@@ -855,6 +920,14 @@ export default function Dashboard() {
                         </Badge>
                       </div>
                     </div>
+                    {filteredSalesData.ptTarget > 0 && (
+                      <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden mt-1">
+                        <div 
+                          className="h-full bg-blue-500" 
+                          style={{ width: `${Math.min((filteredSalesData.privateRevenue / filteredSalesData.ptTarget) * 100, 100)}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
@@ -862,7 +935,9 @@ export default function Dashboard() {
                       <div>
                         <span className="text-muted-foreground block text-[11px] mb-0.5">{t('dashboard.group_packages')}</span>
                         <span className="text-lg font-bold">
-                          {filteredSalesData.groupRevenue.toLocaleString()} <span className="text-xs font-normal">LE</span>
+                          {filteredSalesData.groupRevenue.toLocaleString()}
+                          {filteredSalesData.classesTarget > 0 && <span className="text-sm font-normal text-muted-foreground"> / {filteredSalesData.classesTarget.toLocaleString()}</span>}
+                          <span className="text-xs font-normal"> LE</span>
                         </span>
                       </div>
                       <div className="text-right">
@@ -871,6 +946,40 @@ export default function Dashboard() {
                         </Badge>
                       </div>
                     </div>
+                    {filteredSalesData.classesTarget > 0 && (
+                      <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden mt-1">
+                        <div 
+                          className="h-full bg-emerald-500" 
+                          style={{ width: `${Math.min((filteredSalesData.groupRevenue / filteredSalesData.classesTarget) * 100, 100)}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px] mb-0.5">Memberships</span>
+                        <span className="text-lg font-bold">
+                          {filteredSalesData.membershipsRevenue.toLocaleString()}
+                          {filteredSalesData.membershipsTarget > 0 && <span className="text-sm font-normal text-muted-foreground"> / {filteredSalesData.membershipsTarget.toLocaleString()}</span>}
+                          <span className="text-xs font-normal"> LE</span>
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant="outline" className="font-semibold px-1.5 py-0 h-5 bg-purple-500/10 text-purple-500 border-purple-500/20">
+                          {filteredSalesData.membershipsSold} {t('dashboard.packages')}
+                        </Badge>
+                      </div>
+                    </div>
+                    {filteredSalesData.membershipsTarget > 0 && (
+                      <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden mt-1">
+                        <div 
+                          className="h-full bg-purple-500" 
+                          style={{ width: `${Math.min((filteredSalesData.membershipsRevenue / filteredSalesData.membershipsTarget) * 100, 100)}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

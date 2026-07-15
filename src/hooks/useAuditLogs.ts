@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, getDocs, query, orderBy, where, limit } from 'firebase/firestore';
-import { db } from '../firebase';
+import { auth } from '../firebase';
 import { AuditLog, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { subYears, formatISO } from 'date-fns';
@@ -45,17 +44,22 @@ export const useAuditLogs = (currentUser: User | null, params: AuditLogQueryPara
         ? egyptDayBoundary(params.dateTo, true)
         : formatISO(new Date());
 
+      const token = await auth.currentUser?.getIdToken();
+      const url = new URL('/api/audit-logs', window.location.origin);
+      url.searchParams.append('fromISO', fromISO);
+      url.searchParams.append('toISO', toISO);
+      url.searchParams.append('limit', MAX_FETCH.toString());
 
-      const q = query(
-        collection(db, 'auditLogs'),
-        where('timestamp', '>=', fromISO),
-        where('timestamp', '<=', toISO),
-        orderBy('timestamp', 'desc'),
-        limit(MAX_FETCH)
-      );
-      const snap = await getDocs(q);
-      setAuditLogs(snap.docs.map(d => ({ ...d.data(), id: d.id } as AuditLog)));
+      const res = await fetch(url.toString(), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data.auditLogs || []);
+      }
     } catch (error) {
+      console.error('Failed to fetch audit logs:', error);
       handleFirestoreError(error, OperationType.LIST, 'auditLogs');
     } finally {
       setLoading(false);

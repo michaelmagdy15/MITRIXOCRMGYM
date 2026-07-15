@@ -6,11 +6,58 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { db } from '../firebase';
+import { db, storage, auth, getTenantId } from '../firebase';
 import { doc, updateDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
-import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Flame, Trophy } from 'lucide-react';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Flame, Trophy, Camera, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays } from 'date-fns';
+
+const MAX_PX = 400;
+const TARGET_KB = 150;
+const MIN_QUALITY = 0.30;
+
+async function compressImage(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      let { width, height } = img;
+      if (width > MAX_PX || height > MAX_PX) {
+        if (width > height) { height = Math.round((height / width) * MAX_PX); width = MAX_PX; }
+        else               { width  = Math.round((width / height) * MAX_PX); height = MAX_PX; }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+
+      const tryCompress = (quality: number) => {
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { reject(new Error('Canvas toBlob failed')); return; }
+            if (blob.size / 1024 <= TARGET_KB || quality <= MIN_QUALITY) {
+              resolve(blob);
+            } else {
+              tryCompress(Math.max(MIN_QUALITY, quality - 0.15));
+            }
+          },
+          'image/jpeg',
+          quality,
+        );
+      };
+
+      tryCompress(0.75);
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Failed to load image')); };
+    img.src = objectUrl;
+  });
+}
 
 export default function MemberProfile({ client }: { client: Client | null }) {
   const { currentUser, changeMyPassword } = useAuth();
@@ -41,6 +88,50 @@ export default function MemberProfile({ client }: { client: Client | null }) {
   // Attendance stats for hero card
   const [totalCheckins, setTotalCheckins] = useState(0);
   const [currentStreak, setCurrentStreak] = useState(0);
+
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !client?.id) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file.');
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      const compressed = await compressImage(file);
+      const fileRef = storageRef(storage, `member_photos/${client.id}`);
+      await uploadBytes(fileRef, compressed, { contentType: 'image/jpeg' });
+      const url = await getDownloadURL(fileRef);
+      
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          await fetch('/api/clients/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ id: client.id, updates: { photoURL: url } })
+          });
+        }
+      }
+
+      const clientRef = doc(db, 'clients', client.id);
+      await updateDoc(clientRef, { photoURL: url });
+      
+      toast.success('Profile photo updated successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to upload profile photo.');
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
 
   useEffect(() => {
     if (!client?.id) return;
@@ -77,12 +168,25 @@ export default function MemberProfile({ client }: { client: Client | null }) {
     setProfileError(null);
 
     try {
+      const updates = { name: name.trim(), phone: phone.trim() };
+      
+      if (getTenantId() === 'inzanathletics') {
+        const token = await auth.currentUser?.getIdToken();
+        if (token) {
+          await fetch('/api/clients/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ id: client.id, updates })
+          });
+        }
+      }
+
       // 1. Update clients collection
       const clientRef = doc(db, 'clients', client.id);
-      await updateDoc(clientRef, {
-        name: name.trim(),
-        phone: phone.trim()
-      });
+      await updateDoc(clientRef, updates);
 
       // 2. Update users collection
       const userRef = doc(db, 'users', currentUser.id);
@@ -219,8 +323,35 @@ export default function MemberProfile({ client }: { client: Client | null }) {
         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-8 translate-x-8" />
         <div className="flex items-center gap-4">
           {/* Avatar Circle */}
-          <div className="h-16 w-16 rounded-2xl bg-primary/20 border-2 border-primary/30 flex items-center justify-center text-xl font-extrabold text-primary shrink-0">
-            {initials}
+          <div className="relative group">
+            <div className="h-16 w-16 rounded-2xl bg-primary/20 border-2 border-primary/30 flex items-center justify-center text-xl font-extrabold text-primary shrink-0 overflow-hidden">
+              {client?.photoURL ? (
+                <img src={client.photoURL} alt={client.name} className="w-full h-full object-cover" />
+              ) : (
+                initials
+              )}
+            </div>
+            
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              id="member-photo-upload"
+              onChange={handlePhotoUpload}
+              disabled={isUploadingPhoto}
+            />
+            <Label
+              htmlFor="member-photo-upload"
+              className={`absolute -bottom-2 -right-2 h-7 w-7 rounded-full border border-border shadow-sm flex items-center justify-center cursor-pointer transition-colors ${
+                isUploadingPhoto ? 'bg-muted text-muted-foreground' : 'bg-background hover:bg-muted text-foreground'
+              }`}
+            >
+              {isUploadingPhoto ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Camera className="h-3.5 w-3.5" />
+              )}
+            </Label>
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-extrabold tracking-tight truncate uppercase">{client?.name || 'MEMBER'}</h2>

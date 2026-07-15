@@ -265,30 +265,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                              window.location.pathname === '/superadmin';
     if (isSuperAdminMode) return;
 
-    const staffQuery = query(
-      collection(db, 'users'),
-      where('role', 'in', ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'])
-    );
-    const unsubUsers = onSnapshot(staffQuery, (snapshot) => {
-      const allUsersData = snapshot.docs.map(d => {
-        const data = d.data();
-        const hasStoredId = 'id' in data;
-        const user = { ...data, id: d.id } as User;
-        user.isPending = !hasStoredId;
-        return { user, hasStoredId };
-      });
-      const emailMap = new Map<string, { user: User; hasStoredId: boolean }>();
-      allUsersData.forEach(({ user, hasStoredId }) => {
-        const emailKey = (user.email || '').toLowerCase();
-        const existing = emailMap.get(emailKey);
-        if (!existing || (hasStoredId && !existing.hasStoredId)) {
-          emailMap.set(emailKey, { user, hasStoredId });
+    const fetchUsers = async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+        const res = await fetch('/api/users', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const allFetched = data.users || [];
+          const staffUsers = allFetched.filter((u: any) => 
+            ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role)
+          );
+
+          const allUsersData = staffUsers.map((d: any) => {
+            const hasStoredId = 'id' in d && d.id !== undefined && d.id !== null && d.id !== '';
+            const user = { ...d } as User;
+            user.isPending = !hasStoredId;
+            return { user, hasStoredId };
+          });
+          const emailMap = new Map<string, { user: User; hasStoredId: boolean }>();
+          allUsersData.forEach(({ user, hasStoredId }: any) => {
+            const emailKey = (user.email || '').toLowerCase();
+            const existing = emailMap.get(emailKey);
+            if (!existing || (hasStoredId && !existing.hasStoredId)) {
+              emailMap.set(emailKey, { user, hasStoredId });
+            }
+          });
+          setAllUsers(allUsersData.map((e: any) => e.user));
+          setUsers(Array.from(emailMap.values()).map(e => e.user));
         }
-      });
-      setAllUsers(allUsersData.map(e => e.user));
-      setUsers(Array.from(emailMap.values()).map(e => e.user));
-    }, (error) => console.error('Firestore Error (users):', error));
-    return () => unsubUsers();
+      } catch (error) {
+        console.error('Error fetching users from API:', error);
+      }
+    };
+
+    fetchUsers();
+    const intervalId = setInterval(fetchUsers, 15000); // Poll every 15 seconds
+    return () => clearInterval(intervalId);
   }, [currentUser]);
 
   // Pending accounts + password reset requests listeners (admin/manager only)

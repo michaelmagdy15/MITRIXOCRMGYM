@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { BrandingSettings, SalesTarget, Branch, FeatureFlags, StorefrontConfig } from '../types';
-import { db } from '../firebase';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { auth } from '../firebase';
 import { addAuditLog } from '../services/auditService';
+
 
 const DEFAULT_ACCENT = '#1a1a1a';
 
@@ -22,7 +22,7 @@ interface SettingsContextType {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   salesTarget: SalesTarget;
-  updateSalesTarget: (target: number) => Promise<void>;
+  updateSalesTarget: (target: number, ptTarget?: number, classesTarget?: number, membershipsTarget?: number) => Promise<void>;
   setSalesTarget: React.Dispatch<React.SetStateAction<SalesTarget>>;
   branches: Branch[];
   updateBranches: (branches: Branch[]) => Promise<void>;
@@ -170,9 +170,47 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   }, []);
 
   // Branding — load or subscribe to branding settings
+  const fetchSettings = useCallback(async () => {
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (isAuthenticated && auth.currentUser) {
+        const token = await auth.currentUser.getIdToken();
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch('/api/settings', { headers });
+      const data = await response.json();
+      const settings = data.settings || {};
+
+      if (settings.branding) {
+        applyBrandAccent(settings.branding.brandAccentColor);
+        preloadBrandingLogo(settings.branding as BrandingSettings, () => {
+          setIsBrandingLoaded(true);
+        });
+      } else {
+        setIsBrandingLoaded(true);
+      }
+
+      if (settings.features) setFeatures(prev => ({ ...prev, ...settings.features }));
+      if (settings.storefront) setStorefrontConfig(prev => ({ ...prev, ...settings.storefront }));
+      if (settings.branches?.branches && Array.isArray(settings.branches.branches)) {
+        setBranches(settings.branches.branches);
+      }
+      
+      if (isAuthenticated && role !== 'client' && role !== 'coach') {
+        if (settings.commission) setCommissionRates(settings.commission);
+        if (settings['sales-target']) {
+          setSalesTarget(prev => ({ ...prev, ...settings['sales-target'] }));
+        }
+      }
+    } catch (err: any) {
+      console.error('Could not load settings:', err);
+      setIsBrandingLoaded(true);
+    }
+  }, [isAuthenticated, role, preloadBrandingLogo]);
+
   useEffect(() => {
     let active = true;
-
     const safetyTimeout = setTimeout(() => {
       if (active) {
         console.warn('Branding load safety timeout triggered');
@@ -180,176 +218,81 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       }
     }, 2500);
 
-    const handleSuccess = (snapshot: any) => {
+    fetchSettings().finally(() => {
       clearTimeout(safetyTimeout);
-      if (active) {
-        if (snapshot.exists()) {
-          applyBrandAccent(snapshot.data()?.brandAccentColor);
-          preloadBrandingLogo(snapshot.data() as BrandingSettings, () => {
-            if (active) setIsBrandingLoaded(true);
-          });
-        } else {
-          setIsBrandingLoaded(true);
-        }
-      }
-    };
+    });
 
-    const handleError = (err: any) => {
-      clearTimeout(safetyTimeout);
-      console.warn('Could not load branding:', err.code || err.message);
-      if (active) setIsBrandingLoaded(true);
-    };
-
-    if (!isAuthenticated || role === 'client' || role === 'coach') {
-      // One-time read for unauthenticated/members/coaches
-      getDoc(doc(db, 'settings', 'branding'))
-        .then(handleSuccess)
-        .catch(handleError);
-      return () => {
-        active = false;
-        clearTimeout(safetyTimeout);
-      };
+    let interval: ReturnType<typeof setInterval>;
+    if (isAuthenticated && role !== 'client') {
+      interval = setInterval(fetchSettings, 30000);
     }
 
-    // Real-time listener for staff/admin
-    const unsubBranding = onSnapshot(
-      doc(db, 'settings', 'branding'),
-      handleSuccess,
-      handleError
-    );
     return () => {
       active = false;
       clearTimeout(safetyTimeout);
-      unsubBranding();
+      if (interval) clearInterval(interval);
     };
-  }, [role, isAuthenticated, preloadBrandingLogo]);
+  }, [fetchSettings, isAuthenticated, role]);
 
-  // Features — load or subscribe to feature flags
-  useEffect(() => {
-    if (!isAuthenticated || role === 'client' || role === 'coach') {
-      getDoc(doc(db, 'settings', 'features'))
-        .then((snapshot) => {
-          if (snapshot.exists()) setFeatures(prev => ({ ...prev, ...snapshot.data() }));
-        })
-        .catch((err) => console.warn('Could not load features:', err.message));
-      return;
+  const updateSetting = async (id: string, updates: any) => {
+    let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (auth.currentUser) {
+      const token = await auth.currentUser.getIdToken();
+      headers['Authorization'] = `Bearer ${token}`;
     }
-
-    const unsubFeatures = onSnapshot(
-      doc(db, 'settings', 'features'),
-      (snapshot) => {
-        if (snapshot.exists()) setFeatures(prev => ({ ...prev, ...snapshot.data() }));
-      },
-      (error) => console.warn('Firestore Error (features):', error.message)
-    );
-    return () => { unsubFeatures(); };
-  }, [role, isAuthenticated]);
-
-  // Storefront config — load for everyone, real-time for admins
-  useEffect(() => {
-    if (!isAuthenticated || role === 'client' || role === 'coach') {
-      getDoc(doc(db, 'settings', 'storefront'))
-        .then((snapshot) => {
-          if (snapshot.exists()) setStorefrontConfig(prev => ({ ...prev, ...snapshot.data() as Partial<StorefrontConfig> }));
-        })
-        .catch((err) => console.warn('Could not load storefront config:', err.code || err.message));
-      return;
-    }
-    const unsubStorefront = onSnapshot(
-      doc(db, 'settings', 'storefront'),
-      (snapshot) => {
-        if (snapshot.exists()) setStorefrontConfig(prev => ({ ...prev, ...snapshot.data() as Partial<StorefrontConfig> }));
-      },
-      (error) => console.warn('Firestore Error (storefront):', error.code || error.message)
-    );
-    return () => { unsubStorefront(); };
-  }, [role, isAuthenticated]);
-
-  // Branches — load or subscribe to physical branches list
-  useEffect(() => {
-    if (!isAuthenticated || role === 'client' || role === 'coach') {
-      getDoc(doc(db, 'settings', 'branches'))
-        .then((snapshot) => {
-          if (snapshot.exists()) {
-            const data = snapshot.data();
-            if (data?.branches && Array.isArray(data.branches)) setBranches(data.branches);
-          }
-        })
-        .catch((err) => console.warn('Could not load branches:', err.message));
-      return;
-    }
-
-    const unsubBranches = onSnapshot(
-      doc(db, 'settings', 'branches'),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          if (data?.branches && Array.isArray(data.branches)) setBranches(data.branches);
-        }
-      },
-      (error) => console.error('Firestore Error (branches):', error)
-    );
-    return () => { unsubBranches(); };
-  }, [role, isAuthenticated]);
-
-  // Auth-required settings — only subscribe when a privileged user is logged in to avoid permission errors
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (role === 'coach' || role === 'client') return;
-
-    const unsubCommission = onSnapshot(
-      doc(db, 'settings', 'commission'),
-      (snapshot) => {
-        if (snapshot.exists()) setCommissionRates(snapshot.data() as { ptRate: number; groupRate: number });
-      },
-      (error) => console.error('Firestore Error (commission):', error)
-    );
-
-    const unsubTarget = onSnapshot(
-      doc(db, 'settings', 'sales-target'),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          setSalesTarget(prev => ({ ...prev, targetAmount: data.targetAmount || 50000 }));
-        }
-      },
-      (error) => console.error('Firestore Error (sales-target):', error)
-    );
-
-    return () => { unsubCommission(); unsubTarget(); };
-  }, [role, isAuthenticated]);
+    const res = await fetch('/api/settings/update', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id, updates })
+    });
+    if (!res.ok) throw new Error(`Failed to update ${id}`);
+  };
 
   const updateBranding = useCallback(async (updates: Partial<BrandingSettings>) => {
-    await setDoc(doc(db, 'settings', 'branding'), updates, { merge: true });
+    await updateSetting('branding', updates);
+    setBranding(prev => ({ ...prev, ...updates }));
     if (updates.brandAccentColor !== undefined) {
       applyBrandAccent(updates.brandAccentColor);
     }
     await addAuditLog('UPDATE', 'TARGET', 'branding', `Updated branding settings`);
   }, []);
 
-  const updateSalesTarget = useCallback(async (target: number) => {
-    await setDoc(doc(db, 'settings', 'sales-target'), { targetAmount: target }, { merge: true });
-    await addAuditLog('UPDATE', 'TARGET', 'sales-target', `Updated overall sales target to ${target}`);
+  const updateSalesTarget = useCallback(async (target: number, ptTarget?: number, classesTarget?: number, membershipsTarget?: number) => {
+    try {
+      const dataToSave = { 
+        targetAmount: target,
+        ...(ptTarget !== undefined && { ptTarget }),
+        ...(classesTarget !== undefined && { classesTarget }),
+        ...(membershipsTarget !== undefined && { membershipsTarget })
+      };
+      await updateSetting('sales-target', dataToSave);
+      setSalesTarget(prev => ({ ...prev, ...dataToSave }));
+      await addAuditLog('UPDATE', 'SYSTEM', 'sales-target', `Updated global sales target to ${target} LE`);
+    } catch (error) {
+      console.error('Failed to update sales target', error);
+    }
   }, []);
 
   const updateBranches = useCallback(async (newBranches: Branch[]) => {
-    await setDoc(doc(db, 'settings', 'branches'), { branches: newBranches }, { merge: true });
+    await updateSetting('branches', { branches: newBranches });
     setBranches(newBranches);
     await addAuditLog('UPDATE', 'SYSTEM', 'branches', `Updated system branches`);
   }, []);
 
   const updateCommissionRates = useCallback(async (rates: { ptRate: number; groupRate: number }) => {
-    await setDoc(doc(db, 'settings', 'commission'), rates, { merge: true });
+    await updateSetting('commission', rates);
+    setCommissionRates(rates);
     await addAuditLog('UPDATE', 'TARGET', 'commission', `Updated commission rates: PT ${rates.ptRate}%, Group ${rates.groupRate}%`);
   }, []);
 
   const updateFeatures = useCallback(async (updates: Partial<FeatureFlags>) => {
-    await setDoc(doc(db, 'settings', 'features'), updates, { merge: true });
+    await updateSetting('features', updates);
+    setFeatures(prev => ({ ...prev, ...updates }));
     await addAuditLog('UPDATE', 'SYSTEM', 'features', `Updated system feature flags`);
   }, []);
 
   const updateStorefrontConfig = useCallback(async (updates: Partial<StorefrontConfig>) => {
-    await setDoc(doc(db, 'settings', 'storefront'), updates, { merge: true });
+    await updateSetting('storefront', updates);
     setStorefrontConfig(prev => ({ ...prev, ...updates }));
     await addAuditLog('UPDATE', 'SYSTEM', 'storefront', `Updated storefront configuration`);
   }, []);

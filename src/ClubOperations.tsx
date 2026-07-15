@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from './firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, getDocs } from 'firebase/firestore';
+import { auth } from './firebase';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -58,60 +58,52 @@ export default function ClubOperations() {
   const [guestSearch, setGuestSearch] = useState('');
   const [loadingGuests, setLoadingGuests] = useState(true);
 
-  // --- Subscriptions ---
-  useEffect(() => {
-    // 1. Subscribe to active Juice Bar Orders (Pending, Preparing, Ready)
-    const juiceQ = query(
-      collection(db, 'juiceBarOrders'),
-      where('status', 'in', ['Pending', 'Preparing', 'Ready'])
-    );
-    const unsubJuice = onSnapshot(juiceQ, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as JuiceBarOrder));
-      // Sort: Ready first, then Preparing, then Pending
-      const statusWeight: Record<string, number> = { Ready: 1, Preparing: 2, Pending: 3 };
-      list.sort((a, b) => {
-        const diff = (statusWeight[a.status] || 99) - (statusWeight[b.status] || 99);
-        if (diff !== 0) return diff;
-        return new Date(a.orderedAt).getTime() - new Date(b.orderedAt).getTime();
+  // --- Fetch Data ---
+  const fetchData = async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const headers = { 'Authorization': `Bearer ${token}` };
+
+      // 1. Fetch Juice Bar Orders
+      fetch('/api/juice-bar-orders', { headers }).then(res => res.json()).then(data => {
+        const list = (data || []).filter((o: any) => ['Pending', 'Preparing', 'Ready'].includes(o.status));
+        const statusWeight: Record<string, number> = { Ready: 1, Preparing: 2, Pending: 3 };
+        list.sort((a: any, b: any) => {
+          const diff = (statusWeight[a.status] || 99) - (statusWeight[b.status] || 99);
+          if (diff !== 0) return diff;
+          return new Date(a.orderedAt).getTime() - new Date(b.orderedAt).getTime();
+        });
+        setJuiceOrders(list);
+        setLoadingJuice(false);
+      }).catch(err => {
+        console.error("Error loading juice orders:", err);
+        setLoadingJuice(false);
       });
-      setJuiceOrders(list);
-      setLoadingJuice(false);
-    }, (err) => {
-      console.error("Error loading juice orders:", err);
-      setLoadingJuice(false);
-    });
 
-    // 2. Subscribe to Lockers
-    const lockersQ = query(collection(db, 'lockers'));
-    const unsubLockers = onSnapshot(lockersQ, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Locker));
-      setLockers(list);
-    });
+      // 2. Fetch Lockers
+      fetch('/api/lockers', { headers }).then(res => res.json()).then(data => setLockers(data || []));
 
-    // 3. Subscribe to pending Locker Requests
-    const reqQ = query(collection(db, 'lockerRequests'), where('status', '==', 'Pending'));
-    const unsubRequests = onSnapshot(reqQ, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as LockerRequest));
-      setLockerRequests(list);
-    });
+      // 3. Fetch Locker Requests
+      fetch('/api/locker-requests', { headers }).then(res => res.json()).then(data => {
+        setLockerRequests((data || []).filter((r: any) => r.status === 'Pending'));
+      });
 
-    // 4. Subscribe to Guest Invites
-    const guestsQ = query(collection(db, 'guestInvites'));
-    const unsubGuests = onSnapshot(guestsQ, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as GuestInvite));
-      setGuestInvites(list);
-      setLoadingGuests(false);
-    }, (err) => {
-      console.error("Error loading guest invites:", err);
-      setLoadingGuests(false);
-    });
+      // 4. Fetch Guest Invites
+      fetch('/api/guest-invites', { headers }).then(res => res.json()).then(data => {
+        setGuestInvites(data || []);
+        setLoadingGuests(false);
+      }).catch(err => {
+        console.error("Error loading guest invites:", err);
+        setLoadingGuests(false);
+      });
+    } catch (err) {
+      console.error("Error fetching data:", err);
+    }
+  };
 
-    return () => {
-      unsubJuice();
-      unsubLockers();
-      unsubRequests();
-      unsubGuests();
-    };
+  useEffect(() => {
+    fetchData();
   }, []);
 
   // Fetch available lockers when approving a request
@@ -136,18 +128,21 @@ export default function ClubOperations() {
     else if (currentStatus === 'Ready') nextStatus = 'Completed';
 
     try {
-      const orderRef = doc(db, 'juiceBarOrders', orderId);
-      await updateDoc(orderRef, { status: nextStatus });
-
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'UPDATE',
-        entityType: 'SYSTEM',
-        entityId: orderId,
-        details: `Juice Bar Order status advanced from ${currentStatus} to ${nextStatus}`,
-        timestamp: new Date().toISOString(),
-        userId: 'staff-portal',
-        userName: 'Club Receptionist'
+      const token = await auth.currentUser?.getIdToken();
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+      await fetch('/api/juice-bar-orders/update-status', {
+        method: 'POST', headers, body: JSON.stringify({ id: orderId, status: nextStatus })
       });
+      await fetch('/api/audit-logs/add', {
+        method: 'POST', headers, body: JSON.stringify({
+          log: {
+            id: crypto.randomUUID(), action: 'UPDATE', entityType: 'SYSTEM', entityId: orderId,
+            details: `Juice Bar Order status advanced from ${currentStatus} to ${nextStatus}`,
+            timestamp: new Date().toISOString(), userId: 'staff-portal', userName: 'Club Receptionist'
+          }
+        })
+      });
+      fetchData();
     } catch (err) {
       console.error("Error updating order status:", err);
       alert("Failed to update status.");
@@ -157,8 +152,12 @@ export default function ClubOperations() {
   const cancelJuiceOrder = async (orderId: string) => {
     if (!window.confirm("Cancel this pre-order?")) return;
     try {
-      const orderRef = doc(db, 'juiceBarOrders', orderId);
-      await updateDoc(orderRef, { status: 'Cancelled' });
+      const token = await auth.currentUser?.getIdToken();
+      await fetch('/api/juice-bar-orders/update-status', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ id: orderId, status: 'Cancelled' })
+      });
+      fetchData();
     } catch (err) {
       console.error("Error cancelling order:", err);
     }
@@ -180,12 +179,19 @@ export default function ClubOperations() {
 
     setIsAddingLocker(true);
     try {
-      await addDoc(collection(db, 'lockers'), {
-        number: newLockerNumber.trim(),
-        branch: newLockerBranch,
-        status: 'Available',
-        code: '1234', // default code
-        updatedAt: new Date().toISOString()
+      const token = await auth.currentUser?.getIdToken();
+      await fetch('/api/lockers/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          locker: {
+            id: crypto.randomUUID(),
+            lockerNumber: newLockerNumber.trim(),
+            branch: newLockerBranch,
+            status: 'Available',
+            pinCode: '1234'
+          }
+        })
       });
       setNewLockerNumber('');
       alert("Locker added successfully.");
@@ -205,29 +211,28 @@ export default function ClubOperations() {
       if (!locker) return;
 
       // 1. Update locker document
-      const lockerRef = doc(db, 'lockers', selectedLockerId);
-      await updateDoc(lockerRef, {
-        status: 'Assigned',
-        assignedTo: approvingRequest.clientId,
-        assignedToName: approvingRequest.clientName,
-        updatedAt: new Date().toISOString()
+      const token = await auth.currentUser?.getIdToken();
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+      await fetch('/api/lockers/update', {
+        method: 'POST', headers, body: JSON.stringify({
+          id: selectedLockerId, updates: { status: 'Assigned', assignedTo: approvingRequest.clientId, assignedToName: approvingRequest.clientName }
+        })
       });
 
       // 2. Update request document
-      const reqRef = doc(db, 'lockerRequests', approvingRequest.id);
-      await updateDoc(reqRef, {
-        status: 'Approved'
+      await fetch('/api/locker-requests/update-status', {
+        method: 'POST', headers, body: JSON.stringify({ id: approvingRequest.id, status: 'Approved' })
       });
 
       // 3. Log to auditLogs
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'UPDATE',
-        entityType: 'SYSTEM',
-        entityId: selectedLockerId,
-        details: `Smart Locker ${locker.number} (${locker.branch}) assigned to client ${approvingRequest.clientName}`,
-        timestamp: new Date().toISOString(),
-        userId: 'staff-portal',
-        userName: 'Club Receptionist'
+      await fetch('/api/audit-logs/add', {
+        method: 'POST', headers, body: JSON.stringify({
+          log: {
+            id: crypto.randomUUID(), action: 'UPDATE', entityType: 'SYSTEM', entityId: selectedLockerId,
+            details: `Smart Locker ${locker.number} (${locker.branch}) assigned to client ${approvingRequest.clientName}`,
+            timestamp: new Date().toISOString(), userId: 'staff-portal', userName: 'Club Receptionist'
+          }
+        })
       });
 
       setApprovingRequest(null);
@@ -242,9 +247,11 @@ export default function ClubOperations() {
     if (!window.confirm(`Deny locker request from ${request.clientName}?`)) return;
 
     try {
-      const reqRef = doc(db, 'lockerRequests', request.id);
-      await updateDoc(reqRef, {
-        status: 'Denied'
+      const token = await auth.currentUser?.getIdToken();
+      await fetch('/api/locker-requests/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ id: request.id, status: 'Denied' })
       });
     } catch (err) {
       console.error("Error denying request:", err);
@@ -255,22 +262,22 @@ export default function ClubOperations() {
     if (!window.confirm(`Release locker ${locker.number} currently assigned to ${locker.assignedToName}?`)) return;
 
     try {
-      const lockerRef = doc(db, 'lockers', locker.id);
-      await updateDoc(lockerRef, {
-        status: 'Available',
-        assignedTo: '',
-        assignedToName: '',
-        updatedAt: new Date().toISOString()
+      const token = await auth.currentUser?.getIdToken();
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+      await fetch('/api/lockers/update', {
+        method: 'POST', headers, body: JSON.stringify({
+          id: locker.id, updates: { status: 'Available', assignedTo: '', assignedToName: '' }
+        })
       });
 
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'UPDATE',
-        entityType: 'SYSTEM',
-        entityId: locker.id,
-        details: `Locker ${locker.number} released from client ${locker.assignedToName}`,
-        timestamp: new Date().toISOString(),
-        userId: 'staff-portal',
-        userName: 'Club Receptionist'
+      await fetch('/api/audit-logs/add', {
+        method: 'POST', headers, body: JSON.stringify({
+          log: {
+            id: crypto.randomUUID(), action: 'UPDATE', entityType: 'SYSTEM', entityId: locker.id,
+            details: `Locker ${locker.number} released from client ${locker.assignedToName}`,
+            timestamp: new Date().toISOString(), userId: 'staff-portal', userName: 'Club Receptionist'
+          }
+        })
       });
     } catch (err) {
       console.error("Error releasing locker:", err);
@@ -279,10 +286,13 @@ export default function ClubOperations() {
 
   const changeLockerStatus = async (lockerId: string, newStatus: 'Available' | 'Maintenance') => {
     try {
-      const lockerRef = doc(db, 'lockers', lockerId);
-      await updateDoc(lockerRef, {
-        status: newStatus,
-        updatedAt: new Date().toISOString()
+      const token = await auth.currentUser?.getIdToken();
+      await fetch('/api/lockers/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          id: lockerId, updates: { status: newStatus }
+        })
       });
     } catch (err) {
       console.error("Error changing locker status:", err);
@@ -294,9 +304,13 @@ export default function ClubOperations() {
     if (!editingLockerPin || !newLockerPin) return;
 
     try {
-      const lockerRef = doc(db, 'lockers', editingLockerPin.id);
-      await updateDoc(lockerRef, {
-        code: newLockerPin.trim()
+      const token = await auth.currentUser?.getIdToken();
+      await fetch('/api/lockers/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          id: editingLockerPin.id, updates: { pinCode: newLockerPin.trim() }
+        })
       });
       setEditingLockerPin(null);
       setNewLockerPin('');
@@ -312,41 +326,47 @@ export default function ClubOperations() {
 
     try {
       // 1. Update guestInvite status
-      const inviteRef = doc(db, 'guestInvites', invite.id);
-      await updateDoc(inviteRef, {
-        status: 'Attended'
+      const token = await auth.currentUser?.getIdToken();
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+      await fetch('/api/guest-invites/update-status', {
+        method: 'POST', headers, body: JSON.stringify({ id: invite.id, status: 'Attended' })
       });
 
       // 2. Add client record as Lead
-      await addDoc(collection(db, 'clients'), {
-        name: invite.guestName,
-        phone: invite.guestPhone,
-        status: 'Lead',
-        stage: 'Trial',
-        source: 'Walk-in',
-        interest: 'Pending',
-        category: 'None',
-        createdAt: new Date().toISOString(),
-        assignedTo: '',
-        comments: [
-          {
-            id: Math.random().toString(),
-            text: `Guest Checked In via referral code: ${invite.inviteCode} (Invited by ${invite.hostName})`,
-            date: new Date().toISOString(),
-            author: 'Front Desk'
+      await fetch('/api/clients/add', {
+        method: 'POST', headers, body: JSON.stringify({
+          id: crypto.randomUUID(),
+          client: {
+            name: invite.guestName,
+            phone: invite.guestPhone,
+            status: 'Lead',
+            stage: 'Trial',
+            source: 'Walk-in',
+            interest: 'Pending',
+            category: 'None',
+            createdAt: new Date().toISOString(),
+            assignedTo: '',
+            comments: [
+              {
+                id: Math.random().toString(),
+                text: `Guest Checked In via referral code: ${invite.inviteCode} (Invited by ${invite.hostName})`,
+                date: new Date().toISOString(),
+                author: 'Front Desk'
+              }
+            ]
           }
-        ]
+        })
       });
 
       // 3. Log to audit logs
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'CREATE',
-        entityType: 'LEAD',
-        entityId: invite.inviteCode,
-        details: `Guest ${invite.guestName} checked in using referral code ${invite.inviteCode} (Member: ${invite.hostName})`,
-        timestamp: new Date().toISOString(),
-        userId: 'staff-portal',
-        userName: 'Club Receptionist'
+      await fetch('/api/audit-logs/add', {
+        method: 'POST', headers, body: JSON.stringify({
+          log: {
+            id: crypto.randomUUID(), action: 'CREATE', entityType: 'LEAD', entityId: invite.inviteCode,
+            details: `Guest ${invite.guestName} checked in using referral code ${invite.inviteCode} (Member: ${invite.hostName})`,
+            timestamp: new Date().toISOString(), userId: 'staff-portal', userName: 'Club Receptionist'
+          }
+        })
       });
 
       alert(`${invite.guestName} successfully checked in and added to Leads list.`);

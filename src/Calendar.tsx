@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useLanguage } from './contexts/LanguageContext';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, onSnapshot, addDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
@@ -113,19 +113,23 @@ export default function CalendarView() {
     }
   }, [features]);
 
-  // Fetch classes collection
+  const fetchGymClasses = async () => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch('/api/calendar', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setGymClasses(data.events || []);
+    } catch (error) {
+      console.error("Error loading classes for calendar:", error);
+    }
+  };
+
   useEffect(() => {
-    const q = collection(db, 'classes');
-    const unsub = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as GymClass));
-      setGymClasses(list);
-    }, (err) => {
-      console.error("Error loading classes for calendar:", err);
-    });
-    return unsub;
+    fetchGymClasses();
   }, []);
 
   // Month days generator
@@ -241,13 +245,15 @@ export default function CalendarView() {
       if (!className || !bookDate || !bookBranch || !classCoachName || !bookTime || !classEndTime) return;
 
       if (repeatWeekly) {
-        const batch = writeBatch(db);
         const baseDate = parseISO(bookDate);
+        const token = await auth.currentUser?.getIdToken();
+        const promises = [];
         for (let i = 0; i < repeatWeeks; i++) {
           const classDate = addDays(baseDate, 7 * i);
           const dateStr = format(classDate, 'yyyy-MM-dd');
-          const newDocRef = doc(collection(db, 'classes'));
-          batch.set(newDocRef, {
+          
+          const itemData = {
+            id: crypto.randomUUID(),
             name: className,
             coachName: classCoachName,
             date: dateStr,
@@ -257,11 +263,18 @@ export default function CalendarView() {
             attendees: [],
             type: classType,
             description: classDescription || undefined
-          });
+          };
+
+          promises.push(fetch('/api/calendar/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ event: itemData })
+          }));
         }
-        await batch.commit();
+        await Promise.all(promises);
       } else {
-        await addDoc(collection(db, 'classes'), {
+        const itemData = {
+          id: crypto.randomUUID(),
           name: className,
           coachName: classCoachName,
           date: bookDate,
@@ -271,8 +284,17 @@ export default function CalendarView() {
           attendees: [],
           type: classType,
           description: classDescription || undefined
+        };
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/calendar/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ event: itemData })
         });
       }
+      
+      // Refresh list
+      fetchGymClasses();
 
       // Reset fields
       setClassName('');
@@ -1042,8 +1064,18 @@ export default function CalendarView() {
                     className="w-full rounded-xl border-rose-500/20 text-rose-500 hover:bg-rose-500/5 font-bold text-xs"
                     onClick={async () => {
                       if (window.confirm(language === 'ar' ? 'هل أنت متأكد من إلغاء وحذف هذه الحصة؟' : 'Are you sure you want to cancel and delete this class?')) {
-                        await deleteDoc(doc(db, 'classes', selectedClass.id));
-                        setSelectedClass(null);
+                        try {
+                          const token = await auth.currentUser?.getIdToken();
+                          await fetch('/api/calendar/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({ id: selectedClass.id })
+                          });
+                          setSelectedClass(null);
+                          fetchGymClasses();
+                        } catch (err) {
+                          console.error("Failed to delete", err);
+                        }
                       }
                     }}
                   >

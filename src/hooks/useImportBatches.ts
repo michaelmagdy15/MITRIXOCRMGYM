@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy, getDocs, where, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase';
+import { useState, useEffect, useCallback } from 'react';
+import { auth } from '../firebase';
 import { ImportBatch, Client, Payment, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -10,30 +9,50 @@ export const useImportBatches = (currentUser: User | null, clients: Client[], pa
   const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchImportBatches = useCallback(async () => {
     if (!currentUser || currentUser.role === 'coach' || currentUser.role === 'client') {
       setImportBatches([]);
       setLoading(false);
       return;
     }
-    const unsub = onSnapshot(
-      query(collection(db, 'importBatches'), orderBy('date', 'desc')),
-      (snapshot) => {
-        setImportBatches(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as ImportBatch)));
-        setLoading(false);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'importBatches');
-        setLoading(false);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/import-batches', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setImportBatches(data.importBatches || data.batches || []);
       }
-    );
-    return () => unsub();
+    } catch (error) {
+      console.error('Failed to fetch import batches', error);
+      handleFirestoreError(error, OperationType.LIST, 'importBatches');
+    } finally {
+      setLoading(false);
+    }
   }, [currentUser]);
+
+  useEffect(() => {
+    fetchImportBatches();
+  }, [fetchImportBatches]);
 
   const addImportBatch = async (batch: Omit<ImportBatch, 'id'>): Promise<string> => {
     try {
-      const docRef = await addDoc(collection(db, 'importBatches'), cleanData(batch));
-      return docRef.id;
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/import-batches/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ batch: cleanData(batch) })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await fetchImportBatches();
+        return data.id || data.batchId || '';
+      }
+      return '';
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'importBatches');
       return '';
@@ -42,9 +61,19 @@ export const useImportBatches = (currentUser: User | null, clients: Client[], pa
 
   const rollbackImport = async (batchId: string) => {
     try {
+      const token = await auth.currentUser?.getIdToken();
       const clientsToRollback = clients.filter(c => c.importBatchId === batchId);
-      for (const client of clientsToRollback) {
-        await deleteDoc(doc(db, 'clients', client.id));
+      const clientIds = clientsToRollback.map(c => c.id);
+
+      if (clientIds.length > 0) {
+        await fetch('/api/clients/delete-multiple', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ ids: clientIds })
+        });
       }
 
       const paymentIds = payments
@@ -52,22 +81,30 @@ export const useImportBatches = (currentUser: User | null, clients: Client[], pa
         .map(p => p.id);
 
       if (paymentIds.length > 0) {
-        let batch = writeBatch(db);
-        let count = 0;
         for (const pid of paymentIds) {
-          batch.delete(doc(db, 'payments', pid));
-          count++;
-          if (count === 450) {
-            await batch.commit();
-            batch = writeBatch(db);
-            count = 0;
-          }
+          await fetch('/api/payments/delete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ id: pid })
+          });
         }
-        if (count > 0) await batch.commit();
       }
 
-      await updateDoc(doc(db, 'importBatches', batchId), { status: 'Rolled Back' });
+      await fetch('/api/import-batches/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ id: batchId, updates: { status: 'Rolled Back' } })
+      });
+
       await addAuditLog('DELETE', 'CLIENT', batchId, `Rolled back import batch, deleted ${clientsToRollback.length} records and ${paymentIds.length} payments`);
+      
+      await fetchImportBatches();
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `importBatches/${batchId}`);
     }

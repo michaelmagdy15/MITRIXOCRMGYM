@@ -4,3 +4,20 @@
 - [x] Modify `src/firebase.ts` to load Firebase configuration dynamically from `window.__FIREBASE_CONFIG__`
 - [x] Update `server.ts` to inject tenant configurations into `index.html` at runtime
 - [x] Verify compilation and run build checks
+- [x] Create/update endpoints for CallCenter
+- [x] Migrate CallCenter.tsx to use SQL API endpoints
+- [x] Create/update endpoints for Complaints
+- [x] Migrate Complaints.tsx to use SQL API endpoints
+- [x] Create/update endpoints for LostAndFound
+- [x] Migrate LostAndFound.tsx to use SQL API endpoints
+- [x] Create/update endpoints for Calendar (calendar_events)
+- [x] Migrate Calendar.tsx to use SQL API endpoints
+- [x] Create/update endpoints for Bookings (booking_requests)
+- [x] Migrate Bookings.tsx to use SQL API endpoints
+- [x] Create/update endpoints for ClubOperations
+- [x] Migrate ClubOperations.tsx to use SQL API endpoints
+- [x] Add SQL API endpoints for `Attendance`.
+- [x] Add SQL API endpoints for `Users` (Staff/Coaches).
+- [x] Add SQL API endpoints for `Settings` (Branches, Tags).
+- [x] Add SQL API endpoints for `Packages`.
+- [x] Add SQL API endpoints for `UserTargets`.
