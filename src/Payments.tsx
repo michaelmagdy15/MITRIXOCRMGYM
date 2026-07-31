@@ -18,9 +18,10 @@ import { Payment } from './types';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
-import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp } from 'lucide-react';
+import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog } from './components/AlertDialog';
+import { PaymentCategory, PAYMENT_CATEGORIES, resolvePaymentCategory } from './utils/paymentCategories';
 
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
@@ -96,6 +97,8 @@ export default function Payments() {
   const [discountType, setDiscountType] = useState<'percentage' | 'amount' | ''>('');
   const [discountValue, setDiscountValue] = useState('');
   const [discountedAmount, setDiscountedAmount] = useState('');
+  const [paymentCategory, setPaymentCategory] = useState<PaymentCategory>('Memberships');
+  const [receiptNumber, setReceiptNumber] = useState('');
   const [isMemberOnHold, setIsMemberOnHold] = useState(false);
 
   // Hold feature state
@@ -268,6 +271,7 @@ export default function Payments() {
     const pkg = packages.find(p => p.name === val);
     if (pkg) {
       setAmount(pkg.price.toString());
+      setPaymentCategory(resolvePaymentCategory(pkg.name));
       if (startDate) {
         const s = new Date(startDate);
         const e = new Date(s);
@@ -329,7 +333,8 @@ export default function Payments() {
       return;
     }
 
-    const isPT = /\bpt\b/i.test(finalPackageType);
+    const finalCategory: PaymentCategory = packageType === 'Custom' ? resolvePaymentCategory(customPackage) : paymentCategory;
+    const isPT = finalCategory === 'PT';
     const resolvedCoachName = coachName === '__custom__' ? customCoachName.trim() : coachName;
     if (isPT && !resolvedCoachName) {
       setAlertTitle('Missing Information');
@@ -373,9 +378,10 @@ export default function Payments() {
         method,
         instapayRef: method === 'Instapay' ? instapayRef : undefined,
         packageType: finalPackageType,
-        packageCategory: isPT ? 'Private Training' : 'Group Training',
+        packageCategory: finalCategory,
         coachName: isPT ? resolvedCoachName : undefined,
         notes,
+        receiptSerial: receiptNumber.trim() || undefined,
         sales_rep_id: salesRepId || '',
         salesName: salesName || '',
         recordedBy: recordedById || currentUser?.id || '',
@@ -419,6 +425,8 @@ export default function Payments() {
       setDiscountType('');
       setDiscountValue('');
       setDiscountedAmount('');
+      setPaymentCategory('Memberships');
+      setReceiptNumber('');
       setIsMemberOnHold(false);
   };
 
@@ -513,7 +521,7 @@ export default function Payments() {
         method: upgradeMethod,
         instapayRef: upgradeMethod === 'Instapay' ? upgradeInstapayRef : undefined,
         packageType: pkg.name,
-        packageCategory: pkg.name.toLowerCase().includes('pt') || pkg.name.toLowerCase().includes('private') ? 'Private Training' : 'Group Training',
+        packageCategory: resolvePaymentCategory(pkg.name),
         sales_rep_id: payment.sales_rep_id,
         salesName: payment.salesName || '',
         recordedBy: currentUser?.id || '',
@@ -637,7 +645,7 @@ export default function Payments() {
             </div>
             <div class="details-col align-end">
               <div class="label">${labelReceiptNo}</div>
-              <div class="value">${payment.id.substring(0, 8).toUpperCase()}</div>
+              <div class="value">${(payment.receiptSerial || payment.id.substring(0, 8).toUpperCase())}</div>
               <div class="label">${labelDate}</div>
               <div class="value">${formattedDate}</div>
               <div class="label">${labelPaymentMethod}</div>
@@ -1110,6 +1118,19 @@ export default function Payments() {
                 )}
 
                 <div className="space-y-3">
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.receipt_no')}</Label>
+                  <div className="relative">
+                    <Receipt className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input 
+                      placeholder="Optional receipt / invoice number" 
+                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all pl-14 pr-5 text-lg"
+                      value={receiptNumber} 
+                      onChange={(e) => setReceiptNumber(e.target.value)} 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
                   <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.package_type')}</Label>
                   <Select value={packageType} onValueChange={handlePackageChange}>
                     <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
@@ -1138,7 +1159,21 @@ export default function Payments() {
                   </div>
                 )}
 
-                {((packageType && packageType !== 'Custom' && /\bpt\b/i.test(packageType)) || (packageType === 'Custom' && /\bpt\b/i.test(customPackage))) && (
+                <div className="space-y-3">
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Category</Label>
+                  <Select value={paymentCategory} onValueChange={(v) => v && setPaymentCategory(v as PaymentCategory)}>
+                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none shadow-2xl">
+                      {PAYMENT_CATEGORIES.map(cat => (
+                        <SelectItem key={cat} value={cat} className="rounded-xl py-3 px-4">{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {paymentCategory === 'PT' && (
                   <div className="space-y-3">
                     <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.coach')}</Label>
                     <Select value={coachName} onValueChange={(v) => { if(!v) return; setCoachName(v); if (v !== '__custom__') setCustomCoachName(''); }}>
@@ -1420,6 +1455,7 @@ export default function Payments() {
                   <TableHead className="hidden sm:table-cell">{t('payments.table.branch')}</TableHead>
                   <TableHead className="hidden sm:table-cell">{t('payments.table.method')}</TableHead>
                   <TableHead className="hidden md:table-cell">{t('payments.table.package')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('payments.receipt_no')}</TableHead>
                   <TableHead className="hidden lg:table-cell">{t('payments.table.recorded_by')}</TableHead>
                   <TableHead className="hidden xl:table-cell">{t('payments.table.sales_member')}</TableHead>
                   <TableHead className="hidden xl:table-cell">{t('payments.table.notes')}</TableHead>
@@ -1518,6 +1554,11 @@ export default function Payments() {
                               </span>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {payment.receiptSerial || '—'}
+                          </span>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs sm:text-sm hidden lg:table-cell">
                           {recordedByLabel}
@@ -1720,7 +1761,7 @@ export default function Payments() {
                                         </SelectContent>
                                       </Select>
                                     </div>
-                                    {(payment.package_category_type === 'Private Training' || payment.coachName) && (
+                                    {(payment.package_category_type === 'PT' || (payment.package_category_type as string) === 'Private Training' || payment.coachName) && (
                                       <div>
                                         <Label className="text-xs font-semibold">Coach Name</Label>
                                         <Select value={editCoachName} onValueChange={(val) => setEditCoachName(val || '')}>

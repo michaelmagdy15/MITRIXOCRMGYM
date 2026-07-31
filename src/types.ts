@@ -7,6 +7,7 @@ export type PackageType = 'Private' | 'Group';
 export type UserRole = 'manager' | 'rep' | 'admin' | 'super_admin' | 'crm_admin' | 'coach' | 'client';
 export type InteractionType = 'Call' | 'WhatsApp' | 'Email' | 'Visit';
 export type InteractionOutcome = 'Interested' | 'Not Answered' | 'Scheduled Trial' | 'Rejected' | 'Other';
+import { PaymentCategory } from './utils/paymentCategories';
 
 export type Branch = string;
 
@@ -138,7 +139,7 @@ export interface Payment {
   method: 'Cash' | 'Credit Card' | 'Bank Transfer' | 'Instapay' | 'Other';
   instapayRef?: string; // 12 digits
   packageType: string;
-  package_category_type: 'Private Training' | 'Group Training';
+  package_category_type: PaymentCategory;
   coachName?: string; // Optional coach name for PT packages
   coach_name?: string; // Aligning with requested schema
   notes?: string;

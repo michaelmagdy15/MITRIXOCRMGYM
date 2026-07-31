@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Check, X, Clock, User, Phone, Mail, Search, ShieldAlert, DollarSign, MapPin, CheckCircle } from 'lucide-react';
 import { processPaymentTransaction } from './services/transactionService';
 import { Package, Branch } from './types';
+import { PaymentCategory, resolvePaymentCategory } from './utils/paymentCategories';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface BookingItem {
@@ -117,14 +118,7 @@ export default function Bookings() {
     }
   }, [selectedRequest]);
 
-  const resolveCategory = (pkg: Package): 'Private Training' | 'Group Training' => {
-    const lowerName = pkg.name.toLowerCase();
-    const lowerType = (pkg.type || '').toLowerCase();
-    if (lowerName.includes('private') || lowerName.includes('pt') || lowerType.includes('private')) {
-      return 'Private Training';
-    }
-    return 'Group Training';
-  };
+  const resolveCategory = (pkg: Package): PaymentCategory => resolvePaymentCategory(pkg.name);
 
   const handleAcceptConfirm = async () => {
     if (!selectedRequest) return;
@@ -168,7 +162,7 @@ export default function Bookings() {
       for (const item of selectedRequest.items) {
         // Find matching system package config
         const sysPkg = packages.find(p => p.id === item.packageId || p.name.toLowerCase() === item.packageName.toLowerCase());
-        const category = sysPkg ? resolveCategory(sysPkg) : 'Group Training';
+        const category = sysPkg ? resolveCategory(sysPkg) : 'Memberships' as PaymentCategory;
 
         const isKidsPackage = item.packageName.toLowerCase().includes('kids') || item.packageName.toLowerCase().includes('junior');
         if (isKidsPackage && clientBranch !== 'Mivida') {

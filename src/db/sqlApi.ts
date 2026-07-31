@@ -874,27 +874,29 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
 
 
   // User Targets endpoints
-  app.get("/api/user-targets", requireAuth, async (req, res) => {
+  const userTargetsGetHandler = async (req: express.Request, res: express.Response) => {
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
+      let userTargets;
       if (tenantId === 'inzanathletics') {
-        const userTargets = await sqlDb.getUserTargetsFromSQL();
-        return res.json({ userTargets });
+        userTargets = await sqlDb.getUserTargetsFromSQL();
+      } else {
+        const db = await getDbForRequest(req);
+        const snap = await db.collection('userTargets').get();
+        userTargets = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
       }
-      const db = await getDbForRequest(req);
-      const snap = await db.collection('userTargets').get();
-      const userTargets = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
-      return res.json({ userTargets });
+      // Return under both keys so any client hook (userTargets or targets) parses it correctly.
+      return res.json({ userTargets, targets: userTargets });
     } catch (err: any) {
       console.error('[API] Error in GET /api/user-targets:', err);
       return res.status(500).json({ error: err.message });
     }
-  });
+  };
 
-  app.post("/api/user-targets/save", requireAuth, async (req, res) => {
+  const userTargetsSaveHandler = async (req: express.Request, res: express.Response) => {
     try {
       const { id, target } = req.body;
       const hostname = getRequestHostname(req);
@@ -912,7 +914,12 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       console.error('[API] Error in POST /api/user-targets/save:', err);
       return res.status(500).json({ error: err.message });
     }
-  });
+  };
+
+  app.get("/api/user-targets", requireAuth, userTargetsGetHandler);
+  app.post("/api/user-targets/save", requireAuth, userTargetsSaveHandler);
+  // Alias so client hooks posting to /api/user-targets/update also succeed.
+  app.post("/api/user-targets/update", requireAuth, userTargetsSaveHandler);
 
   // Audit Logs endpoints
   app.get("/api/audit-logs", requireAuth, async (req, res) => {

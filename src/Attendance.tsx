@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan, XCircle, Printer, Check, Calendar } from 'lucide-react';
+import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan, XCircle, Printer, Check, Calendar, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
@@ -298,7 +298,6 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           setLastScannedMember(null);
           setSuccessMessage(null);
           if (manualInputRef.current) manualInputRef.current.value = '';
-          setIsScanning(true); // Auto-restart scanning
         }, 3000);
       } catch (err: any) {
         setError(err instanceof Error ? err.message : t('attendance.failed_record_attendance'));
@@ -306,7 +305,6 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           setLastScannedMember(null);
           setError(null);
           if (manualInputRef.current) manualInputRef.current.value = '';
-          setIsScanning(true); // Auto-restart scanning
         }, 4000);
       } finally {
         setIsRecording(false);
@@ -548,16 +546,22 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         {/* Member Info / Result Section */}
         <div className="lg:col-span-5 space-y-6">
           {error && (
-            <div className="bg-destructive/10 border border-destructive/20 text-destructive p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+            <div className="bg-red-600 border-2 border-red-700 text-white p-4 rounded-xl flex items-start gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
-              <p className="text-sm font-medium">{error}</p>
+              <div>
+                <p className="text-sm font-bold uppercase tracking-wide">Error</p>
+                <p className="text-sm font-medium text-white/95">{error}</p>
+              </div>
             </div>
           )}
 
           {successMessage && (
-            <div className="bg-green-500/10 border border-green-500/20 text-green-600 p-4 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+            <div className="bg-green-600 border-2 border-green-700 text-white p-4 rounded-xl flex items-start gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
               <CheckCircle className="h-5 w-5 mt-0.5 shrink-0" />
-              <p className="text-sm font-medium">{successMessage}</p>
+              <div>
+                <p className="text-sm font-bold uppercase tracking-wide">Check-in Recorded</p>
+                <p className="text-sm font-medium text-white/95">{successMessage}</p>
+              </div>
             </div>
           )}
 
@@ -568,6 +572,19 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                 <CardTitle className="text-2xl">{lastScannedMember.name}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
+                {(lastScannedMember.status === 'Nearly Expired' || (typeof lastScannedMember.sessionsRemaining === 'number' && lastScannedMember.sessionsRemaining > 0 && lastScannedMember.sessionsRemaining <= 3)) && (
+                  <div className="bg-amber-500 border-2 border-amber-600 text-white p-3 rounded-xl flex items-start gap-3 shadow">
+                    <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold uppercase tracking-wide">Nearly Expired</p>
+                      <p className="text-sm font-medium text-white/95">
+                        {lastScannedMember.status === 'Nearly Expired'
+                          ? 'Membership is nearing its expiry date. Remind the member to renew.'
+                          : `Only ${lastScannedMember.sessionsRemaining} sessions remaining. Remind the member to renew.`}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.member_id')}</Label>

@@ -364,6 +364,11 @@ export default function MemberProfile({ client }: { client: Client | null }) {
             <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
               <CalendarDays className="h-3 w-3" /> Member since {memberSince} · {daysAsMember} days
             </p>
+            {client?.salesName && (
+              <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                <UserCheck className="h-3 w-3 text-primary" /> Joined via <span className="font-bold text-foreground">{client.salesName}</span>
+              </p>
+            )}
           </div>
         </div>
         {/* Quick Stats Row */}

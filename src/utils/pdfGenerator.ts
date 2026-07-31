@@ -2,7 +2,7 @@ import { PDFDocument } from 'pdf-lib';
 import { Client } from '../types';
 import { format } from 'date-fns';
 
-export const generateClientContract = async (client: Client, paymentAmount?: number, paymentMethod?: string) => {
+export const generateClientContract = async (client: Client, paymentAmount?: number, paymentMethod?: string): Promise<Blob | null> => {
   try {
     // 1. Fetch the existing PDF from the public folder
     const url = '/MITRIXOGYMCRM Client Contract form.pdf';
@@ -59,19 +59,46 @@ export const generateClientContract = async (client: Client, paymentAmount?: num
     // 4. Serialize the PDFDocument to bytes
     const pdfBytes = await pdfDoc.save();
 
-    // 5. Trigger download
+    const fileName = `Contract_${client.name.replace(/\s+/g, '_')}.pdf`;
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+
+    // 5. Prefer the native Web Share API (mobile browsers / WebViews) so sales
+    // staff can share the contract directly to WhatsApp or file storage.
+    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.share) {
+      try {
+        const file = new File([blob], fileName, { type: 'application/pdf' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: `Contract - ${client.name}`,
+            text: `Membership contract for ${client.name}`,
+          });
+          return blob;
+        }
+      } catch (shareError: any) {
+        // User dismissed the share sheet — keep the flow silent.
+        if (shareError?.name === 'AbortError') {
+          return blob;
+        }
+        console.warn('Web Share API failed, falling back to download:', shareError);
+      }
+    }
+
+    // 6. Fallback: standard Blob download link.
     const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = `Contract_${client.name.replace(/\s+/g, '_')}.pdf`;
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(downloadUrl);
 
+    return blob;
+
   } catch (error) {
     console.error('Error generating contract:', error);
     alert('Failed to generate contract. Please make sure "MITRIXOGYMCRM Client Contract formFILLABLE.pdf" exists in the public folder.');
+    return null;
   }
 };

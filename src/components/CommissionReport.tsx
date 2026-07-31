@@ -132,7 +132,7 @@ const CommissionReport: React.FC = () => {
       const amount = Number(p.amount) || 0;
       reps[repId].totalRevenue += amount;
 
-      if (p.package_category_type === 'Private Training' || p.packageType?.toLowerCase().includes('pt')) {
+      if (p.package_category_type === 'PT' || (p.package_category_type as string) === 'Private Training' || p.packageType?.toLowerCase().includes('pt')) {
         reps[repId].privateRevenue += amount;
       } else {
         reps[repId].groupRevenue += amount;

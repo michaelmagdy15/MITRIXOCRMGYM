@@ -5,6 +5,7 @@ import { Payment, Client, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
 import { addAuditLog } from '../services/auditService';
+import { resolvePaymentCategory } from '../utils/paymentCategories';
 
 interface UsePaymentsOptions {
   currentUser: User | null;
@@ -96,9 +97,7 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
         amount_paid: payment.amount,
         sales_rep_id: payment.sales_rep_id || '',
         created_at: new Date().toISOString(),
-        package_category_type: payment.packageType.toLowerCase().includes('pt') || payment.packageType.toLowerCase().includes('private')
-          ? 'Private Training'
-          : 'Group Training',
+        package_category_type: resolvePaymentCategory(payment.packageType),
         deleted_at: null
       };
 

@@ -52,6 +52,8 @@ export async function getClientsFromSQL() {
     expectedVisitDate: row.expected_visit_date,
     trialDate: row.trial_date,
     membershipExpiry: row.membership_expiry,
+    memberCategory: row.category,
+    points: row.points,
     activityLevel: row.activity_level,
     workoutTimes: row.workout_times || [],
     fitnessTarget: row.fitness_target,
@@ -114,6 +116,8 @@ export async function getLeadsFromSQL() {
     expectedVisitDate: row.expected_visit_date,
     trialDate: row.trial_date,
     membershipExpiry: row.membership_expiry,
+    memberCategory: row.category,
+    points: row.points,
     activityLevel: row.activity_level,
     workoutTimes: row.workout_times || [],
     fitnessTarget: row.fitness_target,
@@ -266,6 +270,7 @@ export async function updateClientInSQL(id: string, updates: any) {
   mapField('stage', 'stage');
   mapField('interest', 'interest');
   mapField('category', 'category');
+  mapField('memberCategory', 'category');
   mapField('source', 'source');
   mapField('expectedVisitDate', 'expected_visit_date');
   mapField('trialDate', 'trial_date');
@@ -276,6 +281,7 @@ export async function updateClientInSQL(id: string, updates: any) {
   mapField('workoutTimes', 'workout_times');
   mapField('fitnessTarget', 'fitness_target');
   mapField('aiTokens', 'ai_tokens');
+  mapField('points', 'points');
   mapField('referralCode', 'referral_code');
   mapField('referredBy', 'referred_by');
   mapField('emergencyContactName', 'emergency_contact_name');
@@ -1063,6 +1069,8 @@ export async function getClientByQrCodeFromSQL(qrData: string) {
     expectedVisitDate: row.expected_visit_date,
     trialDate: row.trial_date,
     membershipExpiry: row.membership_expiry,
+    memberCategory: row.category,
+    points: row.points,
     activityLevel: row.activity_level,
     workoutTimes: row.workout_times || [],
     fitnessTarget: row.fitness_target,

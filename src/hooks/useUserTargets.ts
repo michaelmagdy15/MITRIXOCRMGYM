@@ -17,7 +17,7 @@ export const useUserTargets = (currentUser: User | null) => {
       });
       if (res.ok) {
         const data = await res.json();
-        setUserTargets(data.targets || []);
+        setUserTargets((data.userTargets || data.targets) || []);
       }
     } catch (err) {
       console.error('[Targets] Failed to fetch targets:', err);
@@ -52,7 +52,7 @@ export const useUserTargets = (currentUser: User | null) => {
         createdAt: new Date().toISOString()
       };
       const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/user-targets/update', {
+      const res = await fetch('/api/user-targets/save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -61,6 +61,13 @@ export const useUserTargets = (currentUser: User | null) => {
         body: JSON.stringify({ id: targetId, target: cleanData(targetData) })
       });
       if (res.ok) {
+        // Optimistically update local state so the UI reflects the saved target instantly.
+        setUserTargets(prev => {
+          const exists = prev.some(t => t.id === targetId);
+          return exists
+            ? prev.map(t => (t.id === targetId ? { ...t, ...targetData } : t))
+            : [...prev, targetData];
+        });
         await fetchUserTargets();
       }
       await addAuditLog('UPDATE', 'TARGET', targetId, `Updated target for user ${userId} for ${month}: ${targetAmount} LE`);

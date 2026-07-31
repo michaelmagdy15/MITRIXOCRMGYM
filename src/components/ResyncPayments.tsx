@@ -9,6 +9,7 @@ import { collection, getDocs, writeBatch, addDoc, doc } from 'firebase/firestore
 import { db } from '../firebase';
 import { Client, User, Payment } from '../types';
 import { SALES_NAME_MAPPING } from '../constants';
+import { resolvePaymentCategory } from '../utils/paymentCategories';
 import { exportDatabaseToJson } from '../services/backupService';
 
 interface ResyncPaymentsProps {
@@ -201,7 +202,7 @@ export default function ResyncPayments({ clients, users }: ResyncPaymentsProps) 
             date: (client as any).startDate || new Date().toISOString(),
             method: 'Cash',
             packageType: (client as any).packageType || 'Historical',
-            package_category_type: ((client as any).packageType || '').toLowerCase().includes('pt') ? 'Private Training' : 'Group Training',
+            package_category_type: resolvePaymentCategory((client as any).packageType || ''),
             branch: client.branch || '',
             sales_rep_id: item.newRepId || '',
             salesName: item.newRepName || '',

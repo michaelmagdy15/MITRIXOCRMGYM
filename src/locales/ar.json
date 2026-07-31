@@ -203,6 +203,7 @@
     "import_actives": "استيراد الأعضاء النشطين",
     "recalculate_expiry": "إعادة حساب التواريخ",
     "search_placeholder": "بحث...",
+    "search_by_id": "البحث برقم العضو...",
     "tabs": {
       "renewal_pipeline": "مراحل التجديد",
       "expired": "منتهي",
@@ -257,6 +258,7 @@
     "discount": "خصم (اختياري)",
     "payment_method": "طريقة الدفع",
     "instapay_ref": "رقم مرجع إنستاباي (12 رقم)",
+    "receipt_no": "رقم الإيصال / الفاتورة",
     "package_type": "نوع الباقة",
     "custom_package_name": "اسم الباقة المخصصة",
     "coach": "المدرب",

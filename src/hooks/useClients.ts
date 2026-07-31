@@ -721,6 +721,44 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       const updateData = { ...updates };
       const existing = baseClients.find(c => c.id === id);
 
+      // Optimistically update local React state so the UI reflects changes
+      // immediately without waiting for the network round-trip. The subsequent
+      // server fetch / refetchData() reconciles with the persisted database state.
+      const applyOptimisticUpdate = () => {
+        let updated: Omit<Client, 'comments' | 'interactions'>;
+        const merged = baseClients.find(c => c.id === id);
+        if (merged) {
+          updated = { ...merged, ...updateData };
+        } else {
+          updated = { id, ...updateData } as Omit<Client, 'comments' | 'interactions'>;
+        }
+
+        const norm = (updated.status || '').toString().trim().toLowerCase();
+        const isActiveBucket = ['active', 'hold', 'nearly expired'].includes(norm);
+        const isExpiredBucket = norm === 'expired';
+        const isLeadBucket = norm === 'lead';
+
+        setMembersList(prev => prev.map(c => c.id === id ? { ...c, ...updateData } : c));
+        setExpiredMembersList(prev => prev.map(c => c.id === id ? { ...c, ...updateData } : c));
+        setLeadsList(prev => prev.map(c => c.id === id ? { ...c, ...updateData } : c));
+        setSearchResults(prev => prev.map(c => c.id === id ? { ...c, ...updateData } : c));
+
+        // Move the client between buckets immediately when status transitions.
+        if (isActiveBucket) {
+          setExpiredMembersList(prev => prev.filter(c => c.id !== id));
+          setLeadsList(prev => prev.filter(c => c.id !== id));
+          setMembersList(prev => prev.some(c => c.id === id) ? prev : [...prev, updated]);
+        } else if (isExpiredBucket) {
+          setMembersList(prev => prev.filter(c => c.id !== id));
+          setLeadsList(prev => prev.filter(c => c.id !== id));
+          setExpiredMembersList(prev => prev.some(c => c.id === id) ? prev : [...prev, updated]);
+        } else if (isLeadBucket) {
+          setMembersList(prev => prev.filter(c => c.id !== id));
+          setExpiredMembersList(prev => prev.filter(c => c.id !== id));
+          setLeadsList(prev => prev.some(c => c.id === id) ? prev : [...prev, updated]);
+        }
+      };
+
       // Normalize package name and packageType
       if (updateData.packageType) {
         updateData.packageType = mapOldToNewPackage(updateData.packageType, updateData);
@@ -810,6 +848,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           updateData.salesRep = canonicalRep;
         }
       }
+
+      applyOptimisticUpdate();
 
       if (getTenantId() === 'inzanathletics') {
         const token = await auth.currentUser?.getIdToken();

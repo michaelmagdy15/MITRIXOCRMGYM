@@ -13,6 +13,7 @@ import { Client, Package, Payment } from './types';
 import { Input } from '@/components/ui/input';
 import { addDays, isBefore, parseISO, parse, isValid, isAfter, format } from 'date-fns';
 import { PACKAGES, SALES_NAME_MAPPING } from './constants';
+import { resolvePaymentCategory } from './utils/paymentCategories';
 
 interface ImportDataProps {
   type: 'Lead' | 'Active';
@@ -446,9 +447,7 @@ export default function ImportData({ type }: ImportDataProps) {
             date: startDate || now.toISOString(), // Use start date if available
             method: 'Other',
             packageType: packageType || 'Imported',
-            package_category_type: (packageType || '').toLowerCase().includes('pt') || (packageType || '').toLowerCase().includes('private') 
-              ? 'Private Training' 
-              : 'Group Training',
+            package_category_type: resolvePaymentCategory(packageType || ''),
             recordedBy: currentUser?.id || 'system-import',
             sales_rep_id: systemUser?.id || (typeof finalAssignedTo === 'string' && finalAssignedTo.length > 15 ? finalAssignedTo : 'system-import'),
             salesName: finalSalesName,

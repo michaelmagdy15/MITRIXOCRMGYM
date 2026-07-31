@@ -203,6 +203,7 @@
     "import_actives": "Import Actives",
     "recalculate_expiry": "Recalculate All Expiry",
     "search_placeholder": "Search...",
+    "search_by_id": "Search by Member ID...",
     "tabs": {
       "renewal_pipeline": "Renewal Pipeline",
       "expired": "Expired",
@@ -257,6 +258,7 @@
     "discount": "Discount (Optional)",
     "payment_method": "Payment Method",
     "instapay_ref": "Instapay Ref (12 digits)",
+    "receipt_no": "Receipt / Invoice No.",
     "package_type": "Package Type",
     "custom_package_name": "Custom Package Name",
     "coach": "Coach",

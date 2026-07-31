@@ -12,9 +12,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Minus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity, X } from 'lucide-react';
+import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Minus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity, X, Maximize2, Minimize2 } from 'lucide-react';
 import { Client, InteractionType, InteractionOutcome, AuditLog, ClientPackage } from './types';
-import { format, parseISO, isAfter, isBefore, addDays, subDays, differenceInDays } from 'date-fns';
+import { format, parseISO, isValid, isAfter, isBefore, addDays, subDays, differenceInDays } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { QRCodeSVG } from 'qrcode.react';
@@ -32,15 +32,17 @@ import { db, getTenantId } from './firebase';
 import { cleanData } from './utils';
 import { generateClientContract } from './utils/pdfGenerator';
 import { downloadFile } from './utils/download';
+import { resolvePaymentCategory } from './utils/paymentCategories';
+import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { InzanMemberShow } from './components/InzanMemberShow';
 
 const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => {
   if (!dateStr) return fallback;
   try {
     const parsed = parseISO(dateStr);
-    if (isNaN(parsed.getTime())) {
+    if (!isValid(parsed)) {
       const d = new Date(dateStr);
-      if (!isNaN(d.getTime())) return format(d, formatStr);
+      if (isValid(d)) return format(d, formatStr);
       return fallback;
     }
     return format(parsed, formatStr);
@@ -92,6 +94,18 @@ export default function Clients() {
   }, [packages, features]);
   const activeClient = activeClientId ? clients.find(c => c.id === activeClientId) : null;
 
+  // Sales reps and managers may generate/share member contracts.
+  const canDownloadContract = ['rep', 'manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser?.role || '');
+
+  const handleDownloadContract = () => {
+    if (!activeClient) return;
+    const clientPayments = payments.filter(p => p.clientId === activeClient.id);
+    const latestPayment = clientPayments.length > 0
+      ? [...clientPayments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+      : null;
+    generateClientContract(activeClient, latestPayment?.amount, latestPayment?.method);
+  };
+
   const handleUpdateSessionsRemaining = async (change: number) => {
     if (!activeClient) return;
     
@@ -137,16 +151,20 @@ export default function Clients() {
     
     const activePkg = newPkgs.find(p => p.status === 'Active');
     const updates: any = {
-      packages: newPkgs
+      packages: newPkgs,
+      sessionsRemaining: activePkg ? (activePkg.sessionsRemaining !== undefined ? activePkg.sessionsRemaining : 0) : 0,
     };
 
     if (activePkg) {
       updates.packageType = activePkg.packageName || '';
-      updates.sessionsRemaining = activePkg.sessionsRemaining !== undefined ? activePkg.sessionsRemaining : 0;
       if (activePkg.startDate) updates.startDate = activePkg.startDate;
-      if (activePkg.endDate) updates.membershipExpiry = activePkg.endDate;
+      updates.membershipExpiry = activePkg.endDate || '';
     } else {
-      updates.sessionsRemaining = 0;
+      // No active package: clear top-level package-derived fields so the outer
+      // list view doesn't keep showing stale values after an edit.
+      updates.packageType = '';
+      updates.startDate = '';
+      updates.membershipExpiry = '';
     }
 
     updateClient(activeClient.id, updates);
@@ -189,6 +207,10 @@ export default function Clients() {
   }, [activeClientId, clients, packages]);
 
   React.useEffect(() => {
+    setFullPageView(false);
+  }, [activeClientId]);
+
+  React.useEffect(() => {
     if (activeTab === 'expired') {
       fetchExpiredMembers();
     }
@@ -220,6 +242,8 @@ export default function Clients() {
   const [renewSalesRep, setRenewSalesRep] = useState('unassigned');
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchMode, setSearchMode] = useState<'general' | 'id'>('general');
+  const [fullPageView, setFullPageView] = useState(false);
   const [filterBranch, setFilterBranch] = useState('All');
   const [filterRep, setFilterRep] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
@@ -370,7 +394,7 @@ export default function Clients() {
         method: upgradePaymentMethod as any,
         instapayRef: upgradePaymentMethod === 'Instapay' ? upgradeInstapayRef : undefined,
         packageType: pkg.name,
-        packageCategory: pkg.name.toLowerCase().includes('pt') || pkg.name.toLowerCase().includes('private') ? 'Private Training' : 'Group Training',
+        packageCategory: resolvePaymentCategory(pkg.name),
         sales_rep_id: repId,
         salesName: repName,
         recordedBy: currentUser?.id || '',
@@ -428,7 +452,7 @@ export default function Clients() {
         method: renewPaymentMethod as any,
         instapayRef: renewPaymentMethod === 'Instapay' ? renewInstapayRef : undefined,
         packageType: pkg.name,
-        packageCategory: pkg.name.toLowerCase().includes('pt') || pkg.name.toLowerCase().includes('private') ? 'Private Training' : 'Group Training',
+        packageCategory: resolvePaymentCategory(pkg.name),
         sales_rep_id: repId,
         salesName: repName,
         recordedBy: currentUser?.id || '',
@@ -897,11 +921,16 @@ export default function Clients() {
     // Search
     if (deferredSearchTerm) {
       const term = deferredSearchTerm.toLowerCase();
-      filtered = filtered.filter(m => 
-        m.name.toLowerCase().includes(term) || 
-        m.phone.includes(term) ||
-        (m.memberId && m.memberId.toString().includes(term))
-      );
+      if (searchMode === 'id') {
+        const idTerm = term.replace(/^#/, '');
+        filtered = filtered.filter(m => m.memberId && m.memberId.toString().includes(idTerm));
+      } else {
+        filtered = filtered.filter(m => 
+          m.name.toLowerCase().includes(term) || 
+          m.phone.includes(term) ||
+          (m.memberId && m.memberId.toString().includes(term))
+        );
+      }
     }
 
     // Branch
@@ -986,6 +1015,7 @@ export default function Clients() {
     onHold,
     expired,
     deferredSearchTerm,
+    searchMode,
     deferredFilterBranch,
     deferredFilterRep,
     users,
@@ -1031,8 +1061,7 @@ export default function Clients() {
     const sysPkg = packages.find(p => p.name === newPackageName);
     if (!sysPkg) return;
 
-    const isPt = sysPkg.name.toLowerCase().includes('pt') || sysPkg.name.toLowerCase().includes('private');
-    const category = isPt ? 'Private Training' : 'Group Training';
+    const category = resolvePaymentCategory(sysPkg.name);
 
     // 1. Prepare packages list
     const packagesCopy = [...(client.packages || [])];
@@ -1567,14 +1596,32 @@ export default function Clients() {
         <div className="flex flex-col md:flex-row items-end gap-4 mb-6 bg-card p-4 rounded-xl border shadow-sm">
           <div className="flex-1 w-full space-y-1.5">
             <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('members.search_placeholder')}</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder={t('members.search_placeholder')} 
-                className="pl-9 h-11 bg-muted/30 border-none focus-visible:ring-1"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+            <div className="relative flex items-center gap-2">
+              <div className="flex shrink-0 rounded-lg bg-muted/50 p-0.5 text-[11px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setSearchMode('general')}
+                  className={`px-2.5 py-1.5 rounded-md transition-colors ${searchMode === 'general' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  General
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchMode('id')}
+                  className={`px-2.5 py-1.5 rounded-md transition-colors ${searchMode === 'id' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  ID
+                </button>
+              </div>
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder={searchMode === 'id' ? t('members.search_by_id') : t('members.search_placeholder')} 
+                  className="pl-9 h-11 bg-muted/30 border-none focus-visible:ring-1"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
             </div>
           </div>
           
@@ -1851,7 +1898,7 @@ export default function Clients() {
               />
             </DialogContent>
           ) : (
-            <DialogContent className="w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background">
+            <DialogContent className={fullPageView ? 'w-screen h-screen max-w-none max-h-none rounded-none overflow-hidden flex flex-col p-0 border-none shadow-2xl bg-background' : 'w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background'}>
             {/* Header */}
             <DialogHeader className="px-6 pr-12 sm:pr-6 pt-5 pb-4 border-b bg-muted/20 flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
@@ -1867,11 +1914,28 @@ export default function Clients() {
                         {activeClient.status}
                       </span>
                     </p>
+                    {(activeClient.salesName || activeClient.assignedTo) && (
+                      <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                        <UserPlus className="h-3 w-3" />
+                        Sales Rep: {resolveUserDisplay(activeClient.assignedTo || activeClient.salesName, users, activeClient.salesName || 'Unassigned')}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="text-left sm:text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0 self-start sm:self-auto">
-                  <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>
-                  <span className="text-xl sm:text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                  <div className="text-left sm:text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0">
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>
+                    <span className="text-xl sm:text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 px-2.5"
+                    onClick={() => setFullPageView(v => !v)}
+                    title={fullPageView ? 'Compact view' : 'Full page view'}
+                  >
+                    {fullPageView ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  </Button>
                 </div>
               </div>
             </DialogHeader>
@@ -1911,16 +1975,29 @@ export default function Clients() {
                     <div className="space-y-4 p-4 rounded-xl border bg-muted/20 text-left">
                       <div className="flex items-center justify-between border-b pb-2 mb-2">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Member Details</p>
-                        {getTenantId().toLowerCase().includes('inzan') && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs font-semibold px-2"
-                            onClick={() => setIsEditing(!isEditing)}
-                          >
-                            {isEditing ? 'Cancel' : 'Edit'}
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {canDownloadContract && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs font-semibold px-2 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                              onClick={handleDownloadContract}
+                              title="Download Contract (PDF)"
+                            >
+                              <FileText className="h-3.5 w-3.5 mr-1" /> Download Contract (PDF)
+                            </Button>
+                          )}
+                          {getTenantId().toLowerCase().includes('inzan') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs font-semibold px-2"
+                              onClick={() => setIsEditing(!isEditing)}
+                            >
+                              {isEditing ? 'Cancel' : 'Edit'}
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1 col-span-1 sm:col-span-2">

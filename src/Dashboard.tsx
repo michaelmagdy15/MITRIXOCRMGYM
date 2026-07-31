@@ -56,7 +56,7 @@ export const isGroupPackage = (pkg: string) => {
   const lower = pkg.toLowerCase().trim();
   return GROUP_PACKAGES.includes(lower) || lower.includes('group') || lower.includes('gt');
 };
-import { Target, Users, CalendarDays, AlertTriangle, Gift, Settings, ChevronLeft, ChevronRight, Trophy, Download, ArrowUpDown, UserCheck, UserPlus, Snowflake, Clock, Send, Megaphone } from 'lucide-react';
+import { Target, Users, CalendarDays, AlertTriangle, Gift, Settings, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, Download, ArrowUpDown, UserCheck, UserPlus, Snowflake, Clock, Send, Megaphone } from 'lucide-react';
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import OnlineUsers from './components/OnlineUsers';
 import { Textarea } from '@/components/ui/textarea';
@@ -156,6 +156,16 @@ export default function Dashboard() {
     }
   };
   const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
+  const [isTargetWidgetCollapsed, setIsTargetWidgetCollapsed] = useState(() => localStorage.getItem('isTargetWidgetCollapsed') === 'true');
+
+  const toggleTargetWidget = () => {
+    setIsTargetWidgetCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('isTargetWidgetCollapsed', String(next));
+      return next;
+    });
+  };
+
   const [newTarget, setNewTarget] = useState(salesTarget.targetAmount.toString());
   const [newPtTarget, setNewPtTarget] = useState((salesTarget.ptTarget || 0).toString());
   const [newClassesTarget, setNewClassesTarget] = useState((salesTarget.classesTarget || 0).toString());
@@ -826,8 +836,13 @@ export default function Dashboard() {
         ) : (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{t('dashboard.sales_target')}</CardTitle>
-              {canAccessSettings && (
+              <CardTitle className="text-sm font-medium flex items-center gap-1">
+                {t('dashboard.sales_target')}
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={toggleTargetWidget} title={isTargetWidgetCollapsed ? 'Expand widget' : 'Collapse widget'}>
+                  {isTargetWidgetCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                </Button>
+              </CardTitle>
+              {!isTargetWidgetCollapsed && canAccessSettings && (
                 <CardAction>
                   <Dialog open={isTargetDialogOpen} onOpenChange={(open) => {
                     setIsTargetDialogOpen(open);
@@ -889,6 +904,7 @@ export default function Dashboard() {
                 </CardAction>
               )}
             </CardHeader>
+            {!isTargetWidgetCollapsed && (
             <CardContent>
               <div className="text-2xl font-bold">{filteredSalesData.currentAmount.toLocaleString()} LE</div>
               <p className="text-xs text-muted-foreground">
@@ -984,6 +1000,7 @@ export default function Dashboard() {
                 </div>
               </div>
             </CardContent>
+            )}
           </Card>
         )}
         

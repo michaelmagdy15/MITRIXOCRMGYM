@@ -130,11 +130,11 @@ export default function Users() {
       const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
 
       allUsers.forEach((u: User) => {
-        if (u.role !== 'client') return;
+        if (u.role !== 'client' && u.role !== 'coach') return;
         let match = false;
         
-        if (/^\d+$/.test(term) && String(u.clientRecordId) === term) {
-          match = true;
+        if (/^\d+$/.test(term)) {
+          match = String(u.clientRecordId) === term || String(u.coachId) === term;
         } else if (u.email?.toLowerCase() === termLower) {
           match = true;
         } else if (u.name?.startsWith(capitalizedTerm)) {
@@ -518,7 +518,7 @@ export default function Users() {
 
         <TabsContent value="members" className="space-y-4 m-0 outline-none">
           <div className="flex flex-col gap-1">
-            <p className="text-sm text-muted-foreground">Search and manage client access credentials for the member app portal.</p>
+            <p className="text-sm text-muted-foreground">Look up member or coach portal credentials and account access status by ID, email, or name.</p>
           </div>
 
           <form onSubmit={handleMemberSearch} className="flex gap-2 max-w-md">
@@ -544,20 +544,48 @@ export default function Users() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Member ID</TableHead>
+                      <TableHead>Account ID</TableHead>
                       <TableHead>Name</TableHead>
+                      <TableHead>Role</TableHead>
                       <TableHead>Email (Login Username)</TableHead>
-                      <TableHead>Phone</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {searchResults.map(user => (
                       <TableRow key={user.id}>
-                        <TableCell className="font-mono text-sm">{user.clientRecordId || '—'}</TableCell>
+                        <TableCell className="font-mono text-sm">{user.clientRecordId || user.coachId || '—'}</TableCell>
                         <TableCell className="font-semibold">{user.name}</TableCell>
+                        <TableCell>
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
+                            {user.role === 'coach' ? 'Coach' : 'Member'}
+                          </span>
+                        </TableCell>
                         <TableCell>{user.email}</TableCell>
-                        <TableCell>{user.phone || '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+                              user.isPending
+                                ? 'text-amber-600'
+                                : user.status === 'nonworking'
+                                  ? 'text-muted-foreground'
+                                  : 'text-green-600'
+                            }`}>
+                              <span className={`h-1.5 w-1.5 rounded-full ${
+                                user.isPending
+                                  ? 'bg-amber-500'
+                                  : user.status === 'nonworking'
+                                    ? 'bg-muted-foreground'
+                                    : 'bg-green-500'
+                              }`} />
+                              {user.isPending ? 'Pending (not logged in yet)' : user.status === 'nonworking' ? 'Non-Working' : 'Active'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {user.lastSeen ? `Last seen ${formatDistanceToNow(parseISO(user.lastSeen), { addSuffix: true })}` : 'Never logged in'}
+                            </span>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             <Button
@@ -589,7 +617,7 @@ export default function Users() {
                               size="icon"
                               className="text-destructive hover:bg-destructive/10"
                               onClick={() => {
-                                if (window.confirm(`Delete client portal account for ${user.name}?\n\nThis removes their login access and cannot be undone.`)) {
+                                if (window.confirm(`Delete ${user.role === 'coach' ? 'coach' : 'client'} portal account for ${user.name}?\n\nThis removes their login access and cannot be undone.`)) {
                                   deleteUser(user.id);
                                   setSearchResults(prev => prev.filter(r => r.id !== user.id));
                                 }
@@ -608,12 +636,12 @@ export default function Users() {
             </Card>
           ) : searchQuery && !isSearching ? (
             <div className="py-12 text-center text-muted-foreground border border-dashed rounded-xl bg-card">
-              No member accounts found matching "{searchQuery}".
+              No portal accounts found matching "{searchQuery}".
             </div>
           ) : (
             <div className="py-12 text-center text-muted-foreground border border-dashed rounded-xl bg-card flex flex-col items-center justify-center gap-2">
               <Search className="h-8 w-8 opacity-20" />
-              <p className="text-sm font-medium">Enter a Member ID or full name to view portal account status.</p>
+              <p className="text-sm font-medium">Enter a Member ID, Coach ID, email, or full name to view portal account status.</p>
             </div>
           )}
         </TabsContent>
@@ -622,7 +650,7 @@ export default function Users() {
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingUser?.role === 'client' ? 'Edit Member Portal Credentials' : 'Edit User Profile'}</DialogTitle>
+            <DialogTitle>{editingUser?.role === 'client' ? 'Edit Member Portal Credentials' : editingUser?.role === 'coach' ? 'Edit Coach Portal Credentials' : 'Edit User Profile'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">

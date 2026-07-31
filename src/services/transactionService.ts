@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
 import { addAuditLog } from './auditService';
+import { PaymentCategory } from '../utils/paymentCategories';
 
 /**
  * Transaction Service: Handles member package upgrades and payments
@@ -33,9 +34,10 @@ export interface PaymentTransactionParams {
   instapayRef?: string;
 
   packageType: string;
-  packageCategory: 'Private Training' | 'Group Training';
+  packageCategory: PaymentCategory;
   coachName?: string;
   notes?: string;
+  receiptSerial?: string;
 
   sales_rep_id: string;
   salesName: string;
@@ -159,6 +161,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       package_category_type: params.packageCategory,
       coachName: params.coachName,
       notes: params.notes,
+      receiptSerial: params.receiptSerial || undefined,
       recordedBy: params.recordedBy,
       salesName: params.salesName,
       sales_rep_id: params.sales_rep_id,
