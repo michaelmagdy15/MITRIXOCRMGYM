@@ -19,7 +19,6 @@ import { useTasks } from './hooks/useTasks';
 import { usePackages } from './hooks/usePackages';
 import { useCoaches } from './hooks/useCoaches';
 import { useAttendance } from './hooks/useAttendance';
-import { useAuditLogs } from './hooks/useAuditLogs';
 import { useImportBatches } from './hooks/useImportBatches';
 import { usePTSessions } from './hooks/usePTSessions';
 import { useUserTargets } from './hooks/useUserTargets';
@@ -33,7 +32,6 @@ import {
   InteractionLog,
   SalesTarget, 
   PTPackageRecord, 
-  AuditLog, 
   Task, 
   Package, 
   Coach, 
@@ -61,7 +59,6 @@ export interface AppContextType {
   payments: Payment[];
   loadingPayments: boolean;
   ptPackageRecords: PTPackageRecord[];
-  auditLogs: AuditLog[];
   tasks: Task[];
   allTasks: Task[];
   packages: Package[];
@@ -222,15 +219,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     attendances, 
     recordAttendance 
   } = useAttendance(currentUser, clients);
-
-  const auditLogDateFrom = React.useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().substring(0, 10);
-  }, []);
-  const { 
-    auditLogs 
-  } = useAuditLogs(currentUser, { dateFrom: auditLogDateFrom, dateTo: '' });
 
   const { 
     importBatches, 
@@ -596,7 +584,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     payments: visiblePayments,
     loadingPayments,
     ptPackageRecords,
-    auditLogs,
     tasks: visibleTasks,
     allTasks,
     packages,
@@ -671,7 +658,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     currentUser, effectiveRole, users, visibleClients, loadingClients,
     loadingExpired, expiredLoaded, fetchExpiredMembers,
     salesStats, visiblePayments, loadingPayments, ptPackageRecords,
-    auditLogs, visibleTasks, allTasks, packages, loadingPackages,
+    visibleTasks, allTasks, packages, loadingPackages,
     coaches, importBatches, userTargets, searchQuery, activeTab, activeClientId, prefilledLeadData, isAuthReady, branding,
     features, updateFeatures, previewRole, attendances, canDeletePayments, canAccessSettings,
     canViewGlobalDashboard, canDeleteRecords, canAssignLeads,

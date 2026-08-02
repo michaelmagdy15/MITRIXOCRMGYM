@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAppContext } from './context';
+import { useAuditLogs } from './hooks/useAuditLogs';
+import { useAuth } from './contexts/AuthContext';
 import { useLanguage } from './contexts/LanguageContext';
 import { useSettings } from './contexts/SettingsContext';
 import { format, parseISO, isAfter, isBefore, differenceInDays, subDays } from 'date-fns';
@@ -39,7 +41,8 @@ interface ReportTab {
 }
 
 export default function AdvancedReports() {
-  const { clients, payments, ptPackageRecords, attendances, auditLogs, users, coaches, branches } = useAppContext();
+  const { clients, payments, ptPackageRecords, attendances, users, coaches, branches } = useAppContext();
+  const { currentUser } = useAuth();
   const { branding } = useSettings();
 
   const [activeReport, setActiveReport] = useState<ReportId>('expired-members');
@@ -47,6 +50,10 @@ export default function AdvancedReports() {
   const [dateTo, setDateTo] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');
   const [staffFilter, setStaffFilter] = useState('all');
+
+  // Audit logs are fetched on-demand (this page mounts lazily). Pass the report's
+  // selected date range so the backend filters server-side instead of loading all logs.
+  const { auditLogs } = useAuditLogs(currentUser, { dateFrom, dateTo });
 
   const safeParseDate = (d: any): Date | null => {
     if (!d) return null;

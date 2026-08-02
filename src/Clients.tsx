@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Minus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity, X, Maximize2, Minimize2 } from 'lucide-react';
-import { Client, InteractionType, InteractionOutcome, AuditLog, ClientPackage } from './types';
+import { Client, InteractionType, InteractionOutcome, ClientPackage } from './types';
 import { format, parseISO, isValid, isAfter, isBefore, addDays, subDays, differenceInDays } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,6 +35,7 @@ import { downloadFile } from './utils/download';
 import { resolvePaymentCategory } from './utils/paymentCategories';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { InzanMemberShow } from './components/InzanMemberShow';
+import { ClientAuditLogs } from './components/ClientAuditLogs';
 
 const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => {
   if (!dateStr) return fallback;
@@ -87,7 +88,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, auditLogs, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded } = useAppContext();
+  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded } = useAppContext();
   const { packages } = usePackages();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
@@ -3029,29 +3030,7 @@ export default function Clients() {
                 {/* ── AUDIT LOGS TAB ── */}
                 <TabsContent value="audit-logs" className="mt-0 outline-none p-5 text-left">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Audit Logs History</p>
-                  <div className="h-72 overflow-y-auto space-y-2 custom-scrollbar">
-                    {(() => {
-                      const clientLogs = auditLogs.filter((log) => log.entityId === activeClient.id);
-                      if (clientLogs.length > 0) {
-                        return clientLogs
-                          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                          .map((log) => (
-                            <div key={log.id} className="bg-muted/20 p-3 rounded-lg border text-xs space-y-1">
-                              <div className="flex justify-between items-center text-[10px] text-muted-foreground">
-                                <span className="font-semibold text-foreground/80 flex items-center gap-1">
-                                  <User className="h-3.5 w-3.5" />
-                                  {log.userName || 'System'} ({log.action})
-                                </span>
-                                <span>{safeFormatDate(log.timestamp, 'MMM d yyyy, h:mm a')}</span>
-                              </div>
-                              <p className="text-muted-foreground">{log.details}</p>
-                            </div>
-                          ));
-                      } else {
-                        return <p className="text-xs text-muted-foreground italic text-center py-10">No audit events logged for this member.</p>;
-                      }
-                    })()}
-                  </div>
+                  <ClientAuditLogs clientId={activeClient.id} currentUser={currentUser} />
                 </TabsContent>
 
                 {/* ── POINTS EXCHANGE TAB ── */}
@@ -3131,27 +3110,7 @@ export default function Clients() {
                   {/* points history */}
                   <div className="p-4 rounded-xl border bg-muted/20">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Redemption History</p>
-                    <div className="max-h-40 overflow-y-auto space-y-1.5 text-xs custom-scrollbar">
-                      {(() => {
-                        const pointsLogs = auditLogs.filter(
-                          (log) =>
-                            log.entityId === activeClient.id &&
-                            log.details &&
-                            (log.details.toLowerCase().includes('points') || log.details.toLowerCase().includes('pts'))
-                        );
-
-                        if (pointsLogs.length > 0) {
-                          return pointsLogs.map((log) => (
-                            <div key={log.id} className="bg-background p-2.5 rounded border flex justify-between gap-4">
-                              <p className="text-muted-foreground leading-snug">{log.details}</p>
-                              <span className="text-[9px] text-muted-foreground shrink-0">{safeFormatDate(log.timestamp, 'dd MMM yyyy')}</span>
-                            </div>
-                          ));
-                        } else {
-                          return <p className="text-xs text-muted-foreground italic text-center py-4">No point transactions logged.</p>;
-                        }
-                      })()}
-                    </div>
+                    <ClientAuditLogs clientId={activeClient.id} currentUser={currentUser} mode="points" />
                   </div>
                 </TabsContent>
 

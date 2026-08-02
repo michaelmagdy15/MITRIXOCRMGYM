@@ -933,7 +933,13 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
         return res.json({ auditLogs });
       }
       const db = await getDbForRequest(req);
-      const snap = await db.collection('auditLogs').orderBy('timestamp', 'desc').get();
+      const { fromISO, toISO, limit, entityId } = req.query;
+      const parsedLimit = Math.max(1, Math.min(parseInt(String(limit ?? '1000'), 10) || 1000, 5000));
+      let auditQuery: any = db.collection('auditLogs').orderBy('timestamp', 'desc');
+      if (entityId) auditQuery = auditQuery.where('entityId', '==', entityId);
+      if (fromISO) auditQuery = auditQuery.where('timestamp', '>=', fromISO);
+      if (toISO) auditQuery = auditQuery.where('timestamp', '<=', toISO);
+      const snap = await auditQuery.limit(parsedLimit).get();
       const auditLogs = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
       return res.json({ auditLogs });
     } catch (err: any) {

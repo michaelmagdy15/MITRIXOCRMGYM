@@ -10,6 +10,7 @@ const MAX_FETCH = 5000; // safety cap
 export interface AuditLogQueryParams {
   dateFrom: string; // 'yyyy-MM-dd'
   dateTo: string;   // 'yyyy-MM-dd'
+  entityId?: string; // filter by entityId (e.g. per-client history)
 }
 
 export const useAuditLogs = (currentUser: User | null, params: AuditLogQueryParams) => {
@@ -49,6 +50,7 @@ export const useAuditLogs = (currentUser: User | null, params: AuditLogQueryPara
       url.searchParams.append('fromISO', fromISO);
       url.searchParams.append('toISO', toISO);
       url.searchParams.append('limit', MAX_FETCH.toString());
+      if (params.entityId) url.searchParams.append('entityId', params.entityId);
 
       const res = await fetch(url.toString(), {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -64,7 +66,7 @@ export const useAuditLogs = (currentUser: User | null, params: AuditLogQueryPara
     } finally {
       setLoading(false);
     }
-  }, [currentUser, params.dateFrom, params.dateTo]);
+  }, [currentUser, params.dateFrom, params.dateTo, params.entityId]);
 
   useEffect(() => {
     fetchLogs();
