@@ -24,23 +24,8 @@
       ]
     },
     {
-      "database": "db-test",
-      "rules": "firestore-tenant.rules",
-      "indexes": "firestore.indexes.json"
-    },
-    {
-      "database": "db-testrules",
-      "rules": "firestore-tenant.rules",
-      "indexes": "firestore.indexes.json"
-    },
-    {
-      "database": "db-gyma",
-      "rules": "firestore-tenant.rules",
-      "indexes": "firestore.indexes.json"
-    },
-    {
-      "database": "db-inzanathletics",
-      "rules": "firestore-tenant.rules",
+      "database": "db-vbt",
+      "rules": "firestore.rules",
       "indexes": "firestore.indexes.json"
     },
     {

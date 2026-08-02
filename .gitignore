@@ -17,8 +17,6 @@ src/sdk/
 # Secrets / sensitive data (never commit)
 auth_export.json
 users.json
-root.crt
-*.crt
 strike_crm_backup_*.json
 Copy of Michael mitry (1).pdf
 *.lnk
