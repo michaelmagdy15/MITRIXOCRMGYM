@@ -51,7 +51,7 @@ const getRewardIcon = (name: string, type: 'partner' | 'internal') => {
 const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   {
     name: 'Free Protein Shake',
-    description: 'Redeem at the juice bar for any protein shake of your choice',
+    description: 'Show this at the juice bar and grab any shake you like',
     icon: 'coffee',
     coinsPrice: 50,
     partnerName: 'Juice Bar',
@@ -62,7 +62,7 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   },
   {
     name: 'Guest Pass (1 Day)',
-    description: 'Bring a friend for a free day pass at the gym',
+    description: 'Bring a friend along for a free day at the gym',
     icon: 'ticket',
     coinsPrice: 100,
     partnerName: 'Gym',
@@ -73,7 +73,7 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   },
   {
     name: '15% Off - Next Renewal',
-    description: 'Get 15% off your next membership renewal',
+    description: 'Knock 15% off your next membership renewal',
     icon: 'percent',
     coinsPrice: 200,
     partnerName: 'Gym',
@@ -84,7 +84,7 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   },
   {
     name: 'Free Towel Service (1 Month)',
-    description: 'Complimentary towel service for one month',
+    description: 'A month of free towel service - leave yours at home',
     icon: 'towel',
     coinsPrice: 75,
     partnerName: 'Gym',
@@ -95,7 +95,7 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   },
   {
     name: 'Boxing Gloves Upgrade',
-    description: 'Upgrade to premium club gloves for your sessions',
+    description: 'Swap to a premium pair of club gloves for your sessions',
     icon: 'boxing-glove',
     coinsPrice: 150,
     partnerName: 'Pro Shop',
@@ -164,7 +164,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
   const handleRedeem = async (reward: Reward) => {
     if (!client?.id || !coinsWallet) return;
     if (coinsWallet.balance < reward.coinsPrice) {
-      setResult({ type: 'error', message: `Not enough coins. You have ${coinsWallet.balance}, need ${reward.coinsPrice}.` });
+      setResult({ type: 'error', message: `You need ${reward.coinsPrice} coins for this one - you have ${coinsWallet.balance}.` });
       return;
     }
 
@@ -207,7 +207,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
 
       // Refresh wallet
       setCoinsWallet({ ...coinsWallet, balance: newBalance, totalSpent: coinsWallet.totalSpent + reward.coinsPrice });
-      setResult({ type: 'success', message: `"${reward.name}" redeemed successfully! Show this to staff for validation.` });
+      setResult({ type: 'success', message: `"${reward.name}" is yours - show this screen to the front desk and they'll sort you out.` });
 
       // Refresh redemptions
       const redemptionSnap = await getDocs(
@@ -250,7 +250,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
                 <Coins className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-primary">Coins Balance</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-primary">Your Coins</p>
                 <div className="flex items-center baseline gap-1.5">
                   <span className="text-3xl font-black font-mono text-foreground">{coinsWallet?.balance || 0}</span>
                   <Coins className="h-5 w-5 text-primary" />
@@ -258,9 +258,9 @@ export default function MemberRewards({ client }: { client: Client | null }) {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-[11px] text-muted-foreground">Earn from badges, streaks & check-ins</p>
+              <p className="text-[11px] text-muted-foreground">Earn them by checking in, keeping your streak and grabbing badges</p>
               <p className="text-[10px] font-medium text-muted-foreground mt-0.5">
-                Lifetime earned: <span className="font-mono text-foreground">{coinsWallet?.totalEarned || 0}</span>
+                Earned in total: <span className="font-mono text-foreground">{coinsWallet?.totalEarned || 0}</span>
               </p>
             </div>
           </div>
@@ -282,12 +282,12 @@ export default function MemberRewards({ client }: { client: Client | null }) {
             {tab === 'shop' ? (
               <>
                 <ShoppingCart className="h-3.5 w-3.5" />
-                Rewards Shop
+                Shop
               </>
             ) : (
               <>
                 <Gift className="h-3.5 w-3.5" />
-                My Rewards
+                My Picks
               </>
             )}
           </button>
@@ -331,7 +331,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
                           <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{reward.description}</p>
                         </div>
                         <Badge variant="outline" className="text-[9px] font-bold shrink-0 ml-2">
-                          {reward.type === 'partner' ? reward.partnerName : 'GYM'}
+                          {reward.type === 'partner' ? reward.partnerName : 'At the gym'}
                         </Badge>
                       </div>
 
@@ -354,7 +354,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
                           ) : isOutOfStock ? (
                             'Sold Out'
                           ) : !canAfford ? (
-                            'Not Enough Coins'
+                            'Not enough coins'
                           ) : (
                             'Redeem'
                           )}
@@ -371,21 +371,21 @@ export default function MemberRewards({ client }: { client: Client | null }) {
             <Card className="border-dashed bg-muted/20">
               <CardContent className="py-10 text-center text-xs text-muted-foreground">
                 <Gift className="h-8 w-8 mx-auto opacity-20 mb-2" />
-                No rewards available yet. Check back soon!
+                Nothing in the shop yet - check back soon.
               </CardContent>
             </Card>
           )}
         </div>
       )}
 
-      {/* ─── My Rewards ─── */}
+      {/* ─── My Picks ─── */}
       {activeTab === 'my-rewards' && (
         <div className="space-y-2">
           {myRedemptions.length === 0 ? (
             <Card className="border-dashed bg-muted/20">
               <CardContent className="py-10 text-center text-xs text-muted-foreground">
                 <Gift className="h-8 w-8 mx-auto opacity-20 mb-2" />
-                You haven't redeemed any rewards yet. Visit the shop!
+                You haven't redeemed anything yet - your picks will show up here.
               </CardContent>
             </Card>
           ) : (
@@ -410,7 +410,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className={`${config.bg} ${config.text} ${config.border} text-[9px] font-bold`}>
-                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                          {r.status === 'validated' ? 'Done' : r.status === 'pending' ? 'Awaiting desk' : 'Expired'}
                         </Badge>
                         <span className="text-sm font-black text-rose-500 font-mono">-{r.coinsSpent}</span>
                         <Coins className="h-4 w-4 text-rose-500" />
@@ -444,12 +444,12 @@ export default function MemberRewards({ client }: { client: Client | null }) {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Provider</span>
-                <span className="font-medium">{selectedReward.type === 'partner' ? selectedReward.partnerName : 'GYM'}</span>
+                <span className="text-muted-foreground">From</span>
+                <span className="font-medium">{selectedReward.type === 'partner' ? selectedReward.partnerName : 'the gym'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Availability</span>
-                <span className="font-medium">{selectedReward.quantity - selectedReward.claimed} remaining</span>
+                <span className="text-muted-foreground">In stock</span>
+                <span className="font-medium">{selectedReward.quantity - selectedReward.claimed} left</span>
               </div>
             </div>
           </DialogContent>

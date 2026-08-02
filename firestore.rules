@@ -390,6 +390,49 @@ service cloud.firestore {
       allow write: if ismitrixogymcrmStaff();
     }
 
+    match /rewards/{rewardId} {
+      allow read: if isAuthenticated();
+      allow create: if ismitrixogymcrmStaff();
+      allow update: if ismitrixogymcrmStaff() || (
+        isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimed']) &&
+        request.resource.data.claimed == resource.data.claimed + 1
+      );
+      allow delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /coinsWallets/{walletId} {
+      allow read, write: if ismitrixogymcrmStaff() || isOwnClientRecord(walletId);
+    }
+
+    match /coinsTransactions/{txnId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId);
+      allow update, delete: if ismitrixogymcrmStaff();
+    }
+
+    match /rewardRedemptions/{redemptionId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId);
+      allow update: if ismitrixogymcrmStaff();
+      allow delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /badgeDefinitions/{badgeId} {
+      allow read: if isAuthenticated();
+      allow write: if ismitrixogymcrmStaff();
+    }
+
+    match /memberBadges/{badgeId} {
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create, update: if isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId);
+      allow delete: if ismitrixogymcrmAdmin();
+    }
+
+    match /streaks/{memberId} {
+      allow read, write: if ismitrixogymcrmStaff() || isOwnClientRecord(memberId);
+    }
+
     match /settings/{settingId} {
       allow read: if (settingId == 'branding') || (settingId == 'features') || (settingId == 'storefront') || (settingId == 'branches') || canmitrixogymcrmAccessSettings();
       allow write: if canmitrixogymcrmAccessSettings() && (settingId != 'branding' || isValidBranding(request.resource.data));

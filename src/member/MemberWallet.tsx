@@ -73,7 +73,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
             <div className="p-2 bg-amber-500/20 rounded-xl">
               <Coins className="h-5 w-5 text-amber-500" />
             </div>
-            <span className="text-xs font-bold uppercase tracking-widest text-amber-600">Points Balance</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-amber-600">Your Points</span>
           </div>
           
           <div className="flex items-end gap-2">
@@ -85,14 +85,14 @@ export default function MemberWallet({ client }: { client: Client | null }) {
             <div className="bg-card/40 rounded-xl p-3 border border-emerald-500/10">
               <div className="flex items-center gap-1 text-emerald-500">
                 <ArrowUpCircle className="h-3 w-3" />
-                <span className="text-[10px] font-bold uppercase">Total Earned</span>
+                <span className="text-[10px] font-bold uppercase">Earned in total</span>
               </div>
               <p className="text-lg font-extrabold font-mono mt-0.5">{wallet?.totalEarned || 0}</p>
             </div>
             <div className="bg-card/40 rounded-xl p-3 border border-rose-500/10">
               <div className="flex items-center gap-1 text-rose-500">
                 <ArrowDownCircle className="h-3 w-3" />
-                <span className="text-[10px] font-bold uppercase">Total Spent</span>
+                <span className="text-[10px] font-bold uppercase">Spent in total</span>
               </div>
               <p className="text-lg font-extrabold font-mono mt-0.5">{wallet?.totalSpent || 0}</p>
             </div>
@@ -186,13 +186,13 @@ export default function MemberWallet({ client }: { client: Client | null }) {
       {/* ─── Buy Points Tab ─── */}
       {activeTab === 'buy' && (
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">Select a Points bundle to purchase. Pay at reception with Cash or Instapay.</p>
+          <p className="text-xs text-muted-foreground">Pick a bundle below - pay at reception with cash or Instapay and we'll top you up.</p>
           
           {bundles.length === 0 ? (
             <Card className="border-dashed bg-muted/20">
               <CardContent className="py-10 text-center text-xs text-muted-foreground italic">
                 <Coins className="h-8 w-8 mx-auto opacity-20 mb-2" />
-                No Points bundles available yet. Ask your gym admin to set them up.
+                No bundles available right now - ask the front desk and they'll sort you out.
               </CardContent>
             </Card>
           ) : (
@@ -247,7 +247,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
           <Card className="border bg-amber-500/5 border-amber-500/10">
             <CardContent className="p-3">
               <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium leading-relaxed">
-                💡 <strong>How to purchase:</strong> Tap "Buy Now", then visit reception to complete payment via Cash or Instapay. Points will be credited to your wallet instantly after staff confirmation.
+                💡 <strong>How it works:</strong> Tap "Buy Now", then settle at reception with cash or Instapay. Once staff confirm, the Points land in your wallet.
               </p>
             </CardContent>
           </Card>
@@ -261,7 +261,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
             <Card className="border-dashed bg-muted/20">
               <CardContent className="py-10 text-center text-xs text-muted-foreground italic">
                 <Clock className="h-8 w-8 mx-auto opacity-20 mb-2" />
-                No transactions yet. Purchase Points to get started!
+                No activity yet - buy Points or spend some and it'll show up here.
               </CardContent>
             </Card>
           ) : (

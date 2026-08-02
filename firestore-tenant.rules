@@ -361,6 +361,49 @@ service cloud.firestore {
       allow write: if isTenantAdmin();
     }
 
+    match /rewards/{rewardId} {
+      allow read: if isAuthenticated();
+      allow create: if isTenantStaff();
+      allow update: if isTenantStaff() || (
+        isAuthenticated() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimed']) &&
+        request.resource.data.claimed == resource.data.claimed + 1
+      );
+      allow delete: if isTenantAdmin();
+    }
+
+    match /coinsWallets/{walletId} {
+      allow read, write: if isTenantStaff() || isOwnClientRecord(walletId);
+    }
+
+    match /coinsTransactions/{txnId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId);
+      allow update, delete: if isTenantStaff();
+    }
+
+    match /rewardRedemptions/{redemptionId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId);
+      allow update: if isTenantStaff();
+      allow delete: if isTenantAdmin();
+    }
+
+    match /badgeDefinitions/{badgeId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
+    }
+
+    match /memberBadges/{badgeId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create, update: if isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId);
+      allow delete: if isTenantAdmin();
+    }
+
+    match /streaks/{memberId} {
+      allow read, write: if isTenantStaff() || isOwnClientRecord(memberId);
+    }
+
     match /coaches/{coachId} {
       allow read: if isAuthenticated();
       allow write: if isTenantAdmin();
