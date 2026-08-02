@@ -15,7 +15,7 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 
 const BoxingGlovesIcon = ({ className }: { className?: string }) => (
   <svg
@@ -511,20 +511,22 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
             <div className="flex flex-col items-center justify-center shrink-0">
               {client.status !== 'Expired' && (
                 <Dialog>
-                  <DialogTrigger asChild>
-                    <div 
-                      className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center relative overflow-hidden cursor-pointer transition-transform hover:scale-105 active:scale-95"
-                      title="Tap to enlarge"
-                    >
-                      <QRCodeSVG 
-                        value={memberQrValue} 
-                        size={80} 
-                        level="H" 
-                        includeMargin={false}
-                        fgColor="#18181b"
-                      />
-                    </div>
-                  </DialogTrigger>
+                  <DialogTrigger
+                    render={
+                      <div 
+                        className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center relative overflow-hidden cursor-pointer transition-transform hover:scale-105 active:scale-95"
+                        title="Tap to enlarge"
+                      >
+                        <QRCodeSVG 
+                          value={memberQrValue} 
+                          size={80} 
+                          level="H" 
+                          includeMargin={false}
+                          fgColor="#18181b"
+                        />
+                      </div>
+                    }
+                  />
                   <DialogContent className="max-w-sm p-0 bg-transparent shadow-none">
                     <div className="bg-card rounded-2xl p-6 border shadow-xl">
                       <div className="flex items-center justify-between mb-4">

@@ -3,6 +3,7 @@ import { Client } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Gift, Coins, ShoppingCart, CheckCircle2, AlertCircle, Sparkles, Clock, Star, Shield, Dumbbell, Coffee, Ticket, Percent, HandFist, Bath as BathIcon } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs, addDoc, query, where, doc, updateDoc } from 'firebase/firestore';
@@ -105,9 +106,9 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   },
 ];
 
-const RewardIconWrapper = ({ icon, className = '' }: { icon: React.ComponentType<{ className?: string }>, className?: string }) => (
+const RewardIconWrapper = ({ icon: Icon, className = '' }: { icon: React.ComponentType<{ className?: string }>, className?: string }) => (
   <div className={`w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary ${className}`}>
-    <icon className="h-5 w-5" />
+    <Icon className="h-5 w-5" />
   </div>
 );
 
@@ -389,7 +390,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
             </Card>
           ) : (
             myRedemptions.map(r => {
-              const config = statusConfig[r.status] || statusConfig.pending;
+              const config = statusConfig[r.status] || statusConfig.pending || { bg: 'bg-zinc-500/10', text: 'text-zinc-500', border: 'border-zinc-200/50', icon: Clock };
               const StatusIcon = config.icon;
               
               return (
@@ -434,7 +435,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
                 {selectedReward.description}
               </DialogDescription>
             </DialogHeader>
-            <Separator className="my-4" />
+            <div role="separator" className="my-4 border-t" />
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Cost</span>

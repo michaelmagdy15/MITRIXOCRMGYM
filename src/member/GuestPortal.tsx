@@ -344,6 +344,22 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
     packagesByLocation[loc as LocationGroupId].adults.sort((a, b) => a.sessions - b.sessions);
   });
 
+  // Packages for each age category (across all locations)
+  const displayKids = packages.filter(p => {
+    const n = p.name.toLowerCase();
+    return n.includes('kid') && !n.includes('junior');
+  }).sort((a, b) => a.sessions - b.sessions);
+
+  const displayJuniors = packages.filter(p => {
+    const n = p.name.toLowerCase();
+    return n.includes('junior');
+  }).sort((a, b) => a.sessions - b.sessions);
+
+  const displayAdults = packages.filter(p => {
+    const n = p.name.toLowerCase();
+    return !n.includes('kid') && !n.includes('junior') && !n.includes('corporate') && !n.includes('company') && p.type !== 'Group';
+  }).sort((a, b) => a.sessions - b.sessions);
+
   // Corporate packages (type 'Group' or name contains 'corporate/company') - keep separate
   const corporatePackages = packages.filter(p => {
     const n = p.name.toLowerCase();
