@@ -289,7 +289,14 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   const filteredClasses = classes.filter(c => {
     try {
       const isDateMatch = isSameDay(parseISO(c.date), selectedDate);
-      const isBranchMatch = !c.branch || c.branch === 'ALL' || c.branch === client?.branch || !client?.branch;
+      // More flexible branch matching: show class if it has no branch, is 'ALL', matches client's branch, or client has no branch
+      // Also normalize branch names (trim, case-insensitive)
+      const classBranch = c.branch?.trim();
+      const clientBranch = client?.branch?.trim();
+      const isBranchMatch = !classBranch 
+        || classBranch.toLowerCase() === 'all' 
+        || !clientBranch 
+        || classBranch.toLowerCase() === clientBranch.toLowerCase();
       return isDateMatch && isBranchMatch;
     } catch { return false; }
   });
@@ -297,7 +304,12 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   // Count classes per date for dot indicators
   const classCountByDate = new Map<string, number>();
   classes.forEach(c => {
-    const isBranchMatch = !c.branch || c.branch === 'ALL' || c.branch === client?.branch || !client?.branch;
+    const classBranch = c.branch?.trim();
+    const clientBranch = client?.branch?.trim();
+    const isBranchMatch = !classBranch 
+      || classBranch.toLowerCase() === 'all' 
+      || !clientBranch 
+      || classBranch.toLowerCase() === clientBranch.toLowerCase();
     if (isBranchMatch) {
       const key = c.date;
       classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);
@@ -393,10 +405,27 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
       <div className="space-y-3">
         {filteredClasses.length === 0 ? (
           <Card className="border-dashed bg-muted/20">
-            <CardContent className="py-10 text-center text-muted-foreground text-xs italic">
+            <CardContent className="py-10 text-center text-muted-foreground text-xs">
               <Calendar className="h-8 w-8 mx-auto opacity-20 mb-2" />
-              No sessions scheduled for {isToday(selectedDate) ? 'today' : format(selectedDate, 'dd MMM')}.
-              <br />Try selecting a different date above.
+              <p className="font-medium mb-1">
+                No sessions scheduled for {isToday(selectedDate) ? 'today' : format(selectedDate, 'dd MMM')}.
+              </p>
+              {client?.branch && (
+                <p className="text-[10px] mb-2 opacity-70">
+                  Showing classes for branch: <span className="font-bold text-foreground">{client.branch}</span>
+                </p>
+              )}
+              <p className="italic">Try selecting a different date above.</p>
+              {classes.length > 0 && filteredClasses.length === 0 && client?.branch && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="mt-3 text-xs"
+                  onClick={() => setSelectedDate(startOfDay(new Date()))}
+                >
+                  View all dates
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (

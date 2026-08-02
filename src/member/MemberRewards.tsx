@@ -3,7 +3,7 @@ import { Client } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Gift, Coins, ShoppingCart, CheckCircle2, AlertCircle, Sparkles, Clock, Star } from 'lucide-react';
+import { Gift, Coins, ShoppingCart, CheckCircle2, AlertCircle, Sparkles, Clock, Star, Shield, Dumbbell, Coffee, Ticket, Percent, HandFist, Bath as BathIcon } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs, addDoc, query, where, doc, updateDoc } from 'firebase/firestore';
 import { getOrCreateCoinsWallet, creditCoins, type CoinsWallet } from '../services/gamificationService';
@@ -33,11 +33,25 @@ interface Redemption {
   createdAt: string;
 }
 
+// Map reward types/names to professional icons
+const getRewardIcon = (name: string, type: 'partner' | 'internal') => {
+  const n = name.toLowerCase();
+  if (n.includes('shake') || n.includes('protein') || n.includes('drink') || n.includes('juice')) return Coffee;
+  if (n.includes('guest') || n.includes('pass') || n.includes('friend')) return Ticket;
+  if (n.includes('renewal') || n.includes('discount') || n.includes('off') || n.includes('%')) return Percent;
+  if (n.includes('towel') || n.includes('service')) return BathIcon;
+  if (n.includes('glove') || n.includes('boxing') || n.includes('gear') || n.includes('equipment')) return HandFist;
+  if (n.includes('session') || n.includes('class') || n.includes('training')) return Dumbbell;
+  if (n.includes('shield') || n.includes('protect')) return Shield;
+  if (type === 'partner') return Gift;
+  return Sparkles;
+};
+
 const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   {
     name: 'Free Protein Shake',
     description: 'Redeem at the juice bar for any protein shake of your choice',
-    icon: '🥤',
+    icon: 'coffee',
     coinsPrice: 50,
     partnerName: 'Juice Bar',
     type: 'internal',
@@ -48,7 +62,7 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   {
     name: 'Guest Pass (1 Day)',
     description: 'Bring a friend for a free day pass at the gym',
-    icon: '🎫',
+    icon: 'ticket',
     coinsPrice: 100,
     partnerName: 'Gym',
     type: 'internal',
@@ -59,7 +73,7 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   {
     name: '15% Off - Next Renewal',
     description: 'Get 15% off your next membership renewal',
-    icon: '💰',
+    icon: 'percent',
     coinsPrice: 200,
     partnerName: 'Gym',
     type: 'internal',
@@ -70,7 +84,7 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   {
     name: 'Free Towel Service (1 Month)',
     description: 'Complimentary towel service for one month',
-    icon: '🧺',
+    icon: 'towel',
     coinsPrice: 75,
     partnerName: 'Gym',
     type: 'internal',
@@ -81,7 +95,7 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   {
     name: 'Boxing Gloves Upgrade',
     description: 'Upgrade to premium club gloves for your sessions',
-    icon: '🥊',
+    icon: 'boxing-glove',
     coinsPrice: 150,
     partnerName: 'Pro Shop',
     type: 'partner',
@@ -91,6 +105,12 @@ const DEFAULT_REWARDS: Omit<Reward, 'id'>[] = [
   },
 ];
 
+const RewardIconWrapper = ({ icon, className = '' }: { icon: React.ComponentType<{ className?: string }>, className?: string }) => (
+  <div className={`w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary ${className}`}>
+    <icon className="h-5 w-5" />
+  </div>
+);
+
 export default function MemberRewards({ client }: { client: Client | null }) {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [myRedemptions, setMyRedemptions] = useState<Redemption[]>([]);
@@ -99,6 +119,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
   const [redeemingId, setRedeemingId] = useState<string | null>(null);
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'shop' | 'my-rewards'>('shop');
+  const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
 
   useEffect(() => {
     if (!client?.id) { setLoading(false); return; }
@@ -185,7 +206,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
 
       // Refresh wallet
       setCoinsWallet({ ...coinsWallet, balance: newBalance, totalSpent: coinsWallet.totalSpent + reward.coinsPrice });
-      setResult({ type: 'success', message: `🎉 "${reward.name}" redeemed! Show this to staff for validation.` });
+      setResult({ type: 'success', message: `"${reward.name}" redeemed successfully! Show this to staff for validation.` });
 
       // Refresh redemptions
       const redemptionSnap = await getDocs(
@@ -200,30 +221,50 @@ export default function MemberRewards({ client }: { client: Client | null }) {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
   }
 
-  const statusColors: Record<string, string> = {
-    pending: 'bg-amber-500/10 text-amber-600 border-amber-200/50',
-    validated: 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50',
-    expired: 'bg-zinc-500/10 text-zinc-500 border-zinc-200/50',
+  const statusConfig: Record<string, { bg: string; text: string; border: string; icon: React.ComponentType<{ className?: string }> }> = {
+    pending: { bg: 'bg-amber-500/10', text: 'text-amber-600', border: 'border-amber-200/50', icon: Clock },
+    validated: { bg: 'bg-emerald-500/10', text: 'text-emerald-600', border: 'border-emerald-200/50', icon: CheckCircle2 },
+    expired: { bg: 'bg-zinc-500/10', text: 'text-zinc-500', border: 'border-zinc-200/50', icon: AlertCircle },
+  };
+
+  const formatDate = (dateStr: string) => {
+    try { return format(parseISO(dateStr), 'dd MMM yyyy, h:mm a'); } catch { return ''; }
   };
 
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
       {/* ─── Coins Balance Header ─── */}
-      <div className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 to-amber-500/5 border border-amber-500/20">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-amber-600">Your Coins</p>
-          <div className="flex items-center gap-1.5">
-            <Coins className="h-5 w-5 text-amber-500" />
-            <span className="text-3xl font-black font-mono">{coinsWallet?.balance || 0}</span>
+      <Card className="border-primary/20 bg-primary/5 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Coins className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-primary">Coins Balance</p>
+                <div className="flex items-center baseline gap-1.5">
+                  <span className="text-3xl font-black font-mono text-foreground">{coinsWallet?.balance || 0}</span>
+                  <Coins className="h-5 w-5 text-primary" />
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] text-muted-foreground">Earn from badges, streaks & check-ins</p>
+              <p className="text-[10px] font-medium text-muted-foreground mt-0.5">
+                Lifetime earned: <span className="font-mono text-foreground">{coinsWallet?.totalEarned || 0}</span>
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="text-right">
-          <p className="text-[10px] text-muted-foreground">Earn coins from badges &amp; streaks</p>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* ─── Tab Switcher ─── */}
       <div className="flex gap-1 bg-muted/50 rounded-xl p-1">
@@ -231,18 +272,32 @@ export default function MemberRewards({ client }: { client: Client | null }) {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold capitalize transition-all ${
-              activeTab === tab ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+            className={`flex-1 py-2.5 rounded-lg text-xs font-bold capitalize transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === tab 
+                ? 'bg-card shadow-sm text-foreground' 
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            {tab === 'shop' ? '🛒 Rewards Shop' : '🎁 My Rewards'}
+            {tab === 'shop' ? (
+              <>
+                <ShoppingCart className="h-3.5 w-3.5" />
+                Rewards Shop
+              </>
+            ) : (
+              <>
+                <Gift className="h-3.5 w-3.5" />
+                My Rewards
+              </>
+            )}
           </button>
         ))}
       </div>
 
       {result && (
         <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-medium border ${
-          result.type === 'success' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' : 'bg-rose-500/10 text-rose-600 border-rose-200/50'
+          result.type === 'success' 
+            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' 
+            : 'bg-rose-500/10 text-rose-600 border-rose-200/50'
         }`}>
           {result.type === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
           {result.message}
@@ -251,40 +306,57 @@ export default function MemberRewards({ client }: { client: Client | null }) {
 
       {/* ─── Rewards Shop ─── */}
       {activeTab === 'shop' && (
-        <div className="grid gap-3">
+        <div className="space-y-3">
           {rewards.map(reward => {
             const canAfford = (coinsWallet?.balance || 0) >= reward.coinsPrice;
             const isOutOfStock = reward.claimed >= reward.quantity;
+            const IconComponent = getRewardIcon(reward.name, reward.type);
             
             return (
-              <Card key={reward.id} className={`border overflow-hidden transition-all ${canAfford && !isOutOfStock ? 'hover:shadow-md' : 'opacity-70'}`}>
+              <Card 
+                key={reward.id} 
+                className={`border overflow-hidden transition-all hover:shadow-md ${
+                  !canAfford || isOutOfStock ? 'opacity-50' : ''
+                }`}
+              >
                 <CardContent className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="text-3xl">{reward.icon}</div>
+                  <div className="flex items-start gap-4">
+                    <RewardIconWrapper icon={IconComponent} />
+                    
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-extrabold">{reward.name}</h3>
-                        <Badge variant="outline" className="text-[8px] font-bold">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-bold text-foreground truncate">{reward.name}</h3>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{reward.description}</p>
+                        </div>
+                        <Badge variant="outline" className="text-[9px] font-bold shrink-0 ml-2">
                           {reward.type === 'partner' ? reward.partnerName : 'GYM'}
                         </Badge>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{reward.description}</p>
-                      
-                      <div className="flex items-center justify-between mt-3">
-                        <div className="flex items-center gap-1 text-amber-500">
+
+                      <div className="flex items-center justify-between mt-4 pt-3 border-t">
+                        <div className="flex items-center gap-2 text-primary">
                           <Coins className="h-4 w-4" />
-                          <span className="text-base font-extrabold font-mono">{reward.coinsPrice}</span>
-                          <span className="text-[10px] text-muted-foreground ml-1">
+                          <span className="text-lg font-black font-mono">{reward.coinsPrice}</span>
+                          <span className="text-[10px] text-muted-foreground">
                             {reward.quantity - reward.claimed} left
                           </span>
                         </div>
                         <Button
                           size="sm"
-                          className="h-8 text-xs font-bold"
+                          className="h-9 text-xs font-bold px-4"
                           disabled={!canAfford || isOutOfStock || redeemingId === reward.id}
                           onClick={() => handleRedeem(reward)}
                         >
-                          {redeemingId === reward.id ? 'Redeeming...' : isOutOfStock ? 'Sold Out' : !canAfford ? 'Not Enough' : 'Redeem'}
+                          {redeemingId === reward.id ? (
+                            <> <span className="animate-spin mr-1">⏳</span> Redeeming... </>
+                          ) : isOutOfStock ? (
+                            'Sold Out'
+                          ) : !canAfford ? (
+                            'Not Enough Coins'
+                          ) : (
+                            'Redeem'
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -293,10 +365,10 @@ export default function MemberRewards({ client }: { client: Client | null }) {
               </Card>
             );
           })}
-          
+
           {rewards.length === 0 && (
             <Card className="border-dashed bg-muted/20">
-              <CardContent className="py-10 text-center text-xs text-muted-foreground italic">
+              <CardContent className="py-10 text-center text-xs text-muted-foreground">
                 <Gift className="h-8 w-8 mx-auto opacity-20 mb-2" />
                 No rewards available yet. Check back soon!
               </CardContent>
@@ -310,30 +382,77 @@ export default function MemberRewards({ client }: { client: Client | null }) {
         <div className="space-y-2">
           {myRedemptions.length === 0 ? (
             <Card className="border-dashed bg-muted/20">
-              <CardContent className="py-10 text-center text-xs text-muted-foreground italic">
+              <CardContent className="py-10 text-center text-xs text-muted-foreground">
                 <Gift className="h-8 w-8 mx-auto opacity-20 mb-2" />
                 You haven't redeemed any rewards yet. Visit the shop!
               </CardContent>
             </Card>
           ) : (
-            myRedemptions.map(r => (
-              <div key={r.id} className="flex items-center justify-between p-3 rounded-xl bg-card/50 border">
-                <div>
-                  <p className="text-xs font-bold">{r.rewardName}</p>
-                  <p className="text-[9px] text-muted-foreground font-mono mt-0.5">
-                    {(() => { try { return format(parseISO(r.createdAt), 'dd MMM yyyy, h:mm a'); } catch { return ''; } })()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge className={`text-[9px] ${statusColors[r.status] || ''}`}>
-                    {r.status}
-                  </Badge>
-                  <span className="text-xs font-bold text-amber-500 font-mono">-{r.coinsSpent}</span>
-                </div>
-              </div>
-            ))
+            myRedemptions.map(r => {
+              const config = statusConfig[r.status] || statusConfig.pending;
+              const StatusIcon = config.icon;
+              
+              return (
+                <Card key={r.id} className="border overflow-hidden">
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl ${config.bg} flex items-center justify-center`}>
+                          <StatusIcon className={`h-5 w-5 ${config.text}`} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-foreground">{r.rewardName}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                            {formatDate(r.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={`${config.bg} ${config.text} ${config.border} text-[9px] font-bold`}>
+                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                        </Badge>
+                        <span className="text-sm font-black text-rose-500 font-mono">-{r.coinsSpent}</span>
+                        <Coins className="h-4 w-4 text-rose-500" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
+      )}
+
+      {/* ─── Reward Detail Dialog ─── */}
+      {selectedReward && (
+        <Dialog open onOpenChange={(open) => !open && setSelectedReward(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <RewardIconWrapper icon={getRewardIcon(selectedReward.name, selectedReward.type)} className="mx-auto mb-3 w-14 h-14" />
+              <DialogTitle className="text-center">{selectedReward.name}</DialogTitle>
+              <DialogDescription className="text-center">
+                {selectedReward.description}
+              </DialogDescription>
+            </DialogHeader>
+            <Separator className="my-4" />
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Cost</span>
+                <span className="font-bold flex items-center gap-1">
+                  <Coins className="h-4 w-4" /> {selectedReward.coinsPrice}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Provider</span>
+                <span className="font-medium">{selectedReward.type === 'partner' ? selectedReward.partnerName : 'GYM'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Availability</span>
+                <span className="font-medium">{selectedReward.quantity - selectedReward.claimed} remaining</span>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

@@ -10,11 +10,12 @@ import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fn
 import { 
   Sparkles, Calendar, CheckCircle2, Trophy, Activity, Dumbbell, Award, Users, 
   ShoppingBag, Bell, Clock, Flame, ChevronRight, MapPin, Zap, User, 
-  TrendingUp, Star, Timer, Target, Coins, AlertCircle, Lock
+  TrendingUp, Star, Timer, Target, Coins, AlertCircle, Lock, Maximize2, Minimize2
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 const BoxingGlovesIcon = ({ className }: { className?: string }) => (
   <svg
@@ -508,22 +509,57 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
 
             {/* Right Side: QR Code & Brand Sub-text */}
             <div className="flex flex-col items-center justify-center shrink-0">
-              <div className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center relative overflow-hidden">
-                {client.status === 'Expired' ? (
+              {client.status !== 'Expired' && (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <div 
+                      className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center relative overflow-hidden cursor-pointer transition-transform hover:scale-105 active:scale-95"
+                      title="Tap to enlarge"
+                    >
+                      <QRCodeSVG 
+                        value={memberQrValue} 
+                        size={80} 
+                        level="H" 
+                        includeMargin={false}
+                        fgColor="#18181b"
+                      />
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-sm p-0 bg-transparent shadow-none">
+                    <div className="bg-card rounded-2xl p-6 border shadow-xl">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold">Membership QR Code</h3>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {}}>
+                          <Minimize2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl shadow-inner border border-border">
+                        <QRCodeSVG 
+                          value={memberQrValue} 
+                          size={200} 
+                          level="H" 
+                          includeMargin={false}
+                          fgColor="#18181b"
+                        />
+                      </div>
+                      <p className="text-center text-xs text-muted-foreground mt-4 font-mono tracking-wider">
+                        {memberQrValue}
+                      </p>
+                      <p className="text-center text-[11px] text-muted-foreground mt-2">
+                        Show this code at reception for check-in
+                      </p>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+              {client.status === 'Expired' && (
+                <div className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center relative overflow-hidden">
                   <div className="flex flex-col items-center justify-center text-rose-600 w-full h-full bg-rose-50 rounded-xl">
                     <Lock className="h-7 w-7 text-rose-600 shrink-0" />
                     <span className="text-[9px] font-black tracking-tighter uppercase mt-1 leading-none">LOCKED</span>
                   </div>
-                ) : (
-                  <QRCodeSVG 
-                    value={memberQrValue} 
-                    size={80} 
-                    level="H" 
-                    includeMargin={false}
-                    fgColor="#18181b"
-                  />
-                )}
-              </div>
+                </div>
+              )}
               <span className="text-[8px] font-extrabold tracking-[0.3em] uppercase text-zinc-700 mt-1 font-logo">
                 STRIKE GYMS
               </span>

@@ -279,36 +279,83 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
     return () => clearInterval(interval);
   }, [activeTab, activeSlides.length]);
 
-  // ─── Show ALL packages from the database, grouped by category ───
+  // ─── Package Grouping: Location → Age Category ───
+  
+  // Define location groups with branch matching
+  const LOCATION_GROUP_IDS = ['Maxim', 'Mivida', 'Impact'] as const;
+  type LocationGroupId = typeof LOCATION_GROUP_IDS[number];
+  
+  type AgeCategory = 'kids' | 'juniors' | 'adults';
+  
+  // Helper to get age category from package name
+  const getAgeCategory = (pkgName: string): AgeCategory | null => {
+    const n = pkgName.toLowerCase();
+    if (n.includes('kid') && !n.includes('junior')) return 'kids';
+    if (n.includes('junior')) return 'juniors';
+    if (!n.includes('kid') && !n.includes('junior') && !n.includes('corporate') && !n.includes('company') && n.includes(pkgName.toLowerCase()) && n.includes('group') === false) return 'adults';
+    if (!n.includes('kid') && !n.includes('junior') && !n.includes('corporate') && !n.includes('company')) return 'adults';
+    return null;
+  };
+  
+  // Helper to determine location from package branch
+  const getLocationForPackage = (pkg: Package): LocationGroupId | null => {
+    const branchName = (pkg.branch || '').toLowerCase();
+    if (branchName.includes('maxim')) return 'Maxim';
+    if (branchName.includes('mivida') || branchName.includes('mvida')) return 'Mivida';
+    if (branchName.includes('impact') || branchName.includes('strike')) return 'Impact';
+    return null;
+  };
+
+  // Primary branch for display
   const primaryBranch = branches[0] || 'Main Branch';
 
-  // Kids = name contains 'kid' but not 'junior'
-  const kidsPackages = packages.filter(p => {
-    const n = p.name.toLowerCase();
-    return n.includes('kid') && !n.includes('junior');
-  }).sort((a, b) => a.sessions - b.sessions);
+  // Build location-based package grouping
+  const packagesByLocation: Record<LocationGroupId, { kids: Package[]; juniors: Package[]; adults: Package[] }> = {
+    Maxim: {
+      kids: [] as Package[],
+      juniors: [] as Package[],
+      adults: [] as Package[],
+    },
+    Mivida: {
+      kids: [] as Package[],
+      juniors: [] as Package[],
+      adults: [] as Package[],
+    },
+    Impact: {
+      kids: [] as Package[],
+      juniors: [] as Package[],
+      adults: [] as Package[],
+    },
+  };
 
-  // Juniors = name contains 'junior'
-  const juniorPackages = packages.filter(p => {
-    const n = p.name.toLowerCase();
-    return n.includes('junior');
-  }).sort((a, b) => a.sessions - b.sessions);
+  // Organize packages by location and age category
+  packages.forEach(pkg => {
+    const location = getLocationForPackage(pkg);
+    const age = getAgeCategory(pkg.name);
+    if (location && age) {
+      packagesByLocation[location][age].push(pkg);
+    }
+  });
 
-  // Adults = everything else (not kid, not junior, not group/corporate)
-  const adultPackages = packages.filter(p => {
-    const n = p.name.toLowerCase();
-    return !n.includes('kid') && !n.includes('junior') && !n.includes('corporate') && !n.includes('company') && p.type !== 'Group';
-  }).sort((a, b) => a.sessions - b.sessions);
+  // Sort each category by sessions
+  Object.keys(packagesByLocation).forEach(loc => {
+    packagesByLocation[loc as LocationGroupId].kids.sort((a, b) => a.sessions - b.sessions);
+    packagesByLocation[loc as LocationGroupId].juniors.sort((a, b) => a.sessions - b.sessions);
+    packagesByLocation[loc as LocationGroupId].adults.sort((a, b) => a.sessions - b.sessions);
+  });
 
-  // Use real data only — no mock fallbacks
-  const displayKids = kidsPackages;
-  const displayJuniors = juniorPackages;
-  const displayAdults = adultPackages;
-
-  // Corporate packages (type 'Group' or name contains 'corporate')
+  // Corporate packages (type 'Group' or name contains 'corporate/company') - keep separate
   const corporatePackages = packages.filter(p => {
     const n = p.name.toLowerCase();
     return n.includes('corporate') || n.includes('company') || p.type === 'Group';
+  }).sort((a, b) => a.sessions - b.sessions);
+
+  // Other packages (no recognized location)
+  const otherPackages = packages.filter(p => {
+    const n = p.name.toLowerCase();
+    const isCorporate = n.includes('corporate') || n.includes('company') || p.type === 'Group';
+    const hasLocation = getLocationForPackage(p) !== null;
+    return !isCorporate && !hasLocation;
   }).sort((a, b) => a.sessions - b.sessions);
 
   // Active offers from storefront config

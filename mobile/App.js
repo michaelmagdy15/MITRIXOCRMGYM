@@ -20,11 +20,65 @@ import { requestCameraPermissionsAsync } from 'expo-camera';
 // ─── Configuration ─────────────────────────────────────────────
 // Single source of truth: app.config.js reads env vars at build time
 // and passes them through Constants.expoConfig.extra.
-// Fallback chain: EAS env → config.json (white-label) → hardcoded default
+// Fallback chain: EAS env → config.json (white-label) → STRIKE default.
+// STRIKE is the ONLY tenant allowed to fall back to hardcoded defaults — a
+// white-label build missing its config is treated as a fatal error so we never
+// silently ship one gym's binary pointing at another gym's data.
 const PRODUCTION_URL =
   Constants?.expoConfig?.extra?.PRODUCTION_URL || 'https://strike-egy.com/';
 const APP_NAME =
   Constants?.expoConfig?.extra?.APP_NAME || 'STRIKE';
+
+// Runtime validation: if PRODUCTION_URL is missing or not an https URL, show a
+// fatal config error instead of loading the wrong tenant's data.
+function isValidProductionUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (_) {
+    return false;
+  }
+  return parsed.protocol === 'https:';
+}
+const CONFIG_VALID = isValidProductionUrl(PRODUCTION_URL);
+
+// Allowed origin for the WebView: only same-origin (PRODUCTION_URL) navigations
+// are permitted. Used by onShouldStartLoadWithRequest and the push deep-link path
+// to block dangerous schemes (javascript:, file:, data:) and cross-origin loads.
+let ALLOWED_ORIGIN = '';
+try {
+  ALLOWED_ORIGIN = new URL(PRODUCTION_URL).origin;
+} catch (_) {
+  // If PRODUCTION_URL is malformed, fall back to a string prefix match on https://
+  ALLOWED_ORIGIN = PRODUCTION_URL;
+}
+
+/**
+ * Returns true if a URL is safe to load inside the CRM WebView.
+ * Rejects anything that isn't http(s) and, when an allowed origin is known,
+ * anything outside the configured CRM origin (prevents the WebView from being
+ * navigated to an attacker-controlled page).
+ */
+function isSafeWebUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (_) {
+    return false;
+  }
+  // Block dangerous schemes outright. `javascript:` assigned to location.href
+  // executes in the WebView with full session access — a stored-XSS vector.
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return false;
+  }
+  // Only allow same-origin navigations to the configured CRM origin.
+  if (ALLOWED_ORIGIN) {
+    return parsed.origin === ALLOWED_ORIGIN;
+  }
+  return true;
+}
 
 // ─── Notification Handler ──────────────────────────────────────
 // Configure notification behavior for when the app is in the foreground
@@ -110,11 +164,17 @@ function MainApp() {
         const data = response.notification.request.content.data;
         console.log('[Notification] Tapped:', data);
 
-        // Deep link: if the push payload includes a url, navigate the WebView there
-        if (data?.url && webViewRef.current) {
+        // Deep link: if the push payload includes a url, navigate the WebView there.
+        // Validate the URL scheme + origin first — an attacker-controlled push
+        // (the proxy-push endpoint was previously open) could otherwise set
+        // location.href = "javascript:..." and execute code in the logged-in CRM.
+        const targetUrl = data?.url ? String(data.url) : null;
+        if (targetUrl && isSafeWebUrl(targetUrl) && webViewRef.current) {
           webViewRef.current.injectJavaScript(
-            `window.location.href = ${JSON.stringify(String(data.url))};`
+            `window.location.href = ${JSON.stringify(targetUrl)}; true;`
           );
+        } else if (targetUrl) {
+          console.warn('[Notification] Blocked unsafe deep-link URL:', targetUrl);
         }
       }
     );
@@ -197,11 +257,13 @@ function MainApp() {
           break;
 
         case 'NAVIGATE':
-          // Navigate WebView to a specific URL
-          if (message.payload?.url) {
+          // Navigate WebView to a specific URL (only same-origin https allowed)
+          if (message.payload?.url && isSafeWebUrl(String(message.payload.url))) {
             webViewRef.current?.injectJavaScript(
               `window.location.href = ${JSON.stringify(String(message.payload.url))}; true;`
             );
+          } else if (message.payload?.url) {
+            console.warn('[Bridge] Blocked unsafe NAVIGATE url:', message.payload.url);
           }
           break;
 
@@ -232,6 +294,29 @@ function MainApp() {
     window.expoPushToken = ${JSON.stringify(expoPushToken)};
     true;
   `;
+
+  // ─── Fatal Config Error Screen ─────────────────────────
+  // Rendered when PRODUCTION_URL is missing/invalid at runtime. Prevents the app
+  // from silently loading the wrong tenant's data (e.g. a white-label build that
+  // shipped without its config would otherwise fall back to STRIKE).
+  if (!CONFIG_VALID) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="light" backgroundColor="#0a0a0a" />
+        <View style={styles.offlineContainer}>
+          <View style={styles.offlineIconContainer}>
+            <Text style={styles.offlineIcon}>⚙️</Text>
+          </View>
+          <Text style={styles.offlineTitle}>Configuration Error</Text>
+          <Text style={styles.offlineMessage}>
+            {APP_NAME ? `${APP_NAME} ` : 'This app '}could not start because its
+            server configuration is missing or invalid. Please reinstall or
+            contact support.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // ─── Offline Full Screen ──────────────────────────────
   if (!isConnected && !hasLoadedSuccessfully) {
@@ -274,7 +359,12 @@ function MainApp() {
           ref={webViewRef}
           source={{ uri: PRODUCTION_URL }}
           style={styles.webview}
-          cacheMode="LOAD_CACHE_ELSE_NETWORK"
+
+          // Use default browser caching (LOAD_DEFAULT): normal HTTP cache-control semantics.
+          // Previously used "LOAD_CACHE_ELSE_NETWORK", which preferred stale cache over the
+          // network — after every server deploy, existing installs kept showing old JS/HTML
+          // until the cache expired (the cause of the "empty states after deploy" bug).
+          // For an always-online CRM, honoring server cache headers is correct.
 
           // Native performance and UX enhancements
           bounces={false}
@@ -293,6 +383,15 @@ function MainApp() {
 
           // Security: only allow HTTPS origins (blocks file://, data://, javascript:// schemes)
           originWhitelist={['https://*']}
+
+          // Actually enforce the origin whitelist. Without this handler, originWhitelist
+          // is NOT applied — the WebView still loads any scheme/frame. This returns false
+          // for anything that isn't a safe http(s) same-origin navigation, which closes
+          // javascript:/data:/file: navigations (incl. push deep-link attempts).
+          onShouldStartLoadWithRequest={(request) => {
+            // Allow only http(s) same-origin URLs. Main-frame and iframe loads alike.
+            return isSafeWebUrl(request.url);
+          }}
 
           // Native gestures for iOS (swipe from edge to navigate back/forward)
           allowsBackForwardNavigationGestures={true}

@@ -1,5 +1,19 @@
-import { db, getTenantId } from '../firebase';
+import { db, getTenantId, auth } from '../firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+
+/**
+ * Returns the current user's Firebase ID token, or null if unavailable.
+ * Attached to /api/proxy-push requests now that the endpoint requires auth.
+ */
+async function getAuthHeader(): Promise<Record<string, string>> {
+  try {
+    const token = await auth.currentUser?.getIdToken();
+    if (!token) return {};
+    return { Authorization: `Bearer ${token}` };
+  } catch {
+    return {};
+  }
+}
 
 function getTenantBrandedName(): string {
   try {
@@ -59,10 +73,12 @@ export async function sendPushNotification(expoPushToken: string, title: string,
     const brandedName = getTenantBrandedName();
     const finalTitle = brandedName ? `${brandedName}: ${title}` : title;
 
+    const authHeaders = await getAuthHeader();
     const response = await fetch('/api/proxy-push', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
       },
       body: JSON.stringify({
         messages: [{
@@ -109,12 +125,15 @@ export async function notifyAdmins(title: string, body: string, data?: any) {
       data
     }));
 
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+    // Route through the authenticated /api/proxy-push relay (consistent with all other
+    // sends) instead of calling exp.host directly from the browser. The proxy requires a
+    // Firebase ID token, and Expo accepts a single message object OR an array.
+    const authHeaders = await getAuthHeader();
+    const response = await fetch('/api/proxy-push', {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
-        'Accept-encoding': 'gzip, deflate',
         'Content-Type': 'application/json',
+        ...authHeaders,
       },
       body: JSON.stringify(messages),
     });
@@ -183,6 +202,7 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
     }
 
     let successCount = 0;
+    const authHeaders = await getAuthHeader();
     for (const chunk of chunks) {
       const messages = chunk.map(token => ({
         to: token,
@@ -196,6 +216,7 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
         },
         body: JSON.stringify({ messages }),
       });

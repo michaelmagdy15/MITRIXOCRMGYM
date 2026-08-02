@@ -1161,12 +1161,24 @@ async function startServer() {
     }
   });
 
-  app.post("/api/proxy-push", async (req, res) => {
+  // Push-notification relay to the Expo push API.
+  // Authenticated via requireAuth: previously this was an unauthenticated open relay,
+  // so anyone could push arbitrary payloads (including a "url" deep-link field) to any
+  // staff/member device token. Requiring a valid Firebase ID token ensures only signed-in
+  // users can trigger notifications, and the mobile app's deep-link validation guards the
+  // payload regardless.
+  app.post("/api/proxy-push", requireAuth, async (req, res) => {
     try {
       const { messages } = req.body;
       if (!messages || !Array.isArray(messages)) {
         return res.status(400).json({ error: "Missing or invalid 'messages' array in request body." });
       }
+      if (messages.length > 100) {
+        return res.status(400).json({ error: "Too many messages in a single request (max 100)." });
+      }
+
+      // Expo accepts either a single message object or an array; normalize to array.
+      const payload = JSON.stringify(messages);
 
       const response = await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",
@@ -1175,7 +1187,7 @@ async function startServer() {
           "Accept-encoding": "gzip, deflate",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(messages),
+        body: payload,
       });
 
       const resData = await response.json();
