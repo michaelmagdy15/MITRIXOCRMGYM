@@ -21,6 +21,28 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
+      - '--min-instances=0'
+      - '--max-instances=3'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--concurrency=50'
+      - '--timeout=300'
+
+  # Clean up old container images to reduce GCR storage costs
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        echo "Cleaning up old container images..."
+        # List and delete images except the latest one
+        gcloud container images list-tags gcr.io/$PROJECT_ID/mitrixogymcrm --format="value(tags)" | grep -v "latest" | while read tag; do
+          if [ ! -z "$tag" ]; then
+            echo "Deleting image with tag: $tag"
+            gcloud container images delete gcr.io/$PROJECT_ID/mitrixogymcrm:$tag --quiet || true
+          fi
+        done
+        echo "Cleanup complete"
 
 images:
   - 'gcr.io/$PROJECT_ID/mitrixogymcrm:${_TAG}'
