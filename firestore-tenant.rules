@@ -282,7 +282,7 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if true;
+      allow read: if isOwner(userId) || isTenantStaff();
       allow create: if isTenantAdmin() || (isOwner(userId) && request.resource.data.role in ['client', 'coach']);
       allow update: if isTenantAdmin() || (isOwner(userId) && isSafeUserSelfEdit());
       allow delete: if isTenantSuperAdmin();

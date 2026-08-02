@@ -57,7 +57,11 @@ async function run() {
     console.log(`Found user! email: ${email}, uid: ${uid}, data:`, userDocData);
     
     console.log("Signing in...");
-    const userCred = await signInWithEmailAndPassword(auth, email, 'Miko0019_!');
+    if (!process.env.TEST_USER_PASSWORD) {
+      console.error("TEST_USER_PASSWORD environment variable is required.");
+      return;
+    }
+    const userCred = await signInWithEmailAndPassword(auth, email, process.env.TEST_USER_PASSWORD);
     console.log("Signed in successfully! uid:", userCred.user.uid);
     
     console.log("Searching for client document...");

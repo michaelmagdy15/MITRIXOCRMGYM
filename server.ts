@@ -97,11 +97,6 @@ const paymentsFetchPromises = new Map<string, Promise<any[]>>();
 
 
 async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (process.env.NODE_ENV === 'development' && req.headers['x-audit-bypass'] === 'true') {
-    (req as any).user = { uid: 'audit-user', email: 'audit@example.com' };
-    next();
-    return;
-  }
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Unauthorized: Missing token' });
@@ -111,6 +106,40 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
     const token = authHeader.split('Bearer ')[1];
     const decodedToken = await admin.auth().verifyIdToken(token!);
     (req as any).user = decodedToken;
+
+    // Cross-tenant protection: the tenant database is selected from the request
+    // hostname (getRequestHostname may trust x-forwarded-host / x-original-host),
+    // so after authentication we MUST verify the user is actually a member of the
+    // tenant resolved for this request. Otherwise any authenticated user could
+    // spoof another tenant's host header and read/write that tenant's data.
+    const hostname = getRequestHostname(req);
+    const { config: tenantConfig } = await getTenantInfoForHost(hostname);
+    const resolvedTenantId = tenantConfig?.tenantId;
+
+    // Only enforce membership when a specific tenant was resolved. Hosts that
+    // fall back to the default config (status 'not_found' / shared DB) keep the
+    // legacy shared behavior.
+    if (resolvedTenantId) {
+      let memberDb;
+      try {
+        memberDb = tenantConfig.firestoreDatabaseId
+          ? getFirestore(tenantConfig.firestoreDatabaseId)
+          : getFirestore();
+      } catch (dbErr) {
+        console.error('[Auth] Error resolving tenant database:', dbErr);
+        res.status(500).json({ error: 'Internal error resolving tenant' });
+        return;
+      }
+      const userDoc = await memberDb.collection('users').doc(decodedToken.uid).get();
+      if (!userDoc.exists) {
+        console.warn(
+          `[Auth] User ${decodedToken.uid} is not a member of tenant "${resolvedTenantId}" (host: ${hostname}) — denying access`
+        );
+        res.status(403).json({ error: 'Forbidden: User is not a member of this tenant' });
+        return;
+      }
+    }
+
     next();
     return;
   } catch (error) {

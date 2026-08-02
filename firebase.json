@@ -25,22 +25,22 @@
     },
     {
       "database": "db-test",
-      "rules": "firestore.rules",
+      "rules": "firestore-tenant.rules",
       "indexes": "firestore.indexes.json"
     },
     {
       "database": "db-testrules",
-      "rules": "firestore.rules",
+      "rules": "firestore-tenant.rules",
       "indexes": "firestore.indexes.json"
     },
     {
       "database": "db-gyma",
-      "rules": "firestore.rules",
+      "rules": "firestore-tenant.rules",
       "indexes": "firestore.indexes.json"
     },
     {
       "database": "db-inzanathletics",
-      "rules": "firestore.rules",
+      "rules": "firestore-tenant.rules",
       "indexes": "firestore.indexes.json"
     },
     {

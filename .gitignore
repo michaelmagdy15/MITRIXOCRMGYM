@@ -7,9 +7,31 @@ coverage/
 .env*
 !.env.example
 .netlify/
-. g e m i n i /  
+.gemini/
 *service-account.json
 dist-server/
 scratch/
 nul
 src/sdk/
+
+# Secrets / sensitive data (never commit)
+auth_export.json
+users.json
+root.crt
+*.crt
+strike_crm_backup_*.json
+Copy of Michael mitry (1).pdf
+*.lnk
+logs.json
+runs.json
+catalog_files.txt
+scratch_sample_clients.json
+backup-station.html
+export_docs.html
+strike-crm-guide-v2.1.html
+reports/
+screenshots/
+apple-iphone-15-black-mockup/
+graphify-out/
+src/graphify-out/
+docs/redgits_pages/

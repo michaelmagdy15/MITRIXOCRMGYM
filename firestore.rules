@@ -356,7 +356,7 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if true;
+      allow read: if isOwner(userId) || ismitrixogymcrmStaff();
       allow create: if ismitrixogymcrmAdmin() || (isOwner(userId) && request.resource.data.role in ['client', 'coach']);
       allow update: if ismitrixogymcrmAdmin() || (isOwner(userId) && isSafeUserSelfEdit());
       allow delete: if ismitrixogymcrmSuperAdmin();

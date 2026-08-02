@@ -5,8 +5,8 @@ import path from 'path';
 
 const CONFIG = {
   loginUrl: 'https://inzan.redgits.com/admin/login',
-  username: 'mi5a',
-  password: '12345678',
+  username: process.env.REDGITS_USERNAME || '',
+  password: process.env.REDGITS_PASSWORD || '',
   outputDir: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/redgits_pages',
   progressFile: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/redgits_pages/migration_progress.json',
   finalFile: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/redgits_pages/redgits_inzan_database.json',

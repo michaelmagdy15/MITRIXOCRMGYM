@@ -1266,19 +1266,100 @@ export async function updateBookingRequestStatus(id: string, status: string) {
   await query(`UPDATE booking_requests SET status = $1 WHERE id = $2`, [status, id]);
 }
 
-export async function updateClient(id: string, fields: any) {
-  const updates = [];
-  const values = [];
-  let i = 1;
-  for (const key of Object.keys(fields)) {
-    let col = key;
-    if (key === 'lastContactDate') col = 'last_contact_date';
-    updates.push(`${col} = $${i}`);
-    values.push(fields[key]);
-    i++;
+export async function updateClient(id: string, fields: Record<string, any>) {
+  const safeFields: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  const mapField = (jsField: string, sqlColumn: string) => {
+    if (fields[jsField] !== undefined) {
+      safeFields.push(`${sqlColumn} = $${paramIndex++}`);
+      values.push(fields[jsField]);
+    }
+  };
+
+  mapField('name', 'name');
+  mapField('phone', 'phone');
+  mapField('status', 'status');
+  mapField('memberId', 'member_id');
+  mapField('gender', 'gender');
+  mapField('dateOfBirth', 'date_of_birth');
+  mapField('salesName', 'sales_name');
+  mapField('salesRep', 'sales_rep');
+  mapField('packageType', 'package_type');
+  mapField('startDate', 'start_date');
+  mapField('branch', 'branch');
+  mapField('sessionsRemaining', 'sessions_remaining');
+  mapField('assignedTo', 'assigned_to');
+  mapField('createdAt', 'created_at');
+  mapField('nationalId', 'national_id');
+  mapField('email', 'email');
+  mapField('backupPhone', 'backup_phone');
+  mapField('isBlacklisted', 'is_blacklisted');
+  mapField('photoURL', 'photo_url');
+  mapField('advertisingSource', 'advertising_source');
+  mapField('country', 'country');
+  mapField('city', 'city');
+  mapField('address', 'address');
+  mapField('homePhone', 'home_phone');
+  mapField('nationality', 'nationality');
+  mapField('jobTitle', 'job_title');
+  mapField('guestSerial', 'guest_serial');
+  mapField('civilianOrMilitary', 'civilian_or_military');
+  mapField('referredByName', 'referred_by_name');
+  mapField('linkedAccount', 'linked_account');
+  mapField('linkedClientIds', 'linked_client_ids');
+  mapField('portalUserId', 'portal_user_id');
+  mapField('packages', 'packages');
+  mapField('comments', 'comments');
+  mapField('interactions', 'interactions');
+  mapField('importBatchId', 'import_batch_id');
+  mapField('lastContactDate', 'last_contact_date');
+  mapField('personalEmail', 'personal_email');
+  mapField('stage', 'stage');
+  mapField('interest', 'interest');
+  mapField('category', 'category');
+  mapField('memberCategory', 'category');
+  mapField('source', 'source');
+  mapField('expectedVisitDate', 'expected_visit_date');
+  mapField('trialDate', 'trial_date');
+  mapField('membershipExpiry', 'membership_expiry');
+  mapField('height', 'height');
+  mapField('weight', 'weight');
+  mapField('activityLevel', 'activity_level');
+  mapField('workoutTimes', 'workout_times');
+  mapField('fitnessTarget', 'fitness_target');
+  mapField('aiTokens', 'ai_tokens');
+  mapField('referralCode', 'referral_code');
+  mapField('referredBy', 'referred_by');
+  mapField('emergencyContactName', 'emergency_contact_name');
+  mapField('civilStatus', 'civil_status');
+  mapField('barcode', 'barcode');
+  mapField('cardId', 'card_id');
+  mapField('legacyNotes', 'legacy_notes');
+  mapField('legacyMemberId', 'legacy_member_id');
+  mapField('points', 'points');
+
+  const ALLOWED_FIELDS = new Set([
+    'name','phone','status','memberId','gender','dateOfBirth','salesName','salesRep',
+    'packageType','startDate','branch','sessionsRemaining','assignedTo','createdAt',
+    'nationalId','email','backupPhone','isBlacklisted','photoURL','advertisingSource',
+    'country','city','address','homePhone','nationality','jobTitle','guestSerial',
+    'civilianOrMilitary','referredByName','linkedAccount','linkedClientIds','portalUserId',
+    'packages','comments','interactions','importBatchId','lastContactDate','personalEmail',
+    'stage','interest','category','memberCategory','source','expectedVisitDate','trialDate',
+    'membershipExpiry','height','weight','activityLevel','workoutTimes','fitnessTarget',
+    'aiTokens','referralCode','referredBy','emergencyContactName','civilStatus','barcode',
+    'cardId','legacyNotes','legacyMemberId','points'
+  ]);
+  const unknownKeys = Object.keys(fields).filter(k => !ALLOWED_FIELDS.has(k));
+  if (unknownKeys.length > 0) {
+    throw new Error(`updateClient: unknown field(s) not allowed: ${unknownKeys.join(', ')}`);
   }
+
+  if (safeFields.length === 0) return;
   values.push(id);
-  await query(`UPDATE clients SET ${updates.join(', ')} WHERE id = $${i}`, values);
+  await query(`UPDATE clients SET ${safeFields.join(', ')} WHERE id = $${paramIndex}`, values);
 }
 
 export async function addTask(task: any) {
@@ -1382,20 +1463,31 @@ export async function addLocker(locker: any) {
   );
 }
 
-export async function updateLocker(id: string, fields: any) {
-  const updates = [];
-  const values = [];
+export async function updateLocker(id: string, fields: Record<string, any>) {
+  const updates: string[] = [];
+  const values: any[] = [];
   let i = 1;
+
+  const ALLOWED = { lockerNumber: 1, assignedTo: 1, assignedName: 1, pinCode: 1, status: 1, branch: 1 };
+  const COLUMN_MAP: Record<string, string> = {
+    lockerNumber: 'locker_number',
+    assignedTo: 'assigned_to',
+    assignedName: 'assigned_name',
+    pinCode: 'pin_code',
+    status: 'status',
+    branch: 'branch',
+  };
+
   for (const key of Object.keys(fields)) {
-    let col = key;
-    if (key === 'lockerNumber') col = 'locker_number';
-    if (key === 'assignedTo') col = 'assigned_to';
-    if (key === 'assignedName') col = 'assigned_name';
-    if (key === 'pinCode') col = 'pin_code';
+    if (!(key in ALLOWED)) {
+      throw new Error(`updateLocker: unknown field not allowed: ${key}`);
+    }
+    const col = COLUMN_MAP[key] || key;
     updates.push(`${col} = $${i}`);
     values.push(fields[key]);
     i++;
   }
+
   if (updates.length === 0) return;
   values.push(id);
   await query(`UPDATE lockers SET ${updates.join(', ')} WHERE id = $${i}`, values);
