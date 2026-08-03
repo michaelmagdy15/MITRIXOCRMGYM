@@ -143,3 +143,77 @@ Reduce GCP billing costs across multiple projects and billing accounts to under 
 - Monitor billing for 1 month to confirm costs are under $10
 - Consider deleting `db-vbt` if not needed
 - Consider deleting unused bengarab services (`atplvector`, `gamen-eg`, `mitrixo-landing`, `mitrixo-workouts`, `mitry-visuals`) if not needed
+
+---
+
+# Session 2 — August 3, 2026
+
+## Goal
+Get GCP usage down to the **always-free tier** (Cloud Run 2M req/mo, Firestore 50K reads/day). User is on a tight budget (Egypt) and decided to stay on Google Cloud (declined Oracle / Cloudflare migration).
+
+## Firestore Data Inventory (faa-test-guide-v2)
+| Collection | Docs |
+|------------|------|
+| auditLogs | 4,912 |
+| clients | 967 |
+| users | 926 |
+| payments | 648 |
+| importBatches | 43 |
+| tasks | 34 |
+| packages | 26 |
+| coaches | 7 |
+| sessions | 0 |
+| userTargets | 0 |
+
+Audit log recency (default DB): last 30 days = ~2,369 docs; last 90 days = ~3,521.
+
+## Root Cause of ~$1/day
+The frontend sends a 30-day `dateFrom` for audit logs, but the backend `/api/audit-logs` **ignored it** and did a full `db.collection('auditLogs').get()` on every app load — ~4,912 Firestore reads per load, for every privileged user. Global listeners/hooks in `context.tsx` also pulled clients/payments/coaches/sessions eagerly.
+- **Discovered:** `src/contexts/CRMContext.tsx` is DEAD CODE (never imported). The live app uses `src/context.tsx` (`AppProvider`) + hooks. Do NOT edit CRMContext.tsx.
+
+## Backups (completed BEFORE any code changes)
+All 3 Firestore DBs exported to `gs://crm-backups-492280162134/` (~8.26 MB), all operations SUCCESSFUL:
+- `default-20260803-013628` (103 output files)
+- `db-registry-2-20260803-013641`
+- `db-vbt-20260803-013642`
+
+Restore command: `gcloud firestore import gs://crm-backups-492280162134/<folder>`
+
+## Scale-Down Changes (verified)
+- `mitrixogymcrm` maxScale **3 → 1** (revision `mitrixogymcrm-00212-wb9` serving; min stays 0)
+- `ext-firestore-send-email-strike-processqueue` (europe-west10) maxScale **100 → 3**
+- `ext-firestore-send-email-processqueue` (us-central1) **could not be updated** — image `us-central1-docker.pkg.dev/faa-test-guide-v2/gcf-artifacts/faa--test--guide--v2__us--central1__ext--firestore--send--email--processqueue:version_1` not found (orphaned/idle). Fix requires `firebase deploy --only functions` or deletion via Firebase Extensions console.
+- Strike project services (9 total, incl. `strike-boxing-crm`, `metawebhook`, etc.) — ALL orphaned ("Image ... not found"), can't serve traffic, so no action needed (cost-free already).
+
+## Code Optimizations (committed as `eb108dc`)
+1. **`src/db/sqlApi.ts` `/api/audit-logs`** — now honors `fromISO`, `toISO`, `limit` (capped 1–5000), and `entityId` query params instead of reading the whole collection.
+2. **`src/context.tsx`** — removed the global `auditLogs` fetch entirely (was reading all logs on every app load). Also removed `auditLogs` from `AppContextType` + value + deps.
+3. **`src/hooks/useAuditLogs.ts`** — added optional `entityId` param.
+4. **`src/AdvancedReports.tsx`** — staff-logs report now fetches its own audit logs on-demand with the report's selected date range (page is lazily mounted, so no reads until opened).
+5. **`src/components/ClientAuditLogs.tsx`** (new) — per-client audit-log history + points redemption history fetched on-demand (Base UI `TabsContent` unmounts when inactive → zero reads until tab opened).
+6. **`cloudbuild.yaml`** — `--max-instances=3` → `--max-instances=1` so future builds don't revert the scale-down.
+
+Result: audit-log reads drop from ~4,912 per app load to **zero**; full history still available on-demand in the pages that need it.
+
+## Firestore Composite Index (created, READY)
+`auditLogs` collection group: `entityId` ASC, `timestamp` DESC
+`CICAgLjy8IAK` — required for the per-client on-demand queries.
+
+## Verification
+- `npm run lint` (tsc --noEmit): PASS
+- `npm run build` (vite + esbuild): PASS
+- Firestore `runQuery` with entityId+timestamp+limit: returns docs, no index error
+- Git: `eb108dc` committed & pushed to `origin/master` (MITRIXOCRMGYM)
+
+## Environment Notes (for future sessions)
+- Active gcloud account: `michaelmitry13@gmail.com`, default project `bengarab`
+- `monitoring.googleapis.com` returns 404 from this network (blocked); billing/run/firestore APIs work
+- `InsecureRequestWarning` noise on gcloud is harmless (root.crt is a standard ISRG cert, not a proxy)
+- For Firestore `runQuery` with complex JSON: write body to a temp file (e.g. `C:\Users\Mi5a\AppData\Local\Temp\opencode\q.json`) and use `curl.exe --data @file` — works around PowerShell quoting
+- `.env` holds CockroachDB creds for the `inzanathletics` tenant (`postgresql://michael:...@mitrixo-29021.j77.aws-eu-central-1.cockroachlabs.cloud:26257/Inzan-athletics`)
+
+## Remaining / Next Steps
+- Monitor billing to confirm the audit-log fix shows up (reads should drop sharply)
+- Redeploy (`firebase deploy` / Cloud Build) to ship the code changes to production
+- Consider capping the us-central1 send-email extension via `firebase deploy --only functions`
+- Optional: tighten remaining global listeners (`useClients`, `usePayments`, `usePTSessions`, `useCoaches`) — they are real-time by design; lower priority
