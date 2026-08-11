@@ -32,6 +32,10 @@
       "database": "db-registry-2",
       "rules": "firestore.rules",
       "indexes": "firestore.indexes.json"
+    },
+    {
+      "database": "db-inzanathletics",
+      "rules": "firestore-tenant.rules"
     }
   ],
   "storage": {

@@ -12,7 +12,7 @@ const RESERVED_TENANT_IDS = new Set([
   'strike', 'strikeboxing', 'dashboard', 'superadmin', 'admin',
   'www', 'api', 'app', 'test', 'staging', 'dev', 'mail', 'smtp',
   'ftp', 'cdn', 'static', 'assets', 'mitrixo', 'default', 'registry',
-  'registry-2', 'test', 'testrules', 'gyma', 'inzanathletics',
+  'registry-2', 'test', 'testrules', 'gyma',
 ]);
 
 // ===============================================================

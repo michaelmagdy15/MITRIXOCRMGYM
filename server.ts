@@ -164,11 +164,18 @@ const strikeCrmConfig = {
 };
 delete strikeCrmConfig.firestoreDatabaseId;
 
+const inzanConfig = {
+  ...defaultFirebaseConfig,
+  firestoreDatabaseId: "db-inzanathletics",
+  tenantId: "inzanathletics"
+};
+
 const tenantConfigs: Record<string, any> = {
   "localhost": defaultFirebaseConfig, // has firestoreDatabaseId: "db-test"
   "strike.mitrixo.com": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
   "strikeboxing.mitrixo.com": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
   "dashboard.strikeboxing-eg.pro": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
+  "inzanathletics.mitrixo.com": inzanConfig,
   "mitrixogymcrm-boxing.local": {
     ...defaultFirebaseConfig,
     projectId: "mitrixogymcrm-boxing-tenant-1",
@@ -357,10 +364,6 @@ async function startServer() {
       let fetchPromise = clientsFetchPromises.get(cacheKey);
       if (!fetchPromise) {
         fetchPromise = (async () => {
-          if (tenantId === 'inzanathletics') {
-            console.log(`[Cache] Fetching clients from CockroachDB (Inzan)...`);
-            return await sqlDb.getClientsFromSQL();
-          }
           console.log(`[Cache] Fetching clients from Firestore (${dbId})...`);
           const db = await getDbForRequest(req);
           const snap = await db.collection('clients').where('status', '!=', 'Lead').get();
@@ -425,10 +428,6 @@ async function startServer() {
       let fetchPromise = paymentsFetchPromises.get(cacheKey);
       if (!fetchPromise) {
         fetchPromise = (async () => {
-          if (tenantId === 'inzanathletics') {
-            console.log(`[Cache] Fetching payments from CockroachDB (Inzan)...`);
-            return await sqlDb.getPaymentsFromSQL();
-          }
           console.log(`[Cache] Fetching payments from Firestore (${dbId})...`);
           const db = await getDbForRequest(req);
           const snap = await db.collection('payments').get();
@@ -841,114 +840,6 @@ async function startServer() {
       const tenantId = config?.tenantId;
       const db = await getDbForRequest(req);
 
-      if (tenantId === 'inzanathletics') {
-        // 1. Find client in SQL by id, memberId or phone using indexed search
-        const client = await sqlDb.getClientByQrCodeFromSQL(qrData);
-        if (!client) {
-          return res.status(404).json({ error: "Member not found. Please check the QR code or ID." });
-        }
-        
-        if (client.status === 'Expired') {
-          return res.status(400).json({ error: `${client.name}'s membership is expired. They must head to the STRIKE branch to renew.` });
-        }
-        if (client.status === 'Hold') {
-          return res.status(400).json({ error: `${client.name}'s membership is currently on hold.` });
-        }
-
-        // Check double check-in ( Cairo Timezone )
-        const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-        const attendances = await sqlDb.getAttendancesForClientFromSQL(client.id);
-        const todayCheckins = attendances.filter(a => {
-          if (!a.date) return false;
-          try {
-            return new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr;
-          } catch {
-            return false;
-          }
-        });
-        const checkinCount = todayCheckins.length;
-
-        // Count expected sessions from SQL (only this client's sessions today)
-        const sessions = await sqlDb.getSessionsForClientAndDateFromSQL(client.id, cairoDateStr);
-        const ptSessionsCount = sessions.filter(s => {
-          return s.status === 'Scheduled' || s.status === 'Attended';
-        }).length;
-
-        // Group classes count from Firestore
-        const classesSnap = await db.collection('classes')
-          .where('date', '==', cairoDateStr)
-          .get();
-        const groupClassesCount = classesSnap.docs.filter(docSnap => {
-          const attendees = docSnap.data().attendees || [];
-          return attendees.includes(client.id);
-        }).length;
-
-        const totalExpected = Math.max(1, ptSessionsCount + groupClassesCount);
-
-        if (checkinCount >= totalExpected) {
-          const msg = totalExpected === 1
-            ? `Double check-in blocked. ${client.name} has already checked in today.`
-            : `Double check-in blocked. ${client.name} has already checked in ${checkinCount} times today for ${totalExpected} scheduled sessions.`;
-          return res.status(400).json({ error: msg });
-        }
-
-        // 2. Add Attendance in SQL
-        const attendanceData = {
-          clientId: client.id,
-          branch: branch || 'MAIN',
-          date: new Date().toISOString(),
-          recordedBy: 'qr-reader',
-          packageName: client.packageType || '',
-        };
-        await sqlDb.recordAttendanceInSQL(attendanceData);
-
-        // 3. Mark matching scheduled PT sessions today to 'Attended'
-        const todayScheduledPTs = sessions.filter(s => s.status === 'Scheduled');
-        for (const pt of todayScheduledPTs) {
-          await sqlDb.updateSessionInSQL(pt.id, { status: 'Attended' });
-        }
-
-        // 4. Decrement remaining sessions
-        const packagesCopy = client.packages ? [...client.packages] : [];
-        const activePkgIdx = packagesCopy.findIndex((p: any) => p.status === 'Active');
-        const updateData: any = {};
-
-        if (activePkgIdx !== -1) {
-          const activePkg = packagesCopy[activePkgIdx];
-          if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
-            packagesCopy[activePkgIdx] = {
-              ...activePkg,
-              sessionsRemaining: activePkg.sessionsRemaining - 1
-            };
-            updateData.packages = packagesCopy;
-          }
-        }
-
-        if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-          updateData.sessionsRemaining = client.sessionsRemaining - 1;
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await sqlDb.updateClientInSQL(client.id, updateData);
-        }
-
-        // Log audit trail
-        await sqlDb.addAuditLogToSQL({
-          action: 'CREATE',
-          entityType: 'ATTENDANCE',
-          entityId: client.id,
-          details: `Attendance recorded via QR: ${client.name} at ${branch || 'MAIN'}`,
-          timestamp: new Date().toISOString(),
-          userId: 'qr-reader',
-          userName: 'QR Reader API'
-        });
-
-        // Invalidate cache
-        const cacheKey = `${tenantId}:${config.firestoreDatabaseId || '(default)'}`;
-        clientsCache.delete(cacheKey);
-        
-        return res.json({ success: true, message: `Check-in recorded for ${client.name}`, clientName: client.name });
-      }
 
       // Search by ID first
       let clientSnap = await db.collection('clients').doc(qrData).get();

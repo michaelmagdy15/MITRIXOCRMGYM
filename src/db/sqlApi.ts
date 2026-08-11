@@ -23,10 +23,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
-      if (tenantId === 'inzanathletics') {
-        const leads = await sqlDb.getLeadsFromSQL();
-        return res.json({ leads });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('clients')
         .where('status', '==', 'Lead')
@@ -48,11 +44,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addClientToSQL(id, client);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('clients').doc(id).set(client);
       invalidateCache(config);
@@ -71,11 +62,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updateClientInSQL(id, updates);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('clients').doc(id).update(updates);
       invalidateCache(config);
@@ -94,11 +80,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.deleteClientFromSQL(id);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('clients').doc(id).delete();
       invalidateCache(config);
@@ -117,11 +98,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.deleteMultipleClientsFromSQL(ids);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       const batch = db.batch();
       ids.forEach((id: string) => {
@@ -144,11 +120,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addCommentToSQL(clientId, comment);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       const docRef = db.collection('clients').doc(clientId).collection('comments').doc();
       await docRef.set(comment);
@@ -171,11 +142,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addPaymentToSQL(id, payment);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('payments').doc(id).set(payment);
       invalidateCache(config);
@@ -194,11 +160,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updatePaymentInSQL(id, updates);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('payments').doc(id).update(updates);
       invalidateCache(config);
@@ -217,11 +178,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.deletePaymentFromSQL(id);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('payments').doc(id).delete();
       invalidateCache(config);
@@ -239,10 +195,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const attendances = await sqlDb.getAttendancesFromSQL();
-        return res.json({ attendances });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('attendance').orderBy('date', 'desc').get();
       const attendances = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
@@ -261,11 +213,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.recordAttendanceInSQL(attendance);
-        invalidateCache(config);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('attendance').add(attendance);
       invalidateCache(config);
@@ -283,10 +230,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const coaches = await sqlDb.getCoachesFromSQL();
-        return res.json({ coaches });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('coaches').get();
       const coaches = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
@@ -304,10 +247,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addCoachToSQL(id, coach);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('coaches').doc(id).set(coach);
       return res.json({ success: true });
@@ -324,10 +263,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updateCoachInSQL(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('coaches').doc(id).update(updates);
       return res.json({ success: true });
@@ -344,10 +279,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.deleteCoachFromSQL(id);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('coaches').doc(id).delete();
       return res.json({ success: true });
@@ -364,10 +295,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const packages = await sqlDb.getPackagesFromSQL();
-        return res.json({ packages });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('packages').get();
       const packages = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
@@ -385,10 +312,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addPackageToSQL(id, pkg);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('packages').doc(id).set(pkg);
       return res.json({ success: true });
@@ -405,10 +328,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updatePackageInSQL(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('packages').doc(id).update(updates);
       return res.json({ success: true });
@@ -425,10 +344,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.deletePackageFromSQL(id);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('packages').doc(id).delete();
       return res.json({ success: true });
@@ -445,10 +360,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const sessions = await sqlDb.getSessionsFromSQL();
-        return res.json({ sessions });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('sessions').get();
       const sessions = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
@@ -466,10 +377,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addSessionToSQL(id, session);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('sessions').doc(id).set(session);
       return res.json({ success: true });
@@ -486,10 +393,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updateSessionInSQL(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('sessions').doc(id).update(updates);
       return res.json({ success: true });
@@ -506,10 +409,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const tasks = await sqlDb.getTasksFromSQL();
-        return res.json({ tasks });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('tasks').get();
       const tasks = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
@@ -527,10 +426,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addTaskToSQL(id, task);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('tasks').doc(id).set(task);
       return res.json({ success: true });
@@ -547,10 +442,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updateTaskInSQL(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('tasks').doc(id).update(updates);
       return res.json({ success: true });
@@ -567,10 +458,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.deleteTaskFromSQL(id);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('tasks').doc(id).delete();
       return res.json({ success: true });
@@ -587,10 +474,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const importBatches = await sqlDb.getImportBatchesFromSQL();
-        return res.json({ importBatches });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('importBatches').orderBy('date', 'desc').get();
       const importBatches = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
@@ -608,10 +491,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addImportBatchToSQL(id, batch);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('importBatches').doc(id).set(batch);
       return res.json({ success: true });
@@ -628,10 +507,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updateImportBatchInSQL(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('importBatches').doc(id).update(updates);
       return res.json({ success: true });
@@ -648,10 +523,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const users = await sqlDb.getUsersFromSQL();
-        return res.json({ users });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('users').get();
       const users = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
@@ -669,10 +540,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addUserToSQL(id, user);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('users').doc(id).set(user);
       return res.json({ success: true });
@@ -689,10 +556,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updateUserInSQL(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('users').doc(id).update(updates);
       return res.json({ success: true });
@@ -709,10 +572,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.deleteUserFromSQL(id);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('users').doc(id).delete();
       return res.json({ success: true });
@@ -749,14 +608,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       
       let settingsObj: any = {};
 
-      if (tenantId === 'inzanathletics') {
-        const settings = await sqlDb.getSettingsFromSQL();
-        settingsObj = settings;
-      } else {
-        const db = await getDbForRequest(req);
-        const snap = await db.collection('settings').get();
-        snap.forEach((doc: any) => { settingsObj[doc.id] = doc.data(); });
-      }
 
       if (!isAuthenticated) {
         delete settingsObj['commission'];
@@ -777,10 +628,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const announcements = await sqlDb.getAnnouncementsFromSQL();
-        return res.json({ announcements });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('announcements').get();
       const announcements = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
@@ -798,10 +645,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addAnnouncementToSQL(announcement);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('announcements').add(announcement);
       return res.json({ success: true });
@@ -818,10 +661,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updateAnnouncementInSQL(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('announcements').doc(id).update(updates);
       return res.json({ success: true });
@@ -838,10 +677,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.deleteAnnouncementFromSQL(id);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('announcements').doc(id).delete();
       return res.json({ success: true });
@@ -858,10 +693,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.updateSettingInSQL(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('settings').doc(id).set(updates, { merge: true });
       return res.json({ success: true });
@@ -881,13 +712,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const tenantId = config?.tenantId;
       
       let userTargets;
-      if (tenantId === 'inzanathletics') {
-        userTargets = await sqlDb.getUserTargetsFromSQL();
-      } else {
-        const db = await getDbForRequest(req);
-        const snap = await db.collection('userTargets').get();
-        userTargets = snap.docs.map((d: any) => ({ ...d.data(), id: d.id }));
-      }
       // Return under both keys so any client hook (userTargets or targets) parses it correctly.
       return res.json({ userTargets, targets: userTargets });
     } catch (err: any) {
@@ -903,10 +727,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.saveUserTargetToSQL(id, target);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('userTargets').doc(id).set(target, { merge: true });
       return res.json({ success: true });
@@ -928,10 +748,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        const auditLogs = await sqlDb.getAuditLogsFromSQL();
-        return res.json({ auditLogs });
-      }
       const db = await getDbForRequest(req);
       const { fromISO, toISO, limit, entityId } = req.query;
       const parsedLimit = Math.max(1, Math.min(parseInt(String(limit ?? '1000'), 10) || 1000, 5000));
@@ -955,10 +771,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
       
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addAuditLogToSQL(log);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('auditLogs').add(log);
       return res.json({ success: true });
@@ -973,10 +785,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        const logs = await sqlDb.getCallCenterLogs();
-        return res.json({ logs });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('callCenterLog').get();
       const logs = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
@@ -991,10 +799,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { log } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.addCallCenterLog(log);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('callCenterLog').doc(log.id).set(log);
       return res.json({ success: true });
@@ -1008,10 +812,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        const complaints = await sqlDb.getComplaints();
-        return res.json({ complaints });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('complaints').get();
       const complaints = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
@@ -1025,10 +825,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { complaint } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.addComplaint(complaint);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('complaints').doc(complaint.id).set(complaint);
       return res.json({ success: true });
@@ -1041,10 +837,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { id, updates } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.updateComplaint(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('complaints').doc(id).update(updates);
       return res.json({ success: true });
@@ -1058,10 +850,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { id } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.deleteComplaint(id);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('complaints').doc(id).delete();
       return res.json({ success: true });
@@ -1075,10 +863,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        const items = await sqlDb.getLostAndFound();
-        return res.json({ items });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('lostAndFound').get();
       const items = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
@@ -1092,10 +876,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { item } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.addLostAndFound(item);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('lostAndFound').doc(item.id).set(item);
       return res.json({ success: true });
@@ -1108,10 +888,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { id, updates } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.updateLostAndFound(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('lostAndFound').doc(id).update(updates);
       return res.json({ success: true });
@@ -1125,10 +901,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { id } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.deleteLostAndFound(id);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('lostAndFound').doc(id).delete();
       return res.json({ success: true });
@@ -1142,10 +914,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        const events = await sqlDb.getCalendarEvents();
-        return res.json({ events });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('calendarEvents').get();
       const events = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
@@ -1159,10 +927,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { event } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.addCalendarEvent(event);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('calendarEvents').doc(event.id).set(event);
       return res.json({ success: true });
@@ -1175,10 +939,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { id } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.deleteCalendarEvent(id);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('calendarEvents').doc(id).delete();
       return res.json({ success: true });
@@ -1192,10 +952,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        const bookings = await sqlDb.getBookings();
-        return res.json({ bookings });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('bookings').get();
       const bookings = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
@@ -1209,10 +965,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { booking } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.addBooking(booking);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('bookings').doc(booking.id).set(booking);
       return res.json({ success: true });
@@ -1225,10 +977,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { id, updates } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.updateBooking(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('bookings').doc(id).update(updates);
       return res.json({ success: true });
@@ -1242,10 +990,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        const operations = await sqlDb.getClubOperations();
-        return res.json({ operations });
-      }
       const db = await getDbForRequest(req);
       const snap = await db.collection('clubOperations').get();
       const operations = snap.docs.map((doc: any) => ({ ...doc.data(), id: doc.id }));
@@ -1259,10 +1003,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { operation } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.addClubOperation(operation);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('clubOperations').doc(operation.id).set(operation);
       return res.json({ success: true });
@@ -1275,10 +1015,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const { id, updates } = req.body;
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      if (config?.tenantId === 'inzanathletics') {
-        await sqlDb.updateClubOperation(id, updates);
-        return res.json({ success: true });
-      }
       const db = await getDbForRequest(req);
       await db.collection('clubOperations').doc(id).update(updates);
       return res.json({ success: true });
@@ -1293,10 +1029,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
-      if (tenantId === 'inzanathletics') {
-        const requests = await sqlDb.getBookingRequests();
-        return res.json({ bookingRequests: requests });
-      }
       return res.json({ bookingRequests: [] });
     } catch (err: any) {
       console.error('[API] Error in GET /api/booking-requests:', err);
@@ -1309,11 +1041,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
-      if (tenantId === 'inzanathletics') {
-        const { id, status } = req.body;
-        await sqlDb.updateBookingRequestStatus(id, status);
-        return res.json({ success: true });
-      }
       return res.json({ success: true });
     } catch (err: any) {
       console.error('[API] Error in POST /api/booking-requests/update-status:', err);
@@ -1326,11 +1053,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
-      if (tenantId === 'inzanathletics') {
-        const { id, fields } = req.body;
-        await sqlDb.updateClient(id, fields);
-        return res.json({ success: true });
-      }
       return res.json({ success: true });
     } catch (err: any) {
       console.error('[API] Error in POST /api/clients/update-from-booking:', err);
@@ -1343,10 +1065,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId;
-      if (tenantId === 'inzanathletics') {
-        await sqlDb.addTask(req.body.task);
-        return res.json({ success: true });
-      }
       return res.json({ success: true });
     } catch (err: any) {
       console.error('[API] Error in POST /api/tasks/add:', err);
