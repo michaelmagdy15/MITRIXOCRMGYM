@@ -16,6 +16,7 @@ import {
   writeBatch,
   addDoc,
   orderBy,
+  runTransaction,
 } from 'firebase/firestore';
 import * as userService from '../services/userService';
 import { activatePendingUser as activatePendingUserService } from '../services/userService';
@@ -342,42 +343,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithCoachId = async (coachIdOrName: string, password: string) => {
     const term = coachIdOrName.trim();
-    // 1. Try direct Coach ID lookup
-    let q = query(collection(db, 'users'), where('coachId', '==', term.toUpperCase()));
-    let snap = await getDocs(q);
-
-    // 2. If not found, try name lookup in users with role='coach'
-    if (snap.empty) {
-      q = query(collection(db, 'users'), where('role', '==', 'coach'), where('name', '==', term));
-      snap = await getDocs(q);
+    // Resolve the coach email server-side (uses admin SDK, works pre-auth)
+    const res = await fetch('/api/coach/resolve-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ term })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Coach ID or Name not found. Please check and try again.');
     }
-
-    // 3. Fallback: case-insensitive name match on all users of role coach
-    if (snap.empty) {
-      const allCoachesQ = query(collection(db, 'users'), where('role', '==', 'coach'));
-      const allCoachesSnap = await getDocs(allCoachesQ);
-      const matched = allCoachesSnap.docs.find(d => d.data().name?.toLowerCase() === term.toLowerCase());
-      if (matched) {
-        const coachData = matched.data();
-        if (!coachData.email) throw new Error('No email associated with this Coach account.');
-        await signInWithEmail(coachData.email, password);
-        return;
-      }
-    }
-
-    if (snap.empty) throw new Error('Coach ID or Name not found. Please check and try again.');
-    const coachData = snap.docs[0]!.data();
-    if (!coachData.email) throw new Error('No email associated with this Coach account.');
-    await signInWithEmail(coachData.email, password);
+    const data = await res.json();
+    await signInWithEmail(data.email, password);
   };
 
   const loginWithMemberId = async (memberId: string, password: string) => {
-    const q = query(collection(db, 'users'), where('clientRecordId', '==', memberId.trim()));
-    const snap = await getDocs(q);
-    if (snap.empty) throw new Error('Member ID not found. Please check and try again.');
-    const memberData = snap.docs[0]!.data();
-    if (!memberData.email) throw new Error('No account associated with this Member ID.');
-    await signInWithEmail(memberData.email, password);
+    const term = memberId.trim();
+    // 1. Try the deterministic tenant-namespaced email first (covers all
+    //    accounts created via createClientAccount / registerFreeUser).
+    try {
+      const deterministicEmail = getMemberEmail(term);
+      await signInWithEmail(deterministicEmail, password);
+      return;
+    } catch (err: any) {
+      // Deterministic email failed (not found or wrong password) — fall
+      // through to a server-side lookup for legacy/custom-email accounts.
+      const res = await fetch('/api/member/resolve-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: term })
+      }).catch(() => null);
+
+      if (!res) {
+        throw new Error(err?.message || 'Sign-in failed. Please check your credentials.');
+      }
+
+      if (res.status === 404) {
+        throw new Error('Member ID not found. Please check and try again.');
+      }
+
+      if (!res.ok) {
+        throw new Error(err?.message || 'Sign-in failed. Please check your credentials.');
+      }
+
+      const data = await res.json();
+      if (data.email === getMemberEmail(term)) {
+        // Same deterministic account — the password was wrong.
+        throw new Error(err?.message || 'Incorrect password. Please try again.');
+      }
+      await signInWithEmail(data.email, password);
+    }
   };
 
   const createCoachAccount = async (name: string, email: string, branch?: string) => {
@@ -491,50 +506,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
   const submitMemberPasswordResetRequest = async (memberId: string, phone: string) => {
-    // Look up the Firebase user whose clientRecordId matches the provided Member ID
-    const userQ = query(collection(db, 'users'), where('clientRecordId', '==', memberId.trim()));
-    const userSnap = await getDocs(userQ);
-    if (userSnap.empty) {
-      throw new Error('Member ID not found. Please check your ID and try again.');
-    }
-    const userData = userSnap.docs[0]!.data();
-    const syntheticEmail: string = userData.email || '';
-    const memberName: string = userData.name || '';
-
-    // Verify phone against the clients collection
-    const clientQ = query(collection(db, 'clients'), where('memberId', '==', memberId.trim()));
-    const clientSnap = await getDocs(clientQ);
-    if (!clientSnap.empty) {
-      const clientPhone: string = (clientSnap.docs[0]!.data().phone || '').replace(/\s/g, '');
-      const inputPhone = phone.trim().replace(/\s/g, '');
-      if (clientPhone && inputPhone && clientPhone !== inputPhone) {
-        throw new Error('Phone number does not match our records for this Member ID.');
-      }
-    }
-
-    // Check for an existing pending request
-    try {
-      const existingQ = query(
-        collection(db, 'passwordResetRequests'),
-        where('email', '==', syntheticEmail),
-        where('status', '==', 'pending')
-      );
-      const existingSnap = await getDocs(existingQ);
-      if (!existingSnap.empty) {
-        throw new Error('A password reset request for this account is already pending admin approval.');
-      }
-    } catch (err: any) {
-      if (err?.message?.includes('pending admin approval')) throw err;
-    }
-
-    await addDoc(collection(db, 'passwordResetRequests'), {
-      email: syntheticEmail,
-      name: memberName,
-      memberId: memberId.trim(),
-      phone: phone.trim(),
-      requestedAt: new Date().toISOString(),
-      status: 'pending',
+    // Server-side flow: resolves the account, verifies the phone number,
+    // rate-limits duplicate pending requests, and creates the request doc.
+    const res = await fetch('/api/member/request-password-reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId: memberId.trim(), phone: phone.trim() })
     });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to submit password reset request. Please try again.');
+    }
   };
 
   const approvePasswordResetRequest = async (id: string, email: string) => {
@@ -710,15 +692,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const uid = userCred.user.uid;
 
-    // 2. Generate a member ID (e.g., M-0001)
-    const clientsSnap = await getDocs(collection(db, 'clients'));
-    const memberIds = clientsSnap.docs
-      .map(d => d.data().memberId)
-      .filter(id => typeof id === 'string' && id.startsWith('MEM-'))
-      .map(id => parseInt(id.replace('MEM-', ''), 10))
-      .filter(n => !isNaN(n));
-    const nextNum = memberIds.length > 0 ? Math.max(...memberIds) + 1 : 1;
-    const newMemberId = `MEM-${String(nextNum).padStart(3, '0')}`;
+    // 2. Generate a member ID (e.g., MEM-001) via the shared counters doc —
+    //    scanning the clients collection is permission-denied for brand-new
+    //    users (no users doc yet), so we use an atomic counter instead.
+    let newMemberId = '';
+    try {
+      const counterRef = doc(db, 'counters', 'memberIds');
+      const nextId = await runTransaction(db, async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+        let next = 1000;
+        if (counterDoc.exists()) {
+          next = (counterDoc.data().lastId || 999) + 1;
+        }
+        transaction.set(counterRef, { lastId: next }, { merge: true });
+        return next;
+      });
+      newMemberId = `MEM-${String(nextId).padStart(3, '0')}`;
+    } catch (err) {
+      console.error('Error generating member ID:', err);
+      newMemberId = `MEM-${Date.now().toString(36).toUpperCase()}`;
+    }
 
     // 3. Create Client record
     const clientRef = doc(collection(db, 'clients'));

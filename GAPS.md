@@ -1,6 +1,61 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-08-18 (second pass — branding fix deployed, CockroachDB removed, second preloader disabled)
+Updated: 2026-08-18 (third pass — member portal permission architecture hardened, baseline lint fixed)
+
+---
+
+## CRITICAL GAPS — Audit 2026-08-18 (Member Portal Permissions)
+
+### Fixed This Session
+
+**C5. Member login broken ("missing or insufficient permissions", member 624)** — FIXED ✅
+- Root cause: commit 703db01 restricted `users` reads to owner+staff; `loginWithMemberId` queried `users where clientRecordId == id` BEFORE auth → permission denied
+- Fix: login now tries the deterministic tenant email (`member-{id}@{tenant}.mitrixo-member.local` via `getMemberEmail()`) first, then falls back to the new public `POST /api/member/resolve-email` server endpoint for legacy emails
+
+**C6. Member-facing reads of protected collections moved server-side** — FIXED ✅
+- `loginWithCoachId` → new public `POST /api/coach/resolve-email` (server-side 3-step lookup)
+- `submitMemberPasswordResetRequest` → new public `POST /api/member/request-password-reset` (server-side phone verify + rate limit)
+- PT coach list in MemberSessions → new public `GET /api/member/coaches` (id/name/branch only, no emails)
+- New public `POST /api/attendance/self-checkin` — full check-in math (PIN, member lookup, double-check-in, decrement) moved to server; kiosk no longer needs anonymous sign-in or client rule grants
+
+**C7. Server-authoritative session math (members can no longer self-grant sessions)** — FIXED ✅
+- New authenticated endpoints: `POST /api/classes/book`, `POST /api/sessions/book`, `POST /api/sessions/cancel`, `POST /api/sessions/reschedule`
+- MemberClasses join/leave, MemberSessions book/cancel/reschedule now call these; all package/session decrements validated server-side
+- Rules tightened: `sessions` create/update = staff only; `classes` update = staff only; `isSafeClientSelfEdit` no longer allows `packages`/`sessionsRemaining` (kept `name/phone/portalUserId`, added `photoURL`); `tasks` create = staff or Package Purchase Request prefix only
+
+**C8. Staff escalation via users self-create closed** — FIXED ✅
+- `users` create rule: self-create now only role `'client'` (was `'client' or 'coach'` — any authenticated user could self-promote to coach = staff)
+
+**C9. `/api/clients/update` role check** — FIXED ✅
+- Was requireAuth only: any tenant member could update ANY client
+- Now: non-staff callers may only update their own client doc (clientDocId + linkedClientIds) with safe fields (name/phone/photoURL/portalUserId)
+
+**C10. Notifications collection had no rules** — FIXED ✅
+- Fell through to super-admin-only fallback; member bell read/update denied
+- Added rules: read own (recipientUid == uid) or staff; update own read flag only; create/delete staff
+
+**C11. registerFreeUser (Join Club) broken for new users** — FIXED ✅
+- Scanned all `clients` to compute the next MEM- ID — denied for brand-new users (no users doc yet)
+- Now uses atomic `counters/memberIds` transaction
+
+**C12. Baseline lint errors fixed** — FIXED ✅
+- Dead CockroachDB-era `/api/admin/fix-migration` route removed from server.ts (referenced non-existent `fixMigrationData`)
+- `GET /api/settings` no longer imports missing `./firebaseAdmin` module (uses `firebase-admin` directly)
+
+### Public endpoints added (documented per AGENTS.md §5)
+- `POST /api/member/resolve-email` — resolve auth email by member ID (pre-auth login/fallback)
+- `POST /api/coach/resolve-email` — resolve auth email by coach ID/name (pre-auth login)
+- `POST /api/member/request-password-reset` — member password reset request (pre-auth)
+- `GET /api/member/coaches` — coach list for member portal (id/name/branch only)
+- `POST /api/attendance/self-checkin` — PIN-validated self check-in (kiosk, pre-auth)
+
+### Deployed rules changes (firestore.rules + firestore-tenant.rules kept in sync)
+- users: self-create role == 'client' only
+- sessions: create/update staff-only
+- classes: update staff-only
+- clients: self-edit allowed keys = name/phone/portalUserId/photoURL (packages/sessionsRemaining removed)
+- tasks: create = staff OR status Pending + title starts with "Package Purchase Request:"
+- notifications: NEW rule (read own / mark-read only / staff manage)
 
 ---
 
@@ -128,3 +183,11 @@ Implement background sync for offline-capable mobile experience when app is in b
 | C2: Logo persistence | 2026-08-18 | Same root cause as C1 |
 | C3: CockroachDB removal | 2026-08-18 | All club ops migrated to Firestore |
 | C4: Second preloader | 2026-08-18 | Disabled "Loading CRM Data" preloader |
+| C5: Member login 624 | 2026-08-18 | Deterministic member email + server resolve fallback |
+| C6: Member portal reads | 2026-08-18 | resolve-email / password-reset / coaches / self-checkin endpoints |
+| C7: Server-authoritative session math | 2026-08-18 | classes/book + sessions book/cancel/reschedule endpoints; rules tightened |
+| C8: users self-create role | 2026-08-18 | Self-create now role 'client' only (coach escalation closed) |
+| C9: clients/update role check | 2026-08-18 | Non-staff limited to own client doc + safe fields |
+| C10: notifications rules | 2026-08-18 | Added collection rules (was super-admin fallback only) |
+| C11: registerFreeUser | 2026-08-18 | Atomic counters/memberIds instead of clients scan |
+| C12: baseline lint | 2026-08-18 | Removed dead fix-migration route + firebaseAdmin import |

@@ -809,21 +809,6 @@ async function startServer() {
     }
   });
 
-  // ─── Fix Migration Data (backfill referrals, prices, recordedBy) ───
-  app.post("/api/admin/fix-migration", requirePlatformAdmin, async (req, res) => {
-    try {
-      console.log('[Admin] Running migration data fix...');
-      const results = await fixMigrationData();
-      // Invalidate caches after fix
-      clientsCache.clear();
-      paymentsCache.clear();
-      return res.json({ success: true, results });
-    } catch (error) {
-      console.error('[Admin] Migration fix error:', error);
-      return res.status(500).json({ error: (error as Error).message });
-    }
-  });
-
   // ─── PUBLIC QR Code Check-In Endpoint ───
   app.post("/api/attendance/qr-checkin", async (req, res) => {
     const { qrData, branch } = req.body;

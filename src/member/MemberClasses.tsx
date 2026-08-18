@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Client } from '../types';
-import { db } from '../firebase';
-import { collection, query, onSnapshot, doc, updateDoc, addDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import { collection, query, onSnapshot, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -144,39 +144,6 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     }
   }, []);
 
-  const isPackageMatchingClass = (packageName: string, className: string): boolean => {
-    const pName = packageName.toLowerCase();
-    const cName = className.toLowerCase();
-    
-    const isPT = pName.includes('pt') || pName.includes('personal');
-    if (isPT) return false;
-    
-    const classIsJunior = cName.includes('junior');
-    const classIsKids = cName.includes('kid');
-    const classIsAdvanced = cName.includes('advanced') || cName.includes('pro');
-    
-    const pkgHasJunior = pName.includes('junior');
-    const pkgHasKids = pName.includes('kid');
-    const pkgHasAdvanced = pName.includes('advanced') || pName.includes('pro');
-    
-    if (classIsJunior) {
-      if (classIsAdvanced) {
-        return pkgHasJunior && pkgHasAdvanced;
-      }
-      return pkgHasJunior && !pkgHasAdvanced;
-    }
-    
-    if (classIsKids) {
-      if (classIsAdvanced) {
-        return pkgHasKids && pkgHasAdvanced;
-      }
-      return pkgHasKids && !pkgHasAdvanced;
-    }
-    
-    // Adult class (neither kids nor junior)
-    return !classIsJunior && !classIsKids && !pkgHasJunior && !pkgHasKids;
-  };
-
   const handleToggleBooking = async (gymClass: GymClass) => {
     if (!client || !client.id) return;
     if (client.status === 'Expired') {
@@ -187,96 +154,28 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
 
     try {
       const isBooked = gymClass.attendees.includes(client.id);
-      let updatedAttendees = [...gymClass.attendees];
-      let updatedPackages = client.packages ? [...client.packages] : [];
-      let updatedSessionsRemaining = client.sessionsRemaining;
+      const action = isBooked ? 'leave' : 'join';
 
-      if (isBooked) {
-        // Leaving class: Check 1-hour cancellation limit
-        const startTimeStr = gymClass.time.split(' - ')[0]; // e.g. "18:00"
-        if (startTimeStr) {
-          const [hours, minutes] = startTimeStr.split(':').map(Number);
-          const classStart = new Date(gymClass.date);
-          classStart.setHours(hours || 0, minutes || 0, 0, 0);
-          
-          const now = new Date();
-          const diffMs = classStart.getTime() - now.getTime();
-          if (diffMs < 3600000) {
-            alert("Bookings cannot be cancelled less than 1 hour before the class starts.");
-            return;
-          }
-        }
-
-        // Leaving class: Refund 1 session
-        updatedAttendees = updatedAttendees.filter(id => id !== client.id);
-        
-        // Find matching active GT package to refund
-        const pkgToRefund = updatedPackages.find(pkg => {
-          if (pkg.status !== 'Active') return false;
-          const nameUpper = pkg.packageName.toUpperCase();
-          const isGroup = nameUpper.includes('GT') || nameUpper.includes('GP') || nameUpper.includes('GROUP');
-          if (!isGroup) return false;
-          return isPackageMatchingClass(pkg.packageName, gymClass.name);
-        });
-
-        if (pkgToRefund && (pkgToRefund.sessionsRemaining as any) !== 'unlimited') {
-          pkgToRefund.sessionsRemaining = (Number(pkgToRefund.sessionsRemaining) || 0) + 1;
-        }
-
-        if (client.sessionsRemaining !== 'unlimited') {
-          updatedSessionsRemaining = (Number(client.sessionsRemaining) || 0) + 1;
-        }
-      } else {
-        // Joining class: Validate capacity
-        if (gymClass.attendees.length >= gymClass.capacity) {
-          alert("This class is fully booked!");
-          return;
-        }
-
-        // Validate package availability
-        const validPkgIndex = updatedPackages.findIndex(pkg => {
-          if (pkg.status !== 'Active') return false;
-          const nameUpper = pkg.packageName.toUpperCase();
-          const isGroup = nameUpper.includes('GT') || nameUpper.includes('GP') || nameUpper.includes('GROUP');
-          if (!isGroup) return false;
-          if (!isPackageMatchingClass(pkg.packageName, gymClass.name)) return false;
-          const remaining = pkg.sessionsRemaining;
-          return (remaining as any) === 'unlimited' || (typeof remaining === 'number' && remaining > 0);
-        });
-
-        if (validPkgIndex === -1) {
-          let displayCategory = 'Adults';
-          const cName = gymClass.name.toLowerCase();
-          if (cName.includes('junior')) {
-            displayCategory = cName.includes('advanced') || cName.includes('pro') ? 'Juniors Advanced' : 'Juniors';
-          } else if (cName.includes('kid')) {
-            displayCategory = cName.includes('pro') ? 'Kids Pro' : 'Kids';
-          }
-          alert(`You do not have any active Group Training (GT) packages matching this class category (${displayCategory}) with sessions remaining. Please buy a package first.`);
-          return;
-        }
-
-        const validPkg = updatedPackages[validPkgIndex];
-        if (validPkg && (validPkg.sessionsRemaining as any) !== 'unlimited') {
-          validPkg.sessionsRemaining = (Number(validPkg.sessionsRemaining) || 0) - 1;
-        }
-
-        if (client.sessionsRemaining !== 'unlimited') {
-          updatedSessionsRemaining = Math.max(0, (Number(client.sessionsRemaining) || 0) - 1);
-        }
-
-        updatedAttendees.push(client.id);
-      }
-
-      // Perform updates atomically in a batch
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'classes', gymClass.id), { attendees: updatedAttendees });
-      batch.update(doc(db, 'clients', client.id), { 
-        packages: updatedPackages,
-        sessionsRemaining: updatedSessionsRemaining
+      // Server-authoritative booking: validates the 1-hour cancellation rule,
+      // capacity, package matching, and performs the session math.
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/classes/book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          classId: gymClass.id,
+          action,
+          clientId: client.id,
+        })
       });
-      await batch.commit();
-
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || "Failed to update booking. Please try again.");
+        return;
+      }
     } catch (err) {
       console.error("Failed to update booking status:", err);
       alert("Failed to update booking. Please try again.");

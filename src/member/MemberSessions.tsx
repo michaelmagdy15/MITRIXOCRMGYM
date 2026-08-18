@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Client, User } from '../types';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, addDoc, doc, getDoc, getDocs, updateDoc, writeBatch } from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { format, parseISO, addDays, isAfter } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -70,25 +70,25 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       setLoading(false);
     });
 
-    // 2. Fetch active coaches
-    const coachesQ = query(
-      collection(db, 'users'),
-      where('role', '==', 'coach')
-    );
-
-    const unsubCoaches = onSnapshot(coachesQ, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as User));
-      setCoaches(list);
-    }, (err) => {
-      console.error("Error subscribing to coaches list:", err);
-    });
+    // 2. Fetch active coaches (server endpoint — the users collection is
+    //    not readable by members client-side)
+    const loadCoaches = async () => {
+      try {
+        const res = await fetch('/api/member/coaches');
+        if (!res.ok) {
+          console.error("Error fetching coaches list:", res.status);
+          return;
+        }
+        const list = await res.json();
+        setCoaches(list);
+      } catch (err) {
+        console.error("Error fetching coaches list:", err);
+      }
+    };
+    loadCoaches();
 
     return () => {
       unsubSessions();
-      unsubCoaches();
     };
   }, [client?.id]);
 
@@ -138,109 +138,30 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     setBookingError(null);
 
     try {
-      // Validate booking date is in the future
+      // Server-authoritative booking: validates schedule, conflicts, and PT
+      // package availability, then creates the session + task + decrements.
       const selectedDateTime = new Date(`${bookingDate}T${bookingTime}`);
       if (selectedDateTime <= new Date()) {
         throw new Error("Please select a future date and time.");
       }
-
-      // Check coach schedule if loaded
-      if (coachSchedule) {
-        const dayOfWeek = format(selectedDateTime, 'eeee').toLowerCase();
-        const dayConfig = coachSchedule[dayOfWeek];
-        if (!dayConfig || !dayConfig.enabled) {
-          throw new Error(`The coach is not available on ${format(selectedDateTime, 'EEEE')}s.`);
-        }
-        // Verify time range
-        const [hours, minutes] = bookingTime.split(':').map(Number);
-        const [startHours, startMinutes] = dayConfig.startTime.split(':').map(Number);
-        const [endHours, endMinutes] = dayConfig.endTime.split(':').map(Number);
-        
-        const bookingMinutes = (hours || 0) * 60 + (minutes || 0);
-        const startMinutesTotal = (startHours || 0) * 60 + (startMinutes || 0);
-        const endMinutesTotal = (endHours || 0) * 60 + (endMinutes || 0);
-
-        if (bookingMinutes < startMinutesTotal || bookingMinutes > endMinutesTotal) {
-          throw new Error(`The coach is only available between ${dayConfig.startTime} and ${dayConfig.endTime} on ${format(selectedDateTime, 'EEEE')}s.`);
-        }
-      }
-
-      // 1. Conflict Check: check if coach is already booked within 59 mins
-      const q = query(
-        collection(db, 'sessions'),
-        where('trainerId', '==', selectedCoachId),
-        where('status', '==', 'Scheduled')
-      );
-      const snap = await getDocs(q);
-      const requestedTime = selectedDateTime.getTime();
-      const isBooked = snap.docs.some(d => {
-        const existingTime = new Date(d.data().date).getTime();
-        const differenceMinutes = Math.abs(requestedTime - existingTime) / (1000 * 60);
-        return differenceMinutes < 60;
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/sessions/book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          coachId: selectedCoachId,
+          dateISO: selectedDateTime.toISOString(),
+          message: bookingMessage.trim(),
+          clientId: client.id,
+        })
       });
-
-      if (isBooked) {
-        throw new Error("This coach is already booked within this hour. Please choose another time.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to submit request. Please try again.");
       }
-
-      // Find active PT package
-      let updatedPackages = client.packages ? [...client.packages] : [];
-      let updatedSessionsRemaining = client.sessionsRemaining;
-      const validPkgIndex = updatedPackages.findIndex(pkg => {
-        if (pkg.status !== 'Active') return false;
-        const nameUpper = pkg.packageName.toUpperCase();
-        const isPT = nameUpper.includes('PT') || nameUpper.includes('PERSONAL');
-        if (!isPT) return false;
-        const remaining = pkg.sessionsRemaining;
-        return (remaining as any) === 'unlimited' || (typeof remaining === 'number' && remaining > 0);
-      });
-
-      if (validPkgIndex === -1) {
-        throw new Error("You do not have any active Personal Training (PT) packages with sessions remaining. Please buy a package first.");
-      }
-
-      const validPkg = updatedPackages[validPkgIndex];
-      if (validPkg && (validPkg.sessionsRemaining as any) !== 'unlimited') {
-        validPkg.sessionsRemaining = (Number(validPkg.sessionsRemaining) || 0) - 1;
-      }
-
-      if (client.sessionsRemaining !== 'unlimited') {
-        updatedSessionsRemaining = Math.max(0, (Number(client.sessionsRemaining) || 0) - 1);
-      }
-
-      // Add the session & task inside a batch
-      const batch = writeBatch(db);
-      
-      const newSessionRef = doc(collection(db, 'sessions'));
-      batch.set(newSessionRef, {
-        clientId: client.id,
-        date: selectedDateTime.toISOString(),
-        status: 'Scheduled',
-        notes: bookingMessage.trim() || 'Booked via Member Portal',
-        trainerId: selectedCoachId,
-        branch: selectedCoach?.branch || client.branch || 'ALL'
-      });
-
-      const newTaskRef = doc(collection(db, 'tasks'));
-      const formattedDate = format(selectedDateTime, 'PPP');
-      const formattedTime = format(selectedDateTime, 'p');
-      batch.set(newTaskRef, {
-        title: `PT Booking: ${client.name}`,
-        description: `Member booked a PT session with ${selectedCoach?.name || 'Coach'} on ${formattedDate} at ${formattedTime}.${bookingMessage ? ` Message: ${bookingMessage}` : ''}`,
-        dueDate: bookingDate,
-        status: 'Completed',
-        priority: 'Medium',
-        assignedTo: selectedCoachId,
-        clientId: client.id,
-        createdBy: client.portalUserId || client.id,
-        createdAt: new Date().toISOString(),
-      });
-
-      batch.update(doc(db, 'clients', client.id), { 
-        packages: updatedPackages,
-        sessionsRemaining: updatedSessionsRemaining
-      });
-      await batch.commit();
 
       setBookingSuccess(true);
       setBookingMessage('');
@@ -275,72 +196,29 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     setRescheduleError(null);
 
     try {
+      // Server-authoritative reschedule: validates schedule, conflicts,
+      // and the 1-hour rule, then updates the session date + audit log.
       const selectedDateTime = new Date(`${rescheduleDate}T${rescheduleTime}`);
       if (selectedDateTime <= new Date()) {
         throw new Error("Please select a future date and time.");
       }
-
-      const coachId = selectedRescheduleSession.trainerId;
-
-      // 1. Fetch coach schedule to validate hours
-      const scheduleRef = doc(db, 'coachSchedules', coachId);
-      const scheduleSnap = await getDoc(scheduleRef);
-      if (scheduleSnap.exists() && scheduleSnap.data().days) {
-        const scheduleDays = scheduleSnap.data().days;
-        const dayOfWeek = format(selectedDateTime, 'eeee').toLowerCase();
-        const dayConfig = scheduleDays[dayOfWeek];
-        if (!dayConfig || !dayConfig.enabled) {
-          throw new Error(`The coach is not available on ${format(selectedDateTime, 'EEEE')}s.`);
-        }
-        // Verify time range
-        const [hours, minutes] = rescheduleTime.split(':').map(Number);
-        const [startHours, startMinutes] = dayConfig.startTime.split(':').map(Number);
-        const [endHours, endMinutes] = dayConfig.endTime.split(':').map(Number);
-        
-        const bookingMinutes = (hours || 0) * 60 + (minutes || 0);
-        const startMinutesTotal = (startHours || 0) * 60 + (startMinutes || 0);
-        const endMinutesTotal = (endHours || 0) * 60 + (endMinutes || 0);
-
-        if (bookingMinutes < startMinutesTotal || bookingMinutes > endMinutesTotal) {
-          throw new Error(`The coach is only available between ${dayConfig.startTime} and ${dayConfig.endTime} on ${format(selectedDateTime, 'EEEE')}s.`);
-        }
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/sessions/reschedule', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          sessionId: selectedRescheduleSession.id,
+          dateISO: selectedDateTime.toISOString(),
+          clientId: client.id,
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to reschedule. Please try again.");
       }
-
-      // 2. Query other scheduled sessions for conflict
-      const q = query(
-        collection(db, 'sessions'),
-        where('trainerId', '==', coachId),
-        where('status', '==', 'Scheduled')
-      );
-      const snap = await getDocs(q);
-      const requestedTime = selectedDateTime.getTime();
-      const isBooked = snap.docs.some(d => {
-        if (d.id === selectedRescheduleSession.id) return false; // ignore this session itself
-        const existingTime = new Date(d.data().date).getTime();
-        const differenceMinutes = Math.abs(requestedTime - existingTime) / (1000 * 60);
-        return differenceMinutes < 60;
-      });
-
-      if (isBooked) {
-        throw new Error("This coach is already booked within this hour. Please choose another time.");
-      }
-
-      // 3. Update session date in firestore
-      const sessionRef = doc(db, 'sessions', selectedRescheduleSession.id);
-      await updateDoc(sessionRef, {
-        date: selectedDateTime.toISOString()
-      });
-
-      // 4. Log in audit logs
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'UPDATE',
-        entityType: 'SESSION',
-        entityId: selectedRescheduleSession.id,
-        details: `PT Session rescheduled for client ID ${client.id} to ${selectedDateTime.toISOString()}.`,
-        timestamp: new Date().toISOString(),
-        userId: client.portalUserId || client.id,
-        userName: client.name
-      });
 
       setSelectedRescheduleSession(null);
     } catch (err: any) {
@@ -354,56 +232,24 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
   const handleCancelSession = async (sessionId: string) => {
     if (!window.confirm("Are you sure you want to cancel this PT session?")) return;
     try {
-      const session = sessions.find(s => s.id === sessionId);
-      if (session && session.date && session.time) {
-        const [hours, minutes] = session.time.split(':').map(Number);
-        const sessionStart = new Date(session.date);
-        sessionStart.setHours(hours || 0, minutes || 0, 0, 0);
-        
-        const now = new Date();
-        const diffMs = sessionStart.getTime() - now.getTime();
-        if (diffMs < 3600000) {
-          alert("Sessions cannot be cancelled less than 1 hour before start time.");
-          return;
-        }
-      }
-
-      let updatedPackages = client.packages ? [...client.packages] : [];
-      let updatedSessionsRemaining = client.sessionsRemaining;
-      // Find active PT package to refund
-      const pkgToRefund = updatedPackages.find(pkg => {
-        if (pkg.status !== 'Active') return false;
-        const nameUpper = pkg.packageName.toUpperCase();
-        return nameUpper.includes('PT') || nameUpper.includes('PERSONAL');
+      // Server-authoritative cancel: enforces the 1-hour rule and refunds
+      // the PT session to the member's package.
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/sessions/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          sessionId,
+          clientId: client.id,
+        })
       });
-
-      if (pkgToRefund && (pkgToRefund.sessionsRemaining as any) !== 'unlimited') {
-        pkgToRefund.sessionsRemaining = (Number(pkgToRefund.sessionsRemaining) || 0) + 1;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to cancel session.");
       }
-
-      if (client.sessionsRemaining !== 'unlimited') {
-        updatedSessionsRemaining = (Number(client.sessionsRemaining) || 0) + 1;
-      }
-
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'sessions', sessionId), { status: 'Cancelled' });
-      batch.update(doc(db, 'clients', client.id), { 
-        packages: updatedPackages,
-        sessionsRemaining: updatedSessionsRemaining
-      });
-      
-      const newAuditRef = doc(collection(db, 'auditLogs'));
-      batch.set(newAuditRef, {
-        action: 'UPDATE',
-        entityType: 'SESSION',
-        entityId: sessionId,
-        details: `PT Session ${sessionId} cancelled by client ID ${client.id}. PT session refunded.`,
-        timestamp: new Date().toISOString(),
-        userId: client.portalUserId || client.id,
-        userName: client.name
-      });
-
-      await batch.commit();
     } catch (err: any) {
       console.error("Error cancelling session:", err);
       alert("Failed to cancel session: " + err.message);

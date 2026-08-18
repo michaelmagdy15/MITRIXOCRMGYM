@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useMemo, useCallback, useState } from 'react';
-import { auth, db } from './firebase';
-import { signInAnonymously } from 'firebase/auth';
+import { db } from './firebase';
 import {
   doc,
   collection,
@@ -387,149 +386,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
 
   const selfCheckIn = useCallback(async (identifier: string, pin: string, branch: Branch) => {
-    // Ensure a valid Firebase auth token exists (anonymous sign-in for public kiosk/checkin pages)
-    if (!auth.currentUser) {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.warn("Check-in service anonymous sign-in failed, proceeding anyway:", err);
-      }
-    }
-
-    // Validate PIN first
-    if (branding.dailyCheckinPin && pin !== branding.dailyCheckinPin) {
-      return { success: false, message: "Incorrect PIN. Please ask staff for today's PIN." };
-    }
-
-    // Search by memberId, then fall back to phone number
-    let snap = await getDocs(query(collection(db, 'clients'), where('memberId', '==', identifier)));
-    if (snap.empty) {
-      snap = await getDocs(query(collection(db, 'clients'), where('phone', '==', identifier)));
-    }
-    if (snap.empty) return { success: false, message: 'Member not found. Please check your ID or phone number.' };
-
-    let clientDoc = null;
-    let client = null;
-    let checkinCount = 0;
-    let totalExpectedSessions = 1;
-    let alreadyCheckedInTodayList: string[] = [];
-
-    // Find the first matching client that is eligible for check-in today
-    for (const docSnap of snap.docs) {
-      const cData = docSnap.data() as Client;
-      
-      // Skip if client status is Expired
-      if (cData.status === 'Expired') continue;
-      
-      // Count check-ins for this specific client today
-      const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-      const attendanceRef = collection(db, 'attendance');
-      const attendanceSnap = await getDocs(
-        query(attendanceRef, where('clientId', '==', docSnap.id))
-      );
-      const todayCheckins = attendanceSnap.docs.filter(s => {
-        const d = s.data();
-        if (!d.date) return false;
-        try {
-          return new Date(d.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr;
-        } catch {
-          return false;
-        }
-      });
-      const currentCheckinCount = todayCheckins.length;
-
-      // Count expected sessions today for this client
-      const sessionsRef = collection(db, 'sessions');
-      const sessionsSnap = await getDocs(
-        query(sessionsRef, where('clientId', '==', docSnap.id), where('date', '==', cairoDateStr))
-      );
-      const ptSessionsCount = sessionsSnap.docs.filter(s => {
-        const status = s.data().status;
-        return status === 'Scheduled' || status === 'Attended';
-      }).length;
-
-      const classesRef = collection(db, 'classes');
-      const classesSnap = await getDocs(
-        query(classesRef, where('date', '==', cairoDateStr))
-      );
-      const groupClassesCount = classesSnap.docs.filter(s => {
-        const attendees = s.data().attendees || [];
-        return attendees.includes(docSnap.id);
-      }).length;
-
-      const expected = Math.max(1, ptSessionsCount + groupClassesCount);
-
-      if (currentCheckinCount < expected) {
-        // We found an eligible member who hasn't completed their checks!
-        clientDoc = docSnap;
-        client = cData;
-        checkinCount = currentCheckinCount;
-        totalExpectedSessions = expected;
-        break;
-      } else {
-        alreadyCheckedInTodayList.push(cData.name);
-      }
-    }
-
-    if (!clientDoc || !client) {
-      // Find the first non-expired client to report the double check-in message
-      const firstActive = snap.docs.find(d => d.data().status !== 'Expired');
-      if (firstActive) {
-        return { success: false, message: `Double check-in blocked. All active members linked to this ID/phone (${alreadyCheckedInTodayList.join(', ')}) have already checked in today.` };
-      }
-      // If all are expired, report expired error for the first one
-      const firstDoc = snap.docs[0];
-      if (firstDoc && firstDoc.data().status === 'Expired') {
-        return { success: false, message: 'Membership is expired. You must head to the STRIKE branch to renew.' };
-      }
-      return { success: false, message: 'Member not found.' };
-    }
-
-    // Block check-in if sessions are exhausted (numeric 0 or negative)
-    if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining <= 0) {
-      return { success: false, message: `No sessions remaining for ${client.name}. Please renew your membership with staff.` };
-    }
-
+    // Server-authoritative check-in: the server validates the daily PIN,
+    // resolves the member, checks double check-in, records attendance, and
+    // decrements sessions — so no Firestore rule grants are needed here.
     try {
-      const recordedBy = currentUser?.id || auth.currentUser?.uid || 'self-checkin';
-      await addDoc(collection(db, 'attendance'), {
-        clientId: clientDoc.id,
-        branch,
-        date: new Date().toISOString(),
-        recordedBy,
-        packageName: client.packageType || '',
+      const res = await fetch('/api/attendance/self-checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: identifier.trim(), pin: pin.trim(), branch })
       });
-
-      // Decrement sessions only if finite and above zero
-      const packagesCopy = client.packages ? [...client.packages] : [];
-      const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
-      
-      const updateData: any = {};
-      
-      if (activePkgIdx !== -1) {
-        const activePkg = packagesCopy[activePkgIdx];
-        if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
-          packagesCopy[activePkgIdx] = {
-            ...activePkg,
-            sessionsRemaining: activePkg.sessionsRemaining - 1
-          } as any;
-          updateData.packages = packagesCopy;
-        }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error('[Check-in] Server error:', data?.error || res.status);
+        return { success: false, message: 'Failed to record attendance. Please ask staff for help.' };
       }
-      
-      if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-        updateData.sessionsRemaining = client.sessionsRemaining - 1;
-      }
-      
-      if (Object.keys(updateData).length > 0) {
-        await updateDoc(doc(db, 'clients', clientDoc.id), updateData);
-      }
-    } catch {
+      return { success: data.success === true, message: data.message || '' };
+    } catch (err) {
+      console.error('[Check-in] Network error:', err);
       return { success: false, message: 'Failed to record attendance. Please ask staff for help.' };
     }
-
-    return { success: true, message: `Welcome, ${client.name}! Attendance recorded.` };
-  }, [currentUser, branding.dailyCheckinPin]);
+  }, []);
 
   const wipeSystem = useCallback(async () => {
     if (!isManagerOrSama) return;
