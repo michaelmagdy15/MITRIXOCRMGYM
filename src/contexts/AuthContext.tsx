@@ -138,13 +138,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               try { await updateDoc(userDocRef, { role: 'super_admin' }); } catch { /* will be set next admin login */ }
             }
             if (firebaseUser.email) {
-              const staleQ = query(collection(db, 'users'), where('email', '==', firebaseUser.email));
-              const staleSnap = await getDocs(staleQ);
-              const staleInvites = staleSnap.docs.filter(d => d.id !== userId);
-              if (staleInvites.length > 0) {
-                const batch = writeBatch(db);
-                staleInvites.forEach(d => batch.delete(d.ref));
-                await batch.commit();
+              try {
+                const staleQ = query(collection(db, 'users'), where('email', '==', firebaseUser.email));
+                const staleSnap = await getDocs(staleQ);
+                const staleInvites = staleSnap.docs.filter(d => d.id !== userId);
+                if (staleInvites.length > 0) {
+                  const batch = writeBatch(db);
+                  staleInvites.forEach(d => batch.delete(d.ref));
+                  await batch.commit();
+                }
+              } catch (staleErr) {
+                console.warn("Stale email cleanup skipped:", staleErr);
               }
             }
             if (userData.role === 'client' && userData.clientRecordId) {
