@@ -1,7 +1,4 @@
 import express from 'express';
-import admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import * as sqlDb from './dbOperations.js';
 
 // Caches imported from parent context (we can just invalidate via fetch or delete from clientsCache/paymentsCache references if shared,
 // but since the server.ts caches are local, we will expose an invalidation function or handle them directly in server.ts.
@@ -593,10 +590,6 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const idToken = authHeader.split('Bearer ')[1];
         try {
-          // Note: using tenant admin to verify token, or just global admin.
-          // Since getAdminAuth is not imported here, we can just assume if we want we can use globalAdmin.
-          // But actually, getAdminAuthForTenant is available.
-          // @ts-ignore
           const { getAdminAuthForTenant } = await import('./firebaseAdmin');
           const adminAuth = getAdminAuthForTenant(tenantId || '');
           await adminAuth.verifyIdToken(idToken);
@@ -606,8 +599,24 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
         }
       }
       
-      let settingsObj: any = {};
+      const db = await getDbForRequest(req);
 
+      const [brandingSnap, featuresSnap, storefrontSnap, branchesSnap, commissionSnap, salesTargetSnap] = await Promise.all([
+        db.collection('settings').doc('branding').get(),
+        db.collection('settings').doc('features').get(),
+        db.collection('settings').doc('storefront').get(),
+        db.collection('settings').doc('branches').get(),
+        db.collection('settings').doc('commission').get(),
+        db.collection('settings').doc('sales-target').get(),
+      ]);
+
+      const settingsObj: any = {};
+      if (brandingSnap.exists) settingsObj.branding = brandingSnap.data();
+      if (featuresSnap.exists) settingsObj.features = featuresSnap.data();
+      if (storefrontSnap.exists) settingsObj.storefront = storefrontSnap.data();
+      if (branchesSnap.exists) settingsObj.branches = branchesSnap.data();
+      if (commissionSnap.exists) settingsObj.commission = commissionSnap.data();
+      if (salesTargetSnap.exists) settingsObj['sales-target'] = salesTargetSnap.data();
 
       if (!isAuthenticated) {
         delete settingsObj['commission'];
@@ -1075,9 +1084,12 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   // --- Club Operations API ---
   app.get('/api/juice-bar-orders', requireAuth, async (req, res) => {
     try {
-      const orders = await sqlDb.getJuiceBarOrders();
+      const db = await getDbForRequest(req);
+      const snap = await db.collection('juiceBarOrders').get();
+      const orders = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
       res.json(orders);
     } catch (error) {
+      console.error('[API] Error fetching juice bar orders:', error);
       res.status(500).json({ error: 'Failed to fetch juice bar orders' });
     }
   });
@@ -1085,18 +1097,23 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   app.post('/api/juice-bar-orders/update-status', requireAuth, async (req, res) => {
     try {
       const { id, status } = req.body;
-      await sqlDb.updateJuiceBarOrder(id, status);
+      const db = await getDbForRequest(req);
+      await db.collection('juiceBarOrders').doc(id).update({ status });
       res.json({ success: true });
     } catch (error) {
+      console.error('[API] Error updating juice bar order:', error);
       res.status(500).json({ error: 'Failed to update juice bar order status' });
     }
   });
 
   app.get('/api/lockers', requireAuth, async (req, res) => {
     try {
-      const lockers = await sqlDb.getLockers();
+      const db = await getDbForRequest(req);
+      const snap = await db.collection('lockers').get();
+      const lockers = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
       res.json(lockers);
     } catch (error) {
+      console.error('[API] Error fetching lockers:', error);
       res.status(500).json({ error: 'Failed to fetch lockers' });
     }
   });
@@ -1104,9 +1121,11 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   app.post('/api/lockers/add', requireAuth, async (req, res) => {
     try {
       const { locker } = req.body;
-      await sqlDb.addLocker(locker);
+      const db = await getDbForRequest(req);
+      await db.collection('lockers').add(locker);
       res.json({ success: true });
     } catch (error) {
+      console.error('[API] Error adding locker:', error);
       res.status(500).json({ error: 'Failed to add locker' });
     }
   });
@@ -1114,9 +1133,11 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   app.post('/api/lockers/update', requireAuth, async (req, res) => {
     try {
       const { id, updates } = req.body;
-      await sqlDb.updateLocker(id, updates);
+      const db = await getDbForRequest(req);
+      await db.collection('lockers').doc(id).update(updates);
       res.json({ success: true });
     } catch (error) {
+      console.error('[API] Error updating locker:', error);
       res.status(500).json({ error: 'Failed to update locker' });
     }
   });
@@ -1124,18 +1145,23 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   app.post('/api/lockers/delete', requireAuth, async (req, res) => {
     try {
       const { id } = req.body;
-      await sqlDb.deleteLocker(id);
+      const db = await getDbForRequest(req);
+      await db.collection('lockers').doc(id).delete();
       res.json({ success: true });
     } catch (error) {
+      console.error('[API] Error deleting locker:', error);
       res.status(500).json({ error: 'Failed to delete locker' });
     }
   });
 
   app.get('/api/locker-requests', requireAuth, async (req, res) => {
     try {
-      const requests = await sqlDb.getLockerRequests();
+      const db = await getDbForRequest(req);
+      const snap = await db.collection('lockerRequests').get();
+      const requests = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
       res.json(requests);
     } catch (error) {
+      console.error('[API] Error fetching locker requests:', error);
       res.status(500).json({ error: 'Failed to fetch locker requests' });
     }
   });
@@ -1143,18 +1169,23 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   app.post('/api/locker-requests/update-status', requireAuth, async (req, res) => {
     try {
       const { id, status } = req.body;
-      await sqlDb.updateLockerRequest(id, status);
+      const db = await getDbForRequest(req);
+      await db.collection('lockerRequests').doc(id).update({ status });
       res.json({ success: true });
     } catch (error) {
+      console.error('[API] Error updating locker request:', error);
       res.status(500).json({ error: 'Failed to update locker request status' });
     }
   });
 
   app.get('/api/guest-invites', requireAuth, async (req, res) => {
     try {
-      const invites = await sqlDb.getGuestInvites();
+      const db = await getDbForRequest(req);
+      const snap = await db.collection('guestInvites').get();
+      const invites = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
       res.json(invites);
     } catch (error) {
+      console.error('[API] Error fetching guest invites:', error);
       res.status(500).json({ error: 'Failed to fetch guest invites' });
     }
   });
@@ -1162,9 +1193,11 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   app.post('/api/guest-invites/update-status', requireAuth, async (req, res) => {
     try {
       const { id, status } = req.body;
-      await sqlDb.updateGuestInvite(id, status);
+      const db = await getDbForRequest(req);
+      await db.collection('guestInvites').doc(id).update({ status });
       res.json({ success: true });
     } catch (error) {
+      console.error('[API] Error updating guest invite:', error);
       res.status(500).json({ error: 'Failed to update guest invite status' });
     }
   });
@@ -1172,9 +1205,14 @@ export function registerSqlRoutes(app: express.Application, requireAuth: any, ge
   app.post('/api/audit-logs/add', requireAuth, async (req, res) => {
     try {
       const { log } = req.body;
-      await sqlDb.addAuditLog(log);
+      const db = await getDbForRequest(req);
+      await db.collection('auditLogs').add({
+        ...log,
+        timestamp: log.timestamp || new Date().toISOString()
+      });
       res.json({ success: true });
     } catch (error) {
+      console.error('[API] Error adding audit log:', error);
       res.status(500).json({ error: 'Failed to add audit log' });
     }
   });

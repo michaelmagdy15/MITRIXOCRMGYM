@@ -6,10 +6,7 @@ import fs from "fs";
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
-import * as sqlDb from './src/db/dbOperations.js';
-import { checkConnection, query } from './src/db/db.js';
 import { registerSqlRoutes } from './src/db/sqlApi.js';
-import { fixMigrationData } from './src/db/fixMigration.js';
 
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
@@ -1197,15 +1194,7 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    if (process.env.COCKROACH_DB_URL || process.env.DATABASE_URL) {
-      console.log("[DB] Testing connection to CockroachDB...");
-      const isConnected = await checkConnection();
-      if (isConnected) {
-        console.log("[DB] Connection to CockroachDB successful!");
-      } else {
-        console.error("[DB] Failed to connect to CockroachDB.");
-      }
-    }
+    console.log(`[DB] Using Firebase Firestore only - CockroachDB has been removed.`);
   });
 }
 
