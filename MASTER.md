@@ -8,16 +8,51 @@
 
 **MitrixoGYM** — a multi-tenant Firebase CRM platform for fitness gyms and fitness studios. Mission: comprehensive member management, staff management, payments, packages, attendance tracking, and guest management for multiple gym brands under a single platform.
 
-**Current state:** v1.0 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics), Firebase Firestore-only backend (CockroachDB removed 2026-08-18), full feature set including clients, leads, payments, packages, coaches, attendance, announcements, and club operations.
+**Current state:** v1.0 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics), Firebase Firestore-only backend (CockroachDB removed 2026-08-18), full feature set including clients, leads, payments, packages, coaches, attendance, announcements, and club operations. Member portal permission architecture overhauled 2026-08-19 (commit `028301b`) and rules deployed to production.
 
-**Active session (2026-08-18):**
-- Branding/settings fix deployed — GET /api/settings now loads from Firestore correctly
-- CockroachDB removed — all data now stored in Firebase Firestore per tenant database
-- Second "Loading CRM Data" preloader disabled — only logo preloader remains
+**Active session (2026-08-19):**
+- Member portal permission architecture fixed — all member-facing auth flows moved to server endpoints, Firestore rules tightened (Gap #5 / C5–C12)
+- Rules deployed to production project `faa-test-guide-v2` — all 4 databases `(default)`, `db-vbt`, `db-registry-2`, `db-inzanathletics` — and synced to ATPL/Gamen/Matchmaking repos (shared consolidated rules file, verified byte-identical after sync)
+- Member login bug root-caused: commit `703db01` restricted `users` reads but `loginWithMemberId` queried `users` pre-auth → permission denied (member 624 / 12345678)
 
 ---
 
-## 9. Live Session Log — 2026-08-18
+## 9. Live Session Log — 2026-08-19 (most recent)
+
+### Fixed this session (commit `028301b` — 9 files, 1019 insertions, 607 deletions)
+1. **Member login "missing or insufficient permissions"** — root cause: `703db01` restricted `users` reads while `loginWithMemberId`/`loginWithCoachId` queried `users` pre-auth. All pre-auth lookups moved to server endpoints (admin SDK bypasses rules):
+   - `POST /api/member/resolve-email` (public) — member login fallback; deterministic `member-{id}@strike.mitrixo-member.local` email tried first
+   - `POST /api/coach/resolve-email` (public) — coach login lookup
+   - `POST /api/member/request-password-reset` (public) — member reset flow
+   - `GET /api/member/coaches` (public) — coach list for MemberSessions
+   - `POST /api/attendance/self-checkin` (public, PIN-validated) — kiosk check-in
+2. **Members could self-grant sessions** — session math (check-in, class join/leave, PT book/cancel/reschedule) moved server-side: `POST /api/classes/book`, `/api/sessions/book|cancel|reschedule` (requireAuth, ownership validated via `getMemberClients`). Rules now: `sessions`/`classes` create/update staff-only; `users` self-create role == `'client'` only (kills coach escalation).
+3. **Member profile edit too broad** — `isSafeClientSelfEdit` now allows only `['name','phone','portalUserId','photoURL']` (dropped packages/sessionsRemaining; photoURL added — fixes member photo upload).
+4. **`/api/clients/update` privilege escalation** — non-staff callers limited to own `clientDocId` + linkedClientIds and safe keys; staff role list = `admin, super_admin, crm_admin, sales_manager, manager, rep, sales_rep, sales, coach`.
+5. **`tasks` create too open** — now staff OR (`status == 'Pending'` AND title starts with `'Package Purchase Request:'`) — Checkout guest flow still works.
+6. **`notifications` had no rules** — added: read own `recipientUid` or staff; update own `read` flag only; create/delete staff.
+7. **`registerFreeUser` broken** — clients scan denied for brand-new users; memberId now atomic counter (`counters/memberIds`, floor 1000, format `MEM-###`).
+8. **Baseline lint fixes** — removed dead CockroachDB-era `/api/admin/fix-migration` route (server.ts); fixed `GET /api/settings` firebaseAdmin import.
+
+### Deployment (2026-08-19)
+- `firebase deploy --only firestore:rules` → project `faa-test-guide-v2` (the "test guide crm production" project — production for Strike CRM).
+- Deployed to all 4 databases: `(default)`, `db-vbt`, `db-registry-2` (firestore.rules), `db-inzanathletics` (firestore-tenant.rules).
+- `sync-rules.cjs` predeploy copied the newest firestore.rules (Mitrixo's) to ATPL Vector, GamenEG-Brand, Matchmaking repos — verified all three byte-identical afterward (MD5 `FB1EFADDD808EC405D143852C453B97F`), all gamen_*/atpl_*/match_* sections intact (28 matches each). Backups kept in `%TEMP%\opencode\*-firestore*.bak`.
+- ⚠️ **Server redeploy still pending** — the new endpoints exist only in code; `npm run build && npm start` (or equivalent production process restart) must happen before the login fix is live. Rules are live NOW; old frontend against new rules = old bugs (member login still queries users → denied) until server + client are deployed.
+
+### Verification status
+- `npm run lint` → 0 errors; `npm run build` → ✓ built in 8.87s.
+- Member login (624/12345678) smoke test NOT yet run on production after deployment.
+- Server-side endpoint smoke tests NOT yet run.
+
+### What's next
+- Redeploy/restart production server (dist-server build) so member endpoints go live
+- Smoke test member 624 login on strike-egy.com, class booking, PT session book/cancel/reschedule, self-check-in
+- Then per GAPS.md queue: tenant isolation verification (P1), dead CockroachDB code removal (P2), performance audit (P1)
+
+---
+
+## 10. Live Session Log — 2026-08-18
 
 ### Fixed this session
 1. **Branding settings not loading** — GET /api/settings was returning empty object without fetching from Firestore, causing all tenants to show "mitrixogymcrm" and logos not persisting. Fixed to properly fetch branding, features, storefront, branches, commission, and sales-target from tenant's Firestore.
@@ -71,17 +106,17 @@ The GET /api/settings endpoint (sqlApi.ts line 585-622) was building an empty `s
 Work top-to-bottom. Each line = roughly one session. Current queue (from GAPS.md — always re-check it, it's live):
 
 **P0 — Critical Fixes**
-1. Branding/settings end-to-end verification on deployed tenants
-2. Logo upload flow smoke test
+1. Redeploy/restart production server with member endpoints (commit `028301b`) + smoke test member login 624
+2. Branding/settings end-to-end verification on deployed tenants
+3. Logo upload flow smoke test
 
 **P1 — Feature Polish**
-3. Tenant isolation verification — confirm Strike data doesn't leak to Inzan Athletics
-4. Performance audit — client list loading times
-5. Mobile responsive audit for all pages
+4. Tenant isolation verification — confirm Strike data doesn't leak to Inzan Athletics
+5. Performance audit — client list loading times
+6. Mobile responsive audit for all pages
 
 **P2 — Technical Debt**
-6. Remove dead CockroachDB code (src/db/db.ts, src/db/dbOperations.ts)
-7. Firestore security rules audit
+7. Remove dead CockroachDB code (src/db/db.ts, src/db/dbOperations.ts)
 8. TypeScript strict mode enablement
 
 ---
@@ -92,7 +127,7 @@ Work top-to-bottom. Each line = roughly one session. Current queue (from GAPS.md
 - [ ] Build 0 errors / 0 warnings; lint passes
 - [ ] Tenant isolation verified — no data cross-contamination
 - [ ] All features verified working on both Strike and Inzan Athletics tenants
-- [ ] Firestore security rules reviewed and tested
+- [ ] Firestore security rules reviewed and tested (rules tightened + deployed 2026-08-19; runtime smoke tests pending)
 - [ ] No performance issues on client/payment lists (loading < 2s)
 
 ---
