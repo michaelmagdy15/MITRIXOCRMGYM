@@ -590,7 +590,7 @@ function AppContent() {
     );
   }
 
-  const isSyncingData = clients.length === 0 && (loadingClients || loadingPayments);
+  const isSyncingData = false;
 
   if (isSyncingData) {
     const isInzan = getTenantId() === 'inzanathletics';
