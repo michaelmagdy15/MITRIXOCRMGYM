@@ -80,7 +80,7 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
         {/* Top Accent Strip */}
         <div className={`h-1 w-full ${
           pkg.status === 'Active' 
-            ? pkg.isOnHold ? 'bg-amber-400' : 'bg-primary'
+            ? pkg.isOnHold ? 'bg-strike-green' : 'bg-primary'
             : 'bg-muted'
         }`} />
 
@@ -97,7 +97,7 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
             <div className="flex flex-col items-end gap-1">
               {pkg.status === 'Active' ? (
                 pkg.isOnHold ? (
-                  <Badge className="bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border-amber-500/20 text-[10px] flex items-center gap-1">
+                  <Badge className="bg-strike-green/10 text-strike-green hover:bg-strike-green/20 border-strike-green/20 text-[10px] flex items-center gap-1">
                     <PauseCircle className="h-3 w-3" /> Hold
                   </Badge>
                 ) : (
@@ -124,7 +124,7 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
               <div className="flex justify-between text-[10px] text-muted-foreground font-mono">
                 <span>{remaining} sessions remaining</span>
                 {daysRemaining !== null && (
-                  <span className={daysRemaining <= 5 ? 'text-destructive font-semibold' : ''}>
+                  <span className={daysRemaining <= 5 ? 'text-strike-green font-semibold' : ''}>
                     {isExpiredByDate 
                       ? 'Expired' 
                       : daysRemaining === 0 
@@ -156,10 +156,10 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
 
           {/* Package Hold Detail */}
           {pkg.status === 'Active' && pkg.isOnHold && pkg.holdReason && (
-            <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-3 flex items-start gap-2 animate-in fade-in">
-              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <div className="bg-secondary/50 border border-border rounded-xl p-3 flex items-start gap-2 animate-in fade-in">
+              <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
               <div>
-                <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">On Hold</p>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">On Hold</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{pkg.holdReason}</p>
               </div>
             </div>
@@ -189,13 +189,13 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
       {/* Pending Requests */}
       {!loadingPending && pendingRequests.length > 0 && (
         <div className="space-y-3 animate-in fade-in duration-300">
-          <h3 className="text-xs font-extrabold uppercase tracking-widest text-amber-500 flex items-center gap-1.5">
-            <Clock className="h-4 w-4 text-amber-500" /> Pending Package Requests
+          <h3 className="text-xs font-extrabold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+            <Clock className="h-4 w-4 text-muted-foreground" /> Pending Package Requests
           </h3>
           <div className="space-y-3">
             {pendingRequests.map((req) => (
-              <Card key={req.id} className="border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors shadow-sm overflow-hidden">
-                <div className="h-1 w-full bg-amber-500" />
+              <Card key={req.id} className="border border-border bg-secondary/40 hover:bg-secondary/60 transition-colors shadow-sm overflow-hidden">
+                <div className="h-1 w-full bg-muted-foreground/30" />
                 <CardContent className="p-4 space-y-3">
                   <div className="flex justify-between items-start">
                     <div className="space-y-1">
@@ -208,13 +208,13 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
                         Requested on {req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy HH:mm') : 'N/A'}
                       </p>
                     </div>
-                    <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 text-[10px]">
+                    <Badge className="bg-strike-green/15 text-strike-green border-strike-green/25 text-[10px]">
                       Awaiting Payment
                     </Badge>
                   </div>
-                  <div className="flex justify-between items-center text-xs border-t border-amber-500/10 pt-2.5">
+                  <div className="flex justify-between items-center text-xs border-t border-border pt-2.5">
                     <span className="text-muted-foreground">Payment Method: {req.paymentMethod}</span>
-                    <span className="font-bold text-amber-600 dark:text-amber-400">
+                    <span className="font-bold text-strike-green">
                       {req.totalPrice?.toLocaleString()} EGP
                     </span>
                   </div>

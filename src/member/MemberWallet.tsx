@@ -56,7 +56,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
     purchase: <ShoppingBag className="h-3.5 w-3.5 text-emerald-500" />,
     gift: <Gift className="h-3.5 w-3.5 text-pink-500" />,
     refund: <ArrowUpCircle className="h-3.5 w-3.5 text-blue-500" />,
-    packageBuy: <ShoppingBag className="h-3.5 w-3.5 text-amber-500" />,
+    packageBuy: <ShoppingBag className="h-3.5 w-3.5 text-strike-green" />,
     admin_adjustment: <Sparkles className="h-3.5 w-3.5 text-primary" />,
     promo_bonus: <Gift className="h-3.5 w-3.5 text-emerald-500" />,
   };
@@ -64,33 +64,33 @@ export default function MemberWallet({ client }: { client: Client | null }) {
   return (
     <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
       {/* ─── Wallet Balance Hero ─── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-yellow-500/20 via-amber-500/10 to-transparent border border-amber-500/20 p-6">
-        <div className="absolute top-0 right-0 w-40 h-40 bg-amber-500/5 rounded-full -translate-y-12 translate-x-12" />
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-amber-500/5 rounded-full translate-y-8 -translate-x-8" />
+      <div className="relative overflow-hidden rounded-2xl chrome-surface p-6">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-white/20 rounded-full -translate-y-12 translate-x-12" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-strike-green/10 rounded-full translate-y-8 -translate-x-8" />
         
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-3">
-            <div className="p-2 bg-amber-500/20 rounded-xl">
-              <Coins className="h-5 w-5 text-amber-500" />
+            <div className="p-2 bg-strike-green/15 rounded-xl border border-strike-green/25">
+              <Coins className="h-5 w-5 text-strike-green" />
             </div>
-            <span className="text-xs font-bold uppercase tracking-widest text-amber-600">Your Points</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-200">Your Points</span>
           </div>
           
           <div className="flex items-end gap-2">
-            <span className="text-5xl font-black font-mono tracking-tight">{wallet?.balance || 0}</span>
-            <span className="text-lg font-bold text-muted-foreground mb-1">PTS</span>
+            <span className="text-5xl font-black font-mono tracking-tight text-zinc-900 dark:text-white">{wallet?.balance || 0}</span>
+            <span className="text-lg font-bold text-zinc-500 dark:text-zinc-400 mb-1">PTS</span>
           </div>
           
           <div className="grid grid-cols-2 gap-3 mt-4">
-            <div className="bg-card/40 rounded-xl p-3 border border-emerald-500/10">
-              <div className="flex items-center gap-1 text-emerald-500">
+            <div className="bg-card/40 rounded-xl p-3 border border-strike-green/20 backdrop-blur-sm">
+              <div className="flex items-center gap-1 text-strike-green">
                 <ArrowUpCircle className="h-3 w-3" />
                 <span className="text-[10px] font-bold uppercase">Earned in total</span>
               </div>
               <p className="text-lg font-extrabold font-mono mt-0.5">{wallet?.totalEarned || 0}</p>
             </div>
-            <div className="bg-card/40 rounded-xl p-3 border border-rose-500/10">
-              <div className="flex items-center gap-1 text-rose-500">
+            <div className="bg-card/40 rounded-xl p-3 border border-border backdrop-blur-sm">
+              <div className="flex items-center gap-1 text-muted-foreground">
                 <ArrowDownCircle className="h-3 w-3" />
                 <span className="text-[10px] font-bold uppercase">Spent in total</span>
               </div>
@@ -171,7 +171,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
                           </p>
                         </div>
                       </div>
-                      <span className={`text-sm font-extrabold font-mono ${txn.type === 'credit' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      <span className={`text-sm font-extrabold font-mono ${txn.type === 'credit' ? 'text-strike-green' : 'text-muted-foreground'}`}>
                         {txn.type === 'credit' ? '+' : '-'}{txn.amount}
                       </span>
                     </div>
@@ -213,7 +213,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
                           )}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className="text-2xl font-black font-mono text-amber-500">{bundle.pointsAmount}</span>
+                          <span className="text-2xl font-black font-mono text-strike-green">{bundle.pointsAmount}</span>
                           <span className="text-xs text-muted-foreground font-bold">Points</span>
                           {bundle.bonusPoints > 0 && (
                             <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-200/50 text-[9px] font-bold">
@@ -244,9 +244,9 @@ export default function MemberWallet({ client }: { client: Client | null }) {
             </div>
           )}
 
-          <Card className="border bg-amber-500/5 border-amber-500/10">
+          <Card className="border bg-secondary/40 border-border">
             <CardContent className="p-3">
-              <p className="text-[10px] text-amber-700 dark:text-amber-400 font-medium leading-relaxed">
+              <p className="text-[10px] text-muted-foreground font-medium leading-relaxed">
                 💡 <strong>How it works:</strong> Tap "Buy Now", then settle at reception with cash or Instapay. Once staff confirm, the Points land in your wallet.
               </p>
             </CardContent>
@@ -268,10 +268,10 @@ export default function MemberWallet({ client }: { client: Client | null }) {
             transactions.map(txn => (
               <div key={txn.id} className="flex items-center justify-between p-3 rounded-xl bg-card/50 border transition-colors hover:bg-card/70">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-xl border ${txn.type === 'credit' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20'}`}>
+                  <div className={`p-2 rounded-xl border ${txn.type === 'credit' ? 'bg-strike-green/10 border-strike-green/20' : 'bg-secondary border-border'}`}>
                     {txn.type === 'credit'
-                      ? <ArrowUpCircle className="h-4 w-4 text-emerald-500" />
-                      : <ArrowDownCircle className="h-4 w-4 text-rose-500" />
+                      ? <ArrowUpCircle className="h-4 w-4 text-strike-green" />
+                      : <ArrowDownCircle className="h-4 w-4 text-muted-foreground" />
                     }
                   </div>
                   <div>
@@ -284,7 +284,7 @@ export default function MemberWallet({ client }: { client: Client | null }) {
                     </p>
                   </div>
                 </div>
-                <span className={`text-base font-extrabold font-mono ${txn.type === 'credit' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                <span className={`text-base font-extrabold font-mono ${txn.type === 'credit' ? 'text-strike-green' : 'text-muted-foreground'}`}>
                   {txn.type === 'credit' ? '+' : '-'}{txn.amount}
                 </span>
               </div>

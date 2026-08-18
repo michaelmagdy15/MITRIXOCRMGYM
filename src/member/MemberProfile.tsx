@@ -378,7 +378,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
             <p className="text-[9px] text-muted-foreground font-bold">Check-ins</p>
           </div>
           <div className="text-center p-2.5 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
-            <p className="text-lg font-extrabold font-mono text-orange-500 flex items-center justify-center gap-0.5">
+            <p className="text-lg font-extrabold font-mono text-strike-green flex items-center justify-center gap-0.5">
               <Flame className="h-4 w-4" />{currentStreak}
             </p>
             <p className="text-[9px] text-muted-foreground font-bold">Streak</p>
@@ -450,7 +450,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
             </div>
 
             {profileError && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg flex items-center gap-2.5 text-xs">
+              <div className="bg-secondary border border-border text-muted-foreground p-3 rounded-lg flex items-center gap-2.5 text-xs">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{profileError}</span>
               </div>
@@ -510,7 +510,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
             </div>
 
             {linkError && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg flex items-center gap-2.5 text-xs">
+              <div className="bg-secondary border border-border text-muted-foreground p-3 rounded-lg flex items-center gap-2.5 text-xs">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{linkError}</span>
               </div>
@@ -581,7 +581,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
             </div>
 
             {passwordError && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg flex items-center gap-2.5 text-xs">
+              <div className="bg-secondary border border-border text-muted-foreground p-3 rounded-lg flex items-center gap-2.5 text-xs">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{passwordError}</span>
               </div>
@@ -602,9 +602,9 @@ export default function MemberProfile({ client }: { client: Client | null }) {
       </Card>
 
       {/* Account Deletion Request Card (Apple App Store Review Compliance Guideline 5.1.1) */}
-      <Card className="border border-destructive/20 bg-destructive/5 shadow-sm">
+      <Card className="border border-border bg-secondary/40 shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold flex items-center gap-2 text-destructive">
+          <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
             <AlertCircle className="h-4 w-4 shrink-0" />
             Delete Account
           </CardTitle>
@@ -617,8 +617,8 @@ export default function MemberProfile({ client }: { client: Client | null }) {
             Under Apple App Store guidelines, you can request full deletion of your gym membership record and login credentials. This action is irreversible and requires staff approval.
           </p>
           <Button 
-            variant="destructive" 
-            className="w-full font-bold bg-destructive/10 hover:bg-destructive text-destructive hover:text-white"
+            variant="outline" 
+            className="w-full font-bold bg-secondary/40 hover:bg-secondary text-muted-foreground hover:text-foreground"
             onClick={async () => {
               if (window.confirm("Are you absolutely sure you want to submit a request to delete your account? This will terminate all active memberships and delete your data permanently.")) {
                 try {

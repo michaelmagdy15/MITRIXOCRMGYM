@@ -49,6 +49,12 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    --color-strike-green: var(--strike-green);
+    --color-strike-green-soft: var(--strike-green-soft);
+    --color-strike-warm: var(--strike-warm);
+    --color-chrome: var(--chrome);
+    --color-chrome-deep: var(--chrome-deep);
+    --color-chrome-shine: var(--chrome-shine);
 }
 
 :root {
@@ -86,6 +92,17 @@
     --sidebar-ring: oklch(0.708 0 0);
     --brand-accent: #1a1a1a;
     --brand-accent-muted: #1a1a1a26;
+    /* STRIKE accent system — light green for active/streak/success states */
+    --strike-green: oklch(0.72 0.15 150);
+    --strike-green-soft: oklch(0.72 0.15 150 / 0.12);
+    --strike-warm: oklch(0.965 0.004 75);
+    /* Silver / chrome metallic surfaces */
+    --chrome-light: linear-gradient(135deg, #fafafa 0%, #e4e4e7 35%, #f4f4f5 60%, #d4d4d8 100%);
+    --chrome-dark: linear-gradient(135deg, #27272a 0%, #3f3f46 35%, #18181b 65%, #52525b 100%);
+    /* Chrome token aliases (theme-aware via .dark override) */
+    --chrome: var(--chrome-light);
+    --chrome-deep: #d4d4d8;
+    --chrome-shine: #ffffffcc;
 }
 
 .dark {
@@ -122,6 +139,12 @@
     --sidebar-ring: oklch(0.98 0 0);
     --brand-accent: #1a1a1a;
     --brand-accent-muted: #1a1a1a26;
+    --strike-green: oklch(0.72 0.15 150);
+    --strike-green-soft: oklch(0.72 0.15 150 / 0.14);
+    --strike-warm: oklch(0.14 0.004 240);
+    --chrome: var(--chrome-dark);
+    --chrome-deep: #52525b;
+    --chrome-shine: #ffffff26;
 }
 
 @layer base {
@@ -254,6 +277,21 @@
     border: 1px solid var(--border);
     box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3);
   }
+
+  /* Chrome / silver metallic surface */
+  .chrome-surface {
+    background: var(--chrome);
+    border: 1px solid var(--chrome-deep);
+    box-shadow:
+      inset 0 1px 0 var(--chrome-shine),
+      0 10px 30px -10px rgba(0, 0, 0, 0.18);
+  }
+  .dark .chrome-surface {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  }
   
   /* Global card hover enhancement */
   .rounded-2xl.border, .rounded-xl.border, .border.rounded-lg {
@@ -267,7 +305,7 @@
     box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.35);
   }
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-rose-500;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-strike-green;
   }
 
   /* ── Sidebar and Drawer styles ── */
@@ -284,6 +322,52 @@
   }
   .animate-float {
     animation: float 6s ease-in-out infinite;
+  }
+
+  /* ── Skeleton loading shimmer ─────────────────────── */
+  @keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--foreground) 6%, transparent);
+    border-radius: var(--radius-md);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--foreground) 8%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.6s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton::after { animation: none; }
+    .animate-float { animation: none; }
+  }
+
+  /* ── Accessible focus states ──────────────────────── */
+  :focus-visible {
+    outline: 2px solid var(--strike-green);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* ── Reduced motion: neutralize decorative animations ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
   body.font-arabic {
     font-family: 'Cairo', sans-serif !important;

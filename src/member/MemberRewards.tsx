@@ -230,7 +230,7 @@ export default function MemberRewards({ client }: { client: Client | null }) {
   }
 
   const statusConfig: Record<string, { bg: string; text: string; border: string; icon: React.ComponentType<{ className?: string }> }> = {
-    pending: { bg: 'bg-amber-500/10', text: 'text-amber-600', border: 'border-amber-200/50', icon: Clock },
+    pending: { bg: 'bg-strike-green/10', text: 'text-strike-green', border: 'border-strike-green/25', icon: Clock },
     validated: { bg: 'bg-emerald-500/10', text: 'text-emerald-600', border: 'border-emerald-200/50', icon: CheckCircle2 },
     expired: { bg: 'bg-zinc-500/10', text: 'text-zinc-500', border: 'border-zinc-200/50', icon: AlertCircle },
   };
@@ -297,8 +297,8 @@ export default function MemberRewards({ client }: { client: Client | null }) {
       {result && (
         <div className={`flex items-center gap-2 p-3 rounded-xl text-xs font-medium border ${
           result.type === 'success' 
-            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' 
-            : 'bg-rose-500/10 text-rose-600 border-rose-200/50'
+            ? 'bg-strike-green/10 text-strike-green border-strike-green/25' 
+            : 'bg-secondary text-muted-foreground border-border'
         }`}>
           {result.type === 'success' ? <CheckCircle2 className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
           {result.message}
@@ -412,8 +412,8 @@ export default function MemberRewards({ client }: { client: Client | null }) {
                         <Badge className={`${config.bg} ${config.text} ${config.border} text-[9px] font-bold`}>
                           {r.status === 'validated' ? 'Done' : r.status === 'pending' ? 'Awaiting desk' : 'Expired'}
                         </Badge>
-                        <span className="text-sm font-black text-rose-500 font-mono">-{r.coinsSpent}</span>
-                        <Coins className="h-4 w-4 text-rose-500" />
+                        <span className="text-sm font-black text-muted-foreground font-mono">-{r.coinsSpent}</span>
+                        <Coins className="h-4 w-4 text-muted-foreground" />
                       </div>
                     </div>
                   </CardContent>

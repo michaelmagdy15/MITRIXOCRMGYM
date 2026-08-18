@@ -368,7 +368,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                       <UsersIcon className="h-4 w-4" />
                       <span>{gymClass.attendees.length} / {gymClass.capacity} Joined</span>
                       {spotsLeft <= 3 && spotsLeft > 0 && !isBooked && (
-                        <Badge className="bg-amber-500/10 text-amber-600 border-amber-200/50 text-[9px] font-bold">
+                        <Badge className="bg-strike-green/10 text-strike-green border-strike-green/25 text-[9px] font-bold">
                           {spotsLeft} spots left!
                         </Badge>
                       )}
@@ -378,7 +378,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 border-destructive/50 text-destructive hover:bg-destructive hover:text-white transition-all text-xs font-bold"
+                        className="h-8 border-border text-muted-foreground hover:bg-secondary hover:text-foreground transition-all text-xs font-bold"
                         onClick={() => handleToggleBooking(gymClass)}
                         disabled={actionClassId === gymClass.id}
                       >

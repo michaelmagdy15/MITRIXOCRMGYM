@@ -135,7 +135,7 @@ export default function MemberSubscription({ client }: { client: Client | null }
       case 'Approved':
         return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
       case 'Rejected':
-        return 'bg-red-500/10 text-red-500 border-red-500/20';
+        return 'bg-secondary text-muted-foreground border-border';
       default:
         return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
     }

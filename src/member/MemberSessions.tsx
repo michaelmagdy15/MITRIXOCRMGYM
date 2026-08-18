@@ -16,7 +16,7 @@ import { Calendar, Clock, MapPin, Dumbbell, CalendarRange, User as UserIcon, Che
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
   Scheduled:  { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50',   text: 'Scheduled' },
   Attended:   { badge: 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50', text: 'Attended' },
-  'No Show':  { badge: 'bg-red-500/10 text-red-600 border-red-200/50',     text: 'No Show' },
+  'No Show':  { badge: 'bg-secondary text-muted-foreground border-border', text: 'No Show' },
   Cancelled:  { badge: 'bg-zinc-500/10 text-zinc-500 border-zinc-200/50',   text: 'Cancelled' },
 };
 
@@ -334,7 +334,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                           <span>
                             {dayConfig?.enabled 
                               ? `${dayConfig.startTime} – ${dayConfig.endTime}` 
-                              : <span className="text-destructive/70 font-semibold italic">Off</span>
+                              : <span className="text-muted-foreground/70 font-semibold italic">Off</span>
                             }
                           </span>
                         </div>
@@ -387,7 +387,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
             </div>
 
             {bookingError && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg flex items-center gap-2.5 text-xs">
+              <div className="bg-secondary border border-border text-muted-foreground p-3 rounded-lg flex items-center gap-2.5 text-xs">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{bookingError}</span>
               </div>
@@ -466,7 +466,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         size="xs"
                         variant="outline"
                         type="button"
-                        className="text-[10px] text-destructive border-destructive/20 hover:bg-destructive hover:text-white h-7 font-bold px-2.5"
+                        className="text-[10px] text-muted-foreground border-border hover:bg-secondary hover:text-foreground h-7 font-bold px-2.5"
                         onClick={() => handleCancelSession(session.id)}
                       >
                         Cancel
@@ -552,7 +552,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
             </div>
 
             {rescheduleError && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive p-3 rounded-lg text-xs font-semibold">
+              <div className="bg-secondary border border-border text-muted-foreground p-3 rounded-lg text-xs font-semibold">
                 {rescheduleError}
               </div>
             )}

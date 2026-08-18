@@ -83,7 +83,7 @@ export default function CartDrawer() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="h-8 w-8 text-muted-foreground hover:bg-secondary hover:text-foreground"
                       onClick={() => removeFromCart(item.pkg.id)}
                     >
                       <Trash2 className="h-4 w-4" />

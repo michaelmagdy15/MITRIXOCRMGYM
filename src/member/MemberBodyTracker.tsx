@@ -120,7 +120,7 @@ export default function MemberBodyTracker({ client }: { client: Client | null })
                 <p className="text-2xl font-black">{latest.weight}<span className="text-xs font-medium text-muted-foreground ml-0.5">kg</span></p>
                 <p className="text-[9px] text-muted-foreground font-bold mt-0.5">Weight</p>
                 {weightChange !== 0 && (
-                  <Badge className={`mt-1 text-[8px] font-bold ${weightChange < 0 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' : 'bg-rose-500/10 text-rose-600 border-rose-200/50'}`}>
+                  <Badge className={`mt-1 text-[8px] font-bold ${weightChange < 0 ? 'bg-strike-green/10 text-strike-green border-strike-green/25' : 'bg-secondary text-muted-foreground border-border'}`}>
                     {weightChange > 0 ? <ArrowUp className="h-2.5 w-2.5 mr-0.5" /> : <ArrowDown className="h-2.5 w-2.5 mr-0.5" />}
                     {Math.abs(weightChange).toFixed(1)}
                   </Badge>
@@ -130,7 +130,7 @@ export default function MemberBodyTracker({ client }: { client: Client | null })
                 <p className="text-2xl font-black">{latest.bodyFat || '—'}<span className="text-xs font-medium text-muted-foreground ml-0.5">%</span></p>
                 <p className="text-[9px] text-muted-foreground font-bold mt-0.5">Body Fat</p>
                 {fatChange !== 0 && (
-                  <Badge className={`mt-1 text-[8px] font-bold ${fatChange < 0 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' : 'bg-rose-500/10 text-rose-600 border-rose-200/50'}`}>
+                  <Badge className={`mt-1 text-[8px] font-bold ${fatChange < 0 ? 'bg-strike-green/10 text-strike-green border-strike-green/25' : 'bg-secondary text-muted-foreground border-border'}`}>
                     {fatChange > 0 ? '+' : ''}{fatChange.toFixed(1)}%
                   </Badge>
                 )}
@@ -139,7 +139,7 @@ export default function MemberBodyTracker({ client }: { client: Client | null })
                 <p className="text-2xl font-black">{latest.muscleMass || '—'}<span className="text-xs font-medium text-muted-foreground ml-0.5">kg</span></p>
                 <p className="text-[9px] text-muted-foreground font-bold mt-0.5">Muscle</p>
                 {muscleChange !== 0 && (
-                  <Badge className={`mt-1 text-[8px] font-bold ${muscleChange > 0 ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' : 'bg-rose-500/10 text-rose-600 border-rose-200/50'}`}>
+                  <Badge className={`mt-1 text-[8px] font-bold ${muscleChange > 0 ? 'bg-strike-green/10 text-strike-green border-strike-green/25' : 'bg-secondary text-muted-foreground border-border'}`}>
                     {muscleChange > 0 ? '+' : ''}{muscleChange.toFixed(1)}
                   </Badge>
                 )}
@@ -241,7 +241,7 @@ export default function MemberBodyTracker({ client }: { client: Client | null })
                     </p>
                   </div>
                   {wDiff !== 0 && (
-                    <Badge className={`text-[8px] font-bold ${wDiff < 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'}`}>
+                    <Badge className={`text-[8px] font-bold ${wDiff < 0 ? 'bg-strike-green/10 text-strike-green' : 'bg-secondary text-muted-foreground'}`}>
                       {wDiff > 0 ? '+' : ''}{wDiff.toFixed(1)} kg
                     </Badge>
                   )}

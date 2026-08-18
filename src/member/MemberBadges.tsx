@@ -114,13 +114,13 @@ export default function MemberBadges({ client }: { client: Client | null }) {
               <p className="text-[9px] text-muted-foreground font-bold mt-0.5">Badges</p>
             </div>
             <div className="text-center p-3 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
-              <p className="text-2xl font-black text-amber-500 flex items-center justify-center gap-0.5">
+              <p className="text-2xl font-black text-primary flex items-center justify-center gap-0.5">
                 <Coins className="h-4 w-4" />{totalCoins}
               </p>
               <p className="text-[9px] text-muted-foreground font-bold mt-0.5">Coins</p>
             </div>
             <div className="text-center p-3 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">
-              <p className="text-2xl font-black text-orange-500 flex items-center justify-center gap-0.5">
+              <p className="text-2xl font-black text-strike-green flex items-center justify-center gap-0.5">
                 <Flame className="h-4 w-4" />{streak?.currentStreak || 0}
               </p>
               <p className="text-[9px] text-muted-foreground font-bold mt-0.5">Streak</p>
@@ -148,8 +148,8 @@ export default function MemberBadges({ client }: { client: Client | null }) {
       {featuredBadges.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-2">
-            <Star className="h-4 w-4 text-amber-500" />
-            <h3 className="text-xs font-extrabold uppercase tracking-widest text-amber-600">Featured</h3>
+            <Star className="h-4 w-4 text-strike-green" />
+            <h3 className="text-xs font-extrabold uppercase tracking-widest text-strike-green">Featured</h3>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {featuredBadges.map(badge => (
@@ -226,7 +226,7 @@ function BadgeCard({ badge }: { badge: BadgeDefinition & { memberBadge?: MemberB
           <span className={`font-mono font-bold ${isUnlocked ? 'text-primary' : 'text-muted-foreground'}`}>
             {isUnlocked ? '✓ Unlocked' : `${progress}/${target}`}
           </span>
-          <span className="text-amber-500 font-bold flex items-center gap-0.5">
+          <span className="text-strike-green font-bold flex items-center gap-0.5">
             +{badge.coinsReward} <Coins className="h-2.5 w-2.5" />
           </span>
         </div>

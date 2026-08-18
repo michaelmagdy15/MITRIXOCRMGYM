@@ -18,10 +18,10 @@ interface MemberNotification {
 
 const typeIcons: Record<string, React.ReactNode> = {
   announcement: <Megaphone className="h-4 w-4 text-blue-500" />,
-  expiry_warning: <AlertTriangle className="h-4 w-4 text-amber-500" />,
+  expiry_warning: <AlertTriangle className="h-4 w-4 text-muted-foreground" />,
   session_reminder: <Calendar className="h-4 w-4 text-emerald-500" />,
   birthday: <Gift className="h-4 w-4 text-pink-500" />,
-  promo: <Sparkles className="h-4 w-4 text-amber-500" />,
+  promo: <Sparkles className="h-4 w-4 text-strike-green" />,
   system: <Info className="h-4 w-4 text-zinc-500" />,
 };
 
@@ -154,7 +154,7 @@ export default function MemberNotificationBell({ clientId }: MemberNotificationB
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground ring-2 ring-background">
+          <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-strike-green text-[9px] font-bold text-background ring-2 ring-background">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}

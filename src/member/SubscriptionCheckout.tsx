@@ -337,7 +337,7 @@ export default function SubscriptionCheckout() {
               </div>
               <div className="flex justify-between items-center text-sm border-b border-border/30 pb-2">
                 <span className="text-muted-foreground font-semibold">{t('successStatus')}</span>
-                <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-xs font-bold px-2 py-0.5 rounded-full">
+                <Badge className="bg-strike-green/10 text-strike-green border-strike-green/25 text-xs font-bold px-2 py-0.5 rounded-full">
                   {t('successStatusVal')}
                 </Badge>
               </div>
@@ -625,7 +625,7 @@ export default function SubscriptionCheckout() {
               </Card>
 
               {error && (
-                <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-xs font-bold text-destructive flex items-center gap-2.5">
+                <div className="rounded-xl border border-border bg-secondary/60 p-4 text-xs font-bold text-muted-foreground flex items-center gap-2.5">
                   <AlertCircle className="h-4 w-4 flex-shrink-0" />
                   <span>{error}</span>
                 </div>

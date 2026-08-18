@@ -22,11 +22,11 @@ const MENU_ITEMS = [
 ];
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
-  Pending: { badge: 'bg-amber-500/10 text-amber-500 border-amber-500/20', text: 'Pending Approval' },
+  Pending: { badge: 'bg-strike-green/10 text-strike-green border-strike-green/20', text: 'Pending Approval' },
   Preparing: { badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20', text: 'Preparing' },
   Ready: { badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse', text: 'Ready for Pickup' },
   Completed: { badge: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', text: 'Completed' },
-  Cancelled: { badge: 'bg-red-500/10 text-red-400 border-red-500/20', text: 'Cancelled' },
+  Cancelled: { badge: 'bg-secondary text-muted-foreground border-border', text: 'Cancelled' },
 };
 
 export default function MemberJuiceBar({ client }: { client: Client | null }) {
@@ -270,7 +270,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
               <Button
                 variant="ghost"
                 size="xs"
-                className="text-[10px] text-muted-foreground hover:text-destructive h-6 font-bold"
+                className="text-[10px] text-muted-foreground hover:text-foreground h-6 font-bold"
                 onClick={clearCart}
               >
                 <Trash2 className="h-3.5 w-3.5 mr-1" /> Clear
@@ -386,7 +386,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                           type="button"
                           variant="outline"
                           size="xs"
-                          className="text-[10px] text-destructive border-destructive/20 hover:bg-destructive hover:text-white h-7 font-bold px-3.5"
+                          className="text-[10px] text-muted-foreground border-border hover:bg-secondary hover:text-foreground h-7 font-bold px-3.5"
                           onClick={() => handleCancelOrder(order.id)}
                         >
                           Cancel Pre-order

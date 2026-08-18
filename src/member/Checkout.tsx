@@ -299,7 +299,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
         </DialogHeader>
 
         {error && (
-          <Alert variant="destructive" className="my-2">
+          <Alert className="my-2 border-border bg-secondary text-muted-foreground">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -472,7 +472,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
 
             <div className="flex gap-3 pt-4">
               <Button type="button" variant="outline" className="w-1/3" onClick={() => setStep('details')}>Back</Button>
-              <Button className="w-2/3 bg-gradient-to-r from-primary to-rose-600 hover:from-primary/95 hover:to-rose-600/95 font-bold" onClick={handlePurchaseSubmit} disabled={isLoading}>
+              <Button className="w-2/3 bg-gradient-to-r from-primary to-strike-green hover:from-primary/95 hover:to-strike-green/95 font-bold" onClick={handlePurchaseSubmit} disabled={isLoading}>
                 {isLoading ? 'Processing...' : 'Confirm Request'}
               </Button>
             </div>

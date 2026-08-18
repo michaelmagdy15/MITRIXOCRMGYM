@@ -28,6 +28,7 @@ import MemberWallet from './MemberWallet';
 import MemberBadges from './MemberBadges';
 import MemberRewards from './MemberRewards';
 import MemberBodyTracker from './MemberBodyTracker';
+import { MemberScreenSkeleton } from './components/Skeleton';
 
 
 type MemberTab = 'home' | 'booking' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'profile';
@@ -240,8 +241,11 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="min-h-screen bg-background">
+        <div className="h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]" />
+        <main className="px-4 py-6 max-w-md mx-auto w-full">
+          <MemberScreenSkeleton />
+        </main>
       </div>
     );
   }
@@ -260,7 +264,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     <div className="h-screen overflow-hidden bg-background flex flex-col font-sans relative">
       {/* Decorative Premium Glow Blobs */}
       <div className="absolute top-[5%] right-[-20%] w-[320px] h-[320px] rounded-full bg-primary/10 dark:bg-primary/20 blur-[100px] pointer-events-none z-0" />
-      <div className="absolute bottom-[15%] left-[-20%] w-[320px] h-[320px] rounded-full bg-orange-500/10 dark:bg-orange-500/15 blur-[100px] pointer-events-none z-0" />
+      <div className="absolute bottom-[15%] left-[-20%] w-[320px] h-[320px] rounded-full bg-strike-green/10 dark:bg-strike-green/15 blur-[100px] pointer-events-none z-0" />
 
       <header className="border-b bg-card h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
@@ -316,8 +320,8 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
       <main className="flex-1 overflow-y-auto px-4 py-6 pb-28 max-w-md mx-auto w-full overscroll-contain">
         {activeClient?.status === 'Expired' && (
-          <div className="mb-4 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl flex items-start gap-3 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
-            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div className="mb-4 p-4 bg-secondary/60 border border-border text-muted-foreground rounded-2xl flex items-start gap-3 shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-300">
+            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-strike-green" />
             <div className="space-y-1">
               <p className="font-bold text-sm">Membership Expired</p>
               <p className="text-xs font-semibold leading-relaxed">
@@ -390,19 +394,39 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-card/90 border-t z-50 flex justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur-md">
-        {filteredNavItems.map(({ tab, label, icon }) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex flex-col items-center gap-0.5 px-2.5 py-1.5 min-w-[56px] transition-colors rounded-xl ${
-              activeTab === tab ? 'text-primary font-bold' : 'text-muted-foreground font-semibold'
-            }`}
-          >
-            {icon}
-            <span className="text-[9px] tracking-wide">{label}</span>
-          </button>
-        ))}
+      <nav className="fixed bottom-0 left-0 right-0 bg-card/90 border-t z-50 shadow-lg backdrop-blur-md pb-safe">
+        <div className="flex justify-around items-stretch max-w-md mx-auto">
+          {filteredNavItems.map(({ tab, label, icon }) => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                aria-current={isActive ? 'page' : undefined}
+                className={`relative flex flex-col items-center justify-center gap-1 flex-1 min-h-[60px] px-2 pt-2 transition-colors duration-200 ${
+                  isActive ? 'text-strike-green' : 'text-muted-foreground hover:text-foreground/80'
+                }`}
+              >
+                <span
+                  className={`absolute top-0 left-1/2 -translate-x-1/2 h-[3px] rounded-b-full transition-all duration-300 ${
+                    isActive ? 'w-8 bg-strike-green' : 'w-0 bg-transparent'
+                  }`}
+                />
+                <span className="relative">
+                  {icon}
+                  {isActive && (
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-strike-green/70" />
+                  )}
+                </span>
+                <span className={`text-[9px] tracking-wide transition-all duration-300 ${
+                  isActive ? 'font-bold text-strike-green' : 'font-semibold'
+                }`}>
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
     </div>
   );

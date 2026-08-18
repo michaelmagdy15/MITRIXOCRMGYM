@@ -10,9 +10,9 @@ import { Input } from '@/components/ui/input';
 import { UserPlus, Copy, Check, Info, Calendar, UserCheck, AlertCircle } from 'lucide-react';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
-  Pending: { badge: 'bg-amber-500/10 text-amber-500 border-amber-500/20', text: 'Active Invite' },
+  Pending: { badge: 'bg-strike-green/10 text-strike-green border-strike-green/20', text: 'Active Invite' },
   Attended: { badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', text: 'Checked In' },
-  Expired: { badge: 'bg-red-500/10 text-red-400 border-red-500/20', text: 'Expired' },
+  Expired: { badge: 'bg-secondary text-muted-foreground border-border', text: 'Expired' },
 };
 
 export default function MemberInvites({ client }: { client: Client | null }) {

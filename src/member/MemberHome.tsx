@@ -10,12 +10,15 @@ import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fn
 import { 
   Sparkles, Calendar, CheckCircle2, Trophy, Activity, Dumbbell, Award, Users, 
   ShoppingBag, Bell, Clock, Flame, ChevronRight, MapPin, Zap, User, 
-  TrendingUp, Star, Timer, Target, Coins, AlertCircle, Lock, Maximize2, Minimize2
+  TrendingUp, Star, Timer, Target, Coins, AlertCircle, Lock, Maximize2, Minimize2, CalendarPlus
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { SectionHeader } from './components/SectionHeader';
+import { EmptyState } from './components/EmptyState';
+import { Skeleton, SkeletonCard } from './components/Skeleton';
 
 const BoxingGlovesIcon = ({ className }: { className?: string }) => (
   <svg
@@ -323,8 +326,8 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
   }
 
   const statusColor = client.status === 'Active' 
-    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
-    : 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+    ? 'bg-strike-green/10 text-strike-green border-strike-green/20' 
+    : 'bg-secondary text-muted-foreground border-border';
 
   const memberQrValue = client.memberId || client.id;
 
@@ -333,7 +336,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
     : 'bg-blue-500/10 border-blue-500/20 text-blue-500';
 
   const bestStreakBadgeColor = isStrike 
-    ? 'bg-amber-500/10 border-amber-500/20 text-amber-500'
+    ? 'bg-strike-green/10 border-strike-green/20 text-strike-green'
     : 'bg-primary/10 border-primary/20 text-primary';
 
   return (
@@ -344,15 +347,23 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         onClick={() => onNavigate?.('profile')}
       >
         <p className="text-2xl font-bold tracking-tight">
-          {greeting.text} {greeting.emoji}
+          {greeting.text} <span className="inline-block">{greeting.emoji}</span>
         </p>
         <p className="text-lg font-semibold text-primary mt-0.5">{firstName}</p>
+        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-strike-green animate-pulse" />
+          {client.sessionsRemaining === 'unlimited'
+            ? 'Unlimited sessions — train whenever you want.'
+            : Number(client.sessionsRemaining || 0) > 0
+            ? 'Ready for your next session?'
+            : 'You\'re out of sessions — grab a package to keep going.'}
+        </p>
       </div>
 
-      {/* ─── Expired Status Red Warning Banner ─── */}
+      {/* ─── Expired Status Warning Banner (glass) ─── */}
       {client.status === 'Expired' && (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl flex items-start gap-3 shadow-md animate-in fade-in slide-in-from-top-4 duration-300">
-          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+        <div className="p-4 bg-secondary/60 border border-border text-muted-foreground rounded-2xl flex items-start gap-3 shadow-md backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-300">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-strike-green" />
           <div className="space-y-1">
             <p className="font-bold text-sm">Membership Expired</p>
             <p className="text-xs font-semibold leading-relaxed">
@@ -364,7 +375,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
 
       {/* ─── Streak & Stats Badges ─── */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/20 text-orange-500 px-3 py-1.5 rounded-full">
+        <div className="flex items-center gap-1.5 bg-strike-green/10 border border-strike-green/20 text-strike-green px-3 py-1.5 rounded-full">
           <Flame className="h-4 w-4" />
           <span className="text-xs font-bold">{streak.current} Day Streak</span>
         </div>
@@ -453,26 +464,28 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
         </div>
       </div>
 
-      {/* ─── Premium Membership Card (Horizontal Silver-Metallic) ─── */}
-      <div className="relative group overflow-hidden rounded-[24px] shadow-2xl transition-all duration-300 hover:shadow-black/25 animate-float z-10">
-        <div className="absolute inset-0 bg-grid-black/[0.03] rounded-3xl pointer-events-none" />
-        {/* Subtle dynamic metallic reflection light */}
-        <div className="absolute -inset-y-12 -inset-x-12 bg-gradient-to-tr from-white/20 via-transparent to-white/10 blur-xl opacity-60 group-hover:opacity-80 transition-opacity pointer-events-none" />
+      {/* ─── Premium Membership Card (Chrome/Glass, STRIKE) ─── */}
+      <div className="relative group overflow-hidden rounded-[24px] shadow-2xl shadow-black/10 transition-all duration-300 hover:shadow-black/25 animate-float z-10">
+        {/* Chrome metallic base */}
+        <div className="absolute inset-0 rounded-[24px] chrome-surface" />
+        {/* Subtle dynamic reflection light */}
+        <div className="absolute -inset-y-12 -inset-x-12 bg-gradient-to-tr from-white/30 via-transparent to-strike-green/10 blur-xl opacity-60 group-hover:opacity-80 transition-opacity pointer-events-none" />
         
-        <Card className="relative border border-zinc-200/60 rounded-[24px] overflow-hidden bg-gradient-to-br from-zinc-300 via-zinc-100 to-zinc-400 text-zinc-800 shadow-none h-[190px] w-full p-4 flex flex-col justify-between">
-          {/* Card grain/reflection effect */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-white/10 via-white/5 to-black/5 pointer-events-none" />
-          <div className="absolute top-0 right-0 w-36 h-36 bg-white/20 rounded-full blur-2xl pointer-events-none" />
+        <Card className="relative border border-white/40 dark:border-white/10 rounded-[24px] overflow-hidden backdrop-blur-xl bg-transparent shadow-none h-[190px] w-full p-4 flex flex-col justify-between">
+          {/* Glass grain/reflection effect */}
+          <div className="absolute inset-0 bg-gradient-to-tr from-white/40 via-white/10 to-transparent dark:from-white/10 dark:via-white/[0.03] dark:to-transparent pointer-events-none" />
+          <div className="absolute top-0 right-0 w-36 h-36 bg-strike-green/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/30 dark:bg-white/5 rounded-full blur-xl pointer-events-none" />
           
           {/* Top Row: Brand & ID */}
           <div className="flex justify-between items-start z-10">
-            <div className="flex items-center gap-1">
-              <Sparkles className="h-4 w-4 text-zinc-600 animate-pulse shrink-0" />
-              <p className="text-[11px] font-extrabold tracking-[0.25em] uppercase text-zinc-900 leading-none">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-strike-green shadow-[0_0_8px] shadow-strike-green/60" />
+              <p className="text-[11px] font-extrabold tracking-[0.25em] uppercase text-zinc-800 dark:text-zinc-100 leading-none">
                 {branding?.companyName || 'STRIKE'}
               </p>
             </div>
-            <p className="text-[10px] font-mono font-bold tracking-wider text-zinc-600 bg-zinc-200/50 px-2 py-0.5 rounded-md border border-zinc-300/30">
+            <p className="text-[10px] font-mono font-bold tracking-wider text-zinc-600 dark:text-zinc-300 bg-white/50 dark:bg-white/10 px-2 py-0.5 rounded-md border border-white/40 dark:border-white/10 backdrop-blur-sm">
               #{client.memberId || client.id.substring(0, 8)}
             </p>
           </div>
@@ -482,27 +495,27 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
             {/* Left Side: Client Name, Expiry, Status, Branch */}
             <div className="flex flex-col justify-between h-full py-1 min-w-0 flex-1">
               <div>
-                <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest leading-none mb-1">MEMBER PASS</p>
-                <h4 className="text-lg font-black tracking-tight text-zinc-950 uppercase truncate leading-tight pr-1">
+                <p className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest leading-none mb-1">MEMBER PASS</p>
+                <h4 className="text-lg font-black tracking-tight text-zinc-900 dark:text-white uppercase truncate leading-tight pr-1">
                   {client.name}
                 </h4>
               </div>
               
               <div className="space-y-1 mt-auto">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-[9px] font-extrabold tracking-wider px-2 py-0.5 rounded-full border ${
+                  <span className={`text-[9px] font-extrabold tracking-wider px-2 py-0.5 rounded-full border backdrop-blur-sm ${
                     client.status === 'Active'
-                      ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30'
-                      : 'bg-amber-500/10 text-amber-700 border-amber-500/30'
+                      ? 'bg-strike-green/15 text-strike-green border-strike-green/30'
+                      : 'bg-secondary/70 text-muted-foreground border-border'
                   }`}>
                     {client.status.toUpperCase()}
                   </span>
-                  <span className="text-[9.5px] font-bold text-zinc-600 tracking-wider">
+                  <span className="text-[9.5px] font-bold text-zinc-500 dark:text-zinc-400 tracking-wider">
                     VALID UNTIL: {formatOptionalDate(client.membershipExpiry)}
                   </span>
                 </div>
-                <p className="text-[9px] font-extrabold tracking-widest text-zinc-500 uppercase">
-                  BRANCH: <span className="text-zinc-800 font-black">{client.branch || 'MAIN'}</span>
+                <p className="text-[9px] font-extrabold tracking-widest text-zinc-500 dark:text-zinc-400 uppercase">
+                  BRANCH: <span className="text-zinc-800 dark:text-zinc-100 font-black">{client.branch || 'MAIN'}</span>
                 </p>
               </div>
             </div>
@@ -514,7 +527,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
                   <DialogTrigger
                     render={
                       <div 
-                        className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center relative overflow-hidden cursor-pointer transition-transform hover:scale-105 active:scale-95"
+                        className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-2 rounded-2xl shadow-md border border-white/60 dark:border-white/10 w-24 h-24 flex items-center justify-center relative overflow-hidden cursor-pointer transition-transform hover:scale-105 active:scale-95"
                         title="Tap to enlarge"
                       >
                         <QRCodeSVG 
@@ -555,14 +568,14 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
                 </Dialog>
               )}
               {client.status === 'Expired' && (
-                <div className="bg-white p-2 rounded-2xl shadow-md border border-white/50 w-24 h-24 flex items-center justify-center relative overflow-hidden">
-                  <div className="flex flex-col items-center justify-center text-rose-600 w-full h-full bg-rose-50 rounded-xl">
-                    <Lock className="h-7 w-7 text-rose-600 shrink-0" />
+                <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-2 rounded-2xl shadow-md border border-white/60 dark:border-white/10 w-24 h-24 flex items-center justify-center relative overflow-hidden">
+                  <div className="flex flex-col items-center justify-center text-zinc-400 w-full h-full bg-secondary/60 rounded-xl">
+                    <Lock className="h-7 w-7 shrink-0" />
                     <span className="text-[9px] font-black tracking-tighter uppercase mt-1 leading-none">LOCKED</span>
                   </div>
                 </div>
               )}
-              <span className="text-[8px] font-extrabold tracking-[0.3em] uppercase text-zinc-700 mt-1 font-logo">
+              <span className="text-[8px] font-extrabold tracking-[0.3em] uppercase text-zinc-500 dark:text-zinc-300 mt-1 font-logo">
                 STRIKE GYMS
               </span>
             </div>
@@ -585,7 +598,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
               </p>
               {daysToExpiry !== null && (
                 <p className={`text-[10px] font-semibold mt-0.5 ${
-                  daysToExpiry <= 3 ? 'text-destructive' : daysToExpiry <= 7 ? 'text-amber-500' : 'text-muted-foreground'
+                  daysToExpiry <= 3 ? 'text-foreground font-bold' : daysToExpiry <= 7 ? 'text-strike-green' : 'text-muted-foreground'
                 }`}>
                   {daysToExpiry < 0 ? 'Expired' : daysToExpiry === 0 ? 'Expires today' : `${daysToExpiry} days left`}
                 </p>
@@ -603,10 +616,10 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
             </div>
             <div className="mt-auto">
               {client.sessionsRemaining === 'unlimited' ? (
-                <p className="text-xl font-extrabold text-emerald-500 leading-none">Unlimited</p>
+                <p className="text-xl font-extrabold text-strike-green leading-none">Unlimited</p>
               ) : (
                 <p className={`text-2xl font-extrabold leading-none ${
-                  Number(client.sessionsRemaining || 0) <= 1 ? 'text-destructive' : 'text-emerald-500'
+                  Number(client.sessionsRemaining || 0) <= 1 ? 'text-muted-foreground' : 'text-strike-green'
                 }`}>
                   {client.sessionsRemaining ?? 0}
                   <span className="text-xs font-semibold text-muted-foreground ml-1">left</span>
@@ -621,10 +634,10 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
           <CardContent className="p-4 flex flex-col justify-between h-[100px]">
             <div className="flex items-center justify-between text-muted-foreground">
               <span className="text-[10px] font-bold uppercase tracking-wider">Streak</span>
-              <Flame className="h-4 w-4 text-orange-500" />
+              <Flame className="h-4 w-4 text-strike-green" />
             </div>
             <div className="mt-auto">
-              <p className="text-2xl font-extrabold text-orange-500 leading-none">
+              <p className="text-2xl font-extrabold text-strike-green leading-none">
                 {streak.current}
                 <span className="text-xs font-semibold text-muted-foreground ml-1">days</span>
               </p>

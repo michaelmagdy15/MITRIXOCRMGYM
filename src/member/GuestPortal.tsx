@@ -408,7 +408,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
           <p className="text-[11px] tracking-[0.5em] text-zinc-400 uppercase mt-6 font-bold">{branding?.companyName ?? ''}</p>
           
           <div className="h-1.5 w-32 bg-zinc-900 mt-10 rounded-full overflow-hidden border border-white/5 relative">
-            <div className="h-full bg-gradient-to-r from-red-600 to-red-500 rounded-full animate-[slide_1.8s_infinite_ease-in-out] shadow-[0_0_10px_#C20E1A]" />
+            <div className="h-full bg-gradient-to-r from-strike-green to-strike-green/60 rounded-full animate-[slide_1.8s_infinite_ease-in-out] shadow-[0_0_10px] shadow-strike-green/50" />
           </div>
         </div>
         
@@ -1260,14 +1260,14 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             <div className="px-4 pt-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-black tracking-tight uppercase flex items-center gap-2">
-                  <Gift className="h-5 w-5 text-amber-500" /> Offers & Discounts
+                  <Gift className="h-5 w-5 text-strike-green" /> Offers & Discounts
                 </h2>
               </div>
               <div className="grid grid-cols-1 gap-3">
                 {activeOffers.map(offer => (
-                  <div key={offer.id} className="relative overflow-hidden bg-gradient-to-br from-amber-500/10 via-transparent to-primary/5 border border-amber-500/20 rounded-2xl p-4 shadow-sm sf-card-stagger">
+                  <div key={offer.id} className="relative overflow-hidden bg-gradient-to-br from-strike-green/10 via-transparent to-primary/5 border border-strike-green/20 rounded-2xl p-4 shadow-sm sf-card-stagger">
                     {offer.badgeText && (
-                      <Badge className="absolute top-3 right-3 bg-amber-500 text-black text-[9px] font-black px-2">{offer.badgeText}</Badge>
+                      <Badge className="absolute top-3 right-3 bg-strike-green text-black text-[9px] font-black px-2">{offer.badgeText}</Badge>
                     )}
                     <div className="flex items-start gap-3">
                       {offer.imageUrl ? (
@@ -1275,15 +1275,15 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                           <img src={offer.imageUrl} alt={offer.title} className="h-full w-full object-cover" />
                         </div>
                       ) : (
-                        <div className="h-14 w-14 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                          <Tag className="h-6 w-6 text-amber-500" />
+                        <div className="h-14 w-14 rounded-xl bg-strike-green/10 flex items-center justify-center shrink-0">
+                          <Tag className="h-6 w-6 text-strike-green" />
                         </div>
                       )}
                       <div className="flex-1">
                         <h3 className="font-extrabold text-sm uppercase">{offer.title}</h3>
                         <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{offer.description}</p>
                         {offer.validUntil && (
-                          <p className="text-[10px] text-amber-500 font-bold mt-2">Valid until {new Date(offer.validUntil).toLocaleDateString()}</p>
+                          <p className="text-[10px] text-strike-green font-bold mt-2">Valid until {new Date(offer.validUntil).toLocaleDateString()}</p>
                         )}
                       </div>
                     </div>
@@ -1519,7 +1519,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                           <Users className="h-3.5 w-3.5" />
                           <span>{gymClass.attendees ? gymClass.attendees.length : 0} / {gymClass.capacity} Joined</span>
                           {spotsLeft <= 3 && spotsLeft > 0 && (
-                            <Badge className="bg-amber-500/10 text-amber-600 border-amber-200/50 text-[9px] font-bold">
+                            <Badge className="bg-strike-green/10 text-strike-green border-strike-green/25 text-[9px] font-bold">
                               {spotsLeft} spots left!
                             </Badge>
                           )}
@@ -1710,8 +1710,8 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 My Portal
               </Button>
               <Button 
-                variant="destructive" 
-                className="rounded-full shadow-xl text-xs font-bold h-12 px-6"
+                variant="outline" 
+                className="rounded-full shadow-xl text-xs font-bold h-12 px-6 bg-secondary/40 hover:bg-secondary text-muted-foreground hover:text-foreground"
                 onClick={() => logout()}
               >
                 <LogOut className="h-4 w-4" />
