@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { auth } from '../firebase';
+import { db, auth } from '../firebase';
+import { collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { Task } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -11,37 +12,24 @@ export const useTasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchTasks = useCallback(async () => {
-    if (!currentUser) {
+  useEffect(() => {
+    if (!currentUser || effectiveRole === 'client' || effectiveRole === 'coach') {
       setTasks([]);
       setLoading(false);
       return;
     }
-    // Members can't list all tasks
-    if (effectiveRole === 'client' || effectiveRole === 'coach') {
+
+    const unsub = onSnapshot(collection(db, 'tasks'), (snapshot) => {
+      setTasks(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
       setLoading(false);
-      return;
-    }
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/tasks', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTasks(data.tasks || []);
-      }
-    } catch (error) {
+    }, (error) => {
       console.error('Failed to fetch tasks', error);
       handleFirestoreError(error, OperationType.LIST, 'tasks');
-    } finally {
       setLoading(false);
-    }
-  }, [currentUser, effectiveRole]);
+    });
 
-  useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    return () => unsub();
+  }, [currentUser, effectiveRole]);
 
   const visibleTasks = useMemo(() => {
     if (!currentUser) return [];
@@ -58,22 +46,10 @@ export const useTasks = () => {
         createdAt: new Date().toISOString(),
       };
       
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/tasks/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ task: cleanData(newTask) })
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        const id = data.id || data.taskId || 'unknown';
-        await addAuditLog('CREATE', 'CLIENT', id, `Created task: ${task.title}`);
-        await fetchTasks();
-      }
+      const docRef = doc(collection(db, 'tasks'));
+      const docId = docRef.id;
+      await setDoc(docRef, cleanData(newTask));
+      await addAuditLog('CREATE', 'CLIENT', docId, `Created task: ${task.title}`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'tasks');
     }
@@ -81,21 +57,9 @@ export const useTasks = () => {
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/tasks/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ id, updates: cleanData(updates) })
-      });
-      
-      if (res.ok) {
-        const taskName = tasks.find(t => t.id === id)?.title || id;
-        await addAuditLog('UPDATE', 'CLIENT', id, `Updated task: ${taskName}`);
-        await fetchTasks();
-      }
+      await updateDoc(doc(db, 'tasks', id), cleanData(updates));
+      const taskName = tasks.find(t => t.id === id)?.title || id;
+      await addAuditLog('UPDATE', 'CLIENT', id, `Updated task: ${taskName}`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `tasks/${id}`);
     }
@@ -103,21 +67,9 @@ export const useTasks = () => {
 
   const deleteTask = async (id: string) => {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/tasks/delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ id })
-      });
-      
-      if (res.ok) {
-        const taskName = tasks.find(t => t.id === id)?.title || id;
-        await addAuditLog('DELETE', 'CLIENT', id, `Deleted task: ${taskName}`);
-        await fetchTasks();
-      }
+      await deleteDoc(doc(db, 'tasks', id));
+      const taskName = tasks.find(t => t.id === id)?.title || id;
+      await addAuditLog('DELETE', 'CLIENT', id, `Deleted task: ${taskName}`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `tasks/${id}`);
     }

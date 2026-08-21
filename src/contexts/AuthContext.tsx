@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { User, UserId, UserRole, isSuperAdmin, isAdmin, BrandingSettings, PendingAccount, PasswordResetRequest, Client, Coach } from '../types';
-import { auth, db, signInWithEmail, logOut, createFirebaseUser, sendPasswordReset, getMemberEmail } from '../firebase';
+import { auth, db, signInWithEmail, logOut, createFirebaseUser, sendPasswordReset, getMemberEmail, getTenantId } from '../firebase';
 import { onAuthStateChanged, updatePassword as fbUpdatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import {
   doc,
@@ -270,45 +270,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                              window.location.pathname === '/superadmin';
     if (isSuperAdminMode) return;
 
-    const fetchUsers = async () => {
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        if (!token) return;
-        const res = await fetch('/api/users', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const allFetched = data.users || [];
-          const staffUsers = allFetched.filter((u: any) => 
-            ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role)
-          );
+    const usersRef = collection(db, 'users');
+    const unsubscribe = onSnapshot(usersRef, (snapshot) => {
+      const allFetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      const staffUsers = allFetched.filter(u => 
+        ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role)
+      );
 
-          const allUsersData = staffUsers.map((d: any) => {
-            const hasStoredId = 'id' in d && d.id !== undefined && d.id !== null && d.id !== '';
-            const user = { ...d } as User;
-            user.isPending = !hasStoredId;
-            return { user, hasStoredId };
-          });
-          const emailMap = new Map<string, { user: User; hasStoredId: boolean }>();
-          allUsersData.forEach(({ user, hasStoredId }: any) => {
-            const emailKey = (user.email || '').toLowerCase();
-            const existing = emailMap.get(emailKey);
-            if (!existing || (hasStoredId && !existing.hasStoredId)) {
-              emailMap.set(emailKey, { user, hasStoredId });
-            }
-          });
-          setAllUsers(allUsersData.map((e: any) => e.user));
-          setUsers(Array.from(emailMap.values()).map(e => e.user));
+      const allUsersData = staffUsers.map(d => {
+        const hasStoredId = 'id' in d && d.id !== undefined && d.id !== null && d.id !== '';
+        const user = { ...d } as User;
+        user.isPending = !hasStoredId;
+        return { user, hasStoredId };
+      });
+      const emailMap = new Map<string, { user: User; hasStoredId: boolean }>();
+      allUsersData.forEach(({ user, hasStoredId }) => {
+        const emailKey = (user.email || '').toLowerCase();
+        const existing = emailMap.get(emailKey);
+        if (!existing || (hasStoredId && !existing.hasStoredId)) {
+          emailMap.set(emailKey, { user, hasStoredId });
         }
-      } catch (error) {
-        console.error('Error fetching users from API:', error);
-      }
-    };
+      });
+      setAllUsers(allUsersData.map(e => e.user));
+      setUsers(Array.from(emailMap.values()).map(e => e.user));
+    }, (error) => {
+      console.error('Error in users onSnapshot:', error);
+    });
 
-    fetchUsers();
-    const intervalId = setInterval(fetchUsers, 15000); // Poll every 15 seconds
-    return () => clearInterval(intervalId);
+    return () => unsubscribe();
   }, [currentUser]);
 
   // Pending accounts + password reset requests listeners (admin/manager only)
@@ -646,7 +635,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const hasAccount = usersList.some(u => u.role === 'coach' && (u.name?.toLowerCase() === coach.name.toLowerCase() || u.coachId === coach.id));
         if (!hasAccount) {
           try {
-            const email = `coach-${coach.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@mitrixogymcrm-coach.local`;
+            const tenantPrefix = getTenantId() || 'mitrixogymcrm';
+            const email = `${tenantPrefix}-coach-${coach.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@mitrixogymcrm-coach.local`;
             const uid = await createFirebaseUser(email, '12345678');
             const newUser: User = {
               id: uid,

@@ -67,6 +67,7 @@
 | Tenant isolation via hostname | All data queries must use `getDbForRequest(req)` which derives database from hostname. Queries without tenant context = security vulnerability. |
 | Logo URL not persisting | Logo uploads to Firebase Storage work, but URL was never saved because GET /api/settings didn't fetch existing settings. Fixed 2026-08-18. |
 | CockroachDB dead code | db.ts and dbOperations.ts are now dead code. Do not import or use them. |
+| Legacy API Fetching | Do not use `fetch('/api/...')` endpoints in frontend hooks for `inzanathletics` or any tenant. All tenants use direct Firestore SDK calls and snapshot listeners. |
 | Cross-tenant data leakage | Any query not using `getDbForRequest(req)` risks returning wrong tenant's data. Always audit query paths. |
 | Default branding in mailer.ts | functions/src/utils/mailer.ts has hardcoded fallback to "mitrixogymcrm" → "STRIKE" logic. This is intentional branding fallback for emails. |
 | Provisioning creates empty branding | provisioning.ts sets `logoUrl: ''` intentionally — tenant must upload their own logo. |

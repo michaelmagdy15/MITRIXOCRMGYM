@@ -1882,7 +1882,7 @@ export default function Clients() {
 
       {activeClient && (
         <Dialog open={!!activeClientId} onOpenChange={(open) => { if (!open) setActiveClientId(null); }}>
-          {getTenantId() === 'inzanathletics' ? (
+          {features?.customMemberProfile ? (
             <DialogContent className="p-0 border border-border shadow-2xl w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col bg-background rounded-2xl">
               <InzanMemberShow
                 client={activeClient}
@@ -2760,7 +2760,7 @@ export default function Clients() {
                       {(activeClient.packages || []).length > 0 && (
                         <div className="space-y-3">
                           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Package History</p>
-                          <div className="rounded-xl border bg-background overflow-hidden">
+                          <div className="rounded-xl border bg-background overflow-hidden overflow-x-auto">
                             <Table>
                               <TableHeader className="bg-muted/30">
                                 <TableRow>
@@ -2806,7 +2806,7 @@ export default function Clients() {
                             {payments.filter((p) => p.clientId === activeClient.id).length} entries
                           </Badge>
                         </div>
-                        <div className="rounded-xl border bg-background overflow-hidden">
+                        <div className="rounded-xl border bg-background overflow-hidden overflow-x-auto">
                           <Table>
                             <TableHeader className="bg-muted/30">
                               <TableRow>
@@ -2861,7 +2861,7 @@ export default function Clients() {
                             {attendances.filter((att) => att.clientId === activeClient.id).length} entries
                           </Badge>
                         </div>
-                        <div className="rounded-xl border bg-background overflow-hidden max-h-[300px] overflow-y-auto custom-scrollbar">
+                        <div className="rounded-xl border bg-background overflow-hidden overflow-x-auto max-h-[300px] overflow-y-auto custom-scrollbar">
                           <Table>
                             <TableHeader className="bg-muted/30">
                               <TableRow>

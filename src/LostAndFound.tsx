@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
 import { db, auth } from './firebase';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, setDoc, updateDoc, deleteDoc, doc, orderBy, addDoc } from 'firebase/firestore';
 import { LostFoundItem, LostFoundCategory } from './types';
 import { downloadCSV } from './utils/download';
 import { format } from 'date-fns';
@@ -59,24 +59,15 @@ export default function LostAndFound() {
   const [filterStatus, setFilterStatus] = useState('All');
 
   // ── Firestore listeners ──
-  const fetchItems = async () => {
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch('/api/lost-and-found', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setItems(data.items || []);
-    } catch (error) {
-      console.error('Error fetching lost and found:', error);
-      toast.error('Failed to load items');
-    }
-  };
-
   useEffect(() => {
-    fetchItems();
+    const unsub = onSnapshot(collection(db, 'lostAndFound'), (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LostFoundItem));
+      setItems(data);
+    }, (err) => {
+      console.error('Error fetching lost and found:', err);
+      toast.error('Failed to load items');
+    });
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -128,15 +119,10 @@ export default function LostAndFound() {
         createdBy: currentUser?.name || '',
       };
 
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/lost-and-found/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ item: itemData })
-      });
-      if (!res.ok) throw new Error('Failed to save');
+      const docRef = doc(collection(db, 'lostAndFound'));
+      itemData.id = docRef.id;
+      await setDoc(docRef, itemData);
       
-      setItems(prev => [itemData, ...prev]);
       toast.success('Item added successfully');
       setAddOpen(false);
       setNewItem({ ...defaultNewItem });
@@ -157,15 +143,9 @@ export default function LostAndFound() {
         claimedByName: claimantName.trim(),
         claimedDate: new Date().toISOString(),
       };
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/lost-and-found/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: claimItem.id, updates })
-      });
-      if (!res.ok) throw new Error('Failed to update');
+      const docRef = doc(db, 'lostAndFound', claimItem.id);
+      await updateDoc(docRef, updates);
       
-      setItems(prev => prev.map(i => i.id === claimItem.id ? { ...i, ...updates } as LostFoundItem : i));
       toast.success('Item marked as claimed');
       setClaimItem(null);
       setClaimantName('');
@@ -182,15 +162,9 @@ export default function LostAndFound() {
         status: 'Disposed',
         disposedDate: new Date().toISOString(),
       };
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/lost-and-found/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: item.id, updates })
-      });
-      if (!res.ok) throw new Error('Failed to update');
+      const docRef = doc(db, 'lostAndFound', item.id);
+      await updateDoc(docRef, updates);
       
-      setItems(prev => prev.map(i => i.id === item.id ? { ...i, ...updates } as LostFoundItem : i));
       toast.success('Item marked as disposed');
     } catch (err: any) {
       toast.error('Failed to update item: ' + (err.message || 'Unknown error'));
@@ -201,15 +175,8 @@ export default function LostAndFound() {
   const handleDeleteItem = async (item: LostFoundItem) => {
     if (!window.confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/lost-and-found/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: item.id })
-      });
-      if (!res.ok) throw new Error('Failed to delete');
+      await deleteDoc(doc(db, 'lostAndFound', item.id));
       
-      setItems(prev => prev.filter(i => i.id !== item.id));
       toast.success('Item deleted');
     } catch (err: any) {
       toast.error('Failed to delete item: ' + (err.message || 'Unknown error'));

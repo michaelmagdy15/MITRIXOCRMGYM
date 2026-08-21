@@ -8,21 +8,11 @@ import { Button } from '@/components/ui/button';
 import { Calendar, Clock, MapPin, Users as UsersIcon, CheckCircle2, AlertTriangle, Sparkles, ShoppingBag } from 'lucide-react';
 import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-fns';
 
-interface GymClass {
-  id: string;
-  name: string;
-  coachName: string;
-  date: string;          // YYYY-MM-DD
-  time: string;          // e.g. "18:00 - 19:15"
-  branch: string;
-  capacity: number;
-  attendees: string[];   // clientIds
-  type: 'Class' | 'Event';
-  description?: string;
-}
+import { ClassSchedule } from '../types/class';
+
 
 export default function MemberClasses({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: () => void }) {
-  const [classes, setClasses] = useState<GymClass[]>([]);
+  const [classes, setClasses] = useState<ClassSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
@@ -32,72 +22,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   const dateRange = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i - 7));
 
   // Seed default classes/events if the database is empty
-  const seedDemoClasses = async () => {
-    try {
-      const ref = collection(db, 'classes');
-      const snap = await getDocs(ref);
-      if (!snap.empty) return;
-
-      console.log("Seeding group classes and events...");
-      const batch = writeBatch(db);
-      const demoData: Omit<GymClass, 'id'>[] = [
-        {
-          name: "Boxing Fundamentals",
-          coachName: "SHADY YOUSSEF",
-          date: format(addDays(new Date(), 1), 'yyyy-MM-dd'),
-          time: "18:00 - 19:15",
-          branch: client?.branch || "Maadi",
-          capacity: 15,
-          attendees: [],
-          type: "Class",
-          description: "Learn basic stances, punches, and movements. Recommended for beginners."
-        },
-        {
-          name: "Conditioning & Sparring",
-          coachName: "MAHMOUD ALI",
-          date: format(addDays(new Date(), 2), 'yyyy-MM-dd'),
-          time: "19:30 - 21:00",
-          branch: client?.branch || "Maadi",
-          capacity: 12,
-          attendees: [],
-          type: "Class",
-          description: "Heavy conditioning drill followed by supervised light sparring sessions."
-        },
-        {
-          name: "mitrixogymcrm Tournament 2026",
-          coachName: "ALL COACHES",
-          date: format(addDays(new Date(), 5), 'yyyy-MM-dd'),
-          time: "16:00 - 22:00",
-          branch: client?.branch || "Maadi",
-          capacity: 100,
-          attendees: [],
-          type: "Event",
-          description: "Annual amateur boxing cup. Join us for food, music, and epic matches!"
-        },
-        {
-          name: "Ladies Only Boxing Kickoff",
-          coachName: "SARA AHMED",
-          date: format(addDays(new Date(), 3), 'yyyy-MM-dd'),
-          time: "11:00 - 12:30",
-          branch: client?.branch || "Maadi",
-          capacity: 20,
-          attendees: [],
-          type: "Class",
-          description: "Exclusive women-only training focusing on cardiorespiratory endurance."
-        }
-      ];
-
-      demoData.forEach(item => {
-        const newDocRef = doc(collection(db, 'classes'));
-        batch.set(newDocRef, item);
-      });
-
-      await batch.commit();
-    } catch (err) {
-      console.warn("Seeding classes skipped (likely lack of write permissions):", err);
-    }
-  };
-
+  
   useEffect(() => {
     if (!client?.id) {
       setLoading(false);
@@ -107,14 +32,13 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     let unsub: (() => void) | undefined;
 
     const init = async () => {
-      await seedDemoClasses();
-      const q = collection(db, 'classes');
+            const q = collection(db, 'classSchedules');
       unsub = onSnapshot(q, (snapshot) => {
         const list = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
-        } as GymClass));
-        list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+        } as ClassSchedule));
+        list.sort((a, b) => a.startTime.localeCompare(b.startTime));
         setClasses(list);
         setLoading(false);
       }, (err) => {
@@ -144,7 +68,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     }
   }, []);
 
-  const handleToggleBooking = async (gymClass: GymClass) => {
+  const handleToggleBooking = async (gymClass: ClassSchedule) => {
     if (!client || !client.id) return;
     if (client.status === 'Expired') {
       alert("Your membership is expired. You must head to the STRIKE branch to renew before booking classes.");
@@ -153,8 +77,9 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     setActionClassId(gymClass.id);
 
     try {
-      const isBooked = gymClass.attendees.includes(client.id);
-      const action = isBooked ? 'leave' : 'join';
+      const isBooked = (gymClass.attendees || []).includes(client.id);
+      const isWaitlisted = (gymClass.waitlist || []).includes(client.id);
+      const action = (isBooked || isWaitlisted) ? 'leave' : 'join';
 
       // Server-authoritative booking: validates the 1-hour cancellation rule,
       // capacity, package matching, and performs the session math.
@@ -187,7 +112,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   // Filter classes for selected date and client branch
   const filteredClasses = classes.filter(c => {
     try {
-      const isDateMatch = isSameDay(parseISO(c.date), selectedDate);
+      const isDateMatch = isSameDay(parseISO(c.startTime.substring(0, 10)), selectedDate);
       // More flexible branch matching: show class if it has no branch, is 'ALL', matches client's branch, or client has no branch
       // Also normalize branch names (trim, case-insensitive)
       const classBranch = c.branch?.trim();
@@ -210,7 +135,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
       || !clientBranch 
       || classBranch.toLowerCase() === clientBranch.toLowerCase();
     if (isBranchMatch) {
-      const key = c.date;
+      const key = c.startTime.substring(0, 10);
       classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);
     }
   });
@@ -329,18 +254,19 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
           </Card>
         ) : (
           filteredClasses.map(gymClass => {
-            const isBooked = client ? gymClass.attendees.includes(client.id) : false;
-            const isFull = gymClass.attendees.length >= gymClass.capacity;
-            const spotsLeft = Math.max(0, gymClass.capacity - gymClass.attendees.length);
+            const isBooked = client ? (gymClass.attendees || []).includes(client.id) : false;
+            const isWaitlisted = client ? (gymClass.waitlist || []).includes(client.id) : false;
+            const isFull = (gymClass.attendees || []).length >= gymClass.capacity;
+            const spotsLeft = Math.max(0, gymClass.capacity - (gymClass.attendees || []).length);
 
             return (
-              <Card key={gymClass.id} className={`border bg-card/40 hover:bg-card/70 transition-all ${isBooked ? 'border-primary bg-primary/5' : ''}`}>
+              <Card key={gymClass.id} className={`border bg-card/40 hover:bg-card/70 transition-all ${isBooked ? 'border-primary bg-primary/5' : ''} ${isWaitlisted ? 'border-yellow-500 bg-yellow-500/5' : ''}`}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex justify-between items-start">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <Badge variant={gymClass.type === 'Event' ? 'default' : 'secondary'} className="text-[9px] uppercase tracking-wider h-4">
-                          {gymClass.type}
+                        <Badge variant={(gymClass.category === 'Event') ? 'default' : 'secondary'} className="text-[9px] uppercase tracking-wider h-4">
+                          {(gymClass.category || 'Class')}
                         </Badge>
                         <span className="text-[10px] text-primary uppercase font-mono tracking-wider font-bold">
                           {gymClass.branch}
@@ -352,7 +278,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                     <div className="text-right flex flex-col items-end">
                       <div className="flex items-center gap-1 text-xs font-mono font-bold">
                         <Clock className="h-3 w-3 text-muted-foreground" />
-                        {gymClass.time}
+                        {`${new Date(gymClass.startTime).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})} - ${new Date(gymClass.endTime).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}`}
                       </div>
                     </div>
                   </div>
@@ -366,15 +292,20 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                   <div className="flex items-center justify-between border-t pt-2.5 mt-1">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold">
                       <UsersIcon className="h-4 w-4" />
-                      <span>{gymClass.attendees.length} / {gymClass.capacity} Joined</span>
-                      {spotsLeft <= 3 && spotsLeft > 0 && !isBooked && (
+                      <span>{(gymClass.attendees || []).length} / {gymClass.capacity} Joined</span>
+                      {isWaitlisted && (
+                        <Badge variant="outline" className="text-[9px] font-bold text-yellow-600 border-yellow-500 bg-yellow-500/10 ml-2">
+                          Waitlisted (#{(gymClass.waitlist || []).indexOf(client.id) + 1})
+                        </Badge>
+                      )}
+                      {spotsLeft <= 3 && spotsLeft > 0 && !isBooked && !isWaitlisted && (
                         <Badge className="bg-strike-green/10 text-strike-green border-strike-green/25 text-[9px] font-bold">
                           {spotsLeft} spots left!
                         </Badge>
                       )}
                     </div>
 
-                    {isBooked ? (
+                    {isBooked || isWaitlisted ? (
                       <Button
                         size="sm"
                         variant="outline"
@@ -382,16 +313,16 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                         onClick={() => handleToggleBooking(gymClass)}
                         disabled={actionClassId === gymClass.id}
                       >
-                        Leave
+                        {isWaitlisted ? 'Leave Waitlist' : 'Leave'}
                       </Button>
                     ) : (
                       <Button
                         size="sm"
                         className="h-8 text-xs font-bold"
                         onClick={() => handleToggleBooking(gymClass)}
-                        disabled={actionClassId === gymClass.id || (isFull && !isBooked) || client?.status !== 'Active'}
+                        disabled={actionClassId === gymClass.id || client?.status !== 'Active'}
                       >
-                        {isFull ? 'Full' : 'Join Class'}
+                        {isFull ? 'Join Waitlist' : 'Join Class'}
                       </Button>
                     )}
                   </div>

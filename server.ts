@@ -6,7 +6,7 @@ import fs from "fs";
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
-import { registerSqlRoutes } from './src/db/sqlApi.js';
+import { startNoShowJob } from './src/jobs/noShowJob.js';
 
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
@@ -37,6 +37,11 @@ function isRateLimited(ip: string): boolean {
   const entry = rateLimitMap.get(ip);
   if (!entry || now > entry.resetAt) {
     rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    if (rateLimitMap.size > 1000) {
+      for (const [k, v] of rateLimitMap.entries()) {
+        if (now > v.resetAt) rateLimitMap.delete(k);
+      }
+    }
     return false;
   }
   entry.count++;
@@ -66,7 +71,7 @@ async function requirePlatformAdmin(req: express.Request, res: express.Response,
     // For other users, check db-registry-2 for platform_admin or super_admin role
     const centralDb = getFirestore('db-registry-2');
     const userDoc = await centralDb.collection('platform_admins').doc(decodedToken.uid).get();
-    if (userDoc.exists && userDoc.data()?.role === 'platform_admin') {
+    if (userDoc.exists && ['platform_admin', 'super_admin'].includes(userDoc.data()?.role)) {
       (req as any).platformUser = decodedToken;
       return next();
     }
@@ -110,12 +115,18 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
     // tenant resolved for this request. Otherwise any authenticated user could
     // spoof another tenant's host header and read/write that tenant's data.
     const hostname = getRequestHostname(req);
-    const { config: tenantConfig } = await getTenantInfoForHost(hostname);
+    const { config: tenantConfig, status: tenantStatus } = await getTenantInfoForHost(hostname);
+    
+    // Deny requests for unresolvable hosts to prevent cross-tenant auth bypass (C-4)
+    if (tenantStatus === 'not_found') {
+      res.status(403).json({ error: 'Forbidden: Unknown tenant host' });
+      return;
+    }
+
     const resolvedTenantId = tenantConfig?.tenantId;
 
-    // Only enforce membership when a specific tenant was resolved. Hosts that
-    // fall back to the default config (status 'not_found' / shared DB) keep the
-    // legacy shared behavior.
+    // Enforce membership for all authenticated requests (unless it's the superadmin dashboard 
+    // which operates on the registry DB and has no tenantId).
     if (resolvedTenantId) {
       let memberDb;
       try {
@@ -311,14 +322,10 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
 }
 
 function getRequestHostname(req: express.Request): string {
-  const originalHost = req.headers["x-original-host"] || req.headers["x-forwarded-host"];
-  if (originalHost) {
-    const hostStr = Array.isArray(originalHost) ? originalHost[0] : originalHost;
-    if (hostStr) {
-      return (hostStr.split(":")[0] || "").trim();
-    }
+  if (req.hostname) {
+    return req.hostname;
   }
-  return req.hostname || "localhost";
+  return ((req.get("host") || "localhost").split(":")[0] as string);
 }
 
 async function getDbForRequest(req: express.Request) {
@@ -332,6 +339,7 @@ async function getDbForRequest(req: express.Request) {
 
 async function startServer() {
   const app = express();
+  app.set('trust proxy', 1);
   const PORT = Number(process.env.PORT) || 8080;
 
   // Support JSON body parsing
@@ -466,16 +474,7 @@ async function startServer() {
     }
   });
 
-  // Register all PostgreSQL / CockroachDB abstraction routes
-  registerSqlRoutes(
-    app,
-    requireAuth,
-    getRequestHostname,
-    getTenantInfoForHost,
-    getDbForRequest,
-    clientsCache,
-    paymentsCache
-  );
+
 
 
   // Provisioning endpoint for new gym onboarding
@@ -649,7 +648,7 @@ async function startServer() {
       // Reset the password using Admin SDK
       await admin.auth().updateUser(targetUid, { password: DEFAULT_PASSWORD });
       
-      console.log(`[Server] Password reset to default for user: ${targetUid}`);
+      console.log(`[Server] Password reset to default for user.`);
       return res.json({ success: true, message: 'Password has been reset to the default temporary password.' });
     } catch (error) {
       console.error("[Server] Password reset error:", error);
@@ -669,11 +668,9 @@ async function startServer() {
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      const dbId = config?.firestoreDatabaseId || '(default)';
+      const db = await getDbForRequest(req);
       
       const callerUid = (req as any).user.uid;
-      
-      const db = getFirestore(dbId);
       const callerDoc = await db.collection("users").doc(callerUid).get();
       const callerRole = callerDoc.data()?.role || "";
 
@@ -692,7 +689,7 @@ async function startServer() {
       // Update Firestore user document to flag mustChangePassword
       await db.collection("users").doc(targetUserId).update({ mustChangePassword: true });
 
-      console.log(`[Server] Force reset password for user: ${targetUserId} by caller: ${callerUid}`);
+      console.log(`[Server] Force reset password executed.`);
       return res.json({ success: true, message: 'Password has been reset to "12345678".' });
     } catch (error) {
       console.error("[Server] Tenant password reset error:", error);
@@ -710,11 +707,9 @@ async function startServer() {
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      const dbId = config?.firestoreDatabaseId || '(default)';
+      const db = await getDbForRequest(req);
       
       const callerUid = (req as any).user.uid;
-      
-      const db = getFirestore(dbId);
       const callerDoc = await db.collection("users").doc(callerUid).get();
       const callerRole = callerDoc.data()?.role || "";
 
@@ -727,7 +722,14 @@ async function startServer() {
       let userRecord;
       try {
         userRecord = await admin.auth().getUserByEmail(email);
-        console.log(`[Server] Auth account already exists for ${email} with UID: ${userRecord.uid}`);
+        
+        // Prevent cross-tenant overlap (H-6)
+        const existingUserDoc = await db.collection('users').doc(userRecord.uid).get();
+        if (!existingUserDoc.exists) {
+          return res.status(409).json({ error: "This email is already registered with another account on the platform." });
+        }
+        
+        console.log(`[Server] Auth account already exists.`);
       } catch (err: any) {
         if (err.code === 'auth/user-not-found') {
           // Create Firebase Auth user using Admin SDK
@@ -735,7 +737,7 @@ async function startServer() {
             email,
             password
           });
-          console.log(`[Server] Auth account created: ${email} with UID: ${userRecord.uid} by caller: ${callerUid}`);
+          console.log(`[Server] Auth account created.`);
         } else {
           throw err;
         }
@@ -760,11 +762,9 @@ async function startServer() {
     try {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
-      const dbId = config?.firestoreDatabaseId || '(default)';
+      const db = await getDbForRequest(req);
       
       const callerUid = (req as any).user.uid;
-      
-      const db = getFirestore(dbId);
       const callerDoc = await db.collection("users").doc(callerUid).get();
       const callerRole = callerDoc.data()?.role || "";
 
@@ -801,7 +801,7 @@ async function startServer() {
         await db.collection("users").doc(pendingDocId).delete();
       }
 
-      console.log(`[Server] User account activated: ${email} with UID: ${uid}`);
+      console.log(`[Server] User account activated.`);
       return res.json({ success: true, uid });
     } catch (error) {
       console.error("[Server] Tenant activate user error:", error);
@@ -810,7 +810,7 @@ async function startServer() {
   });
 
   // ─── PUBLIC QR Code Check-In Endpoint ───
-  app.post("/api/attendance/qr-checkin", async (req, res) => {
+  app.post("/api/attendance/qr-checkin", requireAuth, async (req, res) => {
     const { qrData, branch } = req.body;
     if (!qrData) {
       return res.status(400).json({ error: "Missing qrData parameter" });
@@ -963,103 +963,66 @@ async function startServer() {
     }
   });
 
-  // ─── PUBLIC Self-Service Password Reset for Members ───
-  // Flow: Member enters ID + Phone (identity verification) + Real Email
-  // Server: Verifies identity → Updates auth email to real email → Saves email to profiles
-  // Client: Calls sendPasswordResetEmail(realEmail) → Firebase sends reset link
-  // Bonus: We collect real member emails for future communications!
-  app.post("/api/self-reset-member-password", async (req, res) => {
-    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
-    if (isRateLimited(clientIp)) {
-      return res.status(429).json({ error: "Too many attempts. Please try again in an hour." });
-    }
-
-    const { memberId, phone, realEmail } = req.body;
-
-    if (!memberId || !phone || !realEmail) {
-      return res.status(400).json({ error: "Please provide your Member ID, phone number, and email address." });
-    }
-
-    const trimmedId = memberId.trim();
-    const trimmedPhone = phone.trim().replace(/\s/g, '');
-    const trimmedEmail = realEmail.trim().toLowerCase();
-
-    // Basic email format check
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      return res.status(400).json({ error: "Please enter a valid email address." });
-    }
-
+  // Server-authoritative endpoint for class booking
+  // Handles capacity checks, waitlist promotion, and prevents double-booking
+  app.post("/api/classes/book", requireAuth, async (req, res) => {
     try {
-      const defaultDb = getFirestore();
-
-      // 1. Look up the client record by memberId
-      const clientsSnap = await defaultDb.collection('clients')
-        .where('memberId', '==', trimmedId)
-        .limit(1)
-        .get();
-
-      if (clientsSnap.empty) {
-        return res.status(404).json({ error: "Member ID not found. Please check and try again." });
+      const { classId, action, clientId } = req.body;
+      if (!classId || !action || !clientId) {
+        return res.status(400).json({ error: "Missing required fields" });
       }
 
-      const clientDoc = clientsSnap.docs[0]!;
-      const clientData = clientDoc.data();
-      const storedPhone = (clientData.phone || '').replace(/\s/g, '');
-
-      // 2. Verify phone number matches
-      if (!storedPhone || storedPhone !== trimmedPhone) {
-        return res.status(403).json({ error: "Phone number does not match our records." });
-      }
-
-      // 3. Find the Firebase Auth user linked to this member
-      const usersSnap = await defaultDb.collection('users')
-        .where('clientRecordId', '==', trimmedId)
-        .limit(1)
-        .get();
-
-      if (usersSnap.empty) {
-        return res.status(404).json({ error: "No portal account found for this Member ID." });
-      }
-
-      const userDoc = usersSnap.docs[0]!;
-      const userUid = userDoc.id;
-
-      // 4. Check if another Firebase Auth user already has this real email
-      try {
-        const existingUser = await admin.auth().getUserByEmail(trimmedEmail);
-        // If a DIFFERENT user has this email, block it
-        if (existingUser.uid !== userUid) {
-          return res.status(409).json({ error: "This email is already associated with another account." });
+      const db = await getDbForRequest(req);
+      const classRef = db.collection("classSchedules").doc(classId);
+      
+      await db.runTransaction(async (transaction) => {
+        const classDoc = await transaction.get(classRef);
+        if (!classDoc.exists) {
+          throw new Error("Class not found");
         }
-      } catch (lookupErr: any) {
-        // auth/user-not-found = email is available, which is what we want
-        if (lookupErr?.code !== 'auth/user-not-found') {
-          throw lookupErr;
+
+        const classData = classDoc.data();
+        let attendees = classData?.attendees || [];
+        let waitlist = classData?.waitlist || [];
+        const capacity = classData?.capacity || 0;
+
+        if (action === 'join') {
+          if (attendees.includes(clientId) || waitlist.includes(clientId)) {
+            throw new Error("Already booked or waitlisted");
+          }
+          if (attendees.length < capacity) {
+            attendees.push(clientId);
+          } else {
+            waitlist.push(clientId);
+          }
+        } else if (action === 'leave') {
+          const attendeeIndex = attendees.indexOf(clientId);
+          if (attendeeIndex > -1) {
+            attendees.splice(attendeeIndex, 1);
+            // Waitlist FIFO Promotion
+            if (waitlist.length > 0) {
+              const promotedId = waitlist.shift();
+              if (promotedId) attendees.push(promotedId);
+            }
+          } else {
+            const waitlistIndex = waitlist.indexOf(clientId);
+            if (waitlistIndex > -1) {
+              waitlist.splice(waitlistIndex, 1);
+            } else {
+              throw new Error("Client not found in attendees or waitlist");
+            }
+          }
+        } else {
+          throw new Error("Invalid action");
         }
-      }
 
-      // 5. Update the Firebase Auth email to the real email
-      await admin.auth().updateUser(userUid, { email: trimmedEmail });
-
-      // 6. Save the real email to the user profile AND client record
-      await defaultDb.collection('users').doc(userUid).update({ 
-        email: trimmedEmail,
-        personalEmail: trimmedEmail,
-        mustChangePassword: true 
-      });
-      await defaultDb.collection('clients').doc(clientDoc.id).update({ 
-        personalEmail: trimmedEmail 
+        transaction.update(classRef, { attendees, waitlist });
       });
 
-      console.log(`[Server] Member ${trimmedId} email updated to ${trimmedEmail}, ready for reset`);
-      return res.json({ 
-        success: true, 
-        email: trimmedEmail,
-        message: 'Identity verified! A password reset link will be sent to your email.' 
-      });
-    } catch (error) {
-      console.error("[Server] Self-service reset error:", error);
-      return res.status(500).json({ error: "Something went wrong. Please try again or contact support." });
+      return res.json({ success: true, message: `Class ${action} successful` });
+    } catch (err: any) {
+      console.error("[Classes Book] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to process booking" });
     }
   });
 
@@ -1179,7 +1142,9 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`[DB] Using Firebase Firestore only - CockroachDB has been removed.`);
+    
+    // Start background jobs
+    startNoShowJob();
   });
 }
 

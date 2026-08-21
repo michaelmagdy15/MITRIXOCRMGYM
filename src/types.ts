@@ -50,10 +50,35 @@ export interface PasswordResetRequest {
   status: 'pending' | 'sent' | 'denied';
 }
 
+export type SessionType = '1-on-1' | 'Partner' | 'Small Group' | 'Class' | 'Nutrition';
+export type SessionStatus = 'Scheduled' | 'Completed' | 'No Show' | 'Rescheduled' | 'Cancelled';
+
 export interface CoachSchedule {
   coachId: string; // userId
-  days: Record<string, { enabled: boolean; startTime: string; endTime: string }>;
+  days: Record<string, { 
+    enabled: boolean; 
+    startTime: string; 
+    endTime: string; 
+    capacities?: Partial<Record<SessionType, number>>;
+  }>;
   updatedAt: string;
+}
+
+export interface Session {
+  id: string;
+  clientId: string;
+  clientName?: string;
+  coachId: string;
+  coachName?: string;
+  type: SessionType;
+  date: string; // ISO string YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  status: SessionStatus;
+  packageId?: string;
+  notes?: string;
+  branch?: Branch;
+  createdAt: string;
 }
 
 export interface ImportBatch {
@@ -351,7 +376,7 @@ export type PaymentId = string;
 export type SessionId = string;
 export type ImportBatchId = string;
 
-export type PrivateSession = PTPackageRecord;
+export type PrivateSession = Session; // Migrating away from PTPackageRecord
 export type Comment = CRMComment;
 export type UserTarget = UserSalesTarget;
 export type ClientUpdates = Partial<Client>;
@@ -429,6 +454,8 @@ export interface FeatureFlags {
   advancedReports?: boolean;
   surveys?: boolean;
   serviceCategoryTargets?: boolean;
+  customMemberProfile?: boolean;
+  classBookingSystem?: boolean;
 }
 
 export interface CallCenterLog {

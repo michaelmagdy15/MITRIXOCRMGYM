@@ -4,12 +4,21 @@ import App from './App.tsx';
 import './index.css';
 import './styles/transitions.css';
 
-// ── Guard 1: Unregister any lingering service workers ──────────────────────
-// PWA was removed; make sure no stale SW serves cached pages to users.
+// ── Guard 1: Register Service Worker for Offline Sync ──────────────────────
+// Re-enabling the PWA service worker to allow offline caching (Background Sync)
+// autoUpdate is configured in vite.config.ts, so this will automatically fetch new versions.
+import { registerSW } from 'virtual:pwa-register';
+
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(registrations => {
-    registrations.forEach(reg => reg.unregister());
-  }).catch(() => { /* ignore — non-critical */ });
+  registerSW({
+    immediate: true,
+    onRegisteredSW(swUrl, r) {
+      console.log(`Service Worker registered: ${swUrl}`);
+    },
+    onRegisterError(error) {
+      console.error('Service Worker registration error', error);
+    },
+  });
 }
 
 // ── Guard 2: bfcache bust ──────────────────────────────────────────────────

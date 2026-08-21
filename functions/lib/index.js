@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkExpiredMemberships = exports.onPaymentUpdated = exports.onClientAssigned = exports.onLeadCreated = exports.metaWebhook = exports.upgradeMemberPackage = exports.forcePasswordReset = void 0;
+exports.processNoShows = exports.onBookingCancelled = exports.checkExpiredMemberships = exports.onPaymentUpdated = exports.onClientAssigned = exports.onLeadCreated = exports.metaWebhook = exports.upgradeMemberPackage = exports.forcePasswordReset = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -340,4 +340,11 @@ exports.checkExpiredMemberships = (0, scheduler_1.onSchedule)({
         logger.error("[checkExpiredMemberships] Error in daily membership expiry scan:", error);
     }
 });
+// -------------------------------------------------------------
+// INZAN ATHLETICS CLASSES
+// -------------------------------------------------------------
+var waitlist_1 = require("./classes/waitlist");
+Object.defineProperty(exports, "onBookingCancelled", { enumerable: true, get: function () { return waitlist_1.onBookingCancelled; } });
+var noShowJob_1 = require("./classes/noShowJob");
+Object.defineProperty(exports, "processNoShows", { enumerable: true, get: function () { return noShowJob_1.processNoShows; } });
 //# sourceMappingURL=index.js.map

@@ -331,7 +331,27 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   }, []);
 
   useEffect(() => {
+    // Expose native scan handler to window so WebView can inject results
+    (window as any).handleNativeScan = (decodedText: string) => {
+      if (handleScanSuccessRef.current) {
+        handleScanSuccessRef.current(decodedText);
+      }
+    };
+    return () => {
+      delete (window as any).handleNativeScan;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isScanning) return;
+
+    // Check if running in Mobile App wrapper
+    if ((window as any).ReactNativeWebView) {
+      (window as any).ReactNativeWebView.postMessage(JSON.stringify({ type: 'START_SCANNER' }));
+      return () => {
+        (window as any).ReactNativeWebView.postMessage(JSON.stringify({ type: 'STOP_SCANNER' }));
+      };
+    }
 
     let isComponentMounted = true;
     let scannerStarted = false; // only true after .start() resolves — guards cleanup
@@ -499,7 +519,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                 <div>
                   <h3 className="text-xl sm:text-2xl font-bold">{t('attendance.ready_to_scan')}</h3>
                   <p className="text-white/60 text-xs sm:text-sm max-w-[280px] mt-2 mx-auto">
-                    {t('attendance.point_camera')}
+                    {(window as any).ReactNativeWebView 
+                      ? 'Uses native device camera for faster scanning.' 
+                      : t('attendance.point_camera')}
                   </p>
                 </div>
                 <Button

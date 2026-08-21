@@ -31,6 +31,7 @@ export default function AdminHub() {
   const [advancedReports, setAdvancedReports] = useState(features.advancedReports === true);
   const [surveys, setSurveys] = useState(features.surveys === true);
   const [serviceCategoryTargets, setServiceCategoryTargets] = useState(features.serviceCategoryTargets === true);
+  const [classBookingSystem, setClassBookingSystem] = useState(features.classBookingSystem === true);
 
   const handleSave = async () => {
     setIsLoading(true);
@@ -51,7 +52,8 @@ export default function AdminHub() {
         complaints,
         advancedReports,
         surveys,
-        serviceCategoryTargets
+        serviceCategoryTargets,
+        classBookingSystem
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -150,13 +152,29 @@ export default function AdminHub() {
                     <Scan className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <div>
-                    <Label className="font-bold text-sm">Attendance & QR Scanner</Label>
+                    <Label className="font-bold text-sm">Attendance Kiosk & Check-ins</Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Enable front-desk webcams and QR code gate validation scanners.
+                      Enable front-desk dashboard and kiosk mode for member entry.
                     </p>
                   </div>
                 </div>
                 <Switch checked={attendance} onCheckedChange={setAttendance} disabled={isLoading} />
+              </div>
+
+              {/* Class Booking System */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-muted rounded-lg mt-0.5">
+                    <Target className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Class Booking System</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Enable the full class scheduling, booking, waitlist, and attendance ecosystem.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={classBookingSystem} onCheckedChange={setClassBookingSystem} disabled={isLoading} />
               </div>
 
               {/* Reports */}

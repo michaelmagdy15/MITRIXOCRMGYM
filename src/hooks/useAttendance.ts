@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
+import { collection, onSnapshot, query, where, getDocs, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { Attendance, Branch, Client, User } from '../types';
 import { addAuditLog } from '../services/auditService';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,24 +9,6 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
   const { effectiveRole } = useAuth();
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const fetchAttendances = useCallback(async () => {
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch('/api/attendance', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAttendances(data.attendances || []);
-      }
-    } catch (err) {
-      console.error('[Attendance] Failed to fetch attendances:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (!currentUser) {
@@ -37,8 +20,17 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       setLoading(false);
       return;
     }
-    fetchAttendances();
-  }, [currentUser, effectiveRole, fetchAttendances]);
+    
+    const unsub = onSnapshot(collection(db, 'attendance'), (snapshot) => {
+      setAttendances(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Attendance)));
+      setLoading(false);
+    }, (error) => {
+      console.error('[Attendance] Failed to fetch attendances:', error);
+      setLoading(false);
+    });
+    
+    return () => unsub();
+  }, [currentUser, effectiveRole]);
 
   const recordAttendance = async (clientId: string, branch: Branch) => {
     if (!currentUser) return;
@@ -52,49 +44,30 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
 
       const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
       
-      const token = await auth.currentUser?.getIdToken();
-
       // Check attendance
-      const attendanceRes = await fetch(`/api/attendance?clientId=${clientId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const attendanceQ = query(collection(db, 'attendance'), where('clientId', '==', clientId));
+      const attendanceSnap = await getDocs(attendanceQ);
       let todayCheckins: any[] = [];
-      if (attendanceRes.ok) {
-        const attData = await attendanceRes.json();
-        todayCheckins = (attData.attendances || []).filter((a: any) => {
-          if (!a.date) return false;
-          try {
-            return new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr;
-          } catch {
-            return false;
+      attendanceSnap.docs.forEach(d => {
+        const a = d.data();
+        if (!a.date) return;
+        try {
+          if (new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr) {
+            todayCheckins.push(a);
           }
-        });
-      }
+        } catch {}
+      });
       const checkinCount = todayCheckins.length;
 
       // Fetch sessions today
-      const sessionsRes = await fetch(`/api/sessions?clientId=${clientId}&date=${cairoDateStr}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      let ptSessionsCount = 0;
-      if (sessionsRes.ok) {
-        const sessionsData = await sessionsRes.json();
-        ptSessionsCount = (sessionsData.sessions || []).filter((s: any) => 
-          s.status === 'Scheduled' || s.status === 'Attended'
-        ).length;
-      }
+      const sessionsQ = query(collection(db, 'sessions'), where('clientId', '==', clientId), where('date', '==', cairoDateStr));
+      const sessionsSnap = await getDocs(sessionsQ);
+      const ptSessionsCount = sessionsSnap.docs.filter(d => d.data().status === 'Scheduled' || d.data().status === 'Attended').length;
 
       // Fetch classes today
-      const classesRes = await fetch(`/api/classes?date=${cairoDateStr}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      let groupClassesCount = 0;
-      if (classesRes.ok) {
-        const classesData = await classesRes.json();
-        groupClassesCount = (classesData.classes || []).filter((c: any) => 
-          (c.attendees || []).includes(clientId)
-        ).length;
-      }
+      const classesQ = query(collection(db, 'classes'), where('date', '==', cairoDateStr));
+      const classesSnap = await getDocs(classesQ);
+      const groupClassesCount = classesSnap.docs.filter(d => (d.data().attendees || []).includes(clientId)).length;
 
       const totalExpectedSessions = Math.max(1, ptSessionsCount + groupClassesCount);
 
@@ -116,14 +89,8 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
         attendanceData.packageName = client.packageType;
       }
 
-      await fetch('/api/attendance/record', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ attendance: attendanceData })
-      });
+      const docRef = doc(collection(db, 'attendance'));
+      await setDoc(docRef, attendanceData);
 
       const packagesCopy = client.packages ? [...client.packages] : [];
       const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
@@ -145,17 +112,8 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       }
 
       if (Object.keys(updateData).length > 0) {
-        await fetch('/api/clients/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id: clientId, updates: updateData })
-        });
+        await updateDoc(doc(db, 'clients', clientId), updateData);
       }
-      
-      await fetchAttendances();
       await addAuditLog('CREATE', 'ATTENDANCE', clientId, `Attendance: ${client.name} at ${branch}`, currentUser?.name);
     } catch (error) {
       console.error('Failed to record attendance', error);

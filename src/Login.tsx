@@ -151,32 +151,29 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
     }
   };
 
-  // Member: Verify identity via server, then send Firebase reset email to their real email
+  // Member: Submit a password reset request for admin approval
   const handleMemberForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!memberForgotId || !memberForgotPhone || !memberForgotEmail) return;
     setIsLoading(true);
     setError('');
     try {
-      // Step 1: Server verifies identity (ID + Phone) and updates auth email
-      const resp = await fetch('/api/self-reset-member-password', {
+      const resp = await fetch('/api/member/request-password-reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           memberId: memberForgotId.trim(), 
           phone: memberForgotPhone.trim(),
-          realEmail: memberForgotEmail.trim()
+          email: memberForgotEmail.trim()
         }),
       });
       const data = await resp.json();
       if (!resp.ok) {
-        throw new Error(data.error || 'Verification failed.');
+        throw new Error(data.error || 'Request failed.');
       }
-      // Step 2: Now that auth email is updated, send Firebase reset email
-      await sendPasswordReset(memberForgotEmail.trim());
       setMemberForgotSubmitted(true);
     } catch (err) {
-      setError((err as Error)?.message || 'Failed to reset password. Please try again.');
+      setError((err as Error)?.message || 'Failed to submit reset request. Please try again.');
     } finally {
       setIsLoading(false);
     }

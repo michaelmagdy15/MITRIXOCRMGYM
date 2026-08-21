@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { db, storage, auth, getTenantId } from '../firebase';
-import { doc, updateDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, getDocs, addDoc, writeBatch } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Flame, Trophy, Camera, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -70,6 +70,13 @@ export default function MemberProfile({ client }: { client: Client | null }) {
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (client) {
+      setName(client.name || '');
+      setPhone(client.phone || '');
+    }
+  }, [client]);
+
   // Password Form State
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -107,19 +114,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
       await uploadBytes(fileRef, compressed, { contentType: 'image/jpeg' });
       const url = await getDownloadURL(fileRef);
       
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        if (token) {
-          await fetch('/api/clients/update', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ id: client.id, updates: { photoURL: url } })
-          });
-        }
-      }
+
 
       const clientRef = doc(db, 'clients', client.id);
       await updateDoc(clientRef, { photoURL: url });
@@ -151,7 +146,10 @@ export default function MemberProfile({ client }: { client: Client | null }) {
         } catch { break; }
       }
       setCurrentStreak(streak);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Error fetching attendance stats:', err);
+      toast.error('Failed to load attendance stats.');
+    });
   }, [client?.id]);
 
   const initials = (client?.name || 'U').split(' ').map(n => n[0] || '').slice(0, 2).join('').toUpperCase();
@@ -170,19 +168,6 @@ export default function MemberProfile({ client }: { client: Client | null }) {
     try {
       const updates = { name: name.trim(), phone: phone.trim() };
       
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        if (token) {
-          await fetch('/api/clients/update', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ id: client.id, updates })
-          });
-        }
-      }
 
       // 1. Update clients collection
       const clientRef = doc(db, 'clients', client.id);
@@ -280,18 +265,21 @@ export default function MemberProfile({ client }: { client: Client | null }) {
         throw new Error("This profile is already linked to your account.");
       }
 
-      // 5. Update current client mutually
+      // 5. Update current and target client mutually in a batch
+      const batch = writeBatch(db);
+      
       const currentClientRef = doc(db, 'clients', client.id);
-      await updateDoc(currentClientRef, {
+      batch.update(currentClientRef, {
         linkedClientIds: [...currentLinks, targetClientId]
       });
 
-      // 6. Update target client mutually
       const targetClientRef = doc(db, 'clients', targetClientId);
       const targetLinks = targetClientData.linkedClientIds || [];
-      await updateDoc(targetClientRef, {
+      batch.update(targetClientRef, {
         linkedClientIds: [...targetLinks, client.id]
       });
+
+      await batch.commit();
 
       // 7. Log to auditLogs
       await addDoc(collection(db, 'auditLogs'), {

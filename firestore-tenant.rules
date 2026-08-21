@@ -152,7 +152,7 @@ service cloud.firestore {
     }
 
     function isSafeUserSelfEdit() {
-      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL', 'clientDocId', 'dismissedNotifications', 'expoPushToken'];
+      let allowed = ['name', 'lastSeen', 'photoURL', 'clientDocId', 'dismissedNotifications', 'expoPushToken'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
              (!('clientDocId' in request.resource.data) || 
               (
@@ -290,20 +290,20 @@ service cloud.firestore {
 
     match /targets/{targetId} {
       allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
-      allow list: if canViewGlobalDashboard() || isSalesRep();
+      allow list: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
       allow write: if canViewGlobalDashboard();
     }
 
     match /userTargets/{targetId} {
       allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.userId == request.auth.uid);
-      allow list: if canViewGlobalDashboard() || isSalesRep();
+      allow list: if canViewGlobalDashboard() || (isSalesRep() && resource.data.userId == request.auth.uid);
       allow write: if canViewGlobalDashboard();
     }
 
     match /payments/{paymentId} {
-      allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
-      allow list: if canViewGlobalDashboard() || isSalesRep();
-      allow create: if isAuthenticated() && isValidPaymentCreate(request.resource.data);
+      allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid) || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow list: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid) || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if (isTenantStaff() || (isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId))) && isValidPaymentCreate(request.resource.data);
       allow update, delete: if canDeletePayments();
     }
 
@@ -314,12 +314,12 @@ service cloud.firestore {
 
     match /auditLogs/{logId} {
       allow read: if canAccessSettings();
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidAuditLog(request.resource.data);
       allow delete: if canAccessSettings();
     }
 
     match /mail/{mailId} {
-      allow create: if true;
+      allow create: if isAuthenticated();
       allow read, update, delete: if isTenantStaff();
     }
 
@@ -339,7 +339,7 @@ service cloud.firestore {
           )
         )
       ));
-      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.portalUserId == request.auth.uid);
+      allow create: if (isTenantStaff() || (isAuthenticated() && request.resource.data.portalUserId == request.auth.uid)) && isValidClient(request.resource.data);
       allow update: if isTenantStaff() || 
                     (isOwnClientRecord(clientId) && isSafeClientSelfEdit()) ||
                     (
@@ -364,11 +364,7 @@ service cloud.firestore {
     match /rewards/{rewardId} {
       allow read: if isAuthenticated();
       allow create: if isTenantStaff();
-      allow update: if isTenantStaff() || (
-        isAuthenticated() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimed']) &&
-        request.resource.data.claimed == resource.data.claimed + 1
-      );
+      allow update: if isTenantStaff();
       allow delete: if isTenantAdmin();
     }
 
@@ -378,7 +374,7 @@ service cloud.firestore {
 
     match /coinsTransactions/{txnId} {
       allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
-      allow create: if isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId);
+      allow create: if isTenantStaff();
       allow update, delete: if isTenantStaff();
     }
 
@@ -396,7 +392,7 @@ service cloud.firestore {
 
     match /memberBadges/{badgeId} {
       allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
-      allow create, update: if isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId);
+      allow create, update: if isTenantStaff();
       allow delete: if isTenantAdmin();
     }
 

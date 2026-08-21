@@ -26,15 +26,30 @@
         "APP_NAME": "STRIKE",
         "PRODUCTION_URL": "https://strike-egy.com"
       }
+    },
+    "production-inzanathletics": {
+      "extends": "production",
+      "env": {
+        "GYM_SUBDOMAIN": "inzanathletics",
+        "APP_NAME": "Inzan",
+        "PRODUCTION_URL": "https://inzanathletics.com"
+      }
     }
   },
   "submit": {
     "production": {
       "ios": {
         "ascAppId": "6782686771"
+      },
+      "android": {
+        "track": "production",
+        "releaseStatus": "completed"
       }
     },
     "production-strike": {
+      "extends": "production"
+    },
+    "production-inzanathletics": {
       "extends": "production"
     }
   }

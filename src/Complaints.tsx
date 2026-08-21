@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
 import { db, auth } from './firebase';
-import { collection, query, onSnapshot, addDoc, updateDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, setDoc, updateDoc, deleteDoc, doc, orderBy, addDoc } from 'firebase/firestore';
 import { Complaint, ComplaintCategory } from './types';
 import { downloadCSV } from './utils/download';
 import { format } from 'date-fns';
@@ -83,24 +83,15 @@ export default function Complaints() {
   const [filterCategory, setFilterCategory] = useState('All');
 
   // ── Firestore listeners ──
-  const fetchComplaints = async () => {
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch('/api/complaints', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setComplaints(data.complaints || []);
-    } catch (error) {
-      console.error('Error fetching complaints:', error);
-      toast.error('Failed to load complaints');
-    }
-  };
-
   useEffect(() => {
-    fetchComplaints();
+    const unsub = onSnapshot(collection(db, 'complaints'), (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Complaint));
+      setComplaints(data);
+    }, (err) => {
+      console.error('Error fetching complaints:', err);
+      toast.error('Failed to load complaints');
+    });
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -167,15 +158,10 @@ export default function Complaints() {
         createdByName: currentUser?.name || '',
       };
 
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/complaints/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ complaint: complaintData })
-      });
-      if (!res.ok) throw new Error('Failed to save');
+      const docRef = doc(collection(db, 'complaints'));
+      complaintData.id = docRef.id;
+      await setDoc(docRef, complaintData);
       
-      setComplaints(prev => [complaintData, ...prev]);
       toast.success('Complaint submitted successfully');
       setAddOpen(false);
       setNewComplaint({ ...defaultNewComplaint });
@@ -196,15 +182,9 @@ export default function Complaints() {
         updates.resolvedAt = new Date().toISOString();
         updates.resolvedBy = currentUser?.name || '';
       }
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/complaints/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: detailComplaint.id, updates })
-      });
-      if (!res.ok) throw new Error('Failed to update');
+      const docRef = doc(db, 'complaints', detailComplaint.id);
+      await updateDoc(docRef, updates);
       
-      setComplaints(prev => prev.map(c => c.id === detailComplaint.id ? { ...c, ...updates } as Complaint : c));
       toast.success('Complaint updated');
       setDetailComplaint(null);
     } catch (err: any) {
@@ -216,15 +196,8 @@ export default function Complaints() {
   const handleDeleteComplaint = async (complaint: Complaint) => {
     if (!window.confirm(`Delete complaint "${complaint.title}"? This cannot be undone.`)) return;
     try {
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/complaints/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: complaint.id })
-      });
-      if (!res.ok) throw new Error('Failed to delete');
+      await deleteDoc(doc(db, 'complaints', complaint.id));
       
-      setComplaints(prev => prev.filter(c => c.id !== complaint.id));
       toast.success('Complaint deleted');
     } catch (err: any) {
       toast.error('Failed to delete: ' + (err.message || 'Unknown error'));

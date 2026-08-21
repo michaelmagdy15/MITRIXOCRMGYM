@@ -147,50 +147,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
   const baseClients = clients;
 
-  // Fetch initial clients from backend cache
-  useEffect(() => {
-    if (getTenantId() !== 'inzanathletics') return;
-    if (!currentUser) return;
-    if (effectiveRole === 'client' || effectiveRole === 'coach') return;
 
-    let active = true;
-    async function loadCache() {
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        if (!token) return;
-
-        const res = await fetch('/api/clients', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        
-        if (!active) return;
-        
-        const allClients = data.clients || [];
-        
-        const activeAndHold = allClients.filter((c: any) => 
-          ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active'].includes(c.status)
-        );
-        const expired = allClients.filter((c: any) => 
-          ['Expired', 'expired'].includes(c.status)
-        );
-
-        setMembersList(activeAndHold);
-        setExpiredMembersList(expired);
-        setExpiredLoaded(true);
-      } catch (err) {
-        console.error('[Clients] Failed to fetch cache:', err);
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-
-    loadCache();
-    return () => { active = false; };
-  }, [currentUser, effectiveRole]);
 
   // 1. Active Members Snapshot Listener (Active, Hold, Nearly Expired)
   useEffect(() => {
@@ -200,9 +157,6 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       return;
     }
 
-    if (getTenantId() === 'inzanathletics') {
-      return;
-    }
 
     const q = query(
       collection(db, 'clients'), 
@@ -228,45 +182,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   const [loadingExpired, setLoadingExpired] = useState(false);
   const [expiredLoaded, setExpiredLoaded] = useState(false);
 
-  const refetchData = useCallback(async () => {
-    if (getTenantId() !== 'inzanathletics') return;
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
 
-      const resClients = await fetch('/api/clients', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (resClients.ok) {
-        const data = await resClients.json();
-        const allClients = data.clients || [];
-        const activeAndHold = allClients.filter((c: any) => 
-          ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active'].includes(c.status)
-        );
-        const expired = allClients.filter((c: any) => 
-          ['Expired', 'expired'].includes(c.status)
-        );
-        setMembersList(activeAndHold);
-        setExpiredMembersList(expired);
-      }
-
-      const resLeads = await fetch('/api/leads', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (resLeads.ok) {
-        const data = await resLeads.json();
-        setLeadsList(data.leads || []);
-      }
-    } catch (err) {
-      console.error('[Clients] Failed to refetch data:', err);
-    }
-  }, [currentUser]);
 
   const fetchExpiredMembers = useCallback(async () => {
-    if (getTenantId() === 'inzanathletics') {
-      setExpiredLoaded(true);
-      return;
-    }
+
     if (expiredLoaded || loadingExpired) return;
     setLoadingExpired(true);
     try {
@@ -286,11 +205,6 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     }
   }, [expiredLoaded, loadingExpired]);
 
-  // Load leads initially for CockroachDB tenant
-  useEffect(() => {
-    if (getTenantId() !== 'inzanathletics' || !currentUser) return;
-    refetchData();
-  }, [currentUser, refetchData]);
 
   // Trigger expired fetch if a search query is entered (so search results find expired members)
   useEffect(() => {
@@ -303,7 +217,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   useEffect(() => {
     if (!currentUser) return;
     if (effectiveRole === 'client' || effectiveRole === 'coach') return;
-    if (getTenantId() === 'inzanathletics') return;
+
 
     const q = query(
       collection(db, 'clients'),
@@ -334,6 +248,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     if (effectiveRole === 'client' || effectiveRole === 'coach') return;
 
     const term = searchTerm.trim();
+    let active = true;
+
     const delayDebounce = setTimeout(async () => {
       try {
         let resultsMap = new Map();
@@ -341,12 +257,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         // Query by phone exact match
         const qPhone = query(collection(db, 'clients'), where('phone', '==', term));
         const phoneSnap = await getDocs(qPhone);
-        phoneSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        if (active) phoneSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
 
         // Query by memberId exact match
         const qMemberId = query(collection(db, 'clients'), where('memberId', '==', term));
         const memberIdSnap = await getDocs(qMemberId);
-        memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        if (active) memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
 
         // Query by name prefix match (capitalized prefix logic)
         const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
@@ -358,20 +274,25 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           limit(30)
         );
         const nameSnap = await getDocs(qName);
-        nameSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        if (active) nameSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
 
-        setSearchResults(
-          Array.from(resultsMap.entries()).map(([id, data]) => ({
-            ...data,
-            id
-          } as Omit<Client, 'comments' | 'interactions'>))
-        );
+        if (active) {
+          setSearchResults(
+            Array.from(resultsMap.entries()).map(([id, data]) => ({
+              ...data,
+              id
+            } as Omit<Client, 'comments' | 'interactions'>))
+          );
+        }
       } catch (error) {
         console.error('Error running on-demand search:', error);
       }
     }, 300);
 
-    return () => clearTimeout(delayDebounce);
+    return () => {
+      active = false;
+      clearTimeout(delayDebounce);
+    };
   }, [currentUser, effectiveRole, searchTerm]);
 
   const fetchClientDetails = async (clientId: string) => {
@@ -509,58 +430,29 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         linkedClientIds,
       };
 
-      // Auto-create portal account
-      if (finalData.memberId) {
-        const uid = await createPortalAccount(finalData.memberId, finalData.name, finalData.phone);
-        if (uid) finalData.portalUserId = uid;
+      const batch = writeBatch(db);
+      batch.set(docRef, finalData);
+
+      // Link siblings bidirectionally and sync sales rep
+      for (const sibling of siblings) {
+        const sibRef = doc(db, 'clients', sibling.id);
+        const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
+        const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
+        
+        if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
+          sibUpdates.salesRep = canonicalRep;
+        }
+        batch.update(sibRef, sibUpdates);
       }
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/clients/add', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id: docRef.id, client: finalData })
-        });
+      await batch.commit();
 
-        // Link siblings bidirectionally and sync sales rep
-        for (const sibling of siblings) {
-          const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
-          const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
-          if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
-            sibUpdates.salesRep = canonicalRep;
-          }
-          await fetch('/api/clients/update', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ id: sibling.id, updates: sibUpdates })
-          });
+      // Auto-create portal account after Firestore write to prevent orphaned accounts
+      if (finalData.memberId) {
+        const uid = await createPortalAccount(finalData.memberId, finalData.name, finalData.phone);
+        if (uid) {
+           await updateDoc(docRef, { portalUserId: uid });
         }
-        refetchData();
-      } else {
-        const batch = writeBatch(db);
-        batch.set(docRef, finalData);
-
-        // Link siblings bidirectionally and sync sales rep
-        for (const sibling of siblings) {
-          const sibRef = doc(db, 'clients', sibling.id);
-          const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
-          const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
-          
-          if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
-            sibUpdates.salesRep = canonicalRep;
-          }
-          batch.update(sibRef, sibUpdates);
-        }
-
-        await batch.commit();
-        await invalidateServerCache();
       }
 
       await addAuditLog(
@@ -571,7 +463,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         currentUser?.name
       );
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'clients');
+      handleFirestoreError(error, OperationType.CREATE, 'clients', true);
     }
   };
 
@@ -618,49 +510,6 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
     }
 
-    if (getTenantId() === 'inzanathletics') {
-      const token = await auth.currentUser?.getIdToken();
-      for (let i = 0; i < validNewClients.length; i++) {
-        try {
-          const client = validNewClients[i];
-          if (!client) continue;
-          const { id, comments, ...clientData } = client;
-
-          if (!clientData.memberId) {
-            clientData.memberId = (nextMemberId++).toString();
-          }
-          if (clientData.paid === undefined) clientData.paid = false;
-
-          const finalId = id || doc(collection(db, 'clients')).id;
-          const finalClient = {
-            ...cleanData(clientData),
-            id: finalId,
-            createdAt: new Date().toISOString(),
-            portalUserId: ''
-          };
-
-          if (finalClient.memberId) {
-            const uid = await createPortalAccount(finalClient.memberId, finalClient.name, finalClient.phone);
-            if (uid) finalClient.portalUserId = uid;
-          }
-
-          await fetch('/api/clients/add', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ id: finalId, client: finalClient })
-          });
-
-          successCount++;
-        } catch (err) {
-          failedCount++;
-          errors.push({ row: i + 1, reason: err instanceof Error ? err.message : 'Unknown error' });
-        }
-      }
-      refetchData();
-    } else {
       let batch = writeBatch(db);
       let operationCount = 0;
 
@@ -684,12 +533,6 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
             portalUserId: ''
           };
 
-          // Auto-create portal account in bulk
-          if (finalClient.memberId) {
-            const uid = await createPortalAccount(finalClient.memberId, finalClient.name, finalClient.phone);
-            if (uid) finalClient.portalUserId = uid;
-          }
-
           batch.set(docRef, finalClient);
           operationCount++;
 
@@ -700,6 +543,14 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           }
 
           successCount++;
+
+          // Auto-create portal account after Firestore write
+          if (finalClient.memberId) {
+            const uid = await createPortalAccount(finalClient.memberId, finalClient.name, finalClient.phone);
+            if (uid) {
+              await updateDoc(docRef, { portalUserId: uid });
+            }
+          }
         } catch (err) {
           failedCount++;
           errors.push({ row: i + 1, reason: err instanceof Error ? err.message : 'Unknown error' });
@@ -709,8 +560,6 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       if (operationCount > 0) {
         await batch.commit();
       }
-      await invalidateServerCache();
-    }
 
     await addAuditLog('CREATE', 'CLIENT', 'bulk', `Bulk imported ${successCount} clients/leads`, currentUser?.name);
     return { success: successCount, failed: failedCount, errors };
@@ -721,9 +570,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       const updateData = { ...updates };
       const existing = baseClients.find(c => c.id === id);
 
-      // Optimistically update local React state so the UI reflects changes
-      // immediately without waiting for the network round-trip. The subsequent
-      // server fetch / refetchData() reconciles with the persisted database state.
+      // Keep references to previous state for rollback
+      const prevMembers = [...membersList];
+      const prevExpired = [...expiredMembersList];
+      const prevLeads = [...leadsList];
+      const prevSearch = [...searchResults];
+
       const applyOptimisticUpdate = () => {
         let updated: Omit<Client, 'comments' | 'interactions'>;
         const merged = baseClients.find(c => c.id === id);
@@ -759,6 +611,13 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       };
 
+      const rollbackOptimisticUpdate = () => {
+        setMembersList(prevMembers);
+        setExpiredMembersList(prevExpired);
+        setLeadsList(prevLeads);
+        setSearchResults(prevSearch);
+      };
+
       // Normalize package name and packageType
       if (updateData.packageType) {
         updateData.packageType = mapOldToNewPackage(updateData.packageType, updateData);
@@ -788,18 +647,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       }
 
-      // Auto-create portal account if they don't have one yet
+      // Check if we need to auto-create portal account later
       const hasNoPortal = !existing?.portalUserId && !updateData.portalUserId;
       const memberId = updateData.memberId || existing?.memberId;
-
-      if (hasNoPortal && memberId) {
-        const uid = await createPortalAccount(
-          memberId,
-          updateData.name || existing?.name || '',
-          updateData.phone || existing?.phone || ''
-        );
-        if (uid) updateData.portalUserId = uid;
-      }
 
       if (existing) {
         if (updateData.sessionsRemaining !== undefined && updateData.packages === undefined) {
@@ -851,35 +701,6 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
       applyOptimisticUpdate();
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/clients/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id, updates: cleanData(updateData) })
-        });
-
-        // Link back and sync sales rep to siblings
-        for (const sibling of siblings) {
-          const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), id]));
-          const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
-          if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
-            sibUpdates.salesRep = canonicalRep;
-          }
-          await fetch('/api/clients/update', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ id: sibling.id, updates: sibUpdates })
-          });
-        }
-        refetchData();
-      } else {
         const batch = writeBatch(db);
         batch.update(doc(db, 'clients', id), cleanData(updateData));
 
@@ -896,71 +717,91 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
 
         await batch.commit();
-        await invalidateServerCache();
+
+      // Auto-create portal account after Firestore write
+      if (hasNoPortal && memberId) {
+        const uid = await createPortalAccount(
+          memberId,
+          updateData.name || existing?.name || '',
+          updateData.phone || existing?.phone || ''
+        );
+        if (uid) {
+           await updateDoc(doc(db, 'clients', id), { portalUserId: uid });
+        }
       }
 
       const clientName = baseClients.find(c => c.id === id)?.name || id;
       addAuditLog('UPDATE', 'CLIENT', id, `Updated client/lead: ${clientName}`, currentUser?.name);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `clients/${id}`);
+      handleFirestoreError(error, OperationType.UPDATE, `clients/${id}`, true);
     }
   };
 
   const deleteClient = async (id: string) => {
     try {
-      const clientName = clients.find(c => c.id === id)?.name || id;
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/clients/delete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id })
-        });
-        refetchData();
-      } else {
-        await deleteDoc(doc(db, 'clients', id));
-        await invalidateServerCache();
+      const client = baseClients.find(c => c.id === id);
+      const clientName = client?.name || id;
+      
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'clients', id));
+      
+      // Clean up dangling linkedClientIds from siblings
+      if (client?.linkedClientIds && client.linkedClientIds.length > 0) {
+        for (const siblingId of client.linkedClientIds) {
+          if (siblingId === id) continue;
+          const sibling = baseClients.find(c => c.id === siblingId);
+          if (sibling) {
+            const sibLinks = (sibling.linkedClientIds || []).filter(lid => lid !== id);
+            batch.update(doc(db, 'clients', siblingId), { 
+              linkedClientIds: sibLinks,
+              linkedAccount: sibLinks.length > 0
+            });
+          }
+        }
       }
+
+      await batch.commit();
+
       await addAuditLog('DELETE', 'CLIENT', id, `Deleted client/lead: ${clientName}`, currentUser?.name);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `clients/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `clients/${id}`, true);
     }
   };
 
   const deleteMultipleClients = async (ids: string[]) => {
     try {
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/clients/delete-multiple', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ ids })
-        });
-        refetchData();
-      } else {
-        let batch = writeBatch(db);
-        let count = 0;
-        for (const id of ids) {
-          batch.delete(doc(db, 'clients', id));
-          count++;
-          if (count === 500) {
-            await batch.commit();
-            batch = writeBatch(db);
-            count = 0;
+      let batch = writeBatch(db);
+      let count = 0;
+      for (const id of ids) {
+        batch.delete(doc(db, 'clients', id));
+        count++;
+
+        const client = baseClients.find(c => c.id === id);
+        if (client?.linkedClientIds && client.linkedClientIds.length > 0) {
+          for (const siblingId of client.linkedClientIds) {
+            if (ids.includes(siblingId) || siblingId === id) continue; // Will be deleted anyway
+            const sibling = baseClients.find(c => c.id === siblingId);
+            if (sibling) {
+              const sibLinks = (sibling.linkedClientIds || []).filter(lid => !ids.includes(lid) && lid !== id);
+              batch.update(doc(db, 'clients', siblingId), { 
+                linkedClientIds: sibLinks,
+                linkedAccount: sibLinks.length > 0
+              });
+              count++;
+            }
           }
         }
-        if (count > 0) await batch.commit();
-        await invalidateServerCache();
+
+        if (count >= 490) { // Keep safe buffer from 500 limit
+          await batch.commit();
+          batch = writeBatch(db);
+          count = 0;
+        }
       }
+      if (count > 0) await batch.commit();
       await addAuditLog('DELETE', 'CLIENT', 'bulk', `Deleted ${ids.length} clients/leads`, currentUser?.name);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, 'clients/bulk');
+      handleFirestoreError(error, OperationType.DELETE, 'clients/bulk', true);
     }
   };
 
@@ -973,25 +814,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         author: commentAuthor,
       };
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/clients/add-comment', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ clientId, comment: commentData })
-        });
-        refetchData();
-      } else {
         await addDoc(collection(db, 'clients', clientId, 'comments'), commentData);
         await updateDoc(doc(db, 'clients', clientId), {
           lastContactDate: new Date().toISOString(),
         });
-      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/comments`);
+      handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/comments`, true);
     }
   };
 
@@ -1013,26 +841,11 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         lastContactDate: interaction.date || new Date().toISOString(),
       });
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/interactions`);
+      handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/interactions`, true);
     }
   };
 
-  const invalidateServerCache = useCallback(async () => {
-    if (getTenantId() !== 'inzanathletics') return;
-    try {
-      if (!currentUser) return;
-      const token = await auth.currentUser?.getIdToken();
-      await fetch('/api/clients/invalidate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      console.log('[Cache] Server cache invalidated successfully.');
-    } catch (err) {
-      console.error('[Cache] Failed to invalidate server cache:', err);
-    }
-  }, [currentUser]);
+
 
   return {
     clients,

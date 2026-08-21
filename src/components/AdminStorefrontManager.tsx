@@ -339,14 +339,14 @@ export default function AdminStorefrontManager() {
 
       {/* Sub-tabs */}
       <Tabs defaultValue="hero" className="space-y-4">
-        <TabsList className="grid grid-cols-7 w-full">
-          <TabsTrigger value="hero" className="text-xs gap-1"><ImageIcon className="h-3 w-3" /> Hero</TabsTrigger>
-          <TabsTrigger value="sections" className="text-xs gap-1"><Layout className="h-3 w-3" /> Sections</TabsTrigger>
-          <TabsTrigger value="schedule" className="text-xs gap-1"><Calendar className="h-3 w-3" /> Schedule</TabsTrigger>
-          <TabsTrigger value="offers" className="text-xs gap-1"><Gift className="h-3 w-3" /> Offers</TabsTrigger>
-          <TabsTrigger value="locations" className="text-xs gap-1"><Map className="h-3 w-3" /> Locations</TabsTrigger>
-          <TabsTrigger value="display" className="text-xs gap-1"><Settings2 className="h-3 w-3" /> Display</TabsTrigger>
-          <TabsTrigger value="text" className="text-xs gap-1"><Type className="h-3 w-3" /> Text & CTA</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto justify-start h-auto flex-nowrap pb-2 gap-1 hide-scrollbar">
+          <TabsTrigger value="hero" className="text-xs gap-1 shrink-0"><ImageIcon className="h-3 w-3" /> Hero</TabsTrigger>
+          <TabsTrigger value="sections" className="text-xs gap-1 shrink-0"><Layout className="h-3 w-3" /> Sections</TabsTrigger>
+          <TabsTrigger value="schedule" className="text-xs gap-1 shrink-0"><Calendar className="h-3 w-3" /> Schedule</TabsTrigger>
+          <TabsTrigger value="offers" className="text-xs gap-1 shrink-0"><Gift className="h-3 w-3" /> Offers</TabsTrigger>
+          <TabsTrigger value="locations" className="text-xs gap-1 shrink-0"><Map className="h-3 w-3" /> Locations</TabsTrigger>
+          <TabsTrigger value="display" className="text-xs gap-1 shrink-0"><Settings2 className="h-3 w-3" /> Display</TabsTrigger>
+          <TabsTrigger value="text" className="text-xs gap-1 shrink-0"><Type className="h-3 w-3" /> Text & CTA</TabsTrigger>
         </TabsList>
 
         {/* ═══════════════════ HERO SLIDES ═══════════════════ */}

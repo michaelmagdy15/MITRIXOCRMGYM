@@ -15,7 +15,7 @@ import NetInfo from '@react-native-community/netinfo';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { requestCameraPermissionsAsync } from 'expo-camera';
+import { CameraView, requestCameraPermissionsAsync } from 'expo-camera';
 
 // ─── Configuration ─────────────────────────────────────────────
 // Single source of truth: app.config.js reads env vars at build time
@@ -80,7 +80,7 @@ function isSafeWebUrl(url) {
   return true;
 }
 
-// ─── Notification Handler ──────────────────────────────────────
+// ─── Notification Handler & Categories ───────────────────────────
 // Configure notification behavior for when the app is in the foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -89,6 +89,33 @@ Notifications.setNotificationHandler({
     shouldSetBadge: true,
   }),
 });
+
+// Configure interactive notification categories (action buttons)
+Notifications.setNotificationCategoryAsync('class_reminder', [
+  {
+    identifier: 'confirm',
+    buttonTitle: 'Confirm Attendance',
+    options: { opensAppToForeground: true },
+  },
+  {
+    identifier: 'cancel',
+    buttonTitle: 'Cancel Booking',
+    options: { opensAppToForeground: true, isDestructive: true },
+  },
+]);
+
+Notifications.setNotificationCategoryAsync('task_assignment', [
+  {
+    identifier: 'view_task',
+    buttonTitle: 'View Task',
+    options: { opensAppToForeground: true },
+  },
+  {
+    identifier: 'complete_task',
+    buttonTitle: 'Mark Complete',
+    options: { opensAppToForeground: true },
+  },
+]);
 
 // ─── Error Boundary ────────────────────────────────────────────
 // Catches render errors and provides a recovery UI instead of white-screen
@@ -142,6 +169,8 @@ function MainApp() {
   const [key, setKey] = useState(0);
   const [expoPushToken, setExpoPushToken] = useState('');
   const [hasLoadedSuccessfully, setHasLoadedSuccessfully] = useState(false);
+  const [hasFailedToLoad, setHasFailedToLoad] = useState(false);
+  const [isNativeScanning, setIsNativeScanning] = useState(false);
 
   // 1. Push Notification Registration (camera is requested on-demand via bridge)
   useEffect(() => {
@@ -161,14 +190,32 @@ function MainApp() {
     // Listener for when a user taps/interacts with a notification — deep link into CRM
     const responseListener = Notifications.addNotificationResponseReceivedListener(
       (response) => {
+        const actionId = response.actionIdentifier;
         const data = response.notification.request.content.data;
-        console.log('[Notification] Tapped:', data);
+        console.log('[Notification] Tapped/Action:', actionId, data);
+
+        let targetUrl = data?.url ? String(data.url) : null;
+
+        // Map notification action buttons to specific deep link paths
+        if (actionId === 'confirm' && data?.classId) {
+          targetUrl = `/member/classes?action=confirm&id=${data.classId}`;
+        } else if (actionId === 'cancel' && data?.classId) {
+          targetUrl = `/member/classes?action=cancel&id=${data.classId}`;
+        } else if (actionId === 'view_task' && data?.taskId) {
+          targetUrl = `/admin/tasks?id=${data.taskId}`;
+        } else if (actionId === 'complete_task' && data?.taskId) {
+          targetUrl = `/admin/tasks?action=complete&id=${data.taskId}`;
+        }
+
+        // Convert relative URLs to absolute based on the tenant's PRODUCTION_URL
+        if (targetUrl && targetUrl.startsWith('/')) {
+          targetUrl = PRODUCTION_URL.replace(/\/$/, '') + targetUrl;
+        }
 
         // Deep link: if the push payload includes a url, navigate the WebView there.
         // Validate the URL scheme + origin first — an attacker-controlled push
         // (the proxy-push endpoint was previously open) could otherwise set
         // location.href = "javascript:..." and execute code in the logged-in CRM.
-        const targetUrl = data?.url ? String(data.url) : null;
         if (targetUrl && isSafeWebUrl(targetUrl) && webViewRef.current) {
           webViewRef.current.injectJavaScript(
             `window.location.href = ${JSON.stringify(targetUrl)}; true;`
@@ -228,6 +275,7 @@ function MainApp() {
 
   // ─── Handlers ──────────────────────────────────────────
   const handleRetry = () => {
+    setHasFailedToLoad(false);
     NetInfo.fetch().then((state) => {
       setIsConnected(state.isConnected !== false);
       setKey((prevKey) => prevKey + 1);
@@ -254,6 +302,25 @@ function MainApp() {
               `window.dispatchEvent(new CustomEvent('nativeCameraPermission', { detail: ${JSON.stringify(status)} })); true;`
             );
           })();
+          break;
+
+        case 'START_SCANNER':
+          // Request permissions and open native scanner
+          (async () => {
+            const { status } = await requestCameraPermissionsAsync();
+            if (status === 'granted') {
+              setIsNativeScanning(true);
+            } else {
+              // Notify web that we couldn't start scanner
+              webViewRef.current?.injectJavaScript(
+                `window.dispatchEvent(new CustomEvent('nativeCameraPermission', { detail: 'denied' })); true;`
+              );
+            }
+          })();
+          break;
+
+        case 'STOP_SCANNER':
+          setIsNativeScanning(false);
           break;
 
         case 'NAVIGATE':
@@ -319,7 +386,9 @@ function MainApp() {
   }
 
   // ─── Offline Full Screen ──────────────────────────────
-  if (!isConnected && !hasLoadedSuccessfully) {
+  // If the WebView attempted to load the PWA (which includes the SW cache)
+  // but failed (no cache, no internet), show the offline blocker.
+  if (hasFailedToLoad && !hasLoadedSuccessfully) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="dark" backgroundColor="#FFFFFF" />
@@ -404,6 +473,7 @@ function MainApp() {
 
           // Handle load errors
           onError={() => {
+            setHasFailedToLoad(true);
             if (!hasLoadedSuccessfully) {
               setIsConnected(false);
             }
@@ -428,6 +498,33 @@ function MainApp() {
             setIsLoading(false);
           }}
         />
+        
+        {isNativeScanning && (
+          <View style={StyleSheet.absoluteFill}>
+            <CameraView 
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              onBarcodeScanned={({ data }) => {
+                // Prevent multiple scans rapidly
+                setIsNativeScanning(false);
+                // Send back to WebView
+                if (webViewRef.current) {
+                  webViewRef.current.injectJavaScript(
+                    `if (typeof window.handleNativeScan === 'function') { window.handleNativeScan(${JSON.stringify(data)}); } true;`
+                  );
+                }
+              }}
+            />
+            {/* Close button for scanner */}
+            <TouchableOpacity 
+              style={styles.closeScannerButton}
+              onPress={() => setIsNativeScanning(false)}
+            >
+              <Text style={styles.closeScannerText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {isLoading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#FF231F" />
@@ -573,5 +670,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
+  },
+  closeScannerButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  closeScannerText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });

@@ -16,7 +16,8 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { UserPerformanceDialog } from './components/UserPerformanceDialog';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
+import { collection, getDocs } from 'firebase/firestore';
 
 export default function Users() {
   const { users, currentUser, updateUser, inviteUser, deleteUser, activatePendingUser, passwordResetRequests, approvePasswordResetRequest, denyPasswordResetRequest } = useAuth();
@@ -115,15 +116,8 @@ export default function Users() {
     }
     setIsSearching(true);
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) throw new Error("No authorization token found");
-      
-      const res = await fetch('/api/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error("Failed to fetch users");
-      const data = await res.json();
-      const allUsers: User[] = data.users || [];
+      const snap = await getDocs(collection(db, 'users'));
+      const allUsers: User[] = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
 
       const results: User[] = [];
       const termLower = term.toLowerCase();

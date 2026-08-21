@@ -28,7 +28,7 @@ export interface FirestoreErrorInfo {
   }
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null, shouldThrow: boolean = false) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -47,7 +47,10 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   }
-  // Log the structured error for debugging — do NOT throw, as this is called from
-  // onSnapshot error callbacks where throwing would crash the component tree.
+  // Log the structured error for debugging
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+
+  if (shouldThrow) {
+    throw error;
+  }
 }

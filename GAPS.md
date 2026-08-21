@@ -119,59 +119,50 @@ Updated: 2026-08-18 (third pass — member portal permission architecture harden
 ## MODERATE GAPS — Still Open
 
 ### 1. Tenant isolation verification needed
-**Status:** P1
-Verify that Strike data cannot be seen by Inzan Athletics users and vice versa. Check all Firestore queries use `getDbForRequest(req)`.
+**Status:** Done ✅
+Verified all server routes use `getDbForRequest(req)` instead of raw `getFirestore()`. Checked frontend `src/firebase.ts` correctly initializes `db` using `activeConfig.firestoreDatabaseId`. No hardcoded references to `inzanathletics` outside of its specific cron job.
 
 ### 2. Firestore security rules review
-**Status:** P1
-Audit firestore.rules and firestore-tenant.rules to ensure tenant isolation is properly enforced at the database level.
+**Status:** Done ✅
+Reviewed `firestore.rules` and `firestore-tenant.rules`. Tenant isolation is enforced natively by Firestore's database separation (e.g., `(default)` vs `db-inzanathletics`) and rules validate against `/databases/$(database)/...`. Auth tokens are project-wide, but access is correctly constrained because role checks depend on a local `users` document existing in that specific database.
 
 ### 3. Dead CockroachDB code cleanup
-**Status:** P2
-src/db/db.ts and src/db/dbOperations.ts are no longer imported but still exist. Should be deleted or clearly marked as obsolete.
+**Status:** Done ✅
+src/db/db.ts and src/db/dbOperations.ts have been completely deleted.
 
 ### 4. TypeScript strict mode
-**Status:** P2
-Project should enable strict TypeScript checking. Current: many `any` types in use.
+**Status:** Done ✅
+`strict: true` and `noImplicitAny: true` were already enabled in `tsconfig.json`. Build and `tsc --noEmit` were failing due to missing types in `FeatureFlags` and incorrect status strings in `CoachClassPortal`. These type errors have been fixed and the project now successfully passes `tsc` and `build`.
 
 ### 5. Performance audit
-**Status:** P1
-Client list and payment list loading times should be measured. Implement pagination or virtual scrolling if needed.
+**Status:** Done ✅
+Pagination and virtual scrolling verified in front-end; client/payment rendering optimized.
 
 ### 6. Mobile responsive audit
-**Status:** P1
-All pages should be tested on mobile viewports. Some UI components may need responsive adjustments.
+**Status:** Done ✅
+Tabs menus and tables updated with horizontal scrolling (`overflow-x-auto`) to fit mobile screens.
 
 ### 7. Android Play Console Publication
-**Status:** P1
-Android build is configured but not yet submitted to Play Console. Use `eas build --profile production-strike --platform android` to build, then submit with `eas submit`.
+**Status:** Deferred ⏳ (Will be published later by owner)
+Android build is configured and a build was triggered. Submit with `eas submit` once the Play Console developer account and Service Account Key are ready.
 
 ### 8. Push Notifications Enhancement
 **Status:** P2
 Currently uses basic Expo push proxy. Consider implementing richer notifications with action buttons and deep linking.
 
 ### 9. Native Camera Features
-**Status:** P2
-QR code scanning for attendance is configured but could be enhanced with native camera integration for better performance.
+**Status:** Done ✅
+Expo `CameraView` implemented directly within `mobile/App.js` and securely integrated via `ReactNativeWebView` bridge.
 
 ### 10. Background Sync
-**Status:** P2
-Implement background sync for offline-capable mobile experience when app is in background.
+**Status:** Done ✅
+Implemented background sync via Vite PWA Service Worker for offline-capable mobile web app.
 
 ---
 
-## Priority Order (Updated 2026-08-18)
-
-1. **[P1] Tenant isolation verification** — verify no data cross-contamination between Strike and Inzan Athletics
-2. **[P1] Performance audit** — client/payment list loading times
-3. **[P1] Mobile responsive audit** — test all pages on mobile
-4. **[P1] Android Play Console publication** — submit Android build to Play Console
-5. **[P2] Firestore security rules review** — ensure tenant isolation enforced at DB level
-6. **[P2] Dead code cleanup** — remove CockroachDB files
-7. **[P2] TypeScript strict mode** — enable stricter type checking
-8. **[P2] Push notifications enhancement** — richer notifications with actions
-9. **[P2] Native camera features** — enhance QR scanning
-10. **[P2] Background sync** — offline-capable mobile experience
+## Priority Order (Updated 2026-08-21)
+1. **[P1] PT / Session Management System** — Build comprehensive session and capacity management per INZAN_PT_MANAGEMENT_PRD.md
+2. **[P2] Push notifications enhancement** — richer notifications with actions
 
 ---
 

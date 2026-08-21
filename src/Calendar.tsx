@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useLanguage } from './contexts/LanguageContext';
 import { db, auth } from './firebase';
-import { collection, onSnapshot, addDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, doc, deleteDoc, writeBatch, getDocs, query } from 'firebase/firestore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
   format, 
@@ -115,14 +115,9 @@ export default function CalendarView() {
 
   const fetchGymClasses = async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch('/api/calendar', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setGymClasses(data.events || []);
+      const snap = await getDocs(query(collection(db, 'calendarEvents')));
+      const events = snap.docs.map(d => ({ ...d.data(), id: d.id } as GymClass));
+      setGymClasses(events);
     } catch (error) {
       console.error("Error loading classes for calendar:", error);
     }
@@ -265,11 +260,7 @@ export default function CalendarView() {
             description: classDescription || undefined
           };
 
-          promises.push(fetch('/api/calendar/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-            body: JSON.stringify({ event: itemData })
-          }));
+          promises.push(setDoc(doc(db, 'calendarEvents', itemData.id), itemData));
         }
         await Promise.all(promises);
       } else {
@@ -285,12 +276,7 @@ export default function CalendarView() {
           type: classType,
           description: classDescription || undefined
         };
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/calendar/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ event: itemData })
-        });
+        await setDoc(doc(db, 'classes', itemData.id), itemData);
       }
       
       // Refresh list
@@ -1065,12 +1051,7 @@ export default function CalendarView() {
                     onClick={async () => {
                       if (window.confirm(language === 'ar' ? 'هل أنت متأكد من إلغاء وحذف هذه الحصة؟' : 'Are you sure you want to cancel and delete this class?')) {
                         try {
-                          const token = await auth.currentUser?.getIdToken();
-                          await fetch('/api/calendar/delete', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                            body: JSON.stringify({ id: selectedClass.id })
-                          });
+                          await deleteDoc(doc(db, 'calendarEvents', selectedClass.id));
                           setSelectedClass(null);
                           fetchGymClasses();
                         } catch (err) {

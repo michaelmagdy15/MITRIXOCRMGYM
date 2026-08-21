@@ -15,7 +15,6 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       VitePWA({
-        selfDestroying: true,   // kills the SW on all users' browsers
         registerType: 'autoUpdate',
         includeAssets: ['pwa-icon.png', 'favicon.png', 'mitrixogymcrmlogo.png'],
         manifest: {
@@ -53,6 +52,8 @@ export default defineConfig(({ mode }) => {
           // Raise precache limit to 5 MB so all split chunks are accepted
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          ignoreURLParametersMatching: [/^cb$/],
+          cleanupOutdatedCaches: true,
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/.*/i,

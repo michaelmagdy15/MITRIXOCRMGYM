@@ -10,11 +10,13 @@ import CoachSchedule from './CoachSchedule';
 import CoachClients from './CoachClients';
 import CoachSessions from './CoachSessions';
 import CoachProfile from './CoachProfile';
+import CoachClassPortal from './CoachClassPortal';
 
-type CoachTab = 'home' | 'schedule' | 'members' | 'sessions' | 'profile';
+type CoachTab = 'home' | 'classes' | 'schedule' | 'members' | 'sessions' | 'profile';
 
 const NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Home',     icon: <Home className="h-5 w-5" /> },
+  { tab: 'classes',  label: 'Classes',  icon: <Users className="h-5 w-5" /> },
   { tab: 'schedule', label: 'Schedule', icon: <Calendar className="h-5 w-5" /> },
   { tab: 'members',  label: 'Members',  icon: <Users className="h-5 w-5" /> },
   { tab: 'sessions', label: 'Sessions', icon: <Dumbbell className="h-5 w-5" /> },
@@ -58,6 +60,7 @@ export default function CoachPortal() {
 
       <main className="flex-1 container mx-auto px-4 py-6 pb-24 max-w-2xl">
         {activeTab === 'home'     && <CoachHome onNavigate={setActiveTab} />}
+        {activeTab === 'classes'  && <CoachClassPortal />}
         {activeTab === 'schedule' && <CoachSchedule />}
         {activeTab === 'members'  && <CoachClients />}
         {activeTab === 'sessions' && <CoachSessions />}

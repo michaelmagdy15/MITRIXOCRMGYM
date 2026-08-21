@@ -367,3 +367,9 @@ export const checkExpiredMemberships = onSchedule(
     }
   }
 );
+
+// -------------------------------------------------------------
+// INZAN ATHLETICS CLASSES
+// -------------------------------------------------------------
+export { onBookingCancelled } from "./classes/waitlist";
+export { processNoShows } from "./classes/noShowJob";

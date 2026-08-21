@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, query, where, getDocs, runTransaction } from 'firebase/firestore';
 import { db, createFirebaseUser, getTenantId, auth } from '../firebase';
 import { Coach, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
@@ -12,24 +12,7 @@ export const useCoaches = () => {
   const [coaches, setCoaches] = useState<Coach[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchCoaches = async () => {
-    if (getTenantId() !== 'inzanathletics') return;
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch('/api/coaches', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCoaches(data.coaches || []);
-      }
-    } catch (err) {
-      console.error('[Coaches] Failed to fetch coaches:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   useEffect(() => {
     if (!currentUser) {
@@ -38,10 +21,7 @@ export const useCoaches = () => {
       return;
     }
 
-    if (getTenantId() === 'inzanathletics') {
-      fetchCoaches();
-      return;
-    }
+
 
     // Members/coaches can't list all coaches — skip the global listener
     if (effectiveRole === 'client' || effectiveRole === 'coach') {
@@ -59,15 +39,22 @@ export const useCoaches = () => {
   }, [currentUser, effectiveRole]);
 
   const generateCoachId = async (): Promise<string> => {
-    const q = query(collection(db, 'users'), where('role', '==', 'coach'));
-    const snap = await getDocs(q);
-    const nums = snap.docs
-      .map(d => (d.data().coachId as string) || '')
-      .filter(id => id.startsWith('COACH-'))
-      .map(id => parseInt(id.split('-')[1] || '0', 10))
-      .filter(n => !isNaN(n));
-    const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
-    return `COACH-${String(maxNum + 1).padStart(3, '0')}`;
+    const counterRef = doc(db, 'counters', 'coaches');
+    try {
+      const nextId = await runTransaction(db, async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+        let currentId = 0;
+        if (counterDoc.exists()) {
+          currentId = counterDoc.data().lastId || 0;
+        }
+        transaction.set(counterRef, { lastId: currentId + 1 }, { merge: true });
+        return currentId + 1;
+      });
+      return `COACH-${String(nextId).padStart(3, '0')}`;
+    } catch (error) {
+      console.error('Error generating coach ID:', error);
+      return `COACH-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+    }
   };
 
   const addCoach = async (coach: Omit<Coach, 'id'>) => {
@@ -75,12 +62,15 @@ export const useCoaches = () => {
       const docId = doc(collection(db, 'coaches')).id;
       const finalCoach: any = { ...coach };
 
+      await setDoc(doc(db, 'coaches', docId), cleanData(finalCoach));
+
       if (coach.active) {
         try {
           const coachId = await generateCoachId();
           const coachNum = coachId.split('-')[1] || '000';
           const firstName = (coach.name || '').split(' ')[0]?.replace(/[^a-zA-Z0-9]/g, '') || 'coach';
-          const email = `coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
+          const tenantPrefix = getTenantId() || 'mitrixogymcrm';
+          const email = `${tenantPrefix}-coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
           const uid = await createFirebaseUser(email, '12345678');
 
           const newUser: User = {
@@ -94,30 +84,15 @@ export const useCoaches = () => {
           };
 
           await setDoc(doc(db, 'users', uid), newUser);
-          finalCoach.userId = uid;
+          await updateDoc(doc(db, 'coaches', docId), { userId: uid });
         } catch (authErr) {
           console.error("Auto coach portal account creation failed:", authErr);
         }
       }
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/coaches/add', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id: docId, coach: cleanData(finalCoach) })
-        });
-        await fetchCoaches();
-      } else {
-        await setDoc(doc(db, 'coaches', docId), cleanData(finalCoach));
-      }
-
       await addAuditLog('CREATE', 'COACH', docId, `Created coach: ${coach.name}`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'coaches');
+      handleFirestoreError(error, OperationType.CREATE, 'coaches', true);
     }
   };
 
@@ -141,13 +116,16 @@ export const useCoaches = () => {
         }
       }
 
+      await updateDoc(doc(db, 'coaches', id), cleanData(updateData));
+
       if (isNowActive && hasNoUser) {
         try {
           const coachId = await generateCoachId();
           const coachNum = coachId.split('-')[1] || '000';
           const coachName = updates.name || existing?.name || '';
           const firstName = coachName.split(' ')[0]?.replace(/[^a-zA-Z0-9]/g, '') || 'coach';
-          const email = `coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
+          const tenantPrefix = getTenantId() || 'mitrixogymcrm';
+          const email = `${tenantPrefix}-coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
           const uid = await createFirebaseUser(email, '12345678');
 
           const newUser: User = {
@@ -161,54 +139,26 @@ export const useCoaches = () => {
           };
 
           await setDoc(doc(db, 'users', uid), newUser);
-          updateData.userId = uid;
+          await updateDoc(doc(db, 'coaches', id), { userId: uid });
         } catch (authErr) {
           console.error("Auto coach portal account creation on update failed:", authErr);
         }
       }
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/coaches/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id, updates: cleanData(updateData) })
-        });
-        await fetchCoaches();
-      } else {
-        await updateDoc(doc(db, 'coaches', id), cleanData(updateData));
-      }
-
       const coachName = coaches.find(c => c.id === id)?.name || id;
       await addAuditLog('UPDATE', 'COACH', id, `Updated coach: ${coachName}`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `coaches/${id}`);
+      handleFirestoreError(error, OperationType.UPDATE, `coaches/${id}`, true);
     }
   };
 
   const deleteCoach = async (id: string) => {
     try {
       const coachName = coaches.find(c => c.id === id)?.name || id;
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/coaches/delete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id })
-        });
-        await fetchCoaches();
-      } else {
         await deleteDoc(doc(db, 'coaches', id));
-      }
       await addAuditLog('DELETE', 'COACH', id, `Deleted coach: ${coachName}`);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `coaches/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `coaches/${id}`, true);
     }
   };
 

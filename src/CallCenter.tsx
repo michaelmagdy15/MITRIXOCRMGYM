@@ -9,7 +9,7 @@ import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
 import { useLanguage } from './contexts/LanguageContext';
 import { db, auth } from './firebase';
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, getDocs, setDoc, doc } from 'firebase/firestore';
 import { Client, CallCenterLog } from './types';
 import { downloadFile } from './utils/download';
 import { format, parseISO } from 'date-fns';
@@ -153,14 +153,11 @@ export default function CallCenter() {
   /* ── Fetch call logs from SQL ── */
   const fetchCallLogs = useCallback(async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch('/api/call-center', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setCallLogs(data.logs || []);
+      const snap = await getDocs(query(collection(db, 'callCenterLog')));
+      const logs = snap.docs.map((d) => ({ ...d.data(), id: d.id } as CallCenterLog));
+      // Sort by createdAt desc locally (if missing index)
+      logs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      setCallLogs(logs);
     } catch (error) {
       console.error('Error fetching call logs:', error);
       toast.error('Failed to load call logs');
@@ -280,16 +277,7 @@ export default function CallCenter() {
         branch: selectedClient.branch || '',
       };
 
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/call-center/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ log: logEntry })
-      });
-      if (!res.ok) throw new Error('Failed to save');
+      await setDoc(doc(db, 'callCenterLog', logEntry.id), logEntry);
       
       // Update local state immediately
       setCallLogs(prev => [logEntry, ...prev]);

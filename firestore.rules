@@ -207,7 +207,7 @@ service cloud.firestore {
     }
 
     function isSafeUserSelfEdit() {
-      let allowed = ['name', 'email', 'lastSeen', 'mustChangePassword', 'photoURL', 'clientDocId', 'dismissedNotifications', 'expoPushToken'];
+      let allowed = ['name', 'lastSeen', 'photoURL', 'clientDocId', 'dismissedNotifications', 'expoPushToken'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
              (!('clientDocId' in request.resource.data) || 
               (
@@ -347,7 +347,7 @@ service cloud.firestore {
     }
 
     match /attendance/{attendanceId} {
-      allow read: if isAuthenticated();
+      allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
       allow write: if ismitrixogymcrmStaff() && isValidAttendance(request.resource.data);
     }
 
@@ -393,11 +393,7 @@ service cloud.firestore {
     match /rewards/{rewardId} {
       allow read: if isAuthenticated();
       allow create: if ismitrixogymcrmStaff();
-      allow update: if ismitrixogymcrmStaff() || (
-        isAuthenticated() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['claimed']) &&
-        request.resource.data.claimed == resource.data.claimed + 1
-      );
+      allow update: if ismitrixogymcrmStaff();
       allow delete: if ismitrixogymcrmAdmin();
     }
 
@@ -445,13 +441,12 @@ service cloud.firestore {
 
     match /auditLogs/{logId} {
       allow read: if canmitrixogymcrmAccessSettings();
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidAuditLog(request.resource.data);
       allow delete: if canmitrixogymcrmAccessSettings();
     }
 
     match /mail/{mailId} {
-      // Members and guests can create mail documents for email triggers
-      allow create: if true;
+      allow create: if isAuthenticated();
       allow read, update, delete: if ismitrixogymcrmStaff();
     }
 
@@ -471,7 +466,7 @@ service cloud.firestore {
           )
         )
       ));
-      allow create: if ismitrixogymcrmStaff() || (isAuthenticated() && request.resource.data.portalUserId == request.auth.uid);
+      allow create: if (ismitrixogymcrmStaff() || (isAuthenticated() && request.resource.data.portalUserId == request.auth.uid)) && isValidClient(request.resource.data);
       allow update: if ismitrixogymcrmStaff() || 
                     (isOwnClientRecord(clientId) && isSafeClientSelfEdit()) ||
                     (
@@ -494,23 +489,20 @@ service cloud.firestore {
       allow read, write: if ismitrixogymcrmStaff();
     }
 
-    match /payments/{paymentId} {
-      allow read, create, update: if ismitrixogymcrmStaff() || ismitrixogymcrmAdmin();
-      allow delete: if canmitrixogymcrmDeletePayments() || ismitrixogymcrmAdmin();
-    }
+
 
     match /packages/{packageId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow write: if ismitrixogymcrmAdmin();
     }
 
     match /coaches/{coachId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow write: if ismitrixogymcrmAdmin();
     }
 
     match /coachSchedules/{coachId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow write: if isOwner(coachId) || ismitrixogymcrmAdmin();
     }
 
@@ -547,12 +539,13 @@ service cloud.firestore {
 
     match /bookingRequests/{requestId} {
       allow read: if ismitrixogymcrmStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId)));
-      allow create: if true;
+      allow create: if isAuthenticated();
       allow update, delete: if ismitrixogymcrmStaff();
     }
 
     match /counters/{counterId} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if ismitrixogymcrmStaff();
     }
 
     match /importBatches/{batchId} {
@@ -677,7 +670,9 @@ service cloud.firestore {
     }
 
     match /match_messages/{msgId} {
-      allow read, write: if isMatchAdmin() || isAuthenticated();
+      allow read: if isMatchAdmin() || (isAuthenticated() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid));
+      allow create: if isMatchAdmin() || (isAuthenticated() && request.resource.data.senderId == request.auth.uid);
+      allow update, delete: if isMatchAdmin() || (isAuthenticated() && resource.data.senderId == request.auth.uid);
     }
 
 
@@ -749,7 +744,7 @@ service cloud.firestore {
 
     match /atpl_testimonials/{testimonialId} {
       allow read: if true;
-      allow write: if isAuthenticated() || isAtplAdmin();
+      allow write: if isAtplAdmin();
     }
 
     match /atpl_access_codes/{codeId} {
@@ -828,7 +823,7 @@ service cloud.firestore {
     }
 
     match /gamen_traffic/{logId} {
-      allow create: if true;
+      allow create: if request.resource.data.keys().hasAll(['path', 'timestamp']);
       allow read, update, delete: if isGamenAdmin();
     }
 

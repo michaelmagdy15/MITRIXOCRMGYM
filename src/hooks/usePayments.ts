@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db, auth, getTenantId } from '../firebase';
 import { Payment, Client, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
 import { addAuditLog } from '../services/auditService';
+import { useAuth } from '../contexts/AuthContext';
 import { resolvePaymentCategory } from '../utils/paymentCategories';
 
 interface UsePaymentsOptions {
@@ -16,40 +17,10 @@ interface UsePaymentsOptions {
 export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaymentsOptions) => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const fetchPayments = useCallback(async () => {
-    if (getTenantId() !== 'inzanathletics') return;
-    if (!currentUser || currentUser.role === 'coach' || currentUser.role === 'client') {
-      setPayments([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-
-      const res = await fetch('/api/payments', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setPayments(data.payments || []);
-    } catch (err) {
-      console.error('[Payments] Failed to fetch payments cache:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentUser]);
+  const { effectiveRole } = useAuth();
 
   useEffect(() => {
-    if (getTenantId() === 'inzanathletics') {
-      fetchPayments();
-      return;
-    }
-
-    if (!currentUser || currentUser.role === 'coach' || currentUser.role === 'client') {
+    if (!currentUser || effectiveRole === 'coach' || effectiveRole === 'client') {
       setPayments([]);
       setLoading(false);
       return;
@@ -67,23 +38,9 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser, fetchPayments]);
+  }, [currentUser]);
 
-  const invalidateCache = async () => {
-    if (getTenantId() !== 'inzanathletics') return;
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      await fetch('/api/payments/invalidate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-    } catch (err) {
-      console.error('[Payments] Failed to invalidate cache:', err);
-    }
-  };
+
 
   const addPayment = async (payment: Omit<Payment, 'id' | 'client_name' | 'amount_paid' | 'created_at' | 'package_category_type' | 'deleted_at'>) => {
     if (!currentUser) return;
@@ -101,26 +58,11 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
         deleted_at: null
       };
 
-      const docId = doc(collection(db, 'payments')).id;
+      const docRef = doc(collection(db, 'payments'));
+      const docId = docRef.id;
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/payments/add', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id: docId, payment: cleanData(paymentData) })
-        });
-      } else {
-        await addDoc(collection(db, 'payments'), cleanData(paymentData));
-      }
+      await setDoc(docRef, cleanData(paymentData));
       await addAuditLog('CREATE', 'PAYMENT', docId, `Recorded payment of ${payment.amount} LE for ${clientName}`, currentUser?.name);
-      
-      // Invalidate cache and trigger reload
-      await invalidateCache();
-      await fetchPayments();
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'payments');
     }
@@ -137,24 +79,8 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
         : id;
       const amount = payment?.amount || 'unknown';
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/payments/delete', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id })
-        });
-      } else {
-        await deleteDoc(doc(db, 'payments', id));
-      }
+      await updateDoc(doc(db, 'payments', id), { deleted_at: new Date().toISOString() });
       await addAuditLog('DELETE', 'PAYMENT', id, `Deleted payment of ${amount} LE for ${clientName}`, currentUser?.name);
-      
-      // Invalidate cache and trigger reload
-      await invalidateCache();
-      await fetchPayments();
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `payments/${id}`);
     }
@@ -168,24 +94,8 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
         ? (clients.find(c => c.id === payment.clientId)?.name || payment.clientId)
         : id;
 
-      if (getTenantId() === 'inzanathletics') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/payments/update', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ id, updates: cleanData(updates) })
-        });
-      } else {
         await updateDoc(doc(db, 'payments', id), cleanData(updates));
-      }
       await addAuditLog('UPDATE', 'PAYMENT', id, `Updated payment for ${clientName}`, currentUser?.name);
-      
-      // Invalidate cache and trigger reload
-      await invalidateCache();
-      await fetchPayments();
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `payments/${id}`);
     }

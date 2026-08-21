@@ -8,7 +8,7 @@
 
 **MitrixoGYM** — a multi-tenant Firebase CRM platform for fitness gyms and fitness studios. Mission: comprehensive member management, staff management, payments, packages, attendance tracking, and guest management for multiple gym brands under a single platform.
 
-**Current state:** v1.0 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics), Firebase Firestore-only backend (CockroachDB removed 2026-08-18), full feature set including clients, leads, payments, packages, coaches, attendance, announcements, and club operations. Member portal permission architecture overhauled 2026-08-19 (commit `028301b`) and rules deployed to production.
+**Current state:** v1.0 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics), Firebase Firestore-only backend (CockroachDB removed 2026-08-18), full feature set including clients, leads, payments, packages, coaches, attendance, announcements, and club operations. Member portal permission architecture overhauled 2026-08-19 (commit `028301b`) and rules deployed to production. Frontend hooks now use native Firestore SDK directly instead of proxying through legacy `/api/*` endpoints.
 
 **Active session (2026-08-19):**
 - Member portal permission architecture fixed — all member-facing auth flows moved to server endpoints, Firestore rules tightened (Gap #5 / C5–C12)

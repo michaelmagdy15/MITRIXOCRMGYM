@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Client, User } from '../types';
+import { Client, User, SessionType, Session } from '../types';
 import { auth, db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { useSessions } from '../hooks/useSessions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { format, parseISO, addDays, isAfter } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -28,7 +29,9 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
   const [loading, setLoading] = useState(true);
 
   // Booking form state
+  const { bookSession, updateSessionStatus, deleteSession } = useSessions();
   const [selectedCoachId, setSelectedCoachId] = useState<string>('');
+  const [sessionType, setSessionType] = useState<SessionType>('1-on-1');
   const [coachSchedule, setCoachSchedule] = useState<Record<string, { enabled: boolean; startTime: string; endTime: string }> | null>(null);
   const [bookingDate, setBookingDate] = useState<string>(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
   const [bookingTime, setBookingTime] = useState<string>('10:00');
@@ -138,34 +141,33 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     setBookingError(null);
 
     try {
-      // Server-authoritative booking: validates schedule, conflicts, and PT
-      // package availability, then creates the session + task + decrements.
       const selectedDateTime = new Date(`${bookingDate}T${bookingTime}`);
       if (selectedDateTime <= new Date()) {
         throw new Error("Please select a future date and time.");
       }
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/sessions/book', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          coachId: selectedCoachId,
-          dateISO: selectedDateTime.toISOString(),
-          message: bookingMessage.trim(),
-          clientId: client.id,
-        })
+      
+      const coach = coaches.find(c => c.id === selectedCoachId);
+      
+      const [hours = 0, minutes = 0] = bookingTime.split(':').map(Number);
+      const endHours = String((hours + 1) % 24).padStart(2, '0');
+      const endTime = `${endHours}:${String(minutes).padStart(2, '0')}`;
+
+      await bookSession({
+        clientId: client.id,
+        clientName: client.name,
+        coachId: selectedCoachId,
+        coachName: coach?.name || 'Unassigned Coach',
+        type: sessionType,
+        date: bookingDate,
+        startTime: bookingTime,
+        endTime,
+        status: 'Scheduled',
+        notes: bookingMessage.trim(),
+        branch: client.branch
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to submit request. Please try again.");
-      }
 
       setBookingSuccess(true);
       setBookingMessage('');
-      // Reset values
       setSelectedCoachId('');
     } catch (err: any) {
       console.error("Error submitting booking request:", err);
@@ -196,29 +198,21 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     setRescheduleError(null);
 
     try {
-      // Server-authoritative reschedule: validates schedule, conflicts,
-      // and the 1-hour rule, then updates the session date + audit log.
       const selectedDateTime = new Date(`${rescheduleDate}T${rescheduleTime}`);
       if (selectedDateTime <= new Date()) {
         throw new Error("Please select a future date and time.");
       }
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/sessions/reschedule', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          sessionId: selectedRescheduleSession.id,
-          dateISO: selectedDateTime.toISOString(),
-          clientId: client.id,
-        })
+      
+      // For rescheduling, since our hook doesn't have a direct reschedule endpoint, we can either
+      // implement a specific function in useSessions, or just delete and re-book, or do updateDoc directly.
+      // Wait, updateSessionStatus just updates status.
+      // It's better to update the document directly.
+      const { updateDoc } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'sessions', selectedRescheduleSession.id), {
+        date: rescheduleDate,
+        startTime: rescheduleTime,
+        status: 'Scheduled'
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to reschedule. Please try again.");
-      }
 
       setSelectedRescheduleSession(null);
     } catch (err: any) {
@@ -229,27 +223,19 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     }
   };
 
-  const handleCancelSession = async (sessionId: string) => {
-    if (!window.confirm("Are you sure you want to cancel this PT session?")) return;
+  const handleCancelSession = async (session: Session) => {
+    const sessionStart = new Date(`${session.date}T${session.startTime}`);
+    const now = new Date();
+    const diffHours = (sessionStart.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    if (diffHours < 24) {
+      alert("Sessions cannot be cancelled less than 24 hours before the start time. Please contact the front desk.");
+      return;
+    }
+
+    if (!window.confirm("Are you sure you want to cancel this session?")) return;
     try {
-      // Server-authoritative cancel: enforces the 1-hour rule and refunds
-      // the PT session to the member's package.
-      const token = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/sessions/cancel', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          sessionId,
-          clientId: client.id,
-        })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to cancel session.");
-      }
+      await updateSessionStatus(session.id, 'Cancelled', client.branch);
     } catch (err: any) {
       console.error("Error cancelling session:", err);
       alert("Failed to cancel session: " + err.message);
@@ -291,6 +277,19 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
         <p className="text-xs text-muted-foreground mt-0.5">View scheduled personal training sessions and book new workouts.</p>
       </div>
 
+      {/* Session Balance */}
+      {client.packages && client.packages.some(p => p.status === 'Active' && p.sessionsRemaining !== undefined) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {client.packages.filter(p => p.status === 'Active' && p.sessionsRemaining !== undefined).map(pkg => (
+            <div key={pkg.id} className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">{pkg.packageName}</span>
+              <span className="text-2xl font-black text-primary my-1">{pkg.sessionsRemaining}</span>
+              <span className="text-[9px] text-muted-foreground">Sessions Remaining</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Book a new session Section */}
       <Card className="border bg-card/40 shadow-sm">
         <CardHeader className="pb-3">
@@ -313,6 +312,22 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                       {coach.name} {coach.branch ? `(${coach.branch})` : ''}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-muted-foreground">Session Type</Label>
+              <Select value={sessionType} onValueChange={(val) => setSessionType(val as SessionType)}>
+                <SelectTrigger className="bg-background">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1-on-1">1-on-1 PT</SelectItem>
+                  <SelectItem value="Partner">Partner Training</SelectItem>
+                  <SelectItem value="Small Group">Small Group</SelectItem>
+                  <SelectItem value="Class">Class</SelectItem>
+                  <SelectItem value="Nutrition">Nutrition</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -414,15 +429,19 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
         </h3>
         {upcomingSessions.length > 0 ? (
           upcomingSessions.map(session => {
-            const dateObj = parseISO(session.date);
+            const dateObj = new Date(`${session.date}T${session.startTime}`);
             const style = STATUS_STYLES[session.status] || { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50', text: 'Scheduled' };
+            
+            const diffHours = (dateObj.getTime() - new Date().getTime()) / (1000 * 60 * 60);
+            const canCancel = diffHours >= 24;
+
             return (
               <Card key={session.id} className="border bg-card/40 hover:bg-card/75 transition-colors shadow-sm">
                 <CardContent className="p-4 flex justify-between items-center gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5 text-sm font-bold">
                       <UserIcon className="h-4 w-4 text-primary" />
-                      <span>{getTrainerName(session.trainerId)}</span>
+                      <span>{getTrainerName(session.coachId)}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground font-semibold">
                       <span className="flex items-center gap-1 font-mono">
@@ -432,6 +451,9 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                       <span className="flex items-center gap-1 font-mono">
                         <Clock className="h-3.5 w-3.5" />
                         {format(dateObj, 'h:mm a')}
+                      </span>
+                      <span className="flex items-center gap-1 font-mono text-primary">
+                         {session.type}
                       </span>
                       {session.branch && (
                         <span className="flex items-center gap-1 uppercase tracking-wider text-[10px] text-primary">
@@ -455,8 +477,8 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         className="text-[10px] text-primary border-primary/20 h-7 font-bold px-2.5"
                         onClick={() => {
                           setSelectedRescheduleSession(session);
-                          setRescheduleDate(format(dateObj, 'yyyy-MM-dd'));
-                          setRescheduleTime(format(dateObj, 'HH:mm'));
+                          setRescheduleDate(session.date);
+                          setRescheduleTime(session.startTime);
                           setRescheduleError(null);
                         }}
                       >
@@ -466,8 +488,10 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         size="xs"
                         variant="outline"
                         type="button"
-                        className="text-[10px] text-muted-foreground border-border hover:bg-secondary hover:text-foreground h-7 font-bold px-2.5"
-                        onClick={() => handleCancelSession(session.id)}
+                        disabled={!canCancel}
+                        title={!canCancel ? "Cannot cancel within 24 hours" : ""}
+                        className="text-[10px] text-muted-foreground border-border hover:bg-secondary hover:text-foreground h-7 font-bold px-2.5 disabled:opacity-50"
+                        onClick={() => handleCancelSession(session)}
                       >
                         Cancel
                       </Button>

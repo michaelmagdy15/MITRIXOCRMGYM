@@ -4,6 +4,7 @@ import { useAuth } from './contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { storage, db, auth } from './firebase';
+import { collection, getDocs, setDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 import { Button } from '@/components/ui/button';
@@ -129,14 +130,10 @@ export default function Settings() {
   const fetchAnnouncements = async () => {
     setLoadingAnnouncements(true);
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch('/api/announcements', { headers });
-      if (response.ok) {
-        const data = await response.json();
-        const list = data.announcements || [];
-        list.sort((a: any, b: any) => (b.priority || 0) - (a.priority || 0));
-        setAnnouncements(list);
-      }
+      const snap = await getDocs(collection(db, 'announcements'));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as AnnouncementRecord));
+      list.sort((a, b) => (b.priority || 0) - (a.priority || 0));
+      setAnnouncements(list);
     } catch (err) {
       console.warn('Could not load announcements:', err);
     } finally {
@@ -163,21 +160,12 @@ export default function Settings() {
         createdBy: currentUser?.email || 'admin',
       };
       
-      const headers = await getAuthHeaders();
-      
       if (editingAnnouncementId) {
-        await fetch('/api/announcements/update', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ id: editingAnnouncementId, updates: data })
-        });
+        await updateDoc(doc(db, 'announcements', editingAnnouncementId), data);
         setEditingAnnouncementId(null);
       } else {
-        await fetch('/api/announcements/add', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ announcement: data })
-        });
+        const docRef = doc(collection(db, 'announcements'));
+        await setDoc(docRef, { id: docRef.id, ...data });
       }
       setAnnouncementForm({ title: '', body: '', imageUrl: '', linkUrl: '', priority: 1, startDate: new Date().toISOString().split('T')[0], endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] });
       await fetchAnnouncements();
@@ -191,12 +179,7 @@ export default function Settings() {
   const handleDeleteAnnouncement = async (id: string) => {
     if (!window.confirm('Delete this announcement?')) return;
     try {
-      const headers = await getAuthHeaders();
-      await fetch('/api/announcements/delete', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ id })
-      });
+      await deleteDoc(doc(db, 'announcements', id));
       setAnnouncements(prev => prev.filter(a => a.id !== id));
     } catch (err) {
       console.error('Failed to delete announcement:', err);

@@ -18,7 +18,7 @@ import { Toaster } from 'sonner';
 import Dashboard from './Dashboard';
 import Leads from './Leads';
 import Clients from './Clients';
-import CalendarView from './Calendar';
+import AdminScheduleView from './components/AdminScheduleView';
 import Payments from './Payments';
 import PTPackages from './PTPackages';
 import Attendance from './Attendance';
@@ -32,8 +32,9 @@ import HelpPage from './HelpPage';
 import Debtors from './Debtors';
 import UnconfirmedMemberships from './UnconfirmedMemberships';
 import Bookings from './Bookings';
+import { InzanClassManager } from './components/InzanClassManager';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star } from 'lucide-react';
+import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -590,50 +591,6 @@ function AppContent() {
     );
   }
 
-  const isSyncingData = false;
-
-  if (isSyncingData) {
-    const isInzan = getTenantId() === 'inzanathletics';
-    return (
-      <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.08)_0%,transparent_65%)] pointer-events-none" />
-        
-        <div className="relative flex flex-col items-center z-10 p-8 rounded-2xl bg-zinc-950/40 border border-white/5 backdrop-blur-xl max-w-sm w-full text-center shadow-2xl">
-          <div className="h-14 w-14 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/20 mb-6 relative">
-            <Activity className="h-6 w-6 text-amber-500 animate-pulse" />
-            <div className="absolute inset-0 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
-          </div>
-          
-          <h2 className="text-lg font-bold text-white mb-2">
-            {isInzan ? 'Syncing SQL Database' : 'Loading CRM Data'}
-          </h2>
-          <p className="text-xs text-zinc-400 leading-relaxed mb-6">
-            {isInzan 
-              ? 'Connecting to CockroachDB and pulling the latest member accounts and payment transactions...'
-              : 'Syncing latest client profiles, package information, and financial records...'}
-          </p>
-          
-          {/* Animated loading progress bar */}
-          <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden border border-white/5 relative">
-            <div className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full absolute left-0 w-1/3 animate-[slideProgress_2s_infinite_ease-in-out]" />
-          </div>
-          
-          <span className="text-[10px] tracking-[0.2em] text-zinc-500 uppercase mt-4 font-bold block animate-pulse">
-            Pulling secure data...
-          </span>
-        </div>
-
-        <style>{`
-          @keyframes slideProgress {
-            0% { left: -35%; }
-            50% { left: 100%; }
-            100% { left: -35%; }
-          }
-        `}</style>
-      </div>
-    );
-  }
-
   const isPlatformAdmin = PLATFORM_ADMIN_EMAILS.includes(currentUser?.email?.toLowerCase());
 
   const navItems = [
@@ -651,6 +608,12 @@ function AppContent() {
       label: 'Bookings',
       icon: ShoppingCart,
       show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'rep')
+    },
+    {
+      id: 'class-manager',
+      label: 'Class Manager',
+      icon: Target,
+      show: features.classBookingSystem === true && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
     },
     { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: effectiveRole !== 'admin' },
     {
@@ -1159,12 +1122,18 @@ function AppContent() {
             </TabsContent>
 
             <TabsContent value="calendar" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <CalendarView />
+              <AdminScheduleView />
             </TabsContent>
 
             <TabsContent value="bookings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <Bookings />
             </TabsContent>
+
+            {features.classBookingSystem === true && (
+              <TabsContent value="class-manager" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <InzanClassManager />
+              </TabsContent>
+            )}
 
             {currentUser.role !== 'admin' && (
               <TabsContent value="tasks" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">

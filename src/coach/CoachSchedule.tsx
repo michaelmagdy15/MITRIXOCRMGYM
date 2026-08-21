@@ -9,7 +9,16 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Save, Calendar } from 'lucide-react';
+import { Save, Calendar, Users, Target, UserPlus, FileHeart } from 'lucide-react';
+import { SessionType } from '../types';
+
+const SESSION_TYPES: { key: SessionType; label: string; icon: any }[] = [
+  { key: '1-on-1', label: '1-on-1', icon: Target },
+  { key: 'Partner', label: 'Partner', icon: UserPlus },
+  { key: 'Small Group', label: 'Small Group', icon: Users },
+  { key: 'Class', label: 'Class', icon: Users },
+  { key: 'Nutrition', label: 'Nutrition', icon: FileHeart },
+];
 
 const DAYS = [
   { key: 'monday',    label: 'Monday' },
@@ -22,7 +31,21 @@ const DAYS = [
 ];
 
 const DEFAULT_SCHEDULE: CoachScheduleType['days'] = Object.fromEntries(
-  DAYS.map(d => [d.key, { enabled: d.key !== 'sunday', startTime: '09:00', endTime: '21:00' }])
+  DAYS.map(d => [
+    d.key, 
+    { 
+      enabled: d.key !== 'sunday', 
+      startTime: '09:00', 
+      endTime: '21:00',
+      capacities: {
+        '1-on-1': 1,
+        'Partner': 2,
+        'Small Group': 5,
+        'Class': 15,
+        'Nutrition': 1
+      }
+    }
+  ])
 );
 
 export default function CoachSchedule() {
@@ -54,6 +77,19 @@ export default function CoachSchedule() {
     setSchedule(prev => ({
       ...prev,
       [day]: { ...prev[day]!, [field]: value },
+    }));
+  };
+
+  const updateCapacity = (day: string, type: SessionType, value: number) => {
+    setSchedule(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day]!,
+        capacities: {
+          ...(prev[day]?.capacities || {}),
+          [type]: value
+        }
+      }
     }));
   };
 
@@ -94,7 +130,7 @@ export default function CoachSchedule() {
 
       <div className="grid gap-3">
         {DAYS.map(({ key, label }) => {
-          const day = schedule[key] ?? { enabled: false, startTime: '09:00', endTime: '21:00' };
+          const day = (schedule[key] ?? DEFAULT_SCHEDULE[key])!;
           return (
             <Card key={key} className={`transition-opacity ${day.enabled ? '' : 'opacity-50'}`}>
               <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center gap-4">
@@ -109,28 +145,51 @@ export default function CoachSchedule() {
                 </div>
 
                 {day.enabled ? (
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
-                      <Input
-                        type="time"
-                        value={day.startTime}
-                        onChange={e => updateDay(key, 'startTime', e.target.value)}
-                        className="w-32"
-                      />
+                  <div className="flex-1 flex flex-col">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
+                        <Input
+                          type="time"
+                          value={day.startTime}
+                          onChange={e => updateDay(key, 'startTime', e.target.value)}
+                          className="w-32"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
+                        <Input
+                          type="time"
+                          value={day.endTime}
+                          onChange={e => updateDay(key, 'endTime', e.target.value)}
+                          className="w-32"
+                        />
+                      </div>
+                      <Badge variant="secondary" className="ml-auto text-xs hidden md:flex">
+                        {day.startTime} – {day.endTime}
+                      </Badge>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
-                      <Input
-                        type="time"
-                        value={day.endTime}
-                        onChange={e => updateDay(key, 'endTime', e.target.value)}
-                        className="w-32"
-                      />
+                    
+                    {/* Capacities */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4 border-t pt-4">
+                      {SESSION_TYPES.map(type => {
+                        const Icon = type.icon;
+                        return (
+                          <div key={type.key} className="flex flex-col gap-1.5">
+                            <Label className="text-[10px] text-muted-foreground flex items-center gap-1">
+                              <Icon className="h-3 w-3" /> {type.label}
+                            </Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={day.capacities?.[type.key] ?? 0}
+                              onChange={e => updateCapacity(key, type.key, parseInt(e.target.value) || 0)}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
-                    <Badge variant="secondary" className="ml-auto text-xs">
-                      {day.startTime} – {day.endTime}
-                    </Badge>
                   </div>
                 ) : (
                   <span className="text-sm text-muted-foreground italic">Off</span>

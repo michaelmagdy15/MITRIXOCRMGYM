@@ -45,21 +45,24 @@ export const useAuditLogs = (currentUser: User | null, params: AuditLogQueryPara
         ? egyptDayBoundary(params.dateTo, true)
         : formatISO(new Date());
 
-      const token = await auth.currentUser?.getIdToken();
-      const url = new URL('/api/audit-logs', window.location.origin);
-      url.searchParams.append('fromISO', fromISO);
-      url.searchParams.append('toISO', toISO);
-      url.searchParams.append('limit', MAX_FETCH.toString());
-      if (params.entityId) url.searchParams.append('entityId', params.entityId);
-
-      const res = await fetch(url.toString(), {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setAuditLogs(data.auditLogs || []);
+      const { collection, query, where, orderBy, limit, getDocs } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
+      
+      let q = query(
+        collection(db, 'auditLogs'),
+        where('timestamp', '>=', fromISO),
+        where('timestamp', '<=', toISO),
+        orderBy('timestamp', 'desc'),
+        limit(MAX_FETCH)
+      );
+      
+      if (params.entityId) {
+        q = query(q, where('entityId', '==', params.entityId));
       }
+
+      const snap = await getDocs(q);
+      const data = snap.docs.map(d => ({ ...d.data(), id: d.id })) as AuditLog[];
+      setAuditLogs(data);
     } catch (error) {
       console.error('Failed to fetch audit logs:', error);
       handleFirestoreError(error, OperationType.LIST, 'auditLogs');

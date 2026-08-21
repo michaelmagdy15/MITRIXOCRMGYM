@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { BrandingSettings, SalesTarget, Branch, FeatureFlags, StorefrontConfig } from '../types';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase';
 import { addAuditLog } from '../services/auditService';
+import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 
 const DEFAULT_ACCENT = '#1a1a1a';
@@ -169,18 +170,21 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     }
   }, []);
 
-  // Branding — load or subscribe to branding settings
-  const fetchSettings = useCallback(async () => {
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (isAuthenticated && auth.currentUser) {
-        const token = await auth.currentUser.getIdToken();
-        headers['Authorization'] = `Bearer ${token}`;
+  useEffect(() => {
+    let active = true;
+    const safetyTimeout = setTimeout(() => {
+      if (active) {
+        console.warn('Branding load safety timeout triggered');
+        setIsBrandingLoaded(true);
       }
+    }, 2500);
 
-      const response = await fetch('/api/settings', { headers });
-      const data = await response.json();
-      const settings = data.settings || {};
+    const unsubscribe = onSnapshot(collection(db, 'settings'), (snap) => {
+      clearTimeout(safetyTimeout);
+      const settings: any = {};
+      snap.forEach(d => {
+        settings[d.id] = d.data();
+      });
 
       if (settings.branding) {
         applyBrandAccent(settings.branding.brandAccentColor);
@@ -203,49 +207,21 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
           setSalesTarget(prev => ({ ...prev, ...settings['sales-target'] }));
         }
       }
-    } catch (err: any) {
+    }, (err) => {
       console.error('Could not load settings:', err);
       setIsBrandingLoaded(true);
-    }
-  }, [isAuthenticated, role, preloadBrandingLogo]);
-
-  useEffect(() => {
-    let active = true;
-    const safetyTimeout = setTimeout(() => {
-      if (active) {
-        console.warn('Branding load safety timeout triggered');
-        setIsBrandingLoaded(true);
-      }
-    }, 2500);
-
-    fetchSettings().finally(() => {
       clearTimeout(safetyTimeout);
     });
-
-    let interval: ReturnType<typeof setInterval>;
-    if (isAuthenticated && role !== 'client') {
-      interval = setInterval(fetchSettings, 30000);
-    }
 
     return () => {
       active = false;
       clearTimeout(safetyTimeout);
-      if (interval) clearInterval(interval);
+      unsubscribe();
     };
-  }, [fetchSettings, isAuthenticated, role]);
+  }, [isAuthenticated, role, preloadBrandingLogo]);
 
   const updateSetting = async (id: string, updates: any) => {
-    let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (auth.currentUser) {
-      const token = await auth.currentUser.getIdToken();
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    const res = await fetch('/api/settings/update', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ id, updates })
-    });
-    if (!res.ok) throw new Error(`Failed to update ${id}`);
+    await setDoc(doc(db, 'settings', id), updates, { merge: true });
   };
 
   const updateBranding = useCallback(async (updates: Partial<BrandingSettings>) => {

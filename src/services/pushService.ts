@@ -87,6 +87,7 @@ export async function sendPushNotification(expoPushToken: string, title: string,
           title: finalTitle,
           body,
           data,
+          categoryId: data?.categoryId || undefined
         }]
       }),
     });
@@ -122,7 +123,8 @@ export async function notifyAdmins(title: string, body: string, data?: any) {
       sound: 'default',
       title,
       body,
-      data
+      data,
+      categoryId: data?.categoryId || undefined
     }));
 
     // Route through the authenticated /api/proxy-push relay (consistent with all other
@@ -209,7 +211,8 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
         sound: 'default',
         title,
         body,
-        data
+        data,
+        categoryId: data?.categoryId || undefined
       }));
 
       const response = await fetch('/api/proxy-push', {

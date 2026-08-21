@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from './context';
 import { db, auth } from './firebase';
-import { collection, onSnapshot, doc, updateDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, query, where, getDocs, setDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -68,14 +68,8 @@ export default function Bookings() {
   // Fetch booking requests
   const fetchBookingRequests = async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch('/api/booking-requests', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const list = data.bookingRequests || [];
+      const snap = await getDocs(collection(db, 'booking_requests'));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
       list.sort((a: any, b: any) => b.createdAt.localeCompare(a.createdAt));
       setRequests(list);
       setLoading(false);
@@ -140,21 +134,13 @@ export default function Bookings() {
 
       // 1. Update the client's profile details on the spot
       if (selectedRequest.clientId && selectedRequest.clientId !== 'GUEST-LEAD') {
-        const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/clients/update-from-booking', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({
-            id: selectedRequest.clientId,
-            fields: {
-              name: clientName,
-              phone: clientPhone,
-              branch: clientBranch,
-              gender: clientGender,
-              status: 'Active',
-              lastContactDate: new Date().toISOString()
-            }
-          })
+        await updateDoc(doc(db, 'clients', selectedRequest.clientId), {
+          name: clientName,
+          phone: clientPhone,
+          branch: clientBranch,
+          gender: clientGender,
+          status: 'Active',
+          lastContactDate: new Date().toISOString()
         });
       }
 
@@ -192,29 +178,17 @@ export default function Bookings() {
       }
 
       // 3. Mark the booking request as Approved
-      const token = await auth.currentUser?.getIdToken();
-      await fetch('/api/booking-requests/update-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: selectedRequest.id, status: 'Approved' })
-      });
+      await updateDoc(doc(db, 'booking_requests', selectedRequest.id), { status: 'Approved' });
 
       // 4. Create an automatic Follow Up task
-      await fetch('/api/tasks/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({
-          task: {
-            id: crypto.randomUUID(),
-            title: `Follow up with ${clientName}`,
-            description: `Follow up on recently activated package. Ensure everything is smooth.`,
-            dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            assignedTo: salesRepId,
-            status: 'Pending',
-            type: 'Follow Up',
-            createdAt: new Date().toISOString()
-          }
-        })
+      await setDoc(doc(db, 'tasks', crypto.randomUUID()), {
+        title: `Follow up with ${clientName}`,
+        description: `Follow up on recently activated package. Ensure everything is smooth.`,
+        dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        assignedTo: salesRepId,
+        status: 'Pending',
+        type: 'Follow Up',
+        createdAt: new Date().toISOString()
       });
 
       fetchBookingRequests();
@@ -247,30 +221,18 @@ export default function Bookings() {
 
     try {
       // 1. Mark the booking request as Rejected
-      const token = await auth.currentUser?.getIdToken();
-      await fetch('/api/booking-requests/update-status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ id: rejectingRequest.id, status: 'Rejected' })
-      });
+      await updateDoc(doc(db, 'booking_requests', rejectingRequest.id), { status: 'Rejected' });
 
       // 2. Add a follow-up task
       if (salesRepId) {
-        await fetch('/api/tasks/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({
-            task: {
-              id: crypto.randomUUID(),
-              title: `Follow up with ${rejectingRequest.clientName} regarding rejected request`,
-              description: `Reason: ${rejectReason}`,
-              dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              assignedTo: salesRepId,
-              status: 'Pending',
-              type: 'Follow Up',
-              createdAt: new Date().toISOString()
-            }
-          })
+        await setDoc(doc(db, 'tasks', crypto.randomUUID()), {
+          title: `Follow up with ${rejectingRequest.clientName} regarding rejected request`,
+          description: `Reason: ${rejectReason}`,
+          dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          assignedTo: salesRepId,
+          status: 'Pending',
+          type: 'Follow Up',
+          createdAt: new Date().toISOString()
         });
       }
       
