@@ -8,6 +8,14 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 import { startNoShowJob } from './src/jobs/noShowJob.js';
 
+declare global {
+  namespace Express {
+    interface Request {
+      user?: any;
+    }
+  }
+}
+
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
   admin.initializeApp();
@@ -1023,6 +1031,330 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Classes Book] Error:", err);
       return res.status(500).json({ error: err.message || "Failed to process booking" });
+    }
+  });
+
+  // Server-authoritative endpoint for PT/Session booking
+  app.post("/api/sessions/book", requireAuth, async (req, res) => {
+    try {
+      const { sessionData } = req.body;
+      if (!sessionData || !sessionData.coachId || !sessionData.clientId || !sessionData.date || !sessionData.startTime || !sessionData.type) {
+        return res.status(400).json({ error: "Missing required session fields" });
+      }
+
+      const db = await getDbForRequest(req);
+      
+      const newSessionRef = db.collection("sessions").doc();
+      const coachRef = db.collection("coachSchedules").doc(sessionData.coachId);
+      const clientRef = db.collection("clients").doc(sessionData.clientId);
+
+      const existingSessionsQuery = db.collection("sessions")
+        .where("coachId", "==", sessionData.coachId)
+        .where("date", "==", sessionData.date)
+        .where("startTime", "==", sessionData.startTime)
+        .where("type", "==", sessionData.type)
+        .where("status", "in", ["Scheduled", "Completed", "No Show"]);
+
+      await db.runTransaction(async (transaction) => {
+        const coachDoc = await transaction.get(coachRef);
+        const clientDoc = await transaction.get(clientRef);
+        const existingSnap = await transaction.get(existingSessionsQuery);
+
+        if (!coachDoc.exists) throw new Error("Coach schedule not found");
+        if (!clientDoc.exists) throw new Error("Client not found");
+
+        const coachSchedule = coachDoc.data()?.days || {};
+        const dateObj = new Date(sessionData.date);
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+        const dayOfWeek = days[dateObj.getDay()] as typeof days[number];
+        
+        const dayConfig = coachSchedule[dayOfWeek];
+        if (!dayConfig || !dayConfig.enabled) {
+          throw new Error("Coach is not available on this day");
+        }
+
+        const capacity = dayConfig.capacities?.[sessionData.type] || 0;
+        if (capacity === 0) {
+          throw new Error(`Coach does not offer ${sessionData.type} sessions on this day`);
+        }
+
+        if (existingSnap.docs.length >= capacity) {
+          throw new Error(`This time slot is fully booked for ${sessionData.type} sessions`);
+        }
+
+        const client = clientDoc.data()!;
+        let packageToDeduct = null;
+        let packageIdToUse = sessionData.packageId || null;
+        let rootSessionsToDeduct = false;
+
+        const packagesCopy = client.packages ? [...client.packages] : [];
+        if (packageIdToUse) {
+           const pkgIdx = packagesCopy.findIndex((p: any) => p.id === packageIdToUse && p.status === 'Active');
+           if (pkgIdx !== -1 && typeof packagesCopy[pkgIdx].sessionsRemaining === 'number' && packagesCopy[pkgIdx].sessionsRemaining > 0) {
+             packageToDeduct = pkgIdx;
+           } else {
+             throw new Error("Selected package is invalid or has no sessions remaining");
+           }
+        } else {
+           // Find any active package
+           const pkgIdx = packagesCopy.findIndex((p: any) => p.status === 'Active' && typeof p.sessionsRemaining === 'number' && p.sessionsRemaining > 0);
+           if (pkgIdx !== -1) {
+             packageToDeduct = pkgIdx;
+             packageIdToUse = packagesCopy[pkgIdx].id;
+           } else if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+             rootSessionsToDeduct = true;
+           } else {
+             throw new Error("Client has no sessions remaining in active packages");
+           }
+        }
+
+        const updateData: any = {};
+        if (packageToDeduct !== null) {
+          packagesCopy[packageToDeduct].sessionsRemaining -= 1;
+          updateData.packages = packagesCopy;
+        } else if (rootSessionsToDeduct) {
+          updateData.sessionsRemaining = client.sessionsRemaining - 1;
+        }
+
+        const newSession = {
+          ...sessionData,
+          packageId: packageIdToUse,
+          status: 'Scheduled',
+          createdAt: new Date().toISOString()
+        };
+
+        if (Object.keys(updateData).length > 0) {
+          transaction.update(clientRef, updateData);
+        }
+        transaction.set(newSessionRef, newSession);
+        
+        transaction.set(db.collection("auditLogs").doc(), {
+          action: "CREATE",
+          entityType: "SESSION",
+          entityId: newSessionRef.id,
+          details: `Booked ${sessionData.type} session for ${sessionData.date} at ${sessionData.startTime}`,
+          timestamp: new Date().toISOString(),
+          userId: req.user?.uid || "system",
+          userName: req.user?.email || "System API"
+        });
+      });
+
+      return res.json({ success: true, sessionId: newSessionRef.id });
+    } catch (err: any) {
+      console.error("[Sessions Book] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to process booking" });
+    }
+  });
+
+  // Server-authoritative endpoint for PT/Session cancellation
+  app.post("/api/sessions/cancel", requireAuth, async (req, res) => {
+    try {
+      const { sessionId } = req.body;
+      if (!sessionId) {
+        return res.status(400).json({ error: "Missing sessionId" });
+      }
+
+      const db = await getDbForRequest(req);
+      const sessionRef = db.collection("sessions").doc(sessionId);
+      
+      await db.runTransaction(async (transaction) => {
+        const sessionDoc = await transaction.get(sessionRef);
+        if (!sessionDoc.exists) throw new Error("Session not found");
+        const session = sessionDoc.data()!;
+        if (session.status !== 'Scheduled') {
+          throw new Error(`Cannot cancel a session with status ${session.status}`);
+        }
+
+        const clientRef = db.collection("clients").doc(session.clientId);
+        const clientDoc = await transaction.get(clientRef);
+        
+        if (clientDoc.exists) {
+          const client = clientDoc.data()!;
+          const updateData: any = {};
+          
+          if (session.packageId && client.packages) {
+            const packagesCopy = [...client.packages];
+            const pkgIdx = packagesCopy.findIndex((p: any) => p.id === session.packageId);
+            if (pkgIdx !== -1) {
+              if (typeof packagesCopy[pkgIdx].sessionsRemaining === 'number') {
+                packagesCopy[pkgIdx].sessionsRemaining += 1;
+                updateData.packages = packagesCopy;
+              }
+            }
+          } else if (typeof client.sessionsRemaining === 'number') {
+             updateData.sessionsRemaining = client.sessionsRemaining + 1;
+          }
+
+          if (Object.keys(updateData).length > 0) {
+            transaction.update(clientRef, updateData);
+          }
+        }
+
+        transaction.update(sessionRef, { status: 'Cancelled' });
+        
+        transaction.set(db.collection("auditLogs").doc(), {
+          action: "UPDATE",
+          entityType: "SESSION",
+          entityId: sessionId,
+          details: `Cancelled session and refunded to package`,
+          timestamp: new Date().toISOString(),
+          userId: req.user?.uid || "system",
+          userName: req.user?.email || "System API"
+        });
+      });
+
+      return res.json({ success: true, message: "Session cancelled" });
+    } catch (err: any) {
+      console.error("[Sessions Cancel] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to cancel session" });
+    }
+  });
+
+  // Server-authoritative endpoint for PT/Session reschedule
+  app.post("/api/sessions/reschedule", requireAuth, async (req, res) => {
+    try {
+      const { sessionId, newDate, newStartTime, newEndTime } = req.body;
+      if (!sessionId || !newDate || !newStartTime || !newEndTime) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const db = await getDbForRequest(req);
+      const sessionRef = db.collection("sessions").doc(sessionId);
+      
+      await db.runTransaction(async (transaction) => {
+        const sessionDoc = await transaction.get(sessionRef);
+        if (!sessionDoc.exists) throw new Error("Session not found");
+        const session = sessionDoc.data()!;
+        if (session.status !== 'Scheduled') {
+          throw new Error(`Cannot reschedule a session with status ${session.status}`);
+        }
+
+        const coachRef = db.collection("coachSchedules").doc(session.coachId);
+        const coachDoc = await transaction.get(coachRef);
+        if (!coachDoc.exists) throw new Error("Coach schedule not found");
+
+        const existingSessionsQuery = db.collection("sessions")
+          .where("coachId", "==", session.coachId)
+          .where("date", "==", newDate)
+          .where("startTime", "==", newStartTime)
+          .where("type", "==", session.type)
+          .where("status", "in", ["Scheduled", "Completed", "No Show"]);
+
+        const existingSnap = await transaction.get(existingSessionsQuery);
+
+        const coachSchedule = coachDoc.data()?.days || {};
+        const dateObj = new Date(newDate);
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+        const dayOfWeek = days[dateObj.getDay()] as typeof days[number];
+        
+        const dayConfig = coachSchedule[dayOfWeek];
+        if (!dayConfig || !dayConfig.enabled) {
+          throw new Error("Coach is not available on this day");
+        }
+
+        const capacity = dayConfig.capacities?.[session.type] || 0;
+        if (capacity === 0) {
+          throw new Error(`Coach does not offer ${session.type} sessions on this day`);
+        }
+
+        if (existingSnap.docs.length >= capacity) {
+          throw new Error(`This time slot is fully booked for ${session.type} sessions`);
+        }
+
+        transaction.update(sessionRef, {
+           date: newDate,
+           startTime: newStartTime,
+           endTime: newEndTime,
+           status: 'Scheduled'
+        });
+
+        transaction.set(db.collection("auditLogs").doc(), {
+          action: "UPDATE",
+          entityType: "SESSION",
+          entityId: sessionId,
+          details: `Rescheduled session from ${session.date} ${session.startTime} to ${newDate} ${newStartTime}`,
+          timestamp: new Date().toISOString(),
+          userId: req.user?.uid || "system",
+          userName: req.user?.email || "System API"
+        });
+      });
+
+      return res.json({ success: true, message: "Session rescheduled" });
+    } catch (err: any) {
+      console.error("[Sessions Reschedule] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to reschedule session" });
+    }
+  });
+
+  // --- Admin Requests API ---
+  app.post("/api/requests/freeze", requireAuth, async (req, res) => {
+    try {
+      const { requestId } = req.body;
+      const db = await getDbForRequest(req);
+      
+      await db.runTransaction(async (transaction: any) => {
+        const reqRef = db.collection("bookingRequests").doc(requestId);
+        const reqSnap = await transaction.get(reqRef);
+        if (!reqSnap.exists) throw new Error("Request not found");
+        
+        const reqData = reqSnap.data() as any;
+        if (reqData.status !== "Pending" || reqData.type !== "freeze") {
+          throw new Error("Invalid or already processed request");
+        }
+        
+        const clientId = reqData.clientId;
+        const packageId = reqData.packageId;
+        
+        const clientRef = db.collection("clients").doc(clientId);
+        const clientSnap = await transaction.get(clientRef);
+        if (!clientSnap.exists) throw new Error("Client not found");
+        
+        const clientData = clientSnap.data() as any;
+        let packages = clientData.packages || [];
+        const pkgIndex = packages.findIndex((p: any) => p.id === packageId);
+        
+        if (pkgIndex === -1) throw new Error("Package not found on client");
+        
+        const pkg = packages[pkgIndex];
+        if (pkg.status !== "Active") throw new Error("Can only freeze active packages");
+        
+        // Add 7 days to endDate
+        if (pkg.endDate) {
+          const endDateObj = new Date(pkg.endDate);
+          endDateObj.setDate(endDateObj.getDate() + 7);
+          pkg.endDate = endDateObj.toISOString();
+        }
+        
+        pkg.freezeCount = (pkg.freezeCount || 0) + 1;
+        packages[pkgIndex] = pkg;
+        
+        transaction.update(clientRef, { packages });
+        transaction.update(reqRef, { status: "Approved", updatedAt: new Date().toISOString() });
+      });
+      
+      return res.json({ success: true, message: "Package frozen for 7 days" });
+    } catch (err: any) {
+      console.error("[Requests Freeze] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to process freeze" });
+    }
+  });
+
+  app.post("/api/requests/assessment/assign", requireAuth, async (req, res) => {
+    try {
+      const { requestId, coachId } = req.body;
+      const db = await getDbForRequest(req);
+      
+      const reqRef = db.collection("assessments").doc(requestId);
+      await reqRef.update({
+        assignedCoachId: coachId,
+        status: "Assigned",
+        updatedAt: new Date().toISOString()
+      });
+      
+      return res.json({ success: true, message: "Assessment assigned to coach" });
+    } catch (err: any) {
+      console.error("[Assessment Assign] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to assign assessment" });
     }
   });
 

@@ -7,13 +7,14 @@ import { Progress } from '@/components/ui/progress';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { Calendar, CheckCircle2, AlertTriangle, PlayCircle, PauseCircle, Package, ShoppingBag, Clock } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 
 export default function MemberPackages({ client, onSwitchToStore }: { client: Client | null, onSwitchToStore?: () => void }) {
   if (!client) return null;
 
   const [pendingRequests, setPendingRequests] = React.useState<any[]>([]);
   const [loadingPending, setLoadingPending] = React.useState(true);
+  const [freezingPkgId, setFreezingPkgId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!client?.id) {
@@ -47,6 +48,37 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
       return format(parseISO(dateStr), 'dd MMM yyyy');
     } catch {
       return 'N/A';
+    }
+  };
+
+  const handleRequestFreeze = async (pkg: any) => {
+    if (!client) return;
+    setFreezingPkgId(pkg.id);
+    try {
+      await addDoc(collection(db, 'bookingRequests'), {
+        clientId: client.id,
+        clientName: client.name || 'Unknown',
+        clientEmail: client.email || '',
+        clientPhone: client.phone || '',
+        packageId: pkg.id,
+        packageName: pkg.packageName,
+        type: 'freeze',
+        status: 'Pending',
+        createdAt: new Date().toISOString()
+      });
+      // Optionally reload pending requests or show success
+      const q = query(
+        collection(db, 'bookingRequests'),
+        where('clientId', '==', client.id),
+        where('status', '==', 'Pending')
+      );
+      const snap = await getDocs(q);
+      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setPendingRequests(list);
+    } catch (err) {
+      console.error("Failed to request freeze:", err);
+    } finally {
+      setFreezingPkgId(null);
     }
   };
 
@@ -112,6 +144,25 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
               )}
             </div>
           </div>
+
+          {pkg.status === 'Active' && !pkg.isOnHold && (
+            <div className="flex justify-end">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-7 text-[10px] border-primary/20 text-primary hover:bg-primary/10 gap-1"
+                disabled={freezingPkgId === pkg.id || (pkg.freezeCount || 0) > 0 || pendingRequests.some(r => r.packageId === pkg.id && r.type === 'freeze')}
+                onClick={() => handleRequestFreeze(pkg)}
+              >
+                <PauseCircle className="h-3 w-3" /> 
+                {pendingRequests.some(r => r.packageId === pkg.id && r.type === 'freeze') 
+                  ? 'Freeze Requested' 
+                  : (pkg.freezeCount || 0) > 0 
+                    ? 'Already Frozen' 
+                    : 'Request Freeze (7 Days)'}
+              </Button>
+            </div>
+          )}
 
           {/* Sessions details with Progress Bar */}
           {!isUnlimited && pkg.status === 'Active' && (

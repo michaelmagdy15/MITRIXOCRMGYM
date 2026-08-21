@@ -1,6 +1,24 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-08-18 (third pass — member portal permission architecture hardened, baseline lint fixed)
+Updated: 2026-08-21 (PT Edge Cases & Admin Requests)
+
+---
+
+## RECENT WORK — 2026-08-21 (PT Edge Cases & Session Management)
+
+### Fixed This Session
+**PT.1 PT Session Booking Edge Cases** — FIXED ✅
+- Sessions math strictly processed via `server.ts` transactions to prevent duplicate booking.
+- Member `AssessmentDialog` added, storing `preferredCoachId`.
+- Member `SessionRatingDialog` added to rate completed sessions (1-5 stars and feedback).
+- Member `Request Freeze` workflow implemented (creates `Freeze` status in `bookingRequests` collection).
+
+**PT.2 Admin/Coach Requests Dashboard** — FIXED ✅
+- Coach `CoachSessions.tsx` updated with `Assessments` tab so coaches see pending/contacted requests assigned to them.
+- Admin `AdminRequests.tsx` dashboard built and routed in `App.tsx` for Managers/Admins to approve freezes (extending `package.endDate` by 7 days automatically) and assign Coaches to PT Assessment requests.
+
+**PT.3 Build/Lint Health** — FIXED ✅
+- Fixed TS compilation errors across `server.ts`, `App.tsx`, `AdminRequests.tsx`, and `useSessions.ts`. Build is green and ready for deployment.
 
 ---
 

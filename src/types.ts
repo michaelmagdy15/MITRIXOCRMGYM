@@ -79,6 +79,25 @@ export interface Session {
   notes?: string;
   branch?: Branch;
   createdAt: string;
+  rating?: number;
+  feedback?: string;
+}
+
+export type AssessmentStatus = 'Pending' | 'Contacted' | 'Scheduled' | 'Completed';
+
+export interface Assessment {
+  id: string;
+  clientId: string;
+  clientName: string;
+  preferredCoachId?: string;
+  preferredCoachName?: string;
+  preferredDate?: string; // e.g., 'Mondays and Wednesdays' or specific date
+  preferredTime?: string; // e.g., 'Morning', 'Evening'
+  injuries?: string;
+  goals?: string;
+  status: AssessmentStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ImportBatch {

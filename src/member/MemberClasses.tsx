@@ -283,9 +283,9 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                     </div>
                   </div>
 
-                  {gymClass.description && (
+                  {(gymClass as any).description && (
                     <p className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded-lg border leading-relaxed">
-                      {gymClass.description}
+                      {(gymClass as any).description}
                     </p>
                   )}
 
@@ -295,7 +295,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                       <span>{(gymClass.attendees || []).length} / {gymClass.capacity} Joined</span>
                       {isWaitlisted && (
                         <Badge variant="outline" className="text-[9px] font-bold text-yellow-600 border-yellow-500 bg-yellow-500/10 ml-2">
-                          Waitlisted (#{(gymClass.waitlist || []).indexOf(client.id) + 1})
+                          Waitlisted (#{(gymClass.waitlist || []).indexOf(client?.id || '') + 1})
                         </Badge>
                       )}
                       {spotsLeft <= 3 && spotsLeft > 0 && !isBooked && !isWaitlisted && (

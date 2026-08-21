@@ -6,16 +6,19 @@ import './styles/transitions.css';
 
 // ── Guard 1: Register Service Worker for Offline Sync ──────────────────────
 // Re-enabling the PWA service worker to allow offline caching (Background Sync)
-// autoUpdate is configured in vite.config.ts, so this will automatically fetch new versions.
+// autoUpdate is configured in vite.config.ts, so this will
+// @ts-ignore
 import { registerSW } from 'virtual:pwa-register';
 
+// Register service worker for PWA features (offline support, caching)
 if ('serviceWorker' in navigator) {
-  registerSW({
-    immediate: true,
-    onRegisteredSW(swUrl, r) {
+  const updateSW = registerSW({
+    onNeedRefresh() {
+      // Prompt user to update
+    },onRegisteredSW(swUrl: any, r: any) {
       console.log(`Service Worker registered: ${swUrl}`);
     },
-    onRegisterError(error) {
+    onRegisterError(error: any) {
       console.error('Service Worker registration error', error);
     },
   });

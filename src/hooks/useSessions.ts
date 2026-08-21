@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { collection, query, where, getDocs, getDoc, doc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { Session, SessionType, SessionStatus } from '../types';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { addAuditLog } from '../services/auditService';
 
 export const useSessions = () => {
@@ -37,64 +37,69 @@ export const useSessions = () => {
     if (!currentUser) throw new Error('Not authenticated');
     setLoading(true);
     try {
-      // 1. Capacity Validation
-      const coachRef = doc(db, 'coachSchedules', sessionData.coachId);
-      const coachSnap = await getDoc(coachRef);
-      if (!coachSnap.exists()) throw new Error('Coach schedule not found');
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/sessions/book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ sessionData })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to book session');
       
-      const coachSchedule = coachSnap.data()?.days || {};
-      const dateObj = new Date(sessionData.date);
-      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
-      const dayOfWeek = days[dateObj.getDay()] as 'sunday'|'monday'|'tuesday'|'wednesday'|'thursday'|'friday'|'saturday';
-      
-      const dayConfig = coachSchedule[dayOfWeek];
-      if (!dayConfig || !dayConfig.enabled) {
-        throw new Error('Coach is not available on this day');
-      }
-
-      const capacity = dayConfig.capacities?.[sessionData.type] || 0;
-      if (capacity === 0) {
-        throw new Error(`Coach does not offer ${sessionData.type} sessions on this day`);
-      }
-
-      const existingQ = query(
-        collection(db, 'sessions'),
-        where('coachId', '==', sessionData.coachId),
-        where('date', '==', sessionData.date),
-        where('startTime', '==', sessionData.startTime),
-        where('type', '==', sessionData.type),
-        where('status', 'in', ['Scheduled', 'Completed', 'No Show'])
-      );
-      const existingSnap = await getDocs(existingQ);
-      if (existingSnap.docs.length >= capacity) {
-        throw new Error(`This time slot is fully booked for ${sessionData.type} sessions`);
-      }
-
-      // 2. Package Deduction (placeholder - to be implemented in cloud function or transactional logic)
-      if (sessionData.packageId) {
-        // Here we could run a transaction to deduct 1 session from the client's package
-      }
-
-      // 3. Create Session
-      const newRef = doc(collection(db, 'sessions'));
-      const newSession: Session = {
-        ...sessionData,
-        id: newRef.id,
-        createdAt: new Date().toISOString(),
-      };
-      
-      await setDoc(newRef, newSession);
-      
-      await addAuditLog(
-        'CREATE',
-        'SESSION',
-        newRef.id,
-        `Booked ${sessionData.type} session for ${sessionData.date} at ${sessionData.startTime}`
-      );
-      
-      return newSession;
+      return { id: data.sessionId, ...sessionData, status: 'Scheduled', createdAt: new Date().toISOString() } as Session;
     } catch (err: any) {
       console.error('[useSessions] Error booking session:', err);
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
+  const cancelSession = useCallback(async (sessionId: string) => {
+    if (!currentUser) throw new Error('Not authenticated');
+    setLoading(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/sessions/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ sessionId })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel session');
+    } catch (err: any) {
+      console.error('[useSessions] Error canceling session:', err);
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
+  const rescheduleSession = useCallback(async (sessionId: string, newDate: string, newStartTime: string, newEndTime: string) => {
+    if (!currentUser) throw new Error('Not authenticated');
+    setLoading(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/sessions/reschedule', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ sessionId, newDate, newStartTime, newEndTime })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reschedule session');
+    } catch (err: any) {
+      console.error('[useSessions] Error rescheduling session:', err);
       setError(err.message);
       throw err;
     } finally {
@@ -147,6 +152,8 @@ export const useSessions = () => {
   return {
     fetchSessions,
     bookSession,
+    cancelSession,
+    rescheduleSession,
     updateSessionStatus,
     deleteSession,
     loading,

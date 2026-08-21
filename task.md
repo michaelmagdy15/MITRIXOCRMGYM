@@ -18,6 +18,12 @@
 - [x] Migrate ClubOperations.tsx to use SQL API endpoints
 - [x] Add SQL API endpoints for `Attendance`.
 - [x] Add SQL API endpoints for `Users` (Staff/Coaches).
+- [x] # P1 Implementation: Assessment Form & Rating (Mobile Member UI)
+- [x] Implement `AssessmentForm.tsx` (or Dialog) to capture preferred coach, date, time, injuries, and goals.
+- [x] Add "Request Assessment" button in `MemberSessions.tsx`.
+- [x] Implement `SessionRatingDialog.tsx` to capture 1-5 star rating and feedback.
+- [x] Add "Rate Session" button in `MemberSessions.tsx` for past completed sessions.
+- [x] Add pending assessments view for Coaches in `CoachSessions.tsx`.
 - [x] Add SQL API endpoints for `Settings` (Branches, Tags).
 - [x] Add SQL API endpoints for `Packages`.
 - [x] Add SQL API endpoints for `UserTargets`.

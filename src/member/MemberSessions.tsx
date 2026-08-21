@@ -12,7 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, Clock, MapPin, Dumbbell, CalendarRange, User as UserIcon, CheckCircle2, MessageSquare, AlertCircle, ShoppingBag } from 'lucide-react';
+import { Calendar, Clock, MapPin, Dumbbell, CalendarRange, User as UserIcon, CheckCircle2, MessageSquare, AlertCircle, ShoppingBag, ClipboardList, Star } from 'lucide-react';
+import { AssessmentDialog } from './components/AssessmentDialog';
+import { SessionRatingDialog } from './components/SessionRatingDialog';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
   Scheduled:  { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50',   text: 'Scheduled' },
@@ -40,12 +42,16 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
+  const [assessmentDialogOpen, setAssessmentDialogOpen] = useState(false);
+
   // Rescheduling & Cancellation state
   const [selectedRescheduleSession, setSelectedRescheduleSession] = useState<any | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState<string>('');
   const [rescheduleTime, setRescheduleTime] = useState<string>('');
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
+
+  const [selectedRatingSession, setSelectedRatingSession] = useState<Session | null>(null);
 
   useEffect(() => {
     if (!client?.id) {
@@ -263,16 +269,26 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
           <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
             <Dumbbell className="h-5 w-5 text-primary" /> My Sessions
           </h2>
-          {onSwitchToStore && (
+          <div className="flex items-center gap-2">
             <Button 
-              onClick={onSwitchToStore} 
+              onClick={() => setAssessmentDialogOpen(true)}
               variant="outline" 
               size="sm" 
-              className="h-8 text-[11px] font-bold border-primary/20 hover:border-primary/45 rounded-xl flex items-center gap-1.5 shrink-0 bg-background/50 shadow-sm"
+              className="h-8 text-[11px] font-bold flex items-center gap-1.5 shrink-0"
             >
-              <ShoppingBag className="h-3 w-3" /> Buy Packages
+              <ClipboardList className="h-3 w-3" /> Request Assessment
             </Button>
-          )}
+            {onSwitchToStore && (
+              <Button 
+                onClick={onSwitchToStore} 
+                variant="outline" 
+                size="sm" 
+                className="h-8 text-[11px] font-bold border-primary/20 hover:border-primary/45 rounded-xl flex items-center gap-1.5 shrink-0 bg-background/50 shadow-sm"
+              >
+                <ShoppingBag className="h-3 w-3" /> Buy Packages
+              </Button>
+            )}
+          </div>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">View scheduled personal training sessions and book new workouts.</p>
       </div>
@@ -532,9 +548,22 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         {session.branch && <span className="uppercase text-[9px] font-bold">{session.branch}</span>}
                       </div>
                     </div>
-                    <Badge className={`border text-[10px] px-2 py-0.5 rounded-full ${style.badge}`} variant="outline">
-                      {style.text}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-2">
+                      <Badge className={`border text-[10px] px-2 py-0.5 rounded-full ${style.badge}`} variant="outline">
+                        {style.text}
+                      </Badge>
+                      {session.status === 'Attended' && (
+                        <Button 
+                          variant="ghost" 
+                          size="xs" 
+                          className={`h-6 text-[10px] gap-1 px-2 ${session.rating ? 'text-yellow-500 hover:text-yellow-600' : 'text-muted-foreground'}`}
+                          onClick={() => setSelectedRatingSession(session)}
+                        >
+                          <Star className={`h-3 w-3 ${session.rating ? 'fill-current' : ''}`} />
+                          {session.rating ? 'Edit Rating' : 'Rate Session'}
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               );
@@ -592,6 +621,18 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
           </form>
         </DialogContent>
       </Dialog>
+      <AssessmentDialog
+        open={assessmentDialogOpen}
+        onOpenChange={setAssessmentDialogOpen}
+        client={client}
+        coaches={coaches}
+      />
+      <SessionRatingDialog 
+        session={selectedRatingSession}
+        onOpenChange={(open) => {
+          if (!open) setSelectedRatingSession(null);
+        }}
+      />
     </div>
   );
 }
