@@ -233,13 +233,23 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const dateRange = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i - 7));
 
   useEffect(() => {
-    const q = collection(db, 'classes');
+    const q = collection(db, 'classSchedules');
     const unsub = onSnapshot(q, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as any[];
-      list.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+      const list = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const dateStr = data.date || (data.startTime ? data.startTime.substring(0, 10) : '');
+        const timeStr = data.time || (data.startTime && data.endTime 
+          ? `${data.startTime.substring(11, 16)} - ${data.endTime.substring(11, 16)}` 
+          : '10:00 - 11:15');
+
+        return {
+          id: doc.id,
+          ...data,
+          date: dateStr,
+          time: timeStr
+        };
+      }) as any[];
+      list.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
       setClasses(list);
       setLoadingClasses(false);
     }, (err) => {

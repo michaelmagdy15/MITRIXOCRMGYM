@@ -27,6 +27,11 @@ Updated: 2026-08-23 (Mobile App UX Overhaul, Interactive Booking Flow, Storefron
 - If no credits exist $\rightarrow$ displays interactive in-dialog package recommendation & direct buy/request options.
 - Handles full capacity waitlist joining with automatic promotions.
 
+**MOB.5 Instant Real-Time Schedule Sync (Admin Calendar <-> Mobile App)** — FIXED ✅
+- Unified class schedules across all portals to the Firestore `classSchedules` collection.
+- Upgraded Admin `Calendar.tsx` to listen via real-time `onSnapshot` and write single/recurring classes directly to `classSchedules` with complete `startTime`, `endTime`, `date`, `time`, `branch`, and `capacity` metadata.
+- Updated `MemberClasses.tsx`, `GuestPortal.tsx`, `Attendance.tsx`, and `useAttendance.ts` with flexible date/time formatting and real-time listeners so any class created or deleted in the Admin Calendar reflects instantly across all mobile member screens.
+
 ---
 
 ## RECENT WORK — 2026-08-23 (Phone Auth SMS OTP, Staff Phone Management, Member Multi-Format Login)

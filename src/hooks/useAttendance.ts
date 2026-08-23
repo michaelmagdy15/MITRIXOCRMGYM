@@ -64,10 +64,14 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       const sessionsSnap = await getDocs(sessionsQ);
       const ptSessionsCount = sessionsSnap.docs.filter(d => d.data().status === 'Scheduled' || d.data().status === 'Attended').length;
 
-      // Fetch classes today
-      const classesQ = query(collection(db, 'classes'), where('date', '==', cairoDateStr));
+      // Fetch classes today (support both classSchedules and classes)
+      const classesQ = query(collection(db, 'classSchedules'));
       const classesSnap = await getDocs(classesQ);
-      const groupClassesCount = classesSnap.docs.filter(d => (d.data().attendees || []).includes(clientId)).length;
+      const groupClassesCount = classesSnap.docs.filter(d => {
+        const data = d.data();
+        const dateStr = data.date || (data.startTime ? data.startTime.substring(0, 10) : '');
+        return dateStr === cairoDateStr && (data.attendees || []).includes(clientId);
+      }).length;
 
       const totalExpectedSessions = Math.max(1, ptSessionsCount + groupClassesCount);
 

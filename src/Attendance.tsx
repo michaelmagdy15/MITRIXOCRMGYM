@@ -23,9 +23,22 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   const [classes, setClasses] = useState<any[]>([]);
   useEffect(() => {
-    const q = query(collection(db, 'classes'));
+    const q = query(collection(db, 'classSchedules'));
     const unsub = onSnapshot(q, (snap) => {
-      setClasses(snap.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      setClasses(snap.docs.map(doc => {
+        const data = doc.data();
+        const dateStr = data.date || (data.startTime ? data.startTime.substring(0, 10) : '');
+        const timeStr = data.time || (data.startTime && data.endTime 
+          ? `${data.startTime.substring(11, 16)} - ${data.endTime.substring(11, 16)}` 
+          : '10:00 - 11:15');
+
+        return {
+          ...data,
+          id: doc.id,
+          date: dateStr,
+          time: timeStr
+        };
+      }));
     });
     return () => unsub();
   }, []);

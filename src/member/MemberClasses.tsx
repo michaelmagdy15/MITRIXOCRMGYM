@@ -104,12 +104,33 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     }
   };
 
+  const getClassDateStr = (c: ClassSchedule): string => {
+    if ((c as any).date) return (c as any).date;
+    if (c.startTime && c.startTime.length >= 10) return c.startTime.substring(0, 10);
+    return '';
+  };
+
+  const getClassTimeDisplay = (c: ClassSchedule): string => {
+    if ((c as any).time) return (c as any).time;
+    if (c.startTime && c.endTime) {
+      try {
+        const s = new Date(c.startTime);
+        const e = new Date(c.endTime);
+        if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+          return `${s.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${e.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        }
+      } catch { /* fallback */ }
+      return `${c.startTime} - ${c.endTime}`;
+    }
+    return '10:00 - 11:15';
+  };
+
   // Filter classes for selected date and client branch
   const filteredClasses = classes.filter(c => {
     try {
-      const isDateMatch = isSameDay(parseISO(c.startTime.substring(0, 10)), selectedDate);
-      // More flexible branch matching: show class if it has no branch, is 'ALL', matches client's branch, or client has no branch
-      // Also normalize branch names (trim, case-insensitive)
+      const dateStr = getClassDateStr(c);
+      if (!dateStr) return false;
+      const isDateMatch = isSameDay(parseISO(dateStr), selectedDate);
       const classBranch = c.branch?.trim();
       const clientBranch = client?.branch?.trim();
       const isBranchMatch = !classBranch 
@@ -130,8 +151,10 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
       || !clientBranch 
       || classBranch.toLowerCase() === clientBranch.toLowerCase();
     if (isBranchMatch) {
-      const key = c.startTime.substring(0, 10);
-      classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);
+      const key = getClassDateStr(c);
+      if (key) {
+        classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);
+      }
     }
   });
 
@@ -273,7 +296,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                     <div className="text-right flex flex-col items-end">
                       <div className="flex items-center gap-1 text-xs font-mono font-bold">
                         <Clock className="h-3 w-3 text-muted-foreground" />
-                        {`${new Date(gymClass.startTime).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})} - ${new Date(gymClass.endTime).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}`}
+                        {getClassTimeDisplay(gymClass)}
                       </div>
                     </div>
                   </div>

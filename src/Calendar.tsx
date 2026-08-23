@@ -51,12 +51,19 @@ interface GymClass {
   id: string;
   name: string;
   coachName: string;
+  instructorName?: string;
+  instructorId?: string;
   date: string;          // YYYY-MM-DD
   time: string;          // e.g. "18:00 - 19:15"
+  startTime?: string;
+  endTime?: string;
   branch: string;
   capacity: number;
   attendees: string[];   // clientIds
+  waitlist?: string[];
   type: 'Class' | 'Event';
+  category?: string;
+  status?: 'active' | 'cancelled' | 'completed';
   description?: string;
 }
 
@@ -113,18 +120,43 @@ export default function CalendarView() {
     }
   }, [features]);
 
-  const fetchGymClasses = async () => {
-    try {
-      const snap = await getDocs(query(collection(db, 'calendarEvents')));
-      const events = snap.docs.map(d => ({ ...d.data(), id: d.id } as GymClass));
-      setGymClasses(events);
-    } catch (error) {
-      console.error("Error loading classes for calendar:", error);
-    }
-  };
-
+  // Real-time listener for class schedules across admin, coach, and member mobile apps
   useEffect(() => {
-    fetchGymClasses();
+    const q = collection(db, 'classSchedules');
+    const unsub = onSnapshot(q, (snap) => {
+      const events = snap.docs.map(d => {
+        const data = d.data();
+        const dateStr = data.date || (data.startTime ? data.startTime.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'));
+        const timeStr = data.time || (data.startTime && data.endTime 
+          ? `${data.startTime.substring(11, 16)} - ${data.endTime.substring(11, 16)}` 
+          : '10:00 - 11:15');
+
+        return {
+          id: d.id,
+          name: data.name || data.className || 'Class',
+          coachName: data.coachName || data.instructorName || 'Coach',
+          instructorName: data.instructorName || data.coachName || '',
+          instructorId: data.instructorId || '',
+          date: dateStr,
+          time: timeStr,
+          startTime: data.startTime || `${dateStr}T${timeStr.split('-')[0].trim()}:00`,
+          endTime: data.endTime || `${dateStr}T${timeStr.split('-')[1]?.trim() || '11:15'}:00`,
+          branch: data.branch || 'Main Branch',
+          capacity: Number(data.capacity) || 15,
+          attendees: data.attendees || [],
+          waitlist: data.waitlist || [],
+          type: data.type || (data.category === 'Event' ? 'Event' : 'Class'),
+          category: data.category || data.type || 'Class',
+          status: data.status || 'active',
+          description: data.description || ''
+        } as GymClass;
+      });
+      setGymClasses(events);
+    }, (err) => {
+      console.error("Error listening to class schedules in Calendar:", err);
+    });
+
+    return () => unsub();
   }, []);
 
   // Month days generator
@@ -239,48 +271,44 @@ export default function CalendarView() {
     } else {
       if (!className || !bookDate || !bookBranch || !classCoachName || !bookTime || !classEndTime) return;
 
-      if (repeatWeekly) {
-        const baseDate = parseISO(bookDate);
-        const token = await auth.currentUser?.getIdToken();
-        const promises = [];
-        for (let i = 0; i < repeatWeeks; i++) {
-          const classDate = addDays(baseDate, 7 * i);
-          const dateStr = format(classDate, 'yyyy-MM-dd');
-          
-          const itemData = {
-            id: crypto.randomUUID(),
-            name: className,
-            coachName: classCoachName,
-            date: dateStr,
-            time: `${bookTime} - ${classEndTime}`,
-            branch: bookBranch,
-            capacity: Number(classCapacity) || 15,
-            attendees: [],
-            type: classType,
-            description: classDescription || undefined
-          };
+      const numWeeks = repeatWeekly ? Math.max(1, repeatWeeks) : 1;
+      const baseDate = parseISO(bookDate);
+      const promises = [];
 
-          promises.push(setDoc(doc(db, 'calendarEvents', itemData.id), itemData));
-        }
-        await Promise.all(promises);
-      } else {
+      for (let i = 0; i < numWeeks; i++) {
+        const classDate = addDays(baseDate, 7 * i);
+        const dateStr = format(classDate, 'yyyy-MM-dd');
+        const startIso = `${dateStr}T${bookTime}:00`;
+        const endIso = `${dateStr}T${classEndTime}:00`;
+        const classId = crypto.randomUUID();
+
         const itemData = {
-          id: crypto.randomUUID(),
+          id: classId,
           name: className,
           coachName: classCoachName,
-          date: bookDate,
+          instructorName: classCoachName,
+          date: dateStr,
           time: `${bookTime} - ${classEndTime}`,
+          startTime: startIso,
+          endTime: endIso,
           branch: bookBranch,
           capacity: Number(classCapacity) || 15,
           attendees: [],
+          waitlist: [],
           type: classType,
-          description: classDescription || undefined
+          category: classType,
+          status: 'active',
+          price: 0,
+          description: classDescription || undefined,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         };
-        await setDoc(doc(db, 'classes', itemData.id), itemData);
+
+        // Write directly to classSchedules (primary collection listened to by mobile apps and portals)
+        promises.push(setDoc(doc(db, 'classSchedules', classId), itemData));
       }
-      
-      // Refresh list
-      fetchGymClasses();
+
+      await Promise.all(promises);
 
       // Reset fields
       setClassName('');
@@ -1051,11 +1079,10 @@ export default function CalendarView() {
                     onClick={async () => {
                       if (window.confirm(language === 'ar' ? 'هل أنت متأكد من إلغاء وحذف هذه الحصة؟' : 'Are you sure you want to cancel and delete this class?')) {
                         try {
-                          await deleteDoc(doc(db, 'calendarEvents', selectedClass.id));
+                          await deleteDoc(doc(db, 'classSchedules', selectedClass.id));
                           setSelectedClass(null);
-                          fetchGymClasses();
                         } catch (err) {
-                          console.error("Failed to delete", err);
+                          console.error("Failed to delete class:", err);
                         }
                       }
                     }}
