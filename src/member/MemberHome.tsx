@@ -465,7 +465,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
             </span>
           </div>
           <span className="font-mono text-[11px] font-semibold text-zinc-300 bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-700/60">
-            #{client.memberId || client.id.substring(0, 8)}
+            {client.memberId ? `#${client.memberId}` : 'MEMBER'}
           </span>
         </div>
 
@@ -526,7 +526,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
                       />
                     </div>
                     <p className="font-mono text-xs font-semibold text-muted-foreground bg-muted py-1 px-3 rounded-lg inline-block">
-                      #{client.memberId || client.id}
+                      {client.memberId ? `#${client.memberId}` : client.name}
                     </p>
                   </div>
                 </DialogContent>

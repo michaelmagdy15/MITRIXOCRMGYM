@@ -2911,7 +2911,7 @@ export default function Clients() {
                           data-qr-id={activeClient.memberId || activeClient.id}
                         />
                       </div>
-                      <p className="text-xs font-mono font-bold text-center">#{activeClient.memberId || activeClient.id.slice(0, 8).toUpperCase()}</p>
+                      <p className="text-xs font-mono font-bold text-center">{activeClient.memberId ? `#${activeClient.memberId}` : 'MEMBER'}</p>
                       <div className="flex gap-2 w-full">
                         <Button
                           variant="outline"

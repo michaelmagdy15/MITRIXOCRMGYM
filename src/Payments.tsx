@@ -1472,7 +1472,8 @@ export default function Payments() {
                     const recordedByLabel = recordedByUser?.name
                       || (payment as any).recordedByName
                       || salesRepUser?.name
-                      || (payment.sales_rep_id ? payment.sales_rep_id.substring(0, 8) + '...' : '—');
+                      || (payment as any).sales_rep_name
+                      || '—';
                     return (
                       <TableRow key={payment.id}>
                         <TableCell className="text-xs sm:text-sm">

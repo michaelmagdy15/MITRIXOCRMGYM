@@ -73,7 +73,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           if (client) {
             classAttendees.push({
               clientId,
-              memberId: client.memberId || client.id.substring(0, 8),
+              memberId: client.memberId || '—',
               name: client.name,
               slot: `${cls.name} (${cls.time})`,
               checkedIn: checkinMap.has(clientId),
@@ -95,7 +95,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           const hasCheckin = checkinMap.has(session.clientId) || isSessionAttended;
           ptAttendees.push({
             clientId: session.clientId,
-            memberId: client.memberId || client.id.substring(0, 8),
+            memberId: client.memberId || '—',
             name: client.name,
             slot: `PT Session (${format(parseISO(session.date), 'h:mm a')})`,
             checkedIn: hasCheckin,
@@ -116,7 +116,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         if (client) {
           walkins.push({
             clientId: checkin.clientId,
-            memberId: client.memberId || client.id.substring(0, 8),
+            memberId: client.memberId || '—',
             name: client.name,
             slot: `Walk-in (${format(parseISO(checkin.date), 'h:mm a')})`,
             checkedIn: true,
@@ -623,7 +623,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.member_id')}</Label>
-                    <p className="font-mono text-sm">#{lastScannedMember.memberId || lastScannedMember.id.substring(0, 8)}</p>
+                    <p className="font-mono text-sm">{lastScannedMember.memberId ? `#${lastScannedMember.memberId}` : '—'}</p>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.status')}</Label>

@@ -16,13 +16,41 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   )
 }
 
-function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
+function looksLikeFirestoreId(val: any): boolean {
+  if (typeof val !== 'string') return false;
+  // Firestore auto-generated document IDs are typically 20 alphanumeric chars, e.g. "CiQUIsakv5yqjSRaciKX"
+  return /^[a-zA-Z0-9_-]{18,32}$/.test(val.trim());
+}
+
+function extractTextFromNode(node: React.ReactNode): string {
+  if (!node) return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractTextFromNode).join(' ');
+  if (React.isValidElement(node) && (node.props as any)?.children) {
+    return extractTextFromNode((node.props as any).children);
+  }
+  return '';
+}
+
+function SelectValue({ className, children, placeholder, ...props }: SelectPrimitive.Value.Props) {
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
       className={cn("flex flex-1 text-left", className)}
+      placeholder={placeholder}
       {...props}
-    />
+    >
+      {typeof children === 'function'
+        ? children
+        : (val: any) => {
+            if (children) return children;
+            if (!val) return placeholder || null;
+            if (looksLikeFirestoreId(val)) {
+              return placeholder || 'Selected';
+            }
+            return val;
+          }}
+    </SelectPrimitive.Value>
   )
 }
 
@@ -109,11 +137,15 @@ function SelectLabel({
 function SelectItem({
   className,
   children,
+  label,
   ...props
 }: SelectPrimitive.Item.Props) {
+  const derivedLabel = label || (typeof children === 'string' ? children : extractTextFromNode(children));
+
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
+      label={derivedLabel || undefined}
       className={cn(
         "relative flex w-full cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className
