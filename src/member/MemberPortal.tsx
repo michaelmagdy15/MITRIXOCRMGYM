@@ -347,24 +347,30 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
           </Badge>
         </div>
 
-        {/* Profile Switcher dropdown next to theme toggle */}
+        {/* Profile Switcher dropdown next to theme toggle (only if other family members exist) */}
         <div className="flex items-center gap-1.5">
-          {primaryClient && linkedClients.length > 0 && (
+          {primaryClient && linkedClients.filter(c => c.id !== primaryClient.id).length > 0 && (
             <div className="flex items-center gap-1.5">
               <Users className="h-4 w-4 text-muted-foreground shrink-0" />
               <Select value={selectedClientId} onValueChange={(val) => setSelectedClientId(val || '')}>
-                <SelectTrigger className="h-8 text-[11px] font-semibold bg-background border-border w-32 sm:w-40">
-                  <SelectValue placeholder="Select Profile" />
+                <SelectTrigger className="h-8 text-[11px] font-semibold bg-background border-border max-w-[140px] truncate px-2.5">
+                  <span className="truncate">
+                    {activeClient 
+                      ? `${activeClient.name}${activeClient.memberId ? ` #${activeClient.memberId}` : ''}${activeClient.id === primaryClient.id ? ' (You)' : ''}`
+                      : `${primaryClient.name} (You)`}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={primaryClient.id}>
-                    {primaryClient.name} (You)
+                    {primaryClient.name}{primaryClient.memberId ? ` #${primaryClient.memberId}` : ''} (You)
                   </SelectItem>
-                  {linkedClients.map(c => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
+                  {linkedClients
+                    .filter(c => c.id !== primaryClient.id)
+                    .map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}{c.memberId ? ` #${c.memberId}` : ''}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
