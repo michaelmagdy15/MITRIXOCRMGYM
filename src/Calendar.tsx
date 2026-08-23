@@ -224,16 +224,16 @@ export default function CalendarView() {
   };
 
   // Open booking modal pre-filled for a specific date
-  const handleOpenBooking = (date: Date) => {
-    setBookDate(format(date, 'yyyy-MM-dd'));
-    // Auto-select branch from current user or first branch
+  const handleOpenBooking = (date?: Date, defaultType?: 'pt' | 'class') => {
+    const d = date || new Date();
+    setBookDate(format(d, 'yyyy-MM-dd'));
     if (currentUser?.branch) {
       setBookBranch(currentUser.branch);
     } else if (branches && branches.length > 0) {
       setBookBranch(branches[0] || '');
     }
     // Reset booking states
-    setBookingType('pt');
+    setBookingType(defaultType || (features?.ptPackages === false ? 'class' : 'pt'));
     setBookClientId('');
     setBookTrainerId('');
     setBookTime('10:00');
@@ -244,6 +244,8 @@ export default function CalendarView() {
     setClassCapacity(15);
     setClassType('Class');
     setClassDescription('');
+    setRepeatWeekly(false);
+    setRepeatWeeks(4);
     setIsBookModalOpen(true);
   };
 
@@ -395,12 +397,23 @@ export default function CalendarView() {
           </div>
 
           <Button 
-            onClick={() => handleOpenBooking(new Date())}
-            className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-sm h-10 px-4 flex items-center gap-1.5"
+            onClick={() => handleOpenBooking(new Date(), 'class')}
+            className="rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-sm h-10 px-4 flex items-center gap-1.5 shadow-sm"
           >
             <Plus className="h-4 w-4" />
-            {language === 'ar' ? 'حجز جلسة جديدة' : 'Book Session'}
+            {language === 'ar' ? 'إضافة حصة جديدة' : 'Add Class / Event'}
           </Button>
+
+          {features?.ptPackages !== false && (
+            <Button 
+              variant="outline"
+              onClick={() => handleOpenBooking(new Date(), 'pt')}
+              className="rounded-xl font-bold text-sm h-10 px-4 flex items-center gap-1.5 border-white/10 hover:bg-muted/40"
+            >
+              <Plus className="h-4 w-4" />
+              {language === 'ar' ? 'حجز جلسة خاصة' : 'Book PT Session'}
+            </Button>
+          )}
         </div>
       </div>
 

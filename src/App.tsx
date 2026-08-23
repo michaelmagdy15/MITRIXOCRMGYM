@@ -18,7 +18,7 @@ import { Toaster } from 'sonner';
 import Dashboard from './Dashboard';
 import Leads from './Leads';
 import Clients from './Clients';
-import AdminScheduleView from './components/AdminScheduleView';
+import Calendar from './Calendar';
 import Payments from './Payments';
 import PTPackages from './PTPackages';
 import Attendance from './Attendance';
@@ -1129,7 +1129,7 @@ function AppContent() {
             </TabsContent>
 
             <TabsContent value="calendar" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <AdminScheduleView />
+              <Calendar />
             </TabsContent>
 
             <TabsContent value="bookings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
