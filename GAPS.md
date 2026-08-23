@@ -1,6 +1,31 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-08-23 (Phone Auth SMS OTP, Staff Phone Management, Member Multi-Format Login)
+Updated: 2026-08-23 (Mobile App UX Overhaul, Interactive Booking Flow, Storefront Filters)
+
+---
+
+## RECENT WORK — 2026-08-23 (Mobile App UX Overhaul & Interactive Booking Flow)
+
+### Fixed This Session
+**MOB.1 Mobile App Preloader & Splash Optimization** — FIXED ✅
+- Removed harsh red rotating spinner (`#FF231F`) in `mobile/App.js`; replaced with dark-mode branded loading card and subtle white spinner.
+- Reduced artificial preloader delays in `SettingsContext.tsx` and `GuestPortal.tsx` (from 3000ms/2000ms to 400ms/200ms) for snappy, professional app launches.
+
+**MOB.2 Storefront Corporate & Points Cleanup** — FIXED ✅
+- Excluded corporate and group company packages from member/guest storefront catalog (`GuestPortal.tsx`).
+- Removed points rewards badges (`+{Math.floor(pkg.price / 100)} Pts`) across all storefront package cards for clean visual hierarchy.
+
+**MOB.3 Smart Multi-Criteria Storefront Filters** — FIXED ✅
+- Built instant live search bar for member storefront.
+- Added 3 responsive dropdown filters (Branch/Location, Program/Category, Plan Duration) with quick pill toggles and reset controls.
+- Integrated dynamic filtered results view showing available packages with immediate card actions.
+
+**MOB.4 Interactive Class Booking Dialog with Package Upsell** — FIXED ✅
+- Built and integrated `ClassBookingDialog.tsx` into `MemberClasses.tsx`.
+- Automatically inspects member's active packages and session credits.
+- If credits exist $\rightarrow$ 1-tap confirmation.
+- If no credits exist $\rightarrow$ displays interactive in-dialog package recommendation & direct buy/request options.
+- Handles full capacity waitlist joining with automatic promotions.
 
 ---
 

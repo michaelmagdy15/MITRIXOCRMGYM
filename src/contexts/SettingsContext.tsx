@@ -304,8 +304,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       setIsExiting(true);
       exitTimer = window.setTimeout(() => {
         setIsDone(true);
-      }, 600);
-    }, 3000);
+      }, 300);
+    }, 400);
 
     return () => {
       window.clearTimeout(delayTimer);

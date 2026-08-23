@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAppContext } from '../context';
 import { useCart } from './CartContext';
 import CartDrawer from './CartDrawer';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard, Sun, Moon, Sparkles } from 'lucide-react';
+import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard, Sun, Moon, Sparkles, Search, Filter, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { Client, Package, StorefrontConfig } from '../types';
 import { getTenantId, db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -214,10 +216,13 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const kidsSectionRef = useRef<HTMLDivElement>(null);
   const juniorSectionRef = useRef<HTMLDivElement>(null);
   const adultSectionRef = useRef<HTMLDivElement>(null);
-  const corporateSectionRef = useRef<HTMLDivElement>(null);
 
-  // Category quick filter
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<'all' | 'kids' | 'juniors' | 'adults' | 'corporate'>('all');
+  // Smart Package Filter States
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<'all' | 'kids' | 'juniors' | 'adults' | 'pt'>('all');
+  const [selectedBranchFilter, setSelectedBranchFilter] = useState<string>('all');
+  const [selectedDurationFilter, setSelectedDurationFilter] = useState<string>('all');
+  const [packageSearchQuery, setPackageSearchQuery] = useState<string>('');
+
   const dateScrollRef = useRef<HTMLDivElement>(null);
 
   const [classes, setClasses] = useState<any[]>([]);
@@ -244,11 +249,11 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
     return () => unsub();
   }, []);
 
-  // Preloader: wait for logo image to load (cached for subsequent renders)
+  // Preloader: wait for logo image to load with minimal delay for instant feel
   useEffect(() => {
     if (preloaderState !== 'loading') return;
     let cancelled = false;
-    const minDelay = new Promise(r => setTimeout(r, 2000));
+    const minDelay = new Promise(r => setTimeout(r, 200));
     
     const logoLoad = branding.logoUrl
       ? new Promise<void>((resolve) => {
@@ -264,7 +269,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         setPreloaderState('exiting');
         setTimeout(() => {
           setPreloaderState('hidden');
-        }, 600);
+        }, 300);
       }
     });
     return () => { cancelled = true; };
@@ -279,100 +284,125 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
     return () => clearInterval(interval);
   }, [activeTab, activeSlides.length]);
 
-  // ─── Package Grouping: Location → Age Category ───
+  // ─── Package Grouping & Smart Filter ───
   
   // Define location groups with branch matching
   const LOCATION_GROUP_IDS = ['Maxim', 'Mivida', 'Impact'] as const;
   type LocationGroupId = typeof LOCATION_GROUP_IDS[number];
   
-  type AgeCategory = 'kids' | 'juniors' | 'adults';
+  type AgeCategory = 'kids' | 'juniors' | 'adults' | 'pt';
   
   // Helper to get age category from package name
   const getAgeCategory = (pkgName: string): AgeCategory | null => {
     const n = pkgName.toLowerCase();
+    if (n.includes('corporate') || n.includes('company')) return null;
     if (n.includes('kid') && !n.includes('junior')) return 'kids';
     if (n.includes('junior')) return 'juniors';
-    if (!n.includes('kid') && !n.includes('junior') && !n.includes('corporate') && !n.includes('company') && n.includes(pkgName.toLowerCase()) && n.includes('group') === false) return 'adults';
-    if (!n.includes('kid') && !n.includes('junior') && !n.includes('corporate') && !n.includes('company')) return 'adults';
-    return null;
+    if (n.includes('private') || n.includes('pt') || n.includes('1-on-1')) return 'pt';
+    if (!n.includes('kid') && !n.includes('junior') && n.includes('group') === false) return 'adults';
+    return 'adults';
   };
   
   // Helper to determine location from package branch
   const getLocationForPackage = (pkg: Package): LocationGroupId | null => {
     const branchName = (pkg.branch || '').toLowerCase();
-    if (branchName.includes('maxim')) return 'Maxim';
-    if (branchName.includes('mivida') || branchName.includes('mvida')) return 'Mivida';
-    if (branchName.includes('impact') || branchName.includes('strike')) return 'Impact';
+    const pkgName = (pkg.name || '').toLowerCase();
+    if (branchName.includes('maxim') || pkgName.includes('maxim')) return 'Maxim';
+    if (branchName.includes('mivida') || branchName.includes('mvida') || pkgName.includes('mivida')) return 'Mivida';
+    if (branchName.includes('impact') || branchName.includes('strike') || pkgName.includes('impact')) return 'Impact';
     return null;
   };
 
   // Primary branch for display
   const primaryBranch = branches[0] || 'Main Branch';
 
-  // Build location-based package grouping
-  const packagesByLocation: Record<LocationGroupId, { kids: Package[]; juniors: Package[]; adults: Package[] }> = {
-    Maxim: {
-      kids: [] as Package[],
-      juniors: [] as Package[],
-      adults: [] as Package[],
-    },
-    Mivida: {
-      kids: [] as Package[],
-      juniors: [] as Package[],
-      adults: [] as Package[],
-    },
-    Impact: {
-      kids: [] as Package[],
-      juniors: [] as Package[],
-      adults: [] as Package[],
-    },
-  };
+  // Public packages: strictly exclude corporate and group company packages
+  const publicPackages = useMemo(() => {
+    return packages.filter(p => {
+      const n = (p.name || '').toLowerCase();
+      const isCorporate = n.includes('corporate') || n.includes('company') || p.type === 'Group';
+      return !isCorporate;
+    });
+  }, [packages]);
 
-  // Organize packages by location and age category
-  packages.forEach(pkg => {
-    const location = getLocationForPackage(pkg);
-    const age = getAgeCategory(pkg.name);
-    if (location && age) {
-      packagesByLocation[location][age].push(pkg);
-    }
-  });
+  // Check if any filter is active
+  const isFilterActive = useMemo(() => {
+    return (
+      packageSearchQuery.trim() !== '' ||
+      selectedBranchFilter !== 'all' ||
+      selectedDurationFilter !== 'all' ||
+      selectedCategoryFilter !== 'all'
+    );
+  }, [packageSearchQuery, selectedBranchFilter, selectedDurationFilter, selectedCategoryFilter]);
 
-  // Sort each category by sessions
-  Object.keys(packagesByLocation).forEach(loc => {
-    packagesByLocation[loc as LocationGroupId].kids.sort((a, b) => a.sessions - b.sessions);
-    packagesByLocation[loc as LocationGroupId].juniors.sort((a, b) => a.sessions - b.sessions);
-    packagesByLocation[loc as LocationGroupId].adults.sort((a, b) => a.sessions - b.sessions);
-  });
+  // Filtered packages for search / filter mode
+  const filteredCatalogPackages = useMemo(() => {
+    return publicPackages.filter(pkg => {
+      const name = (pkg.name || '').toLowerCase();
+      const branchName = (pkg.branch || '').toLowerCase();
+
+      // 1. Branch match
+      if (selectedBranchFilter !== 'all') {
+        const targetBranch = selectedBranchFilter.toLowerCase();
+        const matchesBranch = branchName.includes(targetBranch) || name.includes(targetBranch);
+        if (!matchesBranch) return false;
+      }
+
+      // 2. Category match
+      if (selectedCategoryFilter !== 'all') {
+        const cat = getAgeCategory(pkg.name);
+        if (selectedCategoryFilter === 'pt') {
+          const isPT = name.includes('private') || name.includes('pt') || pkg.type === 'PT' || pkg.type === 'Personal Training';
+          if (!isPT) return false;
+        } else if (cat !== selectedCategoryFilter) {
+          return false;
+        }
+      }
+
+      // 3. Duration match
+      if (selectedDurationFilter !== 'all') {
+        if (selectedDurationFilter === '1' && pkg.sessions !== 1) return false;
+        if (selectedDurationFilter === '8' && pkg.sessions !== 8) return false;
+        if (selectedDurationFilter === '12' && pkg.sessions !== 12) return false;
+        if (selectedDurationFilter === '20' && pkg.sessions !== 20) return false;
+        if (selectedDurationFilter === '24' && pkg.sessions !== 24) return false;
+        if (selectedDurationFilter === '30' && pkg.sessions !== 30) return false;
+        if (selectedDurationFilter === '48' && pkg.sessions !== 48) return false;
+        if (selectedDurationFilter === 'unlimited' && pkg.sessionsTotal !== 'unlimited') return false;
+      }
+
+      // 4. Search query text match
+      if (packageSearchQuery.trim()) {
+        const q = packageSearchQuery.toLowerCase().trim();
+        const matchesQuery = name.includes(q) || (pkg.description || '').toLowerCase().includes(q) || branchName.includes(q);
+        if (!matchesQuery) return false;
+      }
+
+      return true;
+    }).sort((a, b) => (a.price || 0) - (b.price || 0));
+  }, [publicPackages, selectedBranchFilter, selectedCategoryFilter, selectedDurationFilter, packageSearchQuery]);
 
   // Packages for each age category (across all locations)
-  const displayKids = packages.filter(p => {
-    const n = p.name.toLowerCase();
-    return n.includes('kid') && !n.includes('junior');
-  }).sort((a, b) => a.sessions - b.sessions);
+  const displayKids = useMemo(() => {
+    return publicPackages.filter(p => {
+      const n = p.name.toLowerCase();
+      return n.includes('kid') && !n.includes('junior');
+    }).sort((a, b) => a.sessions - b.sessions);
+  }, [publicPackages]);
 
-  const displayJuniors = packages.filter(p => {
-    const n = p.name.toLowerCase();
-    return n.includes('junior');
-  }).sort((a, b) => a.sessions - b.sessions);
+  const displayJuniors = useMemo(() => {
+    return publicPackages.filter(p => {
+      const n = p.name.toLowerCase();
+      return n.includes('junior');
+    }).sort((a, b) => a.sessions - b.sessions);
+  }, [publicPackages]);
 
-  const displayAdults = packages.filter(p => {
-    const n = p.name.toLowerCase();
-    return !n.includes('kid') && !n.includes('junior') && !n.includes('corporate') && !n.includes('company') && p.type !== 'Group';
-  }).sort((a, b) => a.sessions - b.sessions);
-
-  // Corporate packages (type 'Group' or name contains 'corporate/company') - keep separate
-  const corporatePackages = packages.filter(p => {
-    const n = p.name.toLowerCase();
-    return n.includes('corporate') || n.includes('company') || p.type === 'Group';
-  }).sort((a, b) => a.sessions - b.sessions);
-
-  // Other packages (no recognized location)
-  const otherPackages = packages.filter(p => {
-    const n = p.name.toLowerCase();
-    const isCorporate = n.includes('corporate') || n.includes('company') || p.type === 'Group';
-    const hasLocation = getLocationForPackage(p) !== null;
-    return !isCorporate && !hasLocation;
-  }).sort((a, b) => a.sessions - b.sessions);
+  const displayAdults = useMemo(() => {
+    return publicPackages.filter(p => {
+      const n = p.name.toLowerCase();
+      return !n.includes('kid') && !n.includes('junior') && p.type !== 'Group';
+    }).sort((a, b) => a.sessions - b.sessions);
+  }, [publicPackages]);
 
   // Active offers from storefront config
   const activeOffers = storefrontConfig.offers.filter(o => o.enabled).sort((a, b) => a.order - b.order);
@@ -573,29 +603,205 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               </div>
             </div>
 
-            {/* CATEGORY FILTER BAR */}
-            <div className="py-3 px-4 border-b flex gap-2 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap">
-              {[
-                { id: 'all', label: 'All Packages', icon: <Dumbbell className="h-3.5 w-3.5" /> },
-                { id: 'kids', label: 'Kids', icon: <Sparkles className="h-3.5 w-3.5" /> },
-                { id: 'juniors', label: 'Juniors', icon: <Tag className="h-3.5 w-3.5" /> },
-                { id: 'adults', label: 'Adults', icon: <User className="h-3.5 w-3.5" /> },
-                { id: 'corporate', label: 'Corporate', icon: <Building2 className="h-3.5 w-3.5" /> }
-              ].map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategoryFilter(cat.id as any)}
-                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full whitespace-nowrap text-xs font-black transition-all sf-interactive ${
-                    selectedCategoryFilter === cat.id 
-                      ? 'bg-primary text-primary-foreground shadow-md' 
-                      : 'bg-card border text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  {cat.icon}
-                  {cat.label}
-                </button>
-              ))}
+            {/* ─── SMART PACKAGE SEARCH & MULTI-CRITERIA FILTER BAR ─── */}
+            <div className="p-4 border-b bg-card/40 space-y-3">
+              {/* Search input */}
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search packages by program, branch or keywords..."
+                  value={packageSearchQuery}
+                  onChange={(e) => setPackageSearchQuery(e.target.value)}
+                  className="h-10 pl-10 pr-9 rounded-2xl bg-background border text-xs focus:border-primary shadow-sm"
+                />
+                {packageSearchQuery && (
+                  <button
+                    onClick={() => setPackageSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Dropdowns Row */}
+              <div className="grid grid-cols-3 gap-2">
+                {/* 1. Branch / Location */}
+                <Select value={selectedBranchFilter} onValueChange={(v) => setSelectedBranchFilter(v || 'all')}>
+                  <SelectTrigger className="h-9 text-[11px] rounded-xl bg-background font-bold border-border/80">
+                    <SelectValue placeholder="Branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Locations</SelectItem>
+                    {branches.map(b => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* 2. Target Category */}
+                <Select value={selectedCategoryFilter} onValueChange={(v) => setSelectedCategoryFilter(v as any)}>
+                  <SelectTrigger className="h-9 text-[11px] rounded-xl bg-background font-bold border-border/80">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Programs</SelectItem>
+                    <SelectItem value="adults">Adults Boxing</SelectItem>
+                    <SelectItem value="kids">Kids Martial Arts</SelectItem>
+                    <SelectItem value="juniors">Juniors Boxing</SelectItem>
+                    <SelectItem value="pt">Private 1-on-1 (PT)</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* 3. Duration / Sessions */}
+                <Select value={selectedDurationFilter} onValueChange={(v) => setSelectedDurationFilter(v || 'all')}>
+                  <SelectTrigger className="h-9 text-[11px] rounded-xl bg-background font-bold border-border/80">
+                    <SelectValue placeholder="Duration" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Plans</SelectItem>
+                    <SelectItem value="1">1 Drop-In Pass</SelectItem>
+                    <SelectItem value="8">8 Sessions (1 Mo)</SelectItem>
+                    <SelectItem value="12">12 Sessions</SelectItem>
+                    <SelectItem value="20">20 Sessions</SelectItem>
+                    <SelectItem value="24">24 Sessions (3 Mo)</SelectItem>
+                    <SelectItem value="30">30 Sessions</SelectItem>
+                    <SelectItem value="48">48 Sessions (6 Mo)</SelectItem>
+                    <SelectItem value="unlimited">Unlimited Pass</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Category Quick Pills & Reset */}
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  {[
+                    { id: 'all', label: 'All', icon: <Dumbbell className="h-3 w-3" /> },
+                    { id: 'adults', label: 'Adults', icon: <User className="h-3 w-3" /> },
+                    { id: 'kids', label: 'Kids', icon: <Sparkles className="h-3 w-3" /> },
+                    { id: 'juniors', label: 'Juniors', icon: <Tag className="h-3 w-3" /> },
+                    { id: 'pt', label: 'PT', icon: <Star className="h-3 w-3" /> }
+                  ].map(cat => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategoryFilter(cat.id as any)}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full whitespace-nowrap text-[10px] font-black transition-all ${
+                        selectedCategoryFilter === cat.id 
+                          ? 'bg-primary text-primary-foreground shadow-sm' 
+                          : 'bg-background border text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {cat.icon}
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                {isFilterActive && (
+                  <button
+                    onClick={() => {
+                      setPackageSearchQuery('');
+                      setSelectedBranchFilter('all');
+                      setSelectedDurationFilter('all');
+                      setSelectedCategoryFilter('all');
+                    }}
+                    className="text-primary text-[10px] font-bold shrink-0 ml-2 hover:underline flex items-center gap-1"
+                  >
+                    <RotateCcw className="h-3 w-3" /> Reset
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* ─── FILTERED SEARCH RESULTS VIEW (When search or dropdown filters applied) ─── */}
+            {isFilterActive && (
+              <div className="p-4 space-y-4 sf-tab-enter">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-black tracking-tight uppercase flex items-center gap-1.5 text-foreground">
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-primary" /> Filtered Packages
+                  </h2>
+                  <Badge variant="outline" className="text-[10px] font-bold border-primary/30 text-primary">
+                    {filteredCatalogPackages.length} available
+                  </Badge>
+                </div>
+
+                {filteredCatalogPackages.length === 0 ? (
+                  <div className="p-8 text-center border border-dashed rounded-3xl bg-muted/20 space-y-3">
+                    <Search className="h-8 w-8 mx-auto text-muted-foreground opacity-30" />
+                    <p className="text-xs font-bold text-foreground">No matching packages found</p>
+                    <p className="text-[11px] text-muted-foreground">Try clearing or adjusting your branch or program filters.</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl text-xs font-bold"
+                      onClick={() => {
+                        setPackageSearchQuery('');
+                        setSelectedBranchFilter('all');
+                        setSelectedDurationFilter('all');
+                        setSelectedCategoryFilter('all');
+                      }}
+                    >
+                      Reset Filters
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3">
+                    {filteredCatalogPackages.map(pkg => (
+                      <div
+                        key={pkg.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('button')) return;
+                          setSelectedPackage(pkg);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            if ((e.target as HTMLElement).closest('button')) return;
+                            setSelectedPackage(pkg);
+                          }
+                        }}
+                        className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      >
+                        <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
+                          <img
+                            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
+                            alt={pkg.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col justify-center min-w-0">
+                          <h3 className="font-extrabold text-xs text-foreground uppercase truncate">{pkg.name}</h3>
+                          {getPackageTypeLabel(pkg.name) && (
+                            <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
+                              {getPackageTypeLabel(pkg.name)}
+                            </p>
+                          )}
+                          <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">
+                            {pkg.sessions} Sessions • {pkg.expiryDays} Days Validity
+                          </p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="font-black text-sm text-primary">
+                              {pkg.price.toLocaleString()} {t('payments.currency_le')}
+                            </span>
+                            <Button
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedPackage(pkg);
+                              }}
+                              className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
+                            >
+                              <Info className="h-3 w-3 mr-1" /> View Details
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 1. SLIDESHOW HERO */}
             {selectedCategoryFilter === 'all' && (
@@ -713,14 +919,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                                 )}
                                 <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                                 <div className="mt-2 flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                                    {isStrike && (
-                                      <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                                        +{Math.floor(pkg.price / 100)} Pts
-                                      </Badge>
-                                    )}
-                                  </div>
+                                  <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
                                   <Button 
                                     size="sm" 
                                     onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
@@ -796,14 +995,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                                 )}
                                 <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                                 <div className="mt-2 flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                                    {isStrike && (
-                                      <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                                        +{Math.floor(pkg.price / 100)} Pts
-                                      </Badge>
-                                    )}
-                                  </div>
+                                  <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
                                   <Button 
                                     size="sm" 
                                     onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
@@ -882,14 +1074,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                                 )}
                                 <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                                 <div className="mt-2 flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                                    {isStrike && (
-                                      <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                                        +{Math.floor(pkg.price / 100)} Pts
-                                      </Badge>
-                                    )}
-                                  </div>
+                                  <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
                                   <Button 
                                     size="sm" 
                                     onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
@@ -995,14 +1180,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                           )}
                           <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                           <div className="mt-2 flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                              {isStrike && (
-                                <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                                  +{Math.floor(pkg.price / 100)} Pts
-                                </Badge>
-                              )}
-                            </div>
+                            <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
                             <Button 
                               size="sm" 
                               onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
@@ -1073,14 +1251,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                           )}
                           <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                           <div className="mt-2 flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                              {isStrike && (
-                                <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                                  +{Math.floor(pkg.price / 100)} Pts
-                                </Badge>
-                              )}
-                            </div>
+                            <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
                             <Button 
                               size="sm" 
                               onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
@@ -1168,14 +1339,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                           )}
                           <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
                           <div className="mt-2 flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                              {isStrike && (
-                                <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                                  +{Math.floor(pkg.price / 100)} Pts
-                                </Badge>
-                              )}
-                            </div>
+                            <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
                             <Button 
                               size="sm" 
                               onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
@@ -1191,68 +1355,6 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 </div>
                 )}
               </>
-            )}
-
-            {/* 5. CORPORATE / GROUP PACKAGES */}
-            {corporatePackages.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'corporate') && (
-            <div ref={corporateSectionRef} className="px-4 pt-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-black tracking-tight uppercase flex items-center gap-2">
-                  <Building2 className="h-5 w-5 text-primary" /> Corporate
-                </h2>
-                <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">GROUP</Badge>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {corporatePackages.map(pkg => (
-                  <div 
-                    key={pkg.id} 
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      if ((e.target as HTMLElement).closest('button')) return;
-                      setSelectedPackage(pkg);
-                    }} 
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        if ((e.target as HTMLElement).closest('button')) return;
-                        setSelectedPackage(pkg);
-                      }
-                    }}
-                    className="bg-gradient-to-r from-primary/5 to-transparent border border-primary/20 rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/40 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  >
-                    <div className="h-14 w-14 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <Building2 className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center min-w-0">
-                      <h3 className="font-extrabold text-xs text-foreground uppercase truncate">{pkg.name}</h3>
-                      {getPackageTypeLabel(pkg.name) && (
-                        <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                          {getPackageTypeLabel(pkg.name)}
-                        </p>
-                      )}
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days</p>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                          {isStrike && (
-                            <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px] font-bold py-0.5 px-1.5 rounded-md">
-                              +{Math.floor(pkg.price / 100)} Pts
-                            </Badge>
-                          )}
-                        </div>
-                        <Button 
-                          size="sm" 
-                          onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                          className="h-7 px-3 text-[10px] font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                        >
-                          <Info className="h-3 w-3 mr-1" /> View Details
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
             )}
 
             {/* 6. OFFERS & DISCOUNTS SECTION */}

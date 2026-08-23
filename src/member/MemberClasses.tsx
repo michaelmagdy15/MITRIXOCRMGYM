@@ -9,20 +9,20 @@ import { Calendar, Clock, MapPin, Users as UsersIcon, CheckCircle2, AlertTriangl
 import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-fns';
 
 import { ClassSchedule } from '../types/class';
+import { ClassBookingDialog } from './components/ClassBookingDialog';
 
-
-export default function MemberClasses({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: () => void }) {
+export default function MemberClasses({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: (packageId?: string) => void }) {
   const [classes, setClasses] = useState<ClassSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
+  const [selectedBookingClass, setSelectedBookingClass] = useState<ClassSchedule | null>(null);
+  const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
   const dateScrollRef = useRef<HTMLDivElement>(null);
 
   // Generate date range: 7 days before and 14 days after today
   const dateRange = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i - 7));
 
-  // Seed default classes/events if the database is empty
-  
   useEffect(() => {
     if (!client?.id) {
       setLoading(false);
@@ -32,7 +32,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     let unsub: (() => void) | undefined;
 
     const init = async () => {
-            const q = collection(db, 'classSchedules');
+      const q = collection(db, 'classSchedules');
       unsub = onSnapshot(q, (snapshot) => {
         const list = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -68,21 +68,16 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     }
   }, []);
 
-  const handleToggleBooking = async (gymClass: ClassSchedule) => {
+  const handleOpenBookingDialog = (gymClass: ClassSchedule) => {
+    setSelectedBookingClass(gymClass);
+    setIsBookingDialogOpen(true);
+  };
+
+  const handleLeaveBooking = async (gymClass: ClassSchedule) => {
     if (!client || !client.id) return;
-    if (client.status === 'Expired') {
-      alert("Your membership is expired. You must head to the STRIKE branch to renew before booking classes.");
-      return;
-    }
     setActionClassId(gymClass.id);
 
     try {
-      const isBooked = (gymClass.attendees || []).includes(client.id);
-      const isWaitlisted = (gymClass.waitlist || []).includes(client.id);
-      const action = (isBooked || isWaitlisted) ? 'leave' : 'join';
-
-      // Server-authoritative booking: validates the 1-hour cancellation rule,
-      // capacity, package matching, and performs the session math.
       const token = await auth.currentUser?.getIdToken();
       const res = await fetch('/api/classes/book', {
         method: 'POST',
@@ -92,18 +87,18 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
         },
         body: JSON.stringify({
           classId: gymClass.id,
-          action,
+          action: 'leave',
           clientId: client.id,
         })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data.error || "Failed to update booking. Please try again.");
+        alert(data.error || "Failed to cancel booking. Please try again.");
         return;
       }
     } catch (err) {
-      console.error("Failed to update booking status:", err);
-      alert("Failed to update booking. Please try again.");
+      console.error("Failed to leave class:", err);
+      alert("Failed to cancel booking. Please try again.");
     } finally {
       setActionClassId(null);
     }
@@ -310,7 +305,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                         size="sm"
                         variant="outline"
                         className="h-8 border-border text-muted-foreground hover:bg-secondary hover:text-foreground transition-all text-xs font-bold"
-                        onClick={() => handleToggleBooking(gymClass)}
+                        onClick={() => handleLeaveBooking(gymClass)}
                         disabled={actionClassId === gymClass.id}
                       >
                         {isWaitlisted ? 'Leave Waitlist' : 'Leave'}
@@ -319,8 +314,8 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                       <Button
                         size="sm"
                         className="h-8 text-xs font-bold"
-                        onClick={() => handleToggleBooking(gymClass)}
-                        disabled={actionClassId === gymClass.id || client?.status !== 'Active'}
+                        onClick={() => handleOpenBookingDialog(gymClass)}
+                        disabled={actionClassId === gymClass.id}
                       >
                         {isFull ? 'Join Waitlist' : 'Join Class'}
                       </Button>
@@ -332,6 +327,15 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
           })
         )}
       </div>
+
+      {/* ─── Interactive Class Booking Dialog ─── */}
+      <ClassBookingDialog
+        open={isBookingDialogOpen}
+        onOpenChange={setIsBookingDialogOpen}
+        gymClass={selectedBookingClass}
+        client={client}
+        onSwitchToStore={onSwitchToStore}
+      />
     </div>
   );
 }

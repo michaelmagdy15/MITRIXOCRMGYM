@@ -527,7 +527,10 @@ function MainApp() {
 
         {isLoading && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FF231F" />
+            <View style={styles.loadingCard}>
+              <Text style={styles.loadingAppTitle}>{APP_NAME}</Text>
+              <ActivityIndicator size="small" color="#FFFFFF" style={{ marginTop: 14 }} />
+            </View>
           </View>
         )}
         {renderOfflineBanner()}
@@ -669,7 +672,19 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#070709',
+  },
+  loadingCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  loadingAppTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   closeScannerButton: {
     position: 'absolute',
