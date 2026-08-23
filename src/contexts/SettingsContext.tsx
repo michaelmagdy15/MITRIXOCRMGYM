@@ -208,7 +208,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
         }
       }
     }, (err) => {
-      console.error('Could not load settings:', err);
+      if (err?.code !== 'permission-denied') {
+        console.error('Could not load settings:', err);
+      }
       setIsBrandingLoaded(true);
       clearTimeout(safetyTimeout);
     });

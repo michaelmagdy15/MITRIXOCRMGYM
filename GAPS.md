@@ -1,6 +1,28 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-08-21 (PT Edge Cases & Admin Requests)
+Updated: 2026-08-23 (Phone Auth SMS OTP, Staff Phone Management, Member Multi-Format Login)
+
+---
+
+## RECENT WORK — 2026-08-23 (Phone Auth SMS OTP, Staff Phone Management, Member Multi-Format Login)
+
+### Fixed This Session
+**AUTH.1 Automated Phone Auth & SMS OTP Password Reset** — FIXED ✅
+- Unified 2-step verification modal in `Login.tsx` with Phone SMS OTP code entry + new password update, and Email Reset link fallback.
+- Enabled Firebase Phone Auth provider with Egypt (+20) SMS Region Policy and test numbers for dev.
+
+**AUTH.2 Staff & Coach Phone Number Management** — FIXED ✅
+- Added `Phone` column in Staff table with amber `No Phone` tags for users missing phone numbers.
+- Added universal phone input to Edit User and Invite User dialogs in `Users.tsx` allowing admins to link numbers 1-by-1.
+
+**AUTH.3 Member Multi-Format Login & Self-Linking** — FIXED ✅
+- Fixed "Member ID not found" for legacy Strike members by trying all synthetic tenant email candidate formats (`@strike-member.local`, `@${tenantId}-member.local`, `@${tenantId}.mitrixo-member.local`).
+- Created `MemberAccountLinkCard.tsx` on `MemberHome.tsx` to allow unlinked members to instant self-link or create a guest profile.
+
+**DOCS.1 Comprehensive Guides & Flowcharts** — COMPLETED ✅
+- `docs/INZAN_FEATURE_GUIDE_AND_TUTORIAL.md`
+- `docs/STRIKE_MOBILE_APP_ARCHITECTURE_AND_FLOWCHART.md`
+- `docs/STRIKE_STAFF_PHONE_NUMBERS_REQUEST.txt`
 
 ---
 

@@ -25,6 +25,7 @@ export default function Users() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
+  const [invitePhone, setInvitePhone] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('rep');
   const [activatingUserId, setActivatingUserId] = useState<string | null>(null);
   const [activatedUserId, setActivatedUserId] = useState<string | null>(null);
@@ -83,11 +84,11 @@ export default function Users() {
     if (editingUser) {
       const updates: Partial<User> = {
         name: editName,
-        email: editEmail
+        email: editEmail,
+        phone: editPhone.trim() || undefined
       };
 
       if (editingUser.role === 'client') {
-        updates.phone = editPhone || undefined;
         updates.clientRecordId = editClientRecordId || undefined;
       } else {
         updates.branch = editBranch || undefined;
@@ -212,10 +213,11 @@ export default function Users() {
 
   const handleInvite = async () => {
     if (inviteEmail) {
-      await inviteUser(inviteEmail, inviteRole, inviteName || undefined);
+      await inviteUser(inviteEmail, inviteRole, inviteName || undefined, invitePhone || undefined);
       setIsInviteOpen(false);
       setInviteEmail('');
       setInviteName('');
+      setInvitePhone('');
       setInviteRole('rep');
     }
   };
@@ -238,7 +240,7 @@ export default function Users() {
 
         <TabsContent value="staff" className="space-y-6 m-0 outline-none">
           <div className="flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">Manage CRM access and target metrics for gym staff.</p>
+            <p className="text-sm text-muted-foreground">Manage CRM access, phone numbers, and target metrics for gym staff.</p>
             {canInviteUsers && (
               <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
                 <DialogTrigger render={<Button />}>
@@ -265,6 +267,16 @@ export default function Users() {
                         value={inviteEmail} 
                         onChange={(e) => setInviteEmail(e.target.value)} 
                       />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Mobile Phone Number (Optional)</Label>
+                      <Input 
+                        type="tel" 
+                        placeholder="+201000680580" 
+                        value={invitePhone} 
+                        onChange={(e) => setInvitePhone(e.target.value)} 
+                      />
+                      <p className="text-xs text-muted-foreground">Used for SMS password resets and OTP verification.</p>
                     </div>
                     <div className="space-y-2">
                       <Label>Role</Label>
@@ -304,6 +316,7 @@ export default function Users() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
                     <TableHead>Branch</TableHead>
                     <TableHead>Last Seen</TableHead>
                     <TableHead>Current Role</TableHead>
@@ -330,6 +343,15 @@ export default function Users() {
                         </div>
                       </TableCell>
                       <TableCell>{user.email}</TableCell>
+                      <TableCell>
+                        {user.phone ? (
+                          <span className="font-mono text-sm">{user.phone}</span>
+                        ) : (
+                          <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50/50 text-xs font-normal">
+                            No Phone
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {user.branch ? (
                           <Badge variant="outline" className="font-normal">{user.branch}</Badge>
@@ -665,16 +687,19 @@ export default function Users() {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label>Mobile Phone Number</Label>
+              <Input 
+                type="tel"
+                value={editPhone} 
+                onChange={(e) => setEditPhone(e.target.value)} 
+                placeholder="e.g. +201000680580"
+              />
+              <p className="text-xs text-muted-foreground">Used for SMS password resets and login verification.</p>
+            </div>
+
             {editingUser?.role === 'client' ? (
               <>
-                <div className="space-y-2">
-                  <Label>Phone Number</Label>
-                  <Input 
-                    value={editPhone} 
-                    onChange={(e) => setEditPhone(e.target.value)} 
-                    placeholder="e.g. +201234567890"
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label>Member ID (clientRecordId)</Label>
                   <Input 

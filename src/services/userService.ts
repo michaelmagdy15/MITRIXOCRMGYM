@@ -24,7 +24,7 @@ export const deleteUser = async (id: UserId, userName?: string) => {
   await addAuditLog('DELETE', 'CLIENT', id as any, `Deleted user account: ${userName || id}`);
 };
 
-export const inviteUser = async (email: string, role: UserRole, displayName?: string) => {
+export const inviteUser = async (email: string, role: UserRole, displayName?: string, phone?: string) => {
   // Check for existing user or invite
   const q = query(collection(db, 'users'), where('email', '==', email));
   const querySnapshot = await getDocs(q);
@@ -44,10 +44,11 @@ export const inviteUser = async (email: string, role: UserRole, displayName?: st
     name,
     email,
     role,
+    ...(phone ? { phone: phone.trim() } : {})
   };
 
   await setDoc(doc(db, 'users', uid), newUser);
-  await addAuditLog('CREATE', 'CLIENT', uid as any, `Invited user: ${email} as ${role}`);
+  await addAuditLog('CREATE', 'CLIENT', uid as any, `Invited user: ${email} as ${role}${phone ? ` (${phone})` : ''}`);
   return uid as UserId;
 };
 

@@ -35,7 +35,7 @@ interface AuthContextType {
   refreshUserData: () => Promise<void>;
   updateBranding: (updates: Partial<BrandingSettings>) => Promise<void>;
   deleteUser: (id: UserId) => Promise<void>;
-  inviteUser: (email: string, role: UserRole, displayName?: string) => Promise<void>;
+  inviteUser: (email: string, role: UserRole, displayName?: string, phone?: string) => Promise<void>;
   activatePendingUser: (pendingDocId: string, email: string, role: UserRole, name: string) => Promise<void>;
   createCoachAccount: (name: string, email: string, branch?: string) => Promise<{ uid: string; coachId: string }>;
   createClientAccount: (clientId: string, memberId: string, clientName: string, phone?: string) => Promise<{ uid: string }>;
@@ -151,6 +151,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 console.warn("Stale email cleanup skipped:", staleErr);
               }
             }
+            if (firebaseUser.phoneNumber && !userData.phone) {
+              userData.phone = firebaseUser.phoneNumber;
+              try { await updateDoc(userDocRef, { phone: firebaseUser.phoneNumber }); } catch { /* ignore */ }
+            }
+
+            // Auto-link client record if missing clientRecordId
+            if (userData.role === 'client' && !userData.clientRecordId) {
+              try {
+                const userPhone = firebaseUser.phoneNumber || userData.phone || '';
+                const cleanPhone = userPhone.replace(/\D/g, '').slice(-9);
+                const allClientsSnap = await getDocs(collection(db, 'clients'));
+                const matchedClient = allClientsSnap.docs.find(d => {
+                  const data = d.data();
+                  if (data.portalUserId === userId) return true;
+                  const cPhone = (data.phone || '').replace(/\D/g, '').slice(-9);
+                  if (cleanPhone && cPhone && cPhone === cleanPhone) return true;
+                  if (userData.email && (data.email || '').toLowerCase() === userData.email.toLowerCase()) return true;
+                  return false;
+                });
+
+                if (matchedClient) {
+                  const cData = matchedClient.data();
+                  userData.clientRecordId = cData.memberId || matchedClient.id;
+                  userData.clientDocId = matchedClient.id;
+                  if (!userData.name || userData.name === 'New User') {
+                    userData.name = cData.name || 'Member';
+                  }
+                  await updateDoc(userDocRef, {
+                    clientRecordId: userData.clientRecordId,
+                    clientDocId: userData.clientDocId,
+                    name: userData.name,
+                    phone: userPhone || userData.phone || ''
+                  });
+                  if (!cData.portalUserId || cData.portalUserId !== userId) {
+                    await updateDoc(doc(db, 'clients', matchedClient.id), { portalUserId: userId });
+                  }
+                }
+              } catch (e) {
+                console.warn("Could not auto-link client record by phone/email:", e);
+              }
+            }
+
             if (userData.role === 'client' && userData.clientRecordId) {
               try {
                 const clientQ = query(collection(db, 'clients'), where('memberId', '==', userData.clientRecordId.trim()));
@@ -184,6 +226,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               'shadyyoussef305@gmail.com',
             ];
             let role: UserRole = 'client';
+            let initialName = firebaseUser.displayName || 'New User';
+            let clientRecordId: string | undefined = undefined;
+            let clientDocId: string | undefined = undefined;
+            let coachId: string | undefined = undefined;
+
             if (firebaseUser.email === "michaelmitry13@gmail.com") {
               role = 'crm_admin';
             } else if (OWNER_EMAILS_NEW.includes(firebaseUser.email || '')) {
@@ -195,7 +242,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const q = query(collection(db, 'users'), where('email', 'in', emailsToSearch));
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
-                  role = querySnapshot.docs[0]!.data()['role'] as UserRole;
+                  const foundData = querySnapshot.docs[0]!.data();
+                  role = foundData['role'] as UserRole;
+                  if (foundData['name']) initialName = foundData['name'];
+                  if (foundData['coachId']) coachId = foundData['coachId'];
+                  if (foundData['clientRecordId']) clientRecordId = foundData['clientRecordId'];
                   const batch = writeBatch(db);
                   querySnapshot.docs.forEach(d => batch.delete(d.ref));
                   await batch.commit();
@@ -204,7 +255,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const allUsersSnap = await getDocs(collection(db, 'users'));
                     const match = allUsersSnap.docs.find(d => (d.data().email || '').toLowerCase() === emailLower);
                     if (match) {
-                      role = match.data()['role'] as UserRole;
+                      const foundData = match.data();
+                      role = foundData['role'] as UserRole;
+                      if (foundData['name']) initialName = foundData['name'];
+                      if (foundData['coachId']) coachId = foundData['coachId'];
+                      if (foundData['clientRecordId']) clientRecordId = foundData['clientRecordId'];
                       const batch = writeBatch(db);
                       allUsersSnap.docs.filter(d => (d.data().email || '').toLowerCase() === emailLower).forEach(d => batch.delete(d.ref));
                       await batch.commit();
@@ -218,11 +273,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             }
 
+            // Phone match lookup in users and clients
+            if (firebaseUser.phoneNumber) {
+              const phoneDigits = firebaseUser.phoneNumber.replace(/\D/g, '').slice(-9);
+              try {
+                const allUsersSnap = await getDocs(collection(db, 'users'));
+                const phoneMatch = allUsersSnap.docs.find(d => {
+                  const uPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+                  return uPhone && uPhone === phoneDigits;
+                });
+                if (phoneMatch) {
+                  const pData = phoneMatch.data();
+                  role = (pData.role as UserRole) || role;
+                  if (pData.name) initialName = pData.name;
+                  if (pData.coachId) coachId = pData.coachId;
+                  if (pData.clientRecordId) clientRecordId = pData.clientRecordId;
+                  const batch = writeBatch(db);
+                  allUsersSnap.docs.filter(d => {
+                    const uPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+                    return uPhone && uPhone === phoneDigits && d.id !== userId;
+                  }).forEach(d => batch.delete(d.ref));
+                  await batch.commit();
+                }
+
+                // If still client, check clients collection to link member
+                if (role === 'client' && !clientRecordId) {
+                  const allClientsSnap = await getDocs(collection(db, 'clients'));
+                  const clientMatch = allClientsSnap.docs.find(d => {
+                    const cPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+                    return cPhone && cPhone === phoneDigits;
+                  });
+                  if (clientMatch) {
+                    const cData = clientMatch.data();
+                    clientRecordId = cData.memberId || clientMatch.id;
+                    clientDocId = clientMatch.id;
+                    if (cData.name) initialName = cData.name;
+                    await updateDoc(doc(db, 'clients', clientMatch.id), { portalUserId: userId });
+                  }
+                }
+              } catch (phoneErr) {
+                console.warn("Could not check phone match during user creation:", phoneErr);
+              }
+            }
+
             const newUser: User = {
               id: userId,
-              name: firebaseUser.displayName || 'New User',
+              name: initialName,
               email: firebaseUser.email || '',
-              role: role
+              phone: firebaseUser.phoneNumber || '',
+              role: role,
+              clientRecordId,
+              clientDocId,
+              coachId
             };
             await setDoc(userDocRef, newUser);
             setCurrentUser(newUser);
@@ -312,14 +414,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isSuperAdminMode) return;
 
     const unsubPending = onSnapshot(
-      query(collection(db, 'pendingAccounts'), where('status', '==', 'pending'), orderBy('requestedAt', 'desc')),
-      (snap) => setPendingAccounts(snap.docs.map(d => ({ ...d.data(), id: d.id } as PendingAccount))),
+      query(collection(db, 'pendingAccounts'), where('status', '==', 'pending')),
+      (snap) => {
+        const list = snap.docs.map(d => ({ ...d.data(), id: d.id } as PendingAccount));
+        list.sort((a, b) => (b.requestedAt || '').localeCompare(a.requestedAt || ''));
+        setPendingAccounts(list);
+      },
       (err) => console.error('Firestore Error (pendingAccounts listener):', err.code, err.message)
     );
 
     const unsubResets = onSnapshot(
-      query(collection(db, 'passwordResetRequests'), where('status', '==', 'pending'), orderBy('requestedAt', 'desc')),
-      (snap) => setPasswordResetRequests(snap.docs.map(d => ({ ...d.data(), id: d.id } as PasswordResetRequest))),
+      query(collection(db, 'passwordResetRequests'), where('status', '==', 'pending')),
+      (snap) => {
+        const list = snap.docs.map(d => ({ ...d.data(), id: d.id } as PasswordResetRequest));
+        list.sort((a, b) => (b.requestedAt || '').localeCompare(a.requestedAt || ''));
+        setPasswordResetRequests(list);
+      },
       (err) => console.error('Firestore Error (passwordResetRequests listener):', err.code, err.message)
     );
 
@@ -352,40 +462,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithMemberId = async (memberId: string, password: string) => {
     const term = memberId.trim();
-    // 1. Try the deterministic tenant-namespaced email first (covers all
-    //    accounts created via createClientAccount / registerFreeUser).
+    const cleanId = term.toLowerCase().replace(/^mem-/, '');
+    const tenantId = getTenantId();
+
+    const candidateEmails = [
+      getMemberEmail(cleanId),
+      `member-${cleanId}@${tenantId}-member.local`,
+      `member-${cleanId}@${tenantId}.mitrixo-member.local`,
+      `member-${cleanId}@strike-member.local`,
+      `member-${cleanId}@inzan-member.local`,
+      `member-${cleanId}@inzanathletics-member.local`,
+      `member-${cleanId}@mitrixogymcrm-member.local`,
+      `member-${cleanId}@default.mitrixo-member.local`
+    ];
+    // Remove duplicates
+    const uniqueCandidates = [...new Set(candidateEmails)];
+
+    let wrongPasswordEncountered = false;
+    let lastError: any = null;
+
+    for (const email of uniqueCandidates) {
+      try {
+        await signInWithEmail(email, password);
+        return;
+      } catch (err: any) {
+        lastError = err;
+        if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+          wrongPasswordEncountered = true;
+        }
+      }
+    }
+
+    if (wrongPasswordEncountered) {
+      throw new Error('Incorrect password. Please check and try again.');
+    }
+
+    // If candidate emails didn't match, fall through to server-side resolve-email
     try {
-      const deterministicEmail = getMemberEmail(term);
-      await signInWithEmail(deterministicEmail, password);
-      return;
-    } catch (err: any) {
-      // Deterministic email failed (not found or wrong password) — fall
-      // through to a server-side lookup for legacy/custom-email accounts.
       const res = await fetch('/api/member/resolve-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ memberId: term })
-      }).catch(() => null);
-
-      if (!res) {
-        throw new Error(err?.message || 'Sign-in failed. Please check your credentials.');
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.email) {
+          await signInWithEmail(data.email, password);
+          return;
+        }
       }
+    } catch { /* ignore server lookup failure */ }
 
-      if (res.status === 404) {
-        throw new Error('Member ID not found. Please check and try again.');
-      }
-
-      if (!res.ok) {
-        throw new Error(err?.message || 'Sign-in failed. Please check your credentials.');
-      }
-
-      const data = await res.json();
-      if (data.email === getMemberEmail(term)) {
-        // Same deterministic account — the password was wrong.
-        throw new Error(err?.message || 'Incorrect password. Please try again.');
-      }
-      await signInWithEmail(data.email, password);
-    }
+    throw new Error('Member ID not found. Please check your ID or reset your password.');
   };
 
   const createCoachAccount = async (name: string, email: string, branch?: string) => {
@@ -551,8 +679,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await userService.deleteUser(id, user?.name);
   };
 
-  const inviteUser = async (email: string, role: UserRole, displayName?: string) => {
-    await userService.inviteUser(email, role, displayName);
+  const inviteUser = async (email: string, role: UserRole, displayName?: string, phone?: string) => {
+    await userService.inviteUser(email, role, displayName, phone);
   };
 
   const activatePendingUser = async (pendingDocId: string, email: string, role: UserRole, name: string) => {

@@ -17,7 +17,31 @@
 
 ---
 
-## 8. Live Session Log — 2026-08-21 (most recent)
+## 8. Live Session Log — 2026-08-23 (most recent)
+
+### Fixed & Built this session
+1. **Automated Phone Auth & SMS OTP Password Reset:**
+   - Unified `ForgotPasswordDialog` in `src/Login.tsx` supporting 2-step verification (Phone SMS OTP with 6-digit code entry + new password update) and Email Reset Link fallback for all roles (Members, Coaches, Staff, Admins).
+   - Configured Firebase Phone Auth provider with Egypt (+20) SMS Region Policy and test number support for localhost dev verification.
+2. **Staff & Coach Phone Management (`src/Users.tsx`):**
+   - Added `Phone` column in Staff table with amber `No Phone` tags for users missing phone numbers.
+   - Added phone number field to Invite Dialog and universal Mobile Phone Number input in Edit User dialog so admins can link staff phone numbers 1-by-1.
+3. **Instant Self-Linking & Setup (`src/member/components/MemberAccountLinkCard.tsx`):**
+   - Replaced dead-end "No member record found" with an interactive card allowing members to self-link via Member ID/Phone or create a guest profile with 1 click.
+4. **Multi-Format Member ID Login Resolution (`src/contexts/AuthContext.tsx`):**
+   - Fixed "Member ID not found" on legacy member accounts by trying all synthetic tenant email candidate formats (`@strike-member.local`, `@${tenantId}-member.local`, `@${tenantId}.mitrixo-member.local`, `@mitrixogymcrm-member.local`).
+5. **Documentation & Architecture Artifacts:**
+   - Completed [docs/INZAN_FEATURE_GUIDE_AND_TUTORIAL.md](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/INZAN_FEATURE_GUIDE_AND_TUTORIAL.md).
+   - Completed [docs/STRIKE_MOBILE_APP_ARCHITECTURE_AND_FLOWCHART.md](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/STRIKE_MOBILE_APP_ARCHITECTURE_AND_FLOWCHART.md).
+   - Created [docs/STRIKE_STAFF_PHONE_NUMBERS_REQUEST.txt](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/docs/STRIKE_STAFF_PHONE_NUMBERS_REQUEST.txt).
+
+### Verification status
+- `npm run build` → ✓ 0 errors, clean build (dist + dist-server).
+- Local smoke tests: SMS verification pass, password update pass, member login (`1078`/`920`) pass.
+
+---
+
+## 9. Live Session Log — 2026-08-21
 
 ### Fixed this session
 1. **PT Edge Cases & Session Management** — Completed full lifecycle for PT Sessions.

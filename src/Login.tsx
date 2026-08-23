@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useSettings } from './contexts/SettingsContext';
-import { sendPasswordReset, getTenantId } from './firebase';
+import { sendPasswordReset, getTenantId, auth } from './firebase';
+import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, updatePassword } from 'firebase/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { UserRole } from './types';
-import { Eye, EyeOff, ShieldCheck, Dumbbell, Users, ArrowLeft, CheckCircle2, Globe } from 'lucide-react';
+import { Eye, EyeOff, ShieldCheck, Dumbbell, Users, ArrowLeft, CheckCircle2, Globe, Smartphone, KeyRound, Mail } from 'lucide-react';
 import { useLanguage } from './contexts/LanguageContext';
 import SignupWizard from './SignupWizard';
 
@@ -70,6 +71,16 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   const [memberForgotEmail, setMemberForgotEmail] = useState('');
   const [memberForgotSubmitted, setMemberForgotSubmitted] = useState(false);
 
+  // Phone SMS OTP state (Method A)
+  const [phoneResetNumber, setPhoneResetNumber] = useState('+201000680580');
+  const [phoneOtpCode, setPhoneOtpCode] = useState('');
+  const [phoneNewPassword, setPhoneNewPassword] = useState('');
+  const [phoneConfirmPassword, setPhoneConfirmPassword] = useState('');
+  const [phoneResetStep, setPhoneResetStep] = useState<'phone' | 'otp' | 'success'>('phone');
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [phoneSmsLoading, setPhoneSmsLoading] = useState(false);
+  const [phoneSmsError, setPhoneSmsError] = useState<string | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -83,6 +94,98 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
       setError('This account has been disabled. Please contact an administrator.');
     } else {
       setError((err as Error)?.message || 'An error occurred. Please try again.');
+    }
+  };
+
+  const formatPhoneNumber = (phone: string) => {
+    let clean = phone.trim().replace(/[\s-]/g, '');
+    if (clean.startsWith('01')) {
+      clean = '+20' + clean.substring(1);
+    } else if (clean.startsWith('201')) {
+      clean = '+' + clean;
+    } else if (!clean.startsWith('+')) {
+      clean = '+20' + clean;
+    }
+    return clean;
+  };
+
+  const handleSendPhoneSms = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPhoneSmsError(null);
+    setPhoneSmsLoading(true);
+    try {
+      const formatted = formatPhoneNumber(phoneResetNumber);
+      
+      // Ensure existing verifier is cleaned up
+      if ((window as any).recaptchaVerifier) {
+        try {
+          (window as any).recaptchaVerifier.clear();
+        } catch {}
+        (window as any).recaptchaVerifier = null;
+      }
+
+      const verifier = new RecaptchaVerifier(auth, 'phone-recaptcha-container', {
+        size: 'invisible',
+        callback: () => {
+          // reCAPTCHA solved
+        },
+        'expired-callback': () => {
+          setPhoneSmsError("reCAPTCHA expired. Please click Send SMS Code again.");
+        }
+      });
+      (window as any).recaptchaVerifier = verifier;
+
+      await verifier.render();
+
+      const confirmation = await signInWithPhoneNumber(auth, formatted, verifier);
+      setConfirmationResult(confirmation);
+      setPhoneResetStep('otp');
+    } catch (err: any) {
+      console.error("SMS Send Error:", err);
+      const code = err?.code || '';
+      if (code === 'auth/invalid-app-credential') {
+        setPhoneSmsError("Google SMS verification failed. Please ensure 'localhost' is in Firebase Authorized Domains or add this number under Firebase 'Phone numbers for testing'.");
+      } else if (code === 'auth/quota-exceeded' || code === 'auth/too-many-requests') {
+        setPhoneSmsError("SMS quota or rate limit exceeded. Please wait a few minutes or test with a designated test code.");
+      } else if (code === 'auth/invalid-phone-number') {
+        setPhoneSmsError("Invalid phone number format. Please enter a valid mobile number (e.g. +201000680580).");
+      } else {
+        setPhoneSmsError(err?.message || "Failed to send SMS code. Please verify your phone number and try again.");
+      }
+    } finally {
+      setPhoneSmsLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneOtpAndReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!confirmationResult) return;
+    if (!phoneOtpCode || phoneOtpCode.length < 6) {
+      setPhoneSmsError("Please enter the 6-digit verification code.");
+      return;
+    }
+    if (phoneNewPassword.length < 6) {
+      setPhoneSmsError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (phoneNewPassword !== phoneConfirmPassword) {
+      setPhoneSmsError("Passwords do not match.");
+      return;
+    }
+
+    setPhoneSmsError(null);
+    setPhoneSmsLoading(true);
+    try {
+      const userCred = await confirmationResult.confirm(phoneOtpCode.trim());
+      if (userCred.user) {
+        await updatePassword(userCred.user, phoneNewPassword);
+      }
+      setPhoneResetStep('success');
+    } catch (err: any) {
+      console.error("OTP Verification Error:", err);
+      setPhoneSmsError(err?.message || "Invalid verification code. Please check and try again.");
+    } finally {
+      setPhoneSmsLoading(false);
     }
   };
 
@@ -554,10 +657,9 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                     <button
                       className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
                       onClick={() => {
-                        setMemberForgotOpen(true);
-                        setMemberForgotSubmitted(false);
-                        setMemberForgotId('');
-                        setMemberForgotPhone('');
+                        setForgotOpen(true);
+                        setPhoneResetStep('phone');
+                        setPhoneSmsError(null);
                         setError('');
                       }}
                     >
@@ -670,99 +772,162 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
           </div>
         </div>
 
-      {/* ── Forgot Password Dialog (Staff / Coach — email) ── */}
-      <Dialog open={forgotOpen} onOpenChange={open => { setForgotOpen(open); if (!open) { setForgotSubmitted(false); setError(''); } }}>
-        <DialogContent>
+      {/* ── Unified Forgot Password Dialog (SMS Phone OTP & Email Link for All Roles) ── */}
+      <Dialog open={forgotOpen} onOpenChange={open => { 
+        setForgotOpen(open); 
+        if (!open) { 
+          setPhoneResetStep('phone');
+          setPhoneSmsError(null); 
+          setPhoneOtpCode('');
+          setPhoneNewPassword('');
+          setPhoneConfirmPassword('');
+          setForgotSubmitted(false);
+          setError('');
+        } 
+      }}>
+        <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+              <KeyRound className="h-5 w-5 text-primary" />
+              Reset Your Password
+            </DialogTitle>
+            <DialogDescription>
+              Choose your preferred method to verify your identity and set a new password.
+            </DialogDescription>
           </DialogHeader>
-          {forgotSubmitted ? (
-            <div className="flex flex-col items-center gap-4 py-4 text-center">
-              <CheckCircle2 className="h-12 w-12 text-green-500" />
-              <p className="font-semibold">Reset Email Sent!</p>
-              <p className="text-sm text-muted-foreground">If an account exists for <strong>{forgotEmail}</strong>, you'll receive a password reset link in your inbox. Check your spam folder too.</p>
-              <Button onClick={() => setForgotOpen(false)}>Close</Button>
-            </div>
-          ) : (
-            <form onSubmit={handleForgotPassword} className="space-y-4 py-2">
-              {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-              <div className="space-y-2">
-                <Label>Email Address</Label>
-                <Input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required />
-              </div>
-              <p className="text-xs text-muted-foreground">We'll send a password reset link directly to your email — no waiting required.</p>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setForgotOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={isLoading || !forgotEmail}>
-                  {isLoading ? 'Sending...' : 'Send Reset Link'}
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
 
-      {/* ── Forgot Password Dialog (Member — ID + Phone + Email) ── */}
-      <Dialog open={memberForgotOpen} onOpenChange={open => { setMemberForgotOpen(open); if (!open) { setMemberForgotSubmitted(false); setError(''); setMemberForgotEmail(''); } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reset Member Password</DialogTitle>
-          </DialogHeader>
-          {memberForgotSubmitted ? (
-            <div className="flex flex-col items-center gap-4 py-4 text-center">
-              <CheckCircle2 className="h-12 w-12 text-green-500" />
-              <p className="font-semibold">Reset Link Sent!</p>
-              <p className="text-sm text-muted-foreground">
-                A password reset link has been sent to <strong>{memberForgotEmail}</strong>. Click the link in the email to set your new password.
-              </p>
-              <p className="text-xs text-muted-foreground">Don't see it? Check your spam/junk folder.</p>
-              <Button onClick={() => setMemberForgotOpen(false)}>Got it</Button>
-            </div>
-          ) : (
-            <form onSubmit={handleMemberForgotPassword} className="space-y-4 py-2">
-              {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
-              <p className="text-sm text-muted-foreground">
-                Verify your identity, then we'll send a password reset link to your email.
-              </p>
-              <div className="space-y-2">
-                <Label>Member ID</Label>
-                <Input
-                  placeholder="e.g. MEM-001"
-                  value={memberForgotId}
-                  onChange={e => setMemberForgotId(e.target.value)}
-                  className="font-mono tracking-wide"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone Number (on file)</Label>
-                <Input
-                  type="tel"
-                  placeholder="e.g. 01012345678"
-                  value={memberForgotPhone}
-                  onChange={e => setMemberForgotPhone(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Your Email Address</Label>
-                <Input
-                  type="email"
-                  placeholder="you@gmail.com"
-                  value={memberForgotEmail}
-                  onChange={e => setMemberForgotEmail(e.target.value)}
-                  required
-                />
-                <p className="text-xs text-muted-foreground">We'll send the reset link here and save this email to your profile.</p>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setMemberForgotOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={isLoading || !memberForgotId || !memberForgotPhone || !memberForgotEmail}>
-                  {isLoading ? 'Verifying...' : 'Send Reset Link'}
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
+          <Tabs defaultValue="sms" className="w-full mt-2">
+            <TabsList className="grid grid-cols-2 w-full mb-4 bg-muted/60 p-1 rounded-lg">
+              <TabsTrigger value="sms" className="flex items-center justify-center gap-1.5 text-xs py-2">
+                <Smartphone className="h-3.5 w-3.5" /> Phone SMS Code
+              </TabsTrigger>
+              <TabsTrigger value="email" className="flex items-center justify-center gap-1.5 text-xs py-2">
+                <Mail className="h-3.5 w-3.5" /> Email Reset Link
+              </TabsTrigger>
+            </TabsList>
+
+            {/* ── Option 1: Phone SMS Reset ── */}
+            <TabsContent value="sms" className="space-y-4 m-0">
+              {phoneResetStep === 'success' ? (
+                <div className="flex flex-col items-center gap-4 py-6 text-center">
+                  <CheckCircle2 className="h-14 w-14 text-green-500 animate-in zoom-in-50" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-lg">Password Reset Complete!</p>
+                    <p className="text-sm text-muted-foreground">You can now sign in immediately with your new password.</p>
+                  </div>
+                  <Button className="w-full mt-2" onClick={() => setForgotOpen(false)}>Sign In Now</Button>
+                </div>
+              ) : phoneResetStep === 'otp' ? (
+                <form onSubmit={handleVerifyPhoneOtpAndReset} className="space-y-4 py-1">
+                  {phoneSmsError && <Alert variant="destructive"><AlertDescription>{phoneSmsError}</AlertDescription></Alert>}
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="otp-input">6-Digit SMS Verification Code</Label>
+                    <Input
+                      id="otp-input"
+                      placeholder="e.g. 123456"
+                      value={phoneOtpCode}
+                      onChange={e => setPhoneOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="text-center font-mono text-xl tracking-[0.3em] font-bold"
+                      maxLength={6}
+                      required
+                      autoFocus
+                    />
+                    <p className="text-xs text-muted-foreground">Sent to {phoneResetNumber}</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="new-pass">New Password</Label>
+                    <Input
+                      id="new-pass"
+                      type="password"
+                      placeholder="Min 6 characters"
+                      value={phoneNewPassword}
+                      onChange={e => setPhoneNewPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-pass">Confirm New Password</Label>
+                    <Input
+                      id="confirm-pass"
+                      type="password"
+                      placeholder="Re-enter new password"
+                      value={phoneConfirmPassword}
+                      onChange={e => setPhoneConfirmPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setPhoneResetStep('phone')}>Back</Button>
+                    <Button type="submit" disabled={phoneSmsLoading || phoneOtpCode.length < 6 || !phoneNewPassword || !phoneConfirmPassword}>
+                      {phoneSmsLoading ? 'Verifying...' : 'Set New Password'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              ) : (
+                <form onSubmit={handleSendPhoneSms} className="space-y-4 py-1">
+                  {phoneSmsError && <Alert variant="destructive"><AlertDescription>{phoneSmsError}</AlertDescription></Alert>}
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="phone-input">Mobile Phone Number</Label>
+                    <Input
+                      id="phone-input"
+                      type="tel"
+                      placeholder="+201000680580"
+                      value={phoneResetNumber}
+                      onChange={e => setPhoneResetNumber(e.target.value)}
+                      className="font-mono tracking-wide"
+                      required
+                      autoFocus
+                    />
+                    <p className="text-xs text-muted-foreground">Format: +201000680580 or 01000680580 (Egyptian mobile).</p>
+                  </div>
+
+                  {/* Invisible reCAPTCHA container for Firebase */}
+                  <div id="phone-recaptcha-container"></div>
+
+                  <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setForgotOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={phoneSmsLoading || !phoneResetNumber.trim()}>
+                      {phoneSmsLoading ? 'Sending SMS...' : 'Send SMS Code'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              )}
+            </TabsContent>
+
+            {/* ── Option 2: Email Reset Link ── */}
+            <TabsContent value="email" className="space-y-4 m-0">
+              {forgotSubmitted ? (
+                <div className="flex flex-col items-center gap-4 py-6 text-center">
+                  <CheckCircle2 className="h-12 w-12 text-green-500" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-lg">Reset Link Sent!</p>
+                    <p className="text-sm text-muted-foreground">If an account exists for <strong>{forgotEmail}</strong>, you will receive a password reset email shortly.</p>
+                  </div>
+                  <Button className="w-full mt-2" onClick={() => setForgotOpen(false)}>Close</Button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-4 py-1">
+                  {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+                  <div className="space-y-2">
+                    <Label>Email Address</Label>
+                    <Input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required />
+                  </div>
+                  <p className="text-xs text-muted-foreground">We'll send a password reset link directly to your email inbox.</p>
+                  <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2">
+                    <Button type="button" variant="outline" onClick={() => setForgotOpen(false)}>Cancel</Button>
+                    <Button type="submit" disabled={isLoading || !forgotEmail}>
+                      {isLoading ? 'Sending...' : 'Send Reset Link'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
     </div>

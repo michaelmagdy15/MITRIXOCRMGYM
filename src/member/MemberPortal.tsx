@@ -160,33 +160,101 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   // 1. Fetch primary client record
   useEffect(() => {
-    if (!currentUser?.clientRecordId) {
-      setLoading(false);
-      return;
-    }
+    let active = true;
 
-    const q = query(
-      collection(db, 'clients'),
-      where('memberId', '==', currentUser.clientRecordId.trim())
-    );
-
-    getDocs(q)
-      .then((snapshot) => {
-        if (!snapshot.empty && snapshot.docs[0]) {
-          const docSnap = snapshot.docs[0];
-          const pClient = { ...docSnap.data(), id: docSnap.id } as Client;
-          setPrimaryClient(pClient);
-          setActiveClient(pClient);
-          setSelectedClientId(prev => prev || pClient.id);
-        } else {
-          console.warn("No client document found matching member ID:", currentUser.clientRecordId);
+    const findClient = async () => {
+      try {
+        // Option A: Match by memberId (clientRecordId)
+        if (currentUser?.clientRecordId) {
+          const q = query(
+            collection(db, 'clients'),
+            where('memberId', '==', currentUser.clientRecordId.trim())
+          );
+          const snapshot = await getDocs(q);
+          if (!snapshot.empty && snapshot.docs[0]) {
+            const docSnap = snapshot.docs[0];
+            const pClient = { ...docSnap.data(), id: docSnap.id } as Client;
+            if (active) {
+              setPrimaryClient(pClient);
+              setActiveClient(pClient);
+              setSelectedClientId(prev => prev || pClient.id);
+              setLoading(false);
+            }
+            return;
+          }
         }
-      })
-      .catch((err) => {
-        console.warn("Could not load client record (may be a permissions issue):", err.code || err.message);
-      })
-      .finally(() => setLoading(false));
-  }, [currentUser?.clientRecordId]);
+
+        // Option B: Match by portalUserId (user's auth UID)
+        if (currentUser?.id) {
+          const qUid = query(
+            collection(db, 'clients'),
+            where('portalUserId', '==', currentUser.id)
+          );
+          const uidSnap = await getDocs(qUid);
+          if (!uidSnap.empty && uidSnap.docs[0]) {
+            const docSnap = uidSnap.docs[0];
+            const pClient = { ...docSnap.data(), id: docSnap.id } as Client;
+            if (active) {
+              setPrimaryClient(pClient);
+              setActiveClient(pClient);
+              setSelectedClientId(prev => prev || pClient.id);
+              setLoading(false);
+            }
+            return;
+          }
+        }
+
+        // Option C: Match by Phone Number (normalized digits)
+        const userPhone = currentUser?.phone || '';
+        if (userPhone) {
+          const cleanPhone = userPhone.replace(/\D/g, '').slice(-9);
+          if (cleanPhone) {
+            const allSnap = await getDocs(collection(db, 'clients'));
+            const matched = allSnap.docs.find(d => {
+              const cPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+              return cPhone && cPhone === cleanPhone;
+            });
+            if (matched && active) {
+              const pClient = { ...matched.data(), id: matched.id } as Client;
+              setPrimaryClient(pClient);
+              setActiveClient(pClient);
+              setSelectedClientId(prev => prev || pClient.id);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+
+        // Option D: Match by Email
+        if (currentUser?.email) {
+          const qEmail = query(
+            collection(db, 'clients'),
+            where('email', '==', currentUser.email.trim().toLowerCase())
+          );
+          const emailSnap = await getDocs(qEmail);
+          if (!emailSnap.empty && emailSnap.docs[0] && active) {
+            const docSnap = emailSnap.docs[0];
+            const pClient = { ...docSnap.data(), id: docSnap.id } as Client;
+            setPrimaryClient(pClient);
+            setActiveClient(pClient);
+            setSelectedClientId(prev => prev || pClient.id);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (err: any) {
+        console.warn("Could not load client record:", err.code || err.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    findClient();
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser?.clientRecordId, currentUser?.id, currentUser?.phone, currentUser?.email]);
 
   // 2. Listen to active client record in real-time
   useEffect(() => {
@@ -330,7 +398,18 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             </div>
           </div>
         )}
-        {activeTab === 'home' && <MemberHome client={activeClient} onSwitchToStore={onSwitchToStore} onNavigate={handleNavigate} />}
+        {activeTab === 'home' && (
+          <MemberHome 
+            client={activeClient} 
+            onSwitchToStore={onSwitchToStore} 
+            onNavigate={handleNavigate}
+            onClientLinked={(linked) => {
+              setPrimaryClient(linked);
+              setActiveClient(linked);
+              setSelectedClientId(linked.id);
+            }}
+          />
+        )}
         
         {activeTab === 'booking' && (
           <div className="space-y-4">

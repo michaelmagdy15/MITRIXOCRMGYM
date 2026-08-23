@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { SectionHeader } from './components/SectionHeader';
 import { EmptyState } from './components/EmptyState';
 import { Skeleton, SkeletonCard } from './components/Skeleton';
+import { MemberAccountLinkCard } from './components/MemberAccountLinkCard';
 
 const BoxingGlovesIcon = ({ className }: { className?: string }) => (
   <svg
@@ -108,10 +109,11 @@ interface Announcement {
   createdBy: string;
 }
 
-export default function MemberHome({ client, onSwitchToStore, onNavigate }: { 
+export default function MemberHome({ client, onSwitchToStore, onNavigate, onClientLinked }: { 
   client: Client | null; 
   onSwitchToStore?: () => void;
   onNavigate?: (tab: string) => void;
+  onClientLinked?: (newClient: Client) => void;
 }) {
   const { theme } = useTheme();
   const { branding, features } = useSettings();
@@ -318,9 +320,8 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate }: {
 
   if (!client) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-        <p className="font-semibold text-lg">No member record found.</p>
-        <p className="text-xs">Contact gym administration to link your account.</p>
+      <div className="py-2 animate-in fade-in duration-300">
+        <MemberAccountLinkCard onClientLinked={onClientLinked || (() => window.location.reload())} />
       </div>
     );
   }

@@ -192,6 +192,9 @@ const tenantConfigs: Record<string, any> = {
   "strikeboxing.mitrixo.com": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
   "dashboard.strikeboxing-eg.pro": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
   "inzanathletics.mitrixo.com": inzanConfig,
+  "inzanathletics.localhost": inzanConfig,
+  "inzan.localhost": inzanConfig,
+  "inzanathletics.local": inzanConfig,
   "mitrixogymcrm-boxing.local": {
     ...defaultFirebaseConfig,
     projectId: "mitrixogymcrm-boxing-tenant-1",
@@ -330,6 +333,11 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
 }
 
 function getRequestHostname(req: express.Request): string {
+  if (req.query?.tenant) {
+    const t = String(req.query.tenant).toLowerCase();
+    if (t === 'inzan' || t === 'inzanathletics') return 'inzanathletics.mitrixo.com';
+    if (t === 'strike' || t === 'strikeboxing') return 'strike.mitrixo.com';
+  }
   if (req.hostname) {
     return req.hostname;
   }
