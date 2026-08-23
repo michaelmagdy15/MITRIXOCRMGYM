@@ -330,43 +330,39 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   return (
     <div className="h-screen overflow-hidden bg-background flex flex-col font-sans relative">
-      {/* Decorative Premium Glow Blobs */}
-      <div className="absolute top-[5%] right-[-20%] w-[320px] h-[320px] rounded-full bg-primary/10 dark:bg-primary/20 blur-[100px] pointer-events-none z-0" />
-      <div className="absolute bottom-[15%] left-[-20%] w-[320px] h-[320px] rounded-full bg-strike-green/10 dark:bg-strike-green/15 blur-[100px] pointer-events-none z-0" />
-
-      <header className="border-b bg-card h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
+      <header className="border-b border-border/60 bg-background/80 backdrop-blur-xl h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div 
             className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity"
             onClick={() => setActiveTab('home')}
           >
             {branding.logoUrl ? (
-              <img src={branding.logoUrl} alt={branding.companyName} className="h-8 w-auto object-contain dark:brightness-0 dark:invert" referrerPolicy="no-referrer" />
+              <img src={branding.logoUrl} alt={branding.companyName} className="h-7 w-auto object-contain dark:brightness-0 dark:invert" referrerPolicy="no-referrer" />
             ) : (
-              <h1 className="text-lg font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
+              <h1 className="text-base font-bold tracking-tight uppercase text-foreground">{branding.companyName}</h1>
             )}
           </div>
-          <Badge variant="outline" className="text-[10px] font-bold tracking-widest uppercase text-primary border-primary/30 hidden sm:inline-flex">
+          <Badge variant="outline" className="text-[10px] font-semibold tracking-wider uppercase text-muted-foreground border-border hidden sm:inline-flex">
             Member
           </Badge>
         </div>
 
         {/* Profile Switcher dropdown next to theme toggle */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {primaryClient && linkedClients.length > 0 && (
             <div className="flex items-center gap-1.5">
-              <Users className="h-4 w-4 text-zinc-400 shrink-0" />
+              <Users className="h-4 w-4 text-muted-foreground shrink-0" />
               <Select value={selectedClientId} onValueChange={(val) => setSelectedClientId(val || '')}>
-                <SelectTrigger className="h-8 text-[11px] font-bold bg-background border-zinc-800 w-32 sm:w-40">
+                <SelectTrigger className="h-8 text-[11px] font-semibold bg-background border-border w-32 sm:w-40">
                   <SelectValue placeholder="Select Profile" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={primaryClient.id}>
-                    {primaryClient.name.toUpperCase()} (You)
+                    {primaryClient.name} (You)
                   </SelectItem>
                   {linkedClients.map(c => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name.toUpperCase()}
+                      {c.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -376,33 +372,31 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
           <MemberNotificationBell clientId={activeClient?.id} />
 
-          <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-foreground">
+          <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-muted-foreground hover:text-foreground">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
-          <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="h-8 w-8 text-foreground">
+          <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="h-8 w-8 text-muted-foreground hover:text-foreground">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-6 pb-28 max-w-md mx-auto w-full overscroll-contain">
+      <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 max-w-md mx-auto w-full overscroll-contain">
         {activeClient?.status === 'Expired' && (
-          <div className="mb-4 p-4 bg-secondary/60 border border-border text-muted-foreground rounded-2xl flex items-start gap-3 shadow-sm backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-300">
-            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-strike-green" />
-            <div className="space-y-1">
-              <p className="font-bold text-sm">Membership Expired</p>
-              <p className="text-xs font-semibold leading-relaxed">
-                Your membership is currently expired. You must head to the STRIKE branch to renew.
-              </p>
-            </div>
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-semibold flex items-center justify-between shadow-sm">
+            <span>Membership Expired</span>
+            <Button size="sm" variant="outline" className="h-7 text-xs bg-transparent border-amber-500/30 text-amber-600 dark:text-amber-400" onClick={() => setActiveTab('profile')}>
+              Renew Plan
+            </Button>
           </div>
         )}
+
         {activeTab === 'home' && (
           <MemberHome 
             client={activeClient} 
             onSwitchToStore={onSwitchToStore} 
-            onNavigate={handleNavigate}
+            onNavigate={handleNavigate} 
             onClientLinked={(linked) => {
               setPrimaryClient(linked);
               setActiveClient(linked);
@@ -413,17 +407,17 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         
         {activeTab === 'booking' && (
           <div className="space-y-4">
-            {!isStrike && features.ptPackages !== false && (
-              <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border">
+            {features.ptPackages !== false && !isStrike && (
+              <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border border-border/60 gap-1">
                 <button 
                   onClick={() => setBookingSubTab('pt')} 
-                  className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${bookingSubTab === 'pt' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${bookingSubTab === 'pt' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                   PT Sessions
                 </button>
                 <button 
                   onClick={() => setBookingSubTab('group')} 
-                  className={`py-1.5 text-xs font-bold rounded-lg transition-colors ${bookingSubTab === 'group' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'}`}
+                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${bookingSubTab === 'group' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                   Group Classes
                 </button>
@@ -440,12 +434,12 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         
         {activeTab === 'profile' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 p-1 bg-muted/60 rounded-xl border gap-0.5">
+            <div className="grid grid-cols-3 p-1 bg-muted/60 rounded-xl border border-border/60 gap-1">
               {profileSubTabsList.map((tab) => (
                 <button 
                   key={tab.id}
                   onClick={() => setProfileSubTab(tab.id as any)}
-                  className={`py-1.5 text-[10px] font-bold rounded-lg transition-colors truncate ${profileSubTab === tab.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground/80 dark:text-zinc-400 hover:text-foreground'}`}
+                  className={`py-1.5 text-[11px] font-semibold rounded-lg transition-colors truncate ${profileSubTab === tab.id ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                   {tab.label}
                 </button>
@@ -473,8 +467,8 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-card/90 border-t z-50 shadow-lg backdrop-blur-md pb-safe">
-        <div className="flex justify-around items-stretch max-w-md mx-auto">
+      <nav className="fixed bottom-0 left-0 right-0 bg-background/90 border-t border-border/60 z-50 backdrop-blur-xl pb-safe">
+        <div className="flex justify-around items-stretch max-w-md mx-auto h-16">
           {filteredNavItems.map(({ tab, label, icon }) => {
             const isActive = activeTab === tab;
             return (
@@ -482,23 +476,18 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`relative flex flex-col items-center justify-center gap-1 flex-1 min-h-[60px] px-2 pt-2 transition-colors duration-200 ${
-                  isActive ? 'text-strike-green' : 'text-muted-foreground hover:text-foreground/80'
+                className={`relative flex flex-col items-center justify-center gap-1 flex-1 px-2 pt-1 transition-colors duration-150 ${
+                  isActive ? 'text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                <span
-                  className={`absolute top-0 left-1/2 -translate-x-1/2 h-[3px] rounded-b-full transition-all duration-300 ${
-                    isActive ? 'w-8 bg-strike-green' : 'w-0 bg-transparent'
-                  }`}
-                />
                 <span className="relative">
                   {icon}
                   {isActive && (
-                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-strike-green/70" />
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
                   )}
                 </span>
-                <span className={`text-[9px] tracking-wide transition-all duration-300 ${
-                  isActive ? 'font-bold text-strike-green' : 'font-semibold'
+                <span className={`text-[10px] tracking-tight ${
+                  isActive ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground'
                 }`}>
                   {label}
                 </span>

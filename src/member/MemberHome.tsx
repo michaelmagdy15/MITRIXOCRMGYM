@@ -282,33 +282,29 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
     const list = [
       { 
         icon: isStrike ? (
-          <BoxingGlovesIcon className="h-7 w-7 text-foreground drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
+          <BoxingGlovesIcon className="h-5 w-5 text-foreground" />
         ) : (
-          <Calendar strokeWidth={1.25} className="h-6 w-6 text-red-500 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
+          <Calendar className="h-5 w-5 text-foreground" />
         ), 
         label: 'Bookings', 
         action: () => onNavigate?.('booking'),
-        glowColor: isStrike ? '#18181b' : '#C20E1A'
       },
       { 
-        icon: <Coins strokeWidth={1.25} className={`h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-yellow-600'}`} />, 
+        icon: <Coins className="h-5 w-5 text-foreground" />, 
         label: 'Wallet', 
         action: () => onNavigate?.('wallet'),
-        glowColor: isStrike ? '#71717a' : '#D97706',
         walletRequired: true
       },
       { 
-        icon: <Trophy strokeWidth={1.25} className={`h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-emerald-500'}`} />, 
+        icon: <Trophy className="h-5 w-5 text-foreground" />, 
         label: 'Progress', 
         action: () => onNavigate?.('profile-progress'),
-        glowColor: isStrike ? '#a1a1aa' : '#059669',
         pointsRequired: true
       },
       { 
-        icon: <User strokeWidth={1.25} className={`h-6 w-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-cyan-500'}`} />, 
+        icon: <User className="h-5 w-5 text-foreground" />, 
         label: 'Profile', 
         action: () => onNavigate?.('profile'),
-        glowColor: isStrike ? '#e4e4e7' : '#06B6D4'
       },
     ];
     return list.filter(item => {
@@ -326,49 +322,53 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
     );
   }
 
-  const statusColor = client.status === 'Active' 
-    ? 'bg-strike-green/10 text-strike-green border-strike-green/20' 
-    : 'bg-secondary text-muted-foreground border-border';
-
   const memberQrValue = client.memberId || client.id;
 
-  const checkinsBadgeColor = isStrike 
-    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-    : 'bg-blue-500/10 border-blue-500/20 text-blue-500';
-
-  const bestStreakBadgeColor = isStrike 
-    ? 'bg-strike-green/10 border-strike-green/20 text-strike-green'
-    : 'bg-primary/10 border-primary/20 text-primary';
-
   return (
-    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      {/* ─── BeFit-Style Greeting Header ─── */}
+    <div className="space-y-5 animate-in fade-in duration-200">
+      {/* ─── Greeting & Header ─── */}
       <div 
-        className="pt-1 cursor-pointer hover:opacity-80 active:scale-98 transition-all"
+        className="pt-1 flex items-center justify-between cursor-pointer group"
         onClick={() => onNavigate?.('profile')}
       >
-        <p className="text-2xl font-bold tracking-tight">
-          {greeting.text} <span className="inline-block">{greeting.emoji}</span>
-        </p>
-        <p className="text-lg font-semibold text-primary mt-0.5">{firstName}</p>
-        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-strike-green animate-pulse" />
-          {client.sessionsRemaining === 'unlimited'
-            ? 'Unlimited sessions — train whenever you want.'
-            : Number(client.sessionsRemaining || 0) > 0
-            ? 'Ready for your next session?'
-            : 'You\'re out of sessions — grab a package to keep going.'}
-        </p>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {greeting.text} {greeting.emoji}
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground mt-0.5 group-hover:text-primary transition-colors">
+            {firstName}
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 font-medium">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            {client.sessionsRemaining === 'unlimited'
+              ? 'Unlimited sessions active'
+              : Number(client.sessionsRemaining || 0) > 0
+              ? `${client.sessionsRemaining} session${Number(client.sessionsRemaining) === 1 ? '' : 's'} available`
+              : 'No active sessions'}
+          </p>
+        </div>
+
+        {/* Member Status Badge */}
+        <Badge 
+          variant="outline" 
+          className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${
+            client.status === 'Active'
+              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+              : 'bg-muted text-muted-foreground border-border'
+          }`}
+        >
+          {client.status || 'Active'}
+        </Badge>
       </div>
 
-      {/* ─── Expired Status Warning Banner (glass) ─── */}
+      {/* ─── Expired Status Warning Banner ─── */}
       {client.status === 'Expired' && (
-        <div className="p-4 bg-secondary/60 border border-border text-muted-foreground rounded-2xl flex items-start gap-3 shadow-md backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-300">
-          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-strike-green" />
-          <div className="space-y-1">
-            <p className="font-bold text-sm">Membership Expired</p>
-            <p className="text-xs font-semibold leading-relaxed">
-              Your membership is currently expired and you cannot record attendance. You must head to the STRIKE branch to renew.
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-rose-400" />
+          <div className="space-y-0.5">
+            <p className="font-bold text-xs">Membership Expired</p>
+            <p className="text-[11px] opacity-90 leading-relaxed">
+              Your membership has expired. Please visit reception or renew your plan to continue booking.
             </p>
           </div>
         </div>
@@ -376,64 +376,53 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
 
       {/* ─── Streak & Stats Badges ─── */}
       <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5 bg-strike-green/10 border border-strike-green/20 text-strike-green px-3 py-1.5 rounded-full">
-          <Flame className="h-4 w-4" />
-          <span className="text-xs font-bold">{streak.current} Day Streak</span>
+        <div className="flex items-center gap-1.5 bg-card border border-border/60 text-foreground px-3 py-1 rounded-full text-xs font-semibold shadow-xs">
+          <Flame className="h-3.5 w-3.5 text-amber-500" />
+          <span>{streak.current} Day Streak</span>
         </div>
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${checkinsBadgeColor}`}>
-          <Activity className="h-4 w-4" />
-          <span className="text-xs font-bold">{totalCheckIns} Check-ins</span>
+        <div className="flex items-center gap-1.5 bg-card border border-border/60 text-foreground px-3 py-1 rounded-full text-xs font-semibold shadow-xs">
+          <Activity className="h-3.5 w-3.5 text-emerald-500" />
+          <span>{totalCheckIns} Total Visits</span>
         </div>
         {streak.best > 0 && (
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${bestStreakBadgeColor}`}>
-            <Star className="h-4 w-4" />
-            <span className="text-xs font-bold">Best: {streak.best}</span>
+          <div className="flex items-center gap-1.5 bg-card border border-border/60 text-muted-foreground px-3 py-1 rounded-full text-xs font-medium shadow-xs">
+            <Star className="h-3.5 w-3.5 text-amber-400" />
+            <span>Best: {streak.best}d</span>
           </div>
         )}
       </div>
 
       {/* ─── Announcement Carousel ─── */}
       {announcements.length > 0 && (
-        <div className="relative overflow-hidden rounded-2xl">
+        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card">
           {announcements.map((announcement, idx) => (
             <div
               key={announcement.id}
-              className={`transition-all duration-500 ${
+              className={`p-4 transition-all duration-300 ${
                 idx === currentAnnouncementIndex ? 'block' : 'hidden'
               }`}
             >
               <div 
-                className="relative bg-gradient-to-br from-primary/90 to-primary/60 text-primary-foreground p-5 rounded-2xl cursor-pointer"
+                className="cursor-pointer space-y-1"
                 onClick={() => announcement.linkUrl && window.open(announcement.linkUrl, '_blank')}
               >
-                {announcement.imageUrl && (
-                  <div className="absolute inset-0 rounded-2xl overflow-hidden">
-                    <img 
-                      src={announcement.imageUrl} 
-                      alt="" 
-                      className="w-full h-full object-cover opacity-20"
-                    />
-                  </div>
-                )}
-                <div className="relative z-10">
-                  <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">📢 Announcement</p>
-                  <p className="text-lg font-bold">{announcement.title}</p>
-                  <p className="text-sm opacity-90 mt-1 line-clamp-2">{announcement.body}</p>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Notice</span>
+                  <span className="text-[10px] text-muted-foreground">{announcements.length > 1 ? `${idx + 1}/${announcements.length}` : ''}</span>
                 </div>
+                <p className="text-sm font-bold text-foreground">{announcement.title}</p>
+                <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{announcement.body}</p>
               </div>
             </div>
           ))}
-          {/* Carousel dots */}
           {announcements.length > 1 && (
-            <div className="flex justify-center gap-1.5 mt-2">
+            <div className="flex justify-center gap-1.5 pb-2.5">
               {announcements.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setCurrentAnnouncementIndex(idx)}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    idx === currentAnnouncementIndex 
-                      ? 'w-6 bg-primary' 
-                      : 'w-1.5 bg-muted-foreground/30'
+                  className={`h-1 rounded-full transition-all duration-200 ${
+                    idx === currentAnnouncementIndex ? 'w-4 bg-primary' : 'w-1 bg-muted-foreground/30'
                   }`}
                 />
               ))}
@@ -442,22 +431,19 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
         </div>
       )}
 
-      {/* ─── Quick Shortcuts (Glassmorphic Style) ─── */}
-      <div className="relative z-10">
-        <h3 className="text-sm font-bold mb-3">Quick Shortcuts</h3>
-        <div className={`grid gap-3 p-5 bg-card/50 backdrop-blur-lg border border-border/30 rounded-3xl shadow-xl shadow-black/5 dark:shadow-black/20 hover:border-primary/20 transition-all duration-300 ${
-          shortcuts.length === 3 ? 'grid-cols-3' : shortcuts.length === 4 ? 'grid-cols-4' : 'grid-cols-5'
-        }`}>
+      {/* ─── Quick Shortcuts ─── */}
+      <div className="bg-card border border-border/60 rounded-2xl p-3 shadow-xs">
+        <div className="grid grid-cols-4 gap-2">
           {shortcuts.map((s, idx) => (
             <button
               key={idx}
               onClick={s.action}
-              className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
+              className="flex flex-col items-center justify-center text-center py-2 px-1 rounded-xl hover:bg-muted/50 active:scale-95 transition-all outline-none group"
             >
-              <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
+              <div className="w-10 h-10 rounded-xl bg-muted/60 border border-border/50 flex items-center justify-center text-foreground group-hover:border-primary/30 group-hover:text-primary transition-all">
                 {s.icon}
               </div>
-              <span className="text-[10px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
+              <span className="text-[11px] font-medium text-muted-foreground group-hover:text-foreground mt-1.5 transition-colors truncate w-full">
                 {s.label}
               </span>
             </button>
@@ -465,247 +451,213 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
         </div>
       </div>
 
-      {/* ─── Premium Membership Card (Chrome/Glass, STRIKE) ─── */}
-      <div className="relative group overflow-hidden rounded-[24px] shadow-2xl shadow-black/10 transition-all duration-300 hover:shadow-black/25 animate-float z-10">
-        {/* Chrome metallic base */}
-        <div className="absolute inset-0 rounded-[24px] chrome-surface" />
-        {/* Subtle dynamic reflection light */}
-        <div className="absolute -inset-y-12 -inset-x-12 bg-gradient-to-tr from-white/30 via-transparent to-strike-green/10 blur-xl opacity-60 group-hover:opacity-80 transition-opacity pointer-events-none" />
+      {/* ─── Minimalist Member Pass Card ─── */}
+      <div className="relative rounded-2xl bg-zinc-950 dark:bg-zinc-900 border border-zinc-800 text-white p-4.5 shadow-md overflow-hidden">
+        {/* Subtle accent border */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
         
-        <Card className="relative border border-white/40 dark:border-white/10 rounded-[24px] overflow-hidden backdrop-blur-xl bg-transparent shadow-none h-[190px] w-full p-4 flex flex-col justify-between">
-          {/* Glass grain/reflection effect */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-white/40 via-white/10 to-transparent dark:from-white/10 dark:via-white/[0.03] dark:to-transparent pointer-events-none" />
-          <div className="absolute top-0 right-0 w-36 h-36 bg-strike-green/10 rounded-full blur-2xl pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/30 dark:bg-white/5 rounded-full blur-xl pointer-events-none" />
-          
-          {/* Top Row: Brand & ID */}
-          <div className="flex justify-between items-start z-10">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-strike-green shadow-[0_0_8px] shadow-strike-green/60" />
-              <p className="text-[11px] font-extrabold tracking-[0.25em] uppercase text-zinc-800 dark:text-zinc-100 leading-none">
-                {branding?.companyName || 'STRIKE'}
+        {/* Top Header: Brand & Member ID */}
+        <div className="flex justify-between items-center pb-3 border-b border-zinc-800/80">
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            <span className="text-[11px] font-bold tracking-widest uppercase text-zinc-300">
+              {branding?.companyName || 'STRIKE'}
+            </span>
+          </div>
+          <span className="font-mono text-[11px] font-semibold text-zinc-300 bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-700/60">
+            #{client.memberId || client.id.substring(0, 8)}
+          </span>
+        </div>
+
+        {/* Card Body: Member Info + QR Code */}
+        <div className="flex items-center justify-between gap-4 pt-3.5">
+          {/* Left Column */}
+          <div className="flex-1 min-w-0 space-y-2.5">
+            <div>
+              <p className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Member Pass</p>
+              <h3 className="text-lg font-bold text-white tracking-tight truncate leading-snug">
+                {client.name}
+              </h3>
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <p className="text-zinc-400 text-[11px]">
+                Branch: <span className="font-semibold text-zinc-200">{client.branch || 'Main Branch'}</span>
+              </p>
+              <p className="text-zinc-400 text-[11px]">
+                Valid: <span className="font-semibold text-zinc-200">{formatOptionalDate(client.membershipExpiry)}</span>
               </p>
             </div>
-            <p className="text-[10px] font-mono font-bold tracking-wider text-zinc-600 dark:text-zinc-300 bg-white/50 dark:bg-white/10 px-2 py-0.5 rounded-md border border-white/40 dark:border-white/10 backdrop-blur-sm">
-              #{client.memberId || client.id.substring(0, 8)}
-            </p>
           </div>
 
-          {/* Middle & Bottom: Horizontal Layout */}
-          <div className="flex items-center justify-between gap-3 z-10 flex-1 mt-2">
-            {/* Left Side: Client Name, Expiry, Status, Branch */}
-            <div className="flex flex-col justify-between h-full py-1 min-w-0 flex-1">
-              <div>
-                <p className="text-[9px] font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest leading-none mb-1">MEMBER PASS</p>
-                <h4 className="text-lg font-black tracking-tight text-zinc-900 dark:text-white uppercase truncate leading-tight pr-1">
-                  {client.name}
-                </h4>
-              </div>
-              
-              <div className="space-y-1 mt-auto">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`text-[9px] font-extrabold tracking-wider px-2 py-0.5 rounded-full border backdrop-blur-sm ${
-                    client.status === 'Active'
-                      ? 'bg-strike-green/15 text-strike-green border-strike-green/30'
-                      : 'bg-secondary/70 text-muted-foreground border-border'
-                  }`}>
-                    {client.status.toUpperCase()}
-                  </span>
-                  <span className="text-[9.5px] font-bold text-zinc-500 dark:text-zinc-400 tracking-wider">
-                    VALID UNTIL: {formatOptionalDate(client.membershipExpiry)}
-                  </span>
-                </div>
-                <p className="text-[9px] font-extrabold tracking-widest text-zinc-500 dark:text-zinc-400 uppercase">
-                  BRANCH: <span className="text-zinc-800 dark:text-zinc-100 font-black">{client.branch || 'MAIN'}</span>
-                </p>
-              </div>
-            </div>
-
-            {/* Right Side: QR Code & Brand Sub-text */}
-            <div className="flex flex-col items-center justify-center shrink-0">
-              {client.status !== 'Expired' && (
-                <Dialog>
-                  <DialogTrigger
-                    render={
-                      <div 
-                        className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-2 rounded-2xl shadow-md border border-white/60 dark:border-white/10 w-24 h-24 flex items-center justify-center relative overflow-hidden cursor-pointer transition-transform hover:scale-105 active:scale-95"
-                        title="Tap to enlarge"
-                      >
-                        <QRCodeSVG 
-                          value={memberQrValue} 
-                          size={80} 
-                          level="H" 
-                          includeMargin={false}
-                          fgColor="#18181b"
-                        />
-                      </div>
-                    }
-                  />
-                  <DialogContent className="max-w-sm p-0 bg-transparent shadow-none">
-                    <div className="bg-card rounded-2xl p-6 border shadow-xl">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold">Membership QR Code</h3>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {}}>
-                          <Minimize2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="bg-white p-4 rounded-xl shadow-inner border border-border">
-                        <QRCodeSVG 
-                          value={memberQrValue} 
-                          size={200} 
-                          level="H" 
-                          includeMargin={false}
-                          fgColor="#18181b"
-                        />
-                      </div>
-                      <p className="text-center text-xs text-muted-foreground mt-4 font-mono tracking-wider">
-                        {memberQrValue}
-                      </p>
-                      <p className="text-center text-[11px] text-muted-foreground mt-2">
-                        Show this code at reception for check-in
-                      </p>
+          {/* Right Column: QR Code */}
+          <div className="flex flex-col items-center shrink-0">
+            {client.status !== 'Expired' ? (
+              <Dialog>
+                <DialogTrigger
+                  render={
+                    <div 
+                      className="bg-white p-2 rounded-xl border border-zinc-700/80 shadow-sm w-20 h-20 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-transform"
+                      title="Tap to zoom"
+                    >
+                      <QRCodeSVG 
+                        value={memberQrValue} 
+                        size={68} 
+                        level="H" 
+                        includeMargin={false}
+                        fgColor="#09090b"
+                      />
                     </div>
-                  </DialogContent>
-                </Dialog>
-              )}
-              {client.status === 'Expired' && (
-                <div className="bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md p-2 rounded-2xl shadow-md border border-white/60 dark:border-white/10 w-24 h-24 flex items-center justify-center relative overflow-hidden">
-                  <div className="flex flex-col items-center justify-center text-zinc-400 w-full h-full bg-secondary/60 rounded-xl">
-                    <Lock className="h-7 w-7 shrink-0" />
-                    <span className="text-[9px] font-black tracking-tighter uppercase mt-1 leading-none">LOCKED</span>
+                  }
+                />
+                <DialogContent className="max-w-xs p-6 bg-card rounded-2xl border shadow-xl">
+                  <div className="text-center space-y-4">
+                    <div>
+                      <h3 className="text-base font-bold text-foreground">Member QR Code</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Scan at reception to check in</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border shadow-xs inline-block mx-auto">
+                      <QRCodeSVG 
+                        value={memberQrValue} 
+                        size={180} 
+                        level="H" 
+                        includeMargin={false}
+                        fgColor="#09090b"
+                      />
+                    </div>
+                    <p className="font-mono text-xs font-semibold text-muted-foreground bg-muted py-1 px-3 rounded-lg inline-block">
+                      #{client.memberId || client.id}
+                    </p>
                   </div>
-                </div>
-              )}
-              <span className="text-[8px] font-extrabold tracking-[0.3em] uppercase text-zinc-500 dark:text-zinc-300 mt-1 font-logo">
-                STRIKE GYMS
-              </span>
-            </div>
+                </DialogContent>
+              </Dialog>
+            ) : (
+              <div className="bg-zinc-800/80 border border-zinc-700 rounded-xl w-20 h-20 flex flex-col items-center justify-center text-zinc-400 gap-1">
+                <Lock className="h-5 w-5" />
+                <span className="text-[9px] font-bold uppercase tracking-wider">Locked</span>
+              </div>
+            )}
+            <span className="text-[9px] text-zinc-400 font-medium tracking-wide mt-1">Tap to enlarge</span>
           </div>
-        </Card>
+        </div>
       </div>
 
-      {/* ─── Stats Grid (BeFit-Inspired Glassmorphic) ─── */}
-      <div className="grid grid-cols-2 gap-3 relative z-10">
-        {/* Package */}
-        <Card className="border border-border/30 bg-card/45 backdrop-blur-lg shadow-lg shadow-black/5 dark:shadow-black/20 rounded-3xl hover:border-primary/20 hover:scale-[1.02] active:scale-98 transition-all duration-300">
-          <CardContent className="p-4 flex flex-col justify-between h-[100px]">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Package</span>
-              <Trophy className="h-4 w-4 text-primary" />
-            </div>
-            <div className="mt-auto">
-              <p className="text-sm font-bold truncate pr-1" title={client.packageType || 'None'}>
-                {client.packageType || 'No package'}
+      {/* ─── Minimalist Stats Grid ─── */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Package Card */}
+        <div className="p-3.5 bg-card border border-border/60 rounded-2xl flex flex-col justify-between h-[96px] shadow-xs">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="text-[10px] font-semibold uppercase tracking-wider">Package</span>
+            <Trophy className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-foreground truncate" title={client.packageType || 'None'}>
+              {client.packageType || 'No Active Plan'}
+            </p>
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+              {daysToExpiry !== null 
+                ? (daysToExpiry < 0 ? 'Expired' : daysToExpiry === 0 ? 'Expires today' : `${daysToExpiry} days remaining`)
+                : 'Standard Plan'}
+            </p>
+          </div>
+        </div>
+
+        {/* Sessions Card */}
+        <div className="p-3.5 bg-card border border-border/60 rounded-2xl flex flex-col justify-between h-[96px] shadow-xs">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="text-[10px] font-semibold uppercase tracking-wider">Sessions</span>
+            <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+          <div>
+            {client.sessionsRemaining === 'unlimited' ? (
+              <p className="text-xl font-bold font-mono text-emerald-500">Unlimited</p>
+            ) : (
+              <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+                {client.sessionsRemaining ?? 0}
+                <span className="text-xs font-normal text-muted-foreground font-sans ml-1">left</span>
               </p>
-              {daysToExpiry !== null && (
-                <p className={`text-[10px] font-semibold mt-0.5 ${
-                  daysToExpiry <= 3 ? 'text-foreground font-bold' : daysToExpiry <= 7 ? 'text-strike-green' : 'text-muted-foreground'
-                }`}>
-                  {daysToExpiry < 0 ? 'Expired' : daysToExpiry === 0 ? 'Expires today' : `${daysToExpiry} days left`}
+            )}
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+              {Number(client.sessionsRemaining || 0) > 0 ? 'Ready to book' : 'Needs renewal'}
+            </p>
+          </div>
+        </div>
+
+        {/* Streak Card */}
+        <div className="p-3.5 bg-card border border-border/60 rounded-2xl flex flex-col justify-between h-[96px] shadow-xs">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="text-[10px] font-semibold uppercase tracking-wider">Streak</span>
+            <Flame className="h-3.5 w-3.5 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold font-mono text-foreground tracking-tight">
+              {streak.current}
+              <span className="text-xs font-normal text-muted-foreground font-sans ml-1">days</span>
+            </p>
+            <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+              Best record: {streak.best} days
+            </p>
+          </div>
+        </div>
+
+        {/* Last Check-in Card */}
+        <div className="p-3.5 bg-card border border-border/60 rounded-2xl flex flex-col justify-between h-[96px] shadow-xs">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span className="text-[10px] font-semibold uppercase tracking-wider">Last Visit</span>
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+          </div>
+          <div>
+            {lastCheckIn ? (
+              <>
+                <p className="text-sm font-bold text-foreground truncate">
+                  {isToday(parseISO(lastCheckIn)) ? 'Today' : format(parseISO(lastCheckIn), 'EEE, dd MMM')}
                 </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Sessions */}
-        <Card className="border border-border/30 bg-card/45 backdrop-blur-lg shadow-lg shadow-black/5 dark:shadow-black/20 rounded-3xl hover:border-primary/20 hover:scale-[1.02] active:scale-98 transition-all duration-300">
-          <CardContent className="p-4 flex flex-col justify-between h-[100px]">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Sessions</span>
-              <Sparkles className="h-4 w-4 text-primary" />
-            </div>
-            <div className="mt-auto">
-              {client.sessionsRemaining === 'unlimited' ? (
-                <p className="text-xl font-extrabold text-strike-green leading-none">Unlimited</p>
-              ) : (
-                <p className={`text-2xl font-extrabold leading-none ${
-                  Number(client.sessionsRemaining || 0) <= 1 ? 'text-muted-foreground' : 'text-strike-green'
-                }`}>
-                  {client.sessionsRemaining ?? 0}
-                  <span className="text-xs font-semibold text-muted-foreground ml-1">left</span>
+                <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
+                  {format(parseISO(lastCheckIn), 'h:mm a')}
                 </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Check-in streak */}
-        <Card className="border border-border/30 bg-card/45 backdrop-blur-lg shadow-lg shadow-black/5 dark:shadow-black/20 rounded-3xl hover:border-primary/20 hover:scale-[1.02] active:scale-98 transition-all duration-300">
-          <CardContent className="p-4 flex flex-col justify-between h-[100px]">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Streak</span>
-              <Flame className="h-4 w-4 text-strike-green" />
-            </div>
-            <div className="mt-auto">
-              <p className="text-2xl font-extrabold text-strike-green leading-none">
-                {streak.current}
-                <span className="text-xs font-semibold text-muted-foreground ml-1">days</span>
-              </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                Best: {streak.best} days
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Last Check-in */}
-        <Card className="border border-border/30 bg-card/45 backdrop-blur-lg shadow-lg shadow-black/5 dark:shadow-black/20 rounded-3xl hover:border-primary/20 hover:scale-[1.02] active:scale-98 transition-all duration-300">
-          <CardContent className="p-4 flex flex-col justify-between h-[100px]">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Last Visit</span>
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            </div>
-            <div className="mt-auto">
-              {lastCheckIn ? (
-                <>
-                  <p className="text-sm font-bold leading-tight">
-                    {isToday(parseISO(lastCheckIn)) ? 'Today' : format(parseISO(lastCheckIn), 'EEE, dd MMM')}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {format(parseISO(lastCheckIn), 'h:mm a')}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm font-medium text-muted-foreground">No visits yet</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold text-muted-foreground">No visits</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">Start today</p>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ─── Shop Button ─── */}
       {onSwitchToStore && (
         <Button 
           onClick={onSwitchToStore}
-          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-2xl h-12 text-sm font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+          className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-11 text-xs font-bold shadow-xs flex items-center justify-center gap-2"
         >
           <ShoppingBag className="h-4 w-4" /> Shop Session Packages
         </Button>
       )}
 
       {/* ─── Gym Peak Hours ─── */}
-      <Card className="border bg-card/40 shadow-sm overflow-hidden">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <Users className="h-4 w-4 text-primary" /> Gym Peak Hours
+      <Card className="border border-border/60 bg-card rounded-2xl shadow-xs overflow-hidden">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5 text-primary" /> Gym Peak Hours
           </CardTitle>
-          <CardDescription className="text-[11px]">
-            Hourly gym occupancy (last 30 days)
+          <CardDescription className="text-[11px] text-muted-foreground mt-0.5">
+            Average hourly gym occupancy
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-1">
+        <CardContent className="p-4 pt-2">
           {loadingTraffic ? (
             <div className="flex items-center justify-center py-6">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
             </div>
           ) : trafficData.some(d => d.count > 0) ? (
-            <div className="h-32 w-full -ml-6">
+            <div className="h-28 w-full -ml-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trafficData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'} vertical={false} />
-                  <XAxis dataKey="label" stroke={theme === 'dark' ? '#a1a1aa' : '#71717a'} fontSize={8} tickLine={false} axisLine={false} />
-                  <YAxis stroke={theme === 'dark' ? '#a1a1aa' : '#71717a'} fontSize={8} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false} />
+                  <XAxis dataKey="label" stroke={theme === 'dark' ? '#71717a' : '#a1a1aa'} fontSize={8} tickLine={false} axisLine={false} />
+                  <YAxis stroke={theme === 'dark' ? '#71717a' : '#a1a1aa'} fontSize={8} tickLine={false} axisLine={false} allowDecimals={false} />
                   <Tooltip 
                     cursor={{ fill: 'rgba(255, 255, 255, 0.04)' }}
                     contentStyle={{ 
@@ -717,17 +669,19 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
                     }}
                     formatter={(value: any) => [`${value} check-ins`, 'Volume']}
                   />
-                  <Bar dataKey="count" fill={theme === 'dark' ? '#ffffff' : '#09090b'} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" fill={theme === 'dark' ? '#e4e4e7' : '#18181b'} radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <div className="py-6 text-center text-xs text-muted-foreground italic">
+            <div className="py-4 text-center text-xs text-muted-foreground italic">
               No recent attendance data available.
             </div>
           )}
         </CardContent>
       </Card>
+
+
 
       {/* ─── Personal Records (PRs) ─── */}
       {prsList.length > 0 && (
