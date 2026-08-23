@@ -191,7 +191,11 @@ const tenantConfigs: Record<string, any> = {
   "strike.mitrixo.com": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
   "strikeboxing.mitrixo.com": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
   "dashboard.strikeboxing-eg.pro": strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
+  "strike-egy.com": strikeCrmConfig,
+  "www.strike-egy.com": strikeCrmConfig,
   "inzanathletics.mitrixo.com": inzanConfig,
+  "inzanathletics.com": inzanConfig,
+  "www.inzanathletics.com": inzanConfig,
   "inzanathletics.localhost": inzanConfig,
   "inzan.localhost": inzanConfig,
   "inzanathletics.local": inzanConfig,

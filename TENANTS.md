@@ -12,6 +12,8 @@
 - `strike.mitrixo.com`
 - `strikeboxing.mitrixo.com`
 - `dashboard.strikeboxing-eg.pro`
+- `strike-egy.com`
+- `www.strike-egy.com`
 
 **Firestore Database:** Default (no specific database ID — uses `(default)`)
 
@@ -30,6 +32,8 @@
 
 **Domains:**
 - `inzanathletics.mitrixo.com`
+- `inzanathletics.com`
+- `www.inzanathletics.com`
 
 **Firestore Database:** `db-inzanathletics`
 
