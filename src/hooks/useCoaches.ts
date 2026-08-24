@@ -67,7 +67,7 @@ export const useCoaches = () => {
       if (coach.active) {
         try {
           const coachId = await generateCoachId();
-          const coachNum = coachId.split('-')[1] || '000';
+          const coachNum = coachId.split('-')[1] || '001';
           const firstName = (coach.name || '').split(' ')[0]?.replace(/[^a-zA-Z0-9]/g, '') || 'coach';
           const tenantPrefix = getTenantId() || 'mitrixogymcrm';
           const email = `${tenantPrefix}-coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
@@ -84,7 +84,7 @@ export const useCoaches = () => {
           };
 
           await setDoc(doc(db, 'users', uid), newUser);
-          await updateDoc(doc(db, 'coaches', docId), { userId: uid });
+          await updateDoc(doc(db, 'coaches', docId), { userId: uid, coachId, email });
         } catch (authErr) {
           console.error("Auto coach portal account creation failed:", authErr);
         }
@@ -120,8 +120,8 @@ export const useCoaches = () => {
 
       if (isNowActive && hasNoUser) {
         try {
-          const coachId = await generateCoachId();
-          const coachNum = coachId.split('-')[1] || '000';
+          const coachId = existing?.coachId || await generateCoachId();
+          const coachNum = coachId.split('-')[1] || '001';
           const coachName = updates.name || existing?.name || '';
           const firstName = coachName.split(' ')[0]?.replace(/[^a-zA-Z0-9]/g, '') || 'coach';
           const tenantPrefix = getTenantId() || 'mitrixogymcrm';
@@ -139,7 +139,7 @@ export const useCoaches = () => {
           };
 
           await setDoc(doc(db, 'users', uid), newUser);
-          await updateDoc(doc(db, 'coaches', id), { userId: uid });
+          await updateDoc(doc(db, 'coaches', id), { userId: uid, coachId, email });
         } catch (authErr) {
           console.error("Auto coach portal account creation on update failed:", authErr);
         }
@@ -154,8 +154,12 @@ export const useCoaches = () => {
 
   const createPortalAccountForCoach = async (coach: Coach): Promise<{ success: boolean; user?: User; error?: string }> => {
     try {
-      const coachId = await generateCoachId();
-      const coachNum = coachId.split('-')[1] || '000';
+      if (coach.userId) {
+        return { success: false, error: 'Coach already has a portal account linked.' };
+      }
+
+      const coachId = coach.coachId || await generateCoachId();
+      const coachNum = coachId.split('-')[1] || '001';
       const firstName = (coach.name || '').split(' ')[0]?.replace(/[^a-zA-Z0-9]/g, '') || 'coach';
       const tenantPrefix = getTenantId() || 'mitrixogymcrm';
       const email = `${tenantPrefix}-coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
@@ -172,7 +176,7 @@ export const useCoaches = () => {
       };
 
       await setDoc(doc(db, 'users', uid), newUser);
-      await updateDoc(doc(db, 'coaches', coach.id), { userId: uid });
+      await updateDoc(doc(db, 'coaches', coach.id), { userId: uid, coachId, email });
       await addAuditLog('CREATE', 'USER', uid, `Created coach portal account for ${coach.name} (${coachId})`);
 
       return { success: true, user: newUser };

@@ -26,6 +26,8 @@ export interface Coach {
   id: string;
   name: string;
   active: boolean;
+  coachId?: string; // e.g. 'COACH-001'
+  email?: string;
   userId?: string; // links to users collection when coach has a login account
   phone?: string;
 }

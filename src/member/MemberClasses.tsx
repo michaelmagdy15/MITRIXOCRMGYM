@@ -24,11 +24,6 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   const dateRange = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i - 7));
 
   useEffect(() => {
-    if (!client?.id) {
-      setLoading(false);
-      return;
-    }
-
     let unsub: (() => void) | undefined;
 
     const init = async () => {
@@ -38,7 +33,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
           id: doc.id,
           ...doc.data()
         } as ClassSchedule));
-        list.sort((a, b) => a.startTime.localeCompare(b.startTime));
+        list.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
         setClasses(list);
         setLoading(false);
       }, (err) => {
@@ -55,7 +50,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     return () => {
       if (unsub) unsub();
     };
-  }, [client?.id, client?.branch]);
+  }, []);
 
   // Scroll to today on mount
   useEffect(() => {
@@ -131,12 +126,14 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
       const dateStr = getClassDateStr(c);
       if (!dateStr) return false;
       const isDateMatch = isSameDay(parseISO(dateStr), selectedDate);
-      const classBranch = c.branch?.trim();
-      const clientBranch = client?.branch?.trim();
+      const classBranch = c.branch?.trim().toLowerCase();
+      const clientBranch = client?.branch?.trim().toLowerCase();
       const isBranchMatch = !classBranch 
-        || classBranch.toLowerCase() === 'all' 
+        || classBranch === 'all' 
+        || classBranch === 'all branches'
         || !clientBranch 
-        || classBranch.toLowerCase() === clientBranch.toLowerCase();
+        || clientBranch === 'all'
+        || classBranch === clientBranch;
       return isDateMatch && isBranchMatch;
     } catch { return false; }
   });
@@ -144,12 +141,14 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   // Count classes per date for dot indicators
   const classCountByDate = new Map<string, number>();
   classes.forEach(c => {
-    const classBranch = c.branch?.trim();
-    const clientBranch = client?.branch?.trim();
+    const classBranch = c.branch?.trim().toLowerCase();
+    const clientBranch = client?.branch?.trim().toLowerCase();
     const isBranchMatch = !classBranch 
-      || classBranch.toLowerCase() === 'all' 
+      || classBranch === 'all' 
+      || classBranch === 'all branches'
       || !clientBranch 
-      || classBranch.toLowerCase() === clientBranch.toLowerCase();
+      || clientBranch === 'all'
+      || classBranch === clientBranch;
     if (isBranchMatch) {
       const key = getClassDateStr(c);
       if (key) {
@@ -157,6 +156,23 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
       }
     }
   });
+
+  // If currently selected date has 0 classes, but there are classes on other dates, find the next date with classes
+  const nextDateWithClasses = useMemo(() => {
+    const today = startOfDay(new Date());
+    for (const c of classes) {
+      const dStr = getClassDateStr(c);
+      if (dStr) {
+        try {
+          const d = parseISO(dStr);
+          if (d >= today && !isSameDay(d, selectedDate)) {
+            return d;
+          }
+        } catch { /* ignore */ }
+      }
+    }
+    return null;
+  }, [classes, selectedDate]);
 
   if (loading) {
     return (
@@ -252,10 +268,18 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
               <p className="font-semibold text-foreground">
                 No classes scheduled for {isToday(selectedDate) ? 'today' : format(selectedDate, 'dd MMM')}.
               </p>
-              {client?.branch && (
-                <p className="text-[11px] opacity-80">
-                  Filtering for branch: <span className="font-semibold text-foreground">{client.branch}</span>
-                </p>
+              {nextDateWithClasses && (
+                <div className="pt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs font-semibold rounded-xl gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
+                    onClick={() => setSelectedDate(nextDateWithClasses)}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Jump to next class on {format(nextDateWithClasses, 'EEEE, dd MMM')}
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>

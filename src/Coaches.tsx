@@ -274,9 +274,14 @@ export default function Coaches() {
   }, [managingCoach, payments]);
 
   const linkedUser = React.useMemo(() => {
-    if (!managingCoach?.userId) return null;
-    return users.find(u => u.id === managingCoach.userId);
+    if (!managingCoach) return null;
+    return users.find(u => u.id === managingCoach.userId || (u.role === 'coach' && u.name?.toLowerCase() === managingCoach.name?.toLowerCase()));
   }, [managingCoach, users]);
+
+  const effectiveCoachId = managingCoach?.coachId || linkedUser?.coachId;
+  const effectiveEmail = managingCoach?.email || linkedUser?.email;
+  const effectiveUserId = managingCoach?.userId || linkedUser?.id;
+  const hasAccount = Boolean(effectiveUserId || effectiveCoachId);
 
   return (
     <div className="space-y-4">
@@ -335,12 +340,17 @@ export default function Coaches() {
             <TableBody>
               {coaches.map(coach => {
                 const coachUser = users.find(u => u.id === coach.userId || (u.role === 'coach' && u.name?.toLowerCase() === coach.name.toLowerCase()));
+                const rowCoachId = coach.coachId || coachUser?.coachId;
+                const rowEmail = coach.email || coachUser?.email;
+                const rowUserId = coach.userId || coachUser?.id;
+                const rowHasAccount = Boolean(rowCoachId || rowUserId);
+
                 return (
                   <TableRow key={coach.id}>
                     <TableCell>
-                      {coachUser?.coachId ? (
+                      {rowCoachId ? (
                         <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-md">
-                          {coachUser.coachId}
+                          {rowCoachId}
                         </span>
                       ) : (
                         <Button
@@ -363,8 +373,8 @@ export default function Coaches() {
                     <TableCell className="font-medium">
                       <div>
                         <p>{coach.name}</p>
-                        {coachUser?.email && (
-                          <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]">{coachUser.email}</p>
+                        {rowEmail && (
+                          <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]">{rowEmail}</p>
                         )}
                       </div>
                     </TableCell>
@@ -378,12 +388,12 @@ export default function Coaches() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end items-center gap-1.5">
-                        {coachUser && (
+                        {rowUserId && (
                           <Button
                             variant="outline"
                             size="sm"
                             className="h-8 text-xs gap-1 text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                            onClick={() => handleResetCoachPassword(coachUser.id, coach.name)}
+                            onClick={() => handleResetCoachPassword(rowUserId, coach.name)}
                             title="Reset password to 12345678"
                           >
                             <RotateCcw className="h-3 w-3" /> Reset PW
@@ -500,7 +510,7 @@ export default function Coaches() {
                         <span className="flex items-center gap-2">
                           <Shield className="h-4 w-4 text-primary" /> Portal Account Details
                         </span>
-                        {linkedUser && (
+                        {hasAccount && (
                           <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
                             Active Account
                           </Badge>
@@ -508,14 +518,14 @@ export default function Coaches() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {linkedUser ? (
+                      {hasAccount ? (
                         <div className="space-y-3 text-sm">
                           <div className="bg-background/80 p-3 rounded-lg border border-border/60 space-y-2">
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-muted-foreground font-medium">Coach ID (Login ID):</span>
                               <div className="flex items-center gap-1.5">
                                 <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                                  {linkedUser.coachId || 'COACH-001'}
+                                  {effectiveCoachId || 'COACH-001'}
                                 </span>
                                 <Button
                                   type="button"
@@ -523,7 +533,7 @@ export default function Coaches() {
                                   size="icon"
                                   className="h-6 w-6"
                                   onClick={() => {
-                                    navigator.clipboard.writeText(linkedUser.coachId || '');
+                                    navigator.clipboard.writeText(effectiveCoachId || '');
                                     setCopiedCoachId(true);
                                     setTimeout(() => setCopiedCoachId(false), 2000);
                                   }}
@@ -534,12 +544,14 @@ export default function Coaches() {
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">Login Email:</span>
-                              <span className="font-mono text-muted-foreground truncate max-w-[200px]" title={linkedUser.email}>
-                                {linkedUser.email}
-                              </span>
-                            </div>
+                            {effectiveEmail && (
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">Login Email:</span>
+                                <span className="font-mono text-muted-foreground truncate max-w-[200px]" title={effectiveEmail}>
+                                  {effectiveEmail}
+                                </span>
+                              </div>
+                            )}
 
                             <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
                               <span className="text-muted-foreground">Default Password:</span>
@@ -555,17 +567,19 @@ export default function Coaches() {
                               <span className="font-medium text-foreground">Select Coach tab → Enter Coach ID & Password</span>
                             </div>
 
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="w-full text-xs h-8 gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-300"
-                              disabled={isResettingPassword}
-                              onClick={() => handleResetCoachPassword(linkedUser.id, managingCoach?.name || 'Coach')}
-                            >
-                              <RotateCcw className={`h-3.5 w-3.5 ${isResettingPassword ? 'animate-spin' : ''}`} />
-                              {isResettingPassword ? 'Resetting Password...' : 'Reset Password to "12345678"'}
-                            </Button>
+                            {effectiveUserId && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="w-full text-xs h-8 gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-300"
+                                disabled={isResettingPassword}
+                                onClick={() => handleResetCoachPassword(effectiveUserId, managingCoach?.name || 'Coach')}
+                              >
+                                <RotateCcw className={`h-3.5 w-3.5 ${isResettingPassword ? 'animate-spin' : ''}`} />
+                                {isResettingPassword ? 'Resetting Password...' : 'Reset Password to "12345678"'}
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ) : (

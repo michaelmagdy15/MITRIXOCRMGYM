@@ -100,8 +100,8 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
-  // Booking and Profile Sub-tabs state
-  const [bookingSubTab, setBookingSubTab] = useState<'pt' | 'group'>(isStrike ? 'group' : 'pt');
+  // Booking and Profile Sub-tabs state (default to group classes schedule)
+  const [bookingSubTab, setBookingSubTab] = useState<'pt' | 'group'>('group');
   
   const profileSubTabsList = useMemo(() => {
     const list = [

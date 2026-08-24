@@ -770,6 +770,94 @@ async function startServer() {
     }
   });
 
+  // Public endpoint for coach login by coachId or Name (pre-auth)
+  app.post("/api/coach/resolve-email", async (req, res) => {
+    const { term } = req.body;
+    if (!term || typeof term !== "string") {
+      return res.status(400).json({ error: "Missing search term" });
+    }
+
+    try {
+      const db = await getDbForRequest(req);
+      const cleanTerm = term.trim();
+
+      // Normalize coach ID format (e.g., '003' -> 'COACH-003', '3' -> 'COACH-003', 'coach-003' -> 'COACH-003')
+      let coachIdTerm = cleanTerm.toUpperCase();
+      if (/^\d+$/.test(cleanTerm)) {
+        coachIdTerm = `COACH-${cleanTerm.padStart(3, '0')}`;
+      } else if (/^COACH-\d+$/i.test(cleanTerm)) {
+        const parts = cleanTerm.split('-');
+        coachIdTerm = `COACH-${parts[1].padStart(3, '0')}`;
+      }
+
+      // 1. Search in users collection by coachId
+      const usersByCoachId = await db.collection("users")
+        .where("role", "==", "coach")
+        .where("coachId", "==", coachIdTerm)
+        .limit(1)
+        .get();
+
+      if (!usersByCoachId.empty) {
+        const u = usersByCoachId.docs[0].data();
+        if (u.email) {
+          return res.json({ email: u.email, coachId: u.coachId, name: u.name });
+        }
+      }
+
+      // 2. Search in coaches collection by coachId
+      const coachesByCoachId = await db.collection("coaches")
+        .where("coachId", "==", coachIdTerm)
+        .limit(1)
+        .get();
+
+      if (!coachesByCoachId.empty) {
+        const c = coachesByCoachId.docs[0].data();
+        if (c.email) {
+          return res.json({ email: c.email, coachId: c.coachId, name: c.name });
+        }
+        if (c.userId) {
+          const uDoc = await db.collection("users").doc(c.userId).get();
+          if (uDoc.exists && uDoc.data()?.email) {
+            return res.json({ email: uDoc.data()!.email, coachId: c.coachId, name: c.name });
+          }
+        }
+      }
+
+      // 3. Search coaches collection by name (case-insensitive)
+      const allCoachesSnap = await db.collection("coaches").get();
+      for (const d of allCoachesSnap.docs) {
+        const c = d.data();
+        if (c.name && c.name.toLowerCase() === cleanTerm.toLowerCase()) {
+          if (c.email) {
+            return res.json({ email: c.email, coachId: c.coachId, name: c.name });
+          }
+          if (c.userId) {
+            const uDoc = await db.collection("users").doc(c.userId).get();
+            if (uDoc.exists && uDoc.data()?.email) {
+              return res.json({ email: uDoc.data()!.email, coachId: uDoc.data()!.coachId || c.coachId, name: c.name });
+            }
+          }
+        }
+      }
+
+      // 4. Search users collection by name
+      const allUsersSnap = await db.collection("users").where("role", "==", "coach").get();
+      for (const d of allUsersSnap.docs) {
+        const u = d.data();
+        if (u.name && u.name.toLowerCase() === cleanTerm.toLowerCase()) {
+          if (u.email) {
+            return res.json({ email: u.email, coachId: u.coachId, name: u.name });
+          }
+        }
+      }
+
+      return res.status(404).json({ error: "Coach ID or Name not found. Please check and try again." });
+    } catch (error) {
+      console.error("[API] Error resolving coach email:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
   // Tenant-level endpoint to activate a pending user account
   app.post("/api/tenant/activate-user", requireAuth, async (req, res) => {
     const { pendingDocId, email, role, name } = req.body;
