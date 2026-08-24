@@ -204,23 +204,50 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
           }
         }
 
-        // Option C: Match by Phone Number (normalized digits)
+        // Option C: Match by Phone Number
         const userPhone = currentUser?.phone || '';
         if (userPhone) {
           const cleanPhone = userPhone.replace(/\D/g, '').slice(-9);
           if (cleanPhone) {
-            const allSnap = await getDocs(collection(db, 'clients'));
-            const matched = allSnap.docs.find(d => {
-              const cPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
-              return cPhone && cPhone === cleanPhone;
-            });
-            if (matched && active) {
-              const pClient = { ...matched.data(), id: matched.id } as Client;
-              setPrimaryClient(pClient);
-              setActiveClient(pClient);
-              setSelectedClientId(prev => prev || pClient.id);
-              setLoading(false);
-              return;
+            // Try exact Firestore where query first (cheap, indexed)
+            try {
+              const phoneQ = query(collection(db, 'clients'), where('phone', '==', userPhone));
+              const phoneSnap = await getDocs(phoneQ);
+              if (!phoneSnap.empty && phoneSnap.docs[0] && active) {
+                const docSnap = phoneSnap.docs[0];
+                const pClient = { ...docSnap.data(), id: docSnap.id } as Client;
+                setPrimaryClient(pClient);
+                setActiveClient(pClient);
+                setSelectedClientId(prev => prev || pClient.id);
+                setLoading(false);
+                return;
+              }
+            } catch {
+              // where('phone') may fail if no index exists; fall through to fallback
+            }
+
+            // Fallback: limited scan over active statuses only (not full collection)
+            console.warn("Performance warning: phone-based client lookup falling back to filtered scan");
+            try {
+              const limitedQ = query(
+                collection(db, 'clients'),
+                where('status', 'in', ['Active', 'Nearly Expired', 'Expired', 'Hold'])
+              );
+              const limitedSnap = await getDocs(limitedQ);
+              const matched = limitedSnap.docs.find(d => {
+                const cPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+                return cPhone && cPhone === cleanPhone;
+              });
+              if (matched && active) {
+                const pClient = { ...matched.data(), id: matched.id } as Client;
+                setPrimaryClient(pClient);
+                setActiveClient(pClient);
+                setSelectedClientId(prev => prev || pClient.id);
+                setLoading(false);
+                return;
+              }
+            } catch {
+              // status-based query also failed; skip this option
             }
           }
         }

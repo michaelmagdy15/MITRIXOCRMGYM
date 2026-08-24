@@ -41,7 +41,7 @@ export default function Coaches() {
   // Account creation & password reset states
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const [copiedCoachId, setCopiedCoachId] = useState(false);
+  const [copiedCoachId, setCopiedCoachId] = useState<string | null>(null);
 
   const handleCreatePortalAccount = async () => {
     if (!managingCoach) return;
@@ -567,12 +567,12 @@ export default function Coaches() {
                                   className="h-6 w-6"
                                   onClick={() => {
                                     navigator.clipboard.writeText(effectiveCoachId || '');
-                                    setCopiedCoachId(true);
-                                    setTimeout(() => setCopiedCoachId(false), 2000);
+                                    setCopiedCoachId(effectiveCoachId || null);
+                                    setTimeout(() => setCopiedCoachId(null), 2000);
                                   }}
                                   title="Copy Coach ID"
                                 >
-                                  {copiedCoachId ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                                  {copiedCoachId === effectiveCoachId ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                                 </Button>
                               </div>
                             </div>

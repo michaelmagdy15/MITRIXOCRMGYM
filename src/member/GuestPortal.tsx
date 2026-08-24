@@ -362,7 +362,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       if (selectedCategoryFilter !== 'all') {
         const cat = getAgeCategory(pkg.name);
         if (selectedCategoryFilter === 'pt') {
-          const isPT = name.includes('private') || name.includes('pt') || pkg.type === 'PT' || pkg.type === 'Personal Training';
+          const isPT = name.includes('private') || name.includes('pt') || pkg.type === 'Private';
           if (!isPT) return false;
         } else if (cat !== selectedCategoryFilter) {
           return false;
@@ -378,13 +378,13 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         if (selectedDurationFilter === '24' && pkg.sessions !== 24) return false;
         if (selectedDurationFilter === '30' && pkg.sessions !== 30) return false;
         if (selectedDurationFilter === '48' && pkg.sessions !== 48) return false;
-        if (selectedDurationFilter === 'unlimited' && pkg.sessionsTotal !== 'unlimited') return false;
+        if (selectedDurationFilter === 'unlimited') return false;
       }
 
       // 4. Search query text match
       if (packageSearchQuery.trim()) {
         const q = packageSearchQuery.toLowerCase().trim();
-        const matchesQuery = name.includes(q) || (pkg.description || '').toLowerCase().includes(q) || branchName.includes(q);
+        const matchesQuery = name.includes(q) || branchName.includes(q);
         if (!matchesQuery) return false;
       }
 

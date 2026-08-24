@@ -54,13 +54,8 @@ export default function CoachSessions() {
     });
 
     // Fetch Assessments
-    const qAssessments = query(
-      collection(db, 'assessments'), 
-      where('preferredCoachId', 'in', [currentUser.id, null]) // Coach gets their own, plus unassigned (if we want, or just their own. Let's do their own for now, since 'in' doesn't support null. We will do two queries if needed, or just their own)
-    );
-    // Actually `in [null]` is not valid in Firestore if we want null and ID. We'll just fetch where preferredCoachId == currentUser.id.
-    const qAss2 = query(collection(db, 'assessments'), where('preferredCoachId', '==', currentUser.id));
-    const unsubAssessments = onSnapshot(qAss2, (snap) => {
+    const qAssessments = query(collection(db, 'assessments'), where('preferredCoachId', '==', currentUser.id));
+    const unsubAssessments = onSnapshot(qAssessments, (snap) => {
       const records = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assessment));
       records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setAssessments(records);

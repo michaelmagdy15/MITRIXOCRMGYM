@@ -53,7 +53,7 @@ export const useCoaches = () => {
       return `COACH-${String(nextId).padStart(3, '0')}`;
     } catch (error) {
       console.error('Error generating coach ID:', error);
-      return `COACH-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+      throw new Error('Failed to generate coach ID. Please try again.');
     }
   };
 
@@ -177,7 +177,7 @@ export const useCoaches = () => {
 
       await setDoc(doc(db, 'users', uid), newUser);
       await updateDoc(doc(db, 'coaches', coach.id), { userId: uid, coachId, email });
-      await addAuditLog('CREATE', 'USER', uid, `Created coach portal account for ${coach.name} (${coachId})`);
+      await addAuditLog('CREATE', 'COACH', uid, `Created coach portal account for ${coach.name} (${coachId})`);
 
       return { success: true, user: newUser };
     } catch (err: any) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Client } from '../types';
 import { auth, db } from '../firebase';
 import { collection, query, onSnapshot, getDocs, doc, writeBatch } from 'firebase/firestore';
@@ -193,7 +193,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
         </div>
         {onSwitchToStore && (
           <Button 
-            onClick={onSwitchToStore} 
+            onClick={() => onSwitchToStore?.()} 
             variant="outline" 
             size="sm" 
             className="h-8 text-xs font-semibold border-border rounded-xl flex items-center gap-1.5 shrink-0 bg-card shadow-xs"

@@ -138,7 +138,7 @@ export const MemberAccountLinkCard: React.FC<MemberAccountLinkCardProps> = ({ on
       const nowIso = new Date().toISOString();
       const joinDate = nowIso.split('T')[0];
 
-      const newClientData: Partial<Client> = {
+      const newClientData: Partial<Client> & Record<string, any> = {
         name: newName.trim(),
         memberId: genId,
         phone: newPhone.trim() || currentUser.phone || '',
@@ -178,7 +178,7 @@ export const MemberAccountLinkCard: React.FC<MemberAccountLinkCardProps> = ({ on
   };
 
   const gymName = branding?.companyName || 'Gym';
-  const whatsappPhone = branding?.whatsappNumber || '201000000000';
+  const whatsappPhone = (branding as any)?.whatsappNumber || '201000000000';
   const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
     `Hello ${gymName}, I am trying to connect my member account. My phone number is: ${currentUser?.phone || searchTerm || ''}`
   )}`;

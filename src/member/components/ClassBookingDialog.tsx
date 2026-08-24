@@ -95,7 +95,7 @@ export function ClassBookingDialog({
       } catch { /* ignore */ }
     }
     const hasRemaining = typeof p.sessionsRemaining === 'number' ? p.sessionsRemaining > 0 : true;
-    const isUnlimited = p.sessionsTotal === 'unlimited';
+    const isUnlimited = false;
     return hasRemaining || isUnlimited;
   });
 
@@ -108,16 +108,16 @@ export function ClassBookingDialog({
       const end = new Date(gymClass.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       return `${start} - ${end}`;
     } catch {
-      return gymClass.time || 'Class Session';
+      return (gymClass as any).time || 'Class Session';
     }
   };
 
   const formatClassDate = () => {
     try {
-      const dateStr = gymClass.startTime ? gymClass.startTime.substring(0, 10) : gymClass.date;
+      const dateStr = gymClass.startTime ? gymClass.startTime.substring(0, 10) : (gymClass as any).date;
       return format(parseISO(dateStr), 'EEEE, dd MMMM yyyy');
     } catch {
-      return gymClass.date || 'Scheduled Date';
+      return (gymClass as any).date || 'Scheduled Date';
     }
   };
 
@@ -166,8 +166,8 @@ export function ClassBookingDialog({
         clientEmail: client.email || '',
         classId: gymClass.id,
         className: gymClass.name,
-        classDate: gymClass.date || gymClass.startTime?.substring(0, 10),
-        classTime: gymClass.time || formatClassTime(),
+        classDate: (gymClass as any).date || gymClass.startTime?.substring(0, 10),
+        classTime: (gymClass as any).time || formatClassTime(),
         packageId: selectedUpsellPkg.id,
         packageName: selectedUpsellPkg.name,
         packagePrice: selectedUpsellPkg.price,

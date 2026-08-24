@@ -787,7 +787,7 @@ async function startServer() {
         coachIdTerm = `COACH-${cleanTerm.padStart(3, '0')}`;
       } else if (/^COACH-\d+$/i.test(cleanTerm)) {
         const parts = cleanTerm.split('-');
-        coachIdTerm = `COACH-${parts[1].padStart(3, '0')}`;
+        coachIdTerm = `COACH-${parts[1]!.padStart(3, '0')}`;
       }
 
       // 1. Search in users collection by coachId
@@ -798,7 +798,7 @@ async function startServer() {
         .get();
 
       if (!usersByCoachId.empty) {
-        const u = usersByCoachId.docs[0].data();
+        const u = usersByCoachId.docs[0]!.data();
         if (u.email) {
           return res.json({ email: u.email, coachId: u.coachId, name: u.name });
         }
@@ -811,7 +811,7 @@ async function startServer() {
         .get();
 
       if (!coachesByCoachId.empty) {
-        const c = coachesByCoachId.docs[0].data();
+        const c = coachesByCoachId.docs[0]!.data();
         if (c.email) {
           return res.json({ email: c.email, coachId: c.coachId, name: c.name });
         }

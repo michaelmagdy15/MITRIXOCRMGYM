@@ -63,15 +63,22 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const generateCoachId = async (): Promise<string> => {
-  const q = query(collection(db, 'users'), where('role', '==', 'coach'));
-  const snap = await getDocs(q);
-  const nums = snap.docs
-    .map(d => (d.data().coachId as string) || '')
-    .filter(id => id.startsWith('COACH-'))
-    .map(id => parseInt(id.split('-')[1] || '0', 10))
-    .filter(n => !isNaN(n));
-  const maxNum = nums.length > 0 ? Math.max(...nums) : 0;
-  return `COACH-${String(maxNum + 1).padStart(3, '0')}`;
+  const counterRef = doc(db, 'counters', 'coaches');
+  try {
+    const nextId = await runTransaction(db, async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      let currentId = 0;
+      if (counterDoc.exists()) {
+        currentId = counterDoc.data().lastId || 0;
+      }
+      transaction.set(counterRef, { lastId: currentId + 1 }, { merge: true });
+      return currentId + 1;
+    });
+    return `COACH-${String(nextId).padStart(3, '0')}`;
+  } catch (error) {
+    console.error('Error generating coach ID:', error);
+    throw new Error('Failed to generate coach ID. Please try again.');
+  }
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -167,7 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   if (data.portalUserId === userId) return true;
                   const cPhone = (data.phone || '').replace(/\D/g, '').slice(-9);
                   if (cleanPhone && cPhone && cPhone === cleanPhone) return true;
-                  if (userData.email && (data.email || '').toLowerCase() === userData.email.toLowerCase()) return true;
+                   if (userData?.email && (data.email || '').toLowerCase() === userData.email.toLowerCase()) return true;
                   return false;
                 });
 
