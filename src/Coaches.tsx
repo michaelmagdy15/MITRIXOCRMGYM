@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { format, parseISO } from 'date-fns';
 
@@ -278,10 +278,11 @@ export default function Coaches() {
     return users.find(u => u.id === managingCoach.userId || (u.role === 'coach' && u.name?.toLowerCase() === managingCoach.name?.toLowerCase()));
   }, [managingCoach, users]);
 
-  const effectiveCoachId = managingCoach?.coachId || linkedUser?.coachId;
+  const rawEffectiveCoachId = managingCoach?.coachId || linkedUser?.coachId;
+  const effectiveCoachId = rawEffectiveCoachId && /^COACH-\d+$/i.test(rawEffectiveCoachId) ? rawEffectiveCoachId : undefined;
   const effectiveEmail = managingCoach?.email || linkedUser?.email;
   const effectiveUserId = managingCoach?.userId || linkedUser?.id;
-  const hasAccount = Boolean(effectiveUserId || effectiveCoachId);
+  const hasAccount = Boolean(effectiveUserId);
 
   return (
     <div className="space-y-4">
@@ -340,10 +341,12 @@ export default function Coaches() {
             <TableBody>
               {coaches.map(coach => {
                 const coachUser = users.find(u => u.id === coach.userId || (u.role === 'coach' && u.name?.toLowerCase() === coach.name.toLowerCase()));
-                const rowCoachId = coach.coachId || coachUser?.coachId;
+                const rawCoachId = coach.coachId || coachUser?.coachId;
+                // Only treat as a valid coach ID if it matches COACH-XXX pattern
+                const rowCoachId = rawCoachId && /^COACH-\d+$/i.test(rawCoachId) ? rawCoachId : undefined;
                 const rowEmail = coach.email || coachUser?.email;
                 const rowUserId = coach.userId || coachUser?.id;
-                const rowHasAccount = Boolean(rowCoachId || rowUserId);
+                const rowHasAccount = Boolean(rowUserId);
 
                 return (
                   <TableRow key={coach.id}>
@@ -352,6 +355,36 @@ export default function Coaches() {
                         <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-md">
                           {rowCoachId}
                         </span>
+                      ) : rowUserId ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] gap-1 border-dashed border-amber-400/60 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                          onClick={async () => {
+                            try {
+                              const counterRef = doc(db, 'counters', 'coaches');
+                              const nextId = await runTransaction(db, async (transaction) => {
+                                const counterDoc = await transaction.get(counterRef);
+                                let currentId = 0;
+                                if (counterDoc.exists()) {
+                                  currentId = counterDoc.data().lastId || 0;
+                                }
+                                transaction.set(counterRef, { lastId: currentId + 1 }, { merge: true });
+                                return currentId + 1;
+                              });
+                              const newCoachId = `COACH-${String(nextId).padStart(3, '0')}`;
+                              // Update the coaches document
+                              await updateDoc(doc(db, 'coaches', coach.id), { coachId: newCoachId });
+                              // Update the users document too
+                              await updateDoc(doc(db, 'users', rowUserId), { coachId: newCoachId });
+                              alert(`Assigned Coach ID: ${newCoachId} to ${coach.name}`);
+                            } catch (err: any) {
+                              alert(`Failed to assign ID: ${err?.message || String(err)}`);
+                            }
+                          }}
+                        >
+                          <Sparkles className="h-3 w-3" /> Assign ID
+                        </Button>
                       ) : (
                         <Button
                           variant="outline"
