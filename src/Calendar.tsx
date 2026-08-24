@@ -726,7 +726,11 @@ export default function CalendarView() {
                       <SelectValue placeholder={language === 'ar' ? 'اختر المدرب' : 'Select trainer'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {users.filter(u => (u.role === 'coach' || coaches.some(c => c.active && c.userId === u.id)) && u.status !== 'nonworking').map(u => (
+                      {coaches.filter(c => c.active).map(c => (
+                        <SelectItem key={c.id} value={c.userId || c.id}>{c.name} (Coach)</SelectItem>
+                      ))}
+                      {/* Also include any users with role=coach not already in coaches list */}
+                      {users.filter(u => u.role === 'coach' && u.status !== 'nonworking' && !coaches.some(c => c.userId === u.id)).map(u => (
                         <SelectItem key={u.id} value={u.id}>{u.name} (Coach)</SelectItem>
                       ))}
                     </SelectContent>

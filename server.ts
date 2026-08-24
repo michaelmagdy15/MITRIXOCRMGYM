@@ -1072,7 +1072,7 @@ async function startServer() {
   });
 
   // Server-authoritative endpoint for class booking
-  // Handles capacity checks, waitlist promotion, and prevents double-booking
+  // Handles capacity checks, waitlist promotion, package session deduction, points award, and prevents double-booking
   app.post("/api/classes/book", requireAuth, async (req, res) => {
     try {
       const { classId, action, clientId } = req.body;
@@ -1082,38 +1082,144 @@ async function startServer() {
 
       const db = await getDbForRequest(req);
       const classRef = db.collection("classSchedules").doc(classId);
-      
+
+      // Resolve client document
+      let clientRef = db.collection("clients").doc(clientId);
+      let clientDoc = await clientRef.get();
+      if (!clientDoc.exists) {
+        const clientByMemberSnap = await db.collection("clients").where("memberId", "==", clientId).limit(1).get();
+        if (!clientByMemberSnap.empty) {
+          clientDoc = clientByMemberSnap.docs[0]!;
+          clientRef = clientDoc.ref;
+        } else {
+          const clientByUidSnap = await db.collection("clients").where("portalUserId", "==", clientId).limit(1).get();
+          if (!clientByUidSnap.empty) {
+            clientDoc = clientByUidSnap.docs[0]!;
+            clientRef = clientDoc.ref;
+          }
+        }
+      }
+
+      const canonicalClientId = clientDoc.exists ? clientDoc.id : clientId;
+      const clientData = clientDoc.exists ? clientDoc.data() : null;
+      const memberIdStr = clientData?.memberId || canonicalClientId;
+
       await db.runTransaction(async (transaction) => {
         const classDoc = await transaction.get(classRef);
         if (!classDoc.exists) {
           throw new Error("Class not found");
         }
 
+        const currentClientDoc = clientDoc.exists ? await transaction.get(clientRef) : null;
+        const currentClientData = currentClientDoc?.exists ? currentClientDoc.data() : null;
+
         const classData = classDoc.data();
-        let attendees = classData?.attendees || [];
-        let waitlist = classData?.waitlist || [];
+        let attendees: string[] = classData?.attendees ? [...classData.attendees] : [];
+        let waitlist: string[] = classData?.waitlist ? [...classData.waitlist] : [];
         const capacity = classData?.capacity || 0;
 
+        const isAlreadyAttendee = attendees.some(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
+        const isAlreadyWaitlisted = waitlist.some(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
+
         if (action === 'join') {
-          if (attendees.includes(clientId) || waitlist.includes(clientId)) {
+          if (isAlreadyAttendee || isAlreadyWaitlisted) {
             throw new Error("Already booked or waitlisted");
           }
+
           if (attendees.length < capacity) {
-            attendees.push(clientId);
+            // Deduct 1 credit from member's active package if available
+            if (currentClientData) {
+              const packagesCopy = currentClientData.packages ? [...currentClientData.packages] : [];
+              const pkgIdx = packagesCopy.findIndex((p: any) => 
+                p.status === 'Active' && !p.isOnHold && typeof p.sessionsRemaining === 'number' && p.sessionsRemaining > 0
+              );
+
+              const updateData: any = {};
+              if (pkgIdx !== -1) {
+                packagesCopy[pkgIdx].sessionsRemaining -= 1;
+                updateData.packages = packagesCopy;
+              } else if (typeof currentClientData.sessionsRemaining === 'number' && currentClientData.sessionsRemaining > 0) {
+                updateData.sessionsRemaining = currentClientData.sessionsRemaining - 1;
+              }
+
+              // Award +10 points for booking a class
+              const currentPoints = typeof currentClientData.points === 'number' ? currentClientData.points : 0;
+              updateData.points = currentPoints + 10;
+              updateData.updatedAt = new Date().toISOString();
+
+              transaction.update(clientRef, updateData);
+
+              // Update points wallet if present
+              const walletRef = db.collection("pointsWallets").doc(memberIdStr);
+              const walletDoc = await transaction.get(walletRef);
+              if (walletDoc.exists) {
+                const wData = walletDoc.data()!;
+                const newBalance = (wData.balance || 0) + 10;
+                transaction.update(walletRef, {
+                  balance: newBalance,
+                  totalEarned: (wData.totalEarned || 0) + 10,
+                  lastUpdated: new Date().toISOString()
+                });
+              } else {
+                transaction.set(walletRef, {
+                  memberId: memberIdStr,
+                  balance: 10,
+                  totalEarned: 10,
+                  totalSpent: 0,
+                  lastUpdated: new Date().toISOString()
+                });
+              }
+
+              // Log points transaction
+              const pointsTxnRef = db.collection("pointsTransactions").doc();
+              transaction.set(pointsTxnRef, {
+                memberId: memberIdStr,
+                type: 'credit',
+                amount: 10,
+                reason: 'gift',
+                description: `Class Booking: ${classData?.name || 'Workout Class'}`,
+                balanceBefore: currentPoints,
+                balanceAfter: currentPoints + 10,
+                createdBy: 'system',
+                createdAt: new Date().toISOString()
+              });
+            }
+
+            attendees.push(canonicalClientId);
           } else {
-            waitlist.push(clientId);
+            // Class full, add to waitlist
+            waitlist.push(canonicalClientId);
           }
         } else if (action === 'leave') {
-          const attendeeIndex = attendees.indexOf(clientId);
+          const attendeeIndex = attendees.findIndex(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
           if (attendeeIndex > -1) {
             attendees.splice(attendeeIndex, 1);
+
+            // Refund 1 credit to member
+            if (currentClientData) {
+              const packagesCopy = currentClientData.packages ? [...currentClientData.packages] : [];
+              const pkgIdx = packagesCopy.findIndex((p: any) => p.status === 'Active' && !p.isOnHold);
+              const updateData: any = {};
+              if (pkgIdx !== -1 && typeof packagesCopy[pkgIdx].sessionsRemaining === 'number') {
+                packagesCopy[pkgIdx].sessionsRemaining += 1;
+                updateData.packages = packagesCopy;
+              } else if (typeof currentClientData.sessionsRemaining === 'number') {
+                updateData.sessionsRemaining = currentClientData.sessionsRemaining + 1;
+              }
+              if (Object.keys(updateData).length > 0) {
+                transaction.update(clientRef, updateData);
+              }
+            }
+
             // Waitlist FIFO Promotion
             if (waitlist.length > 0) {
               const promotedId = waitlist.shift();
-              if (promotedId) attendees.push(promotedId);
+              if (promotedId) {
+                attendees.push(promotedId);
+              }
             }
           } else {
-            const waitlistIndex = waitlist.indexOf(clientId);
+            const waitlistIndex = waitlist.findIndex(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
             if (waitlistIndex > -1) {
               waitlist.splice(waitlistIndex, 1);
             } else {
@@ -1124,7 +1230,22 @@ async function startServer() {
           throw new Error("Invalid action");
         }
 
-        transaction.update(classRef, { attendees, waitlist });
+        transaction.update(classRef, { 
+          attendees, 
+          waitlist,
+          updatedAt: new Date().toISOString()
+        });
+
+        // Audit log
+        transaction.set(db.collection("auditLogs").doc(), {
+          action: action === 'join' ? 'JOIN_CLASS' : 'LEAVE_CLASS',
+          entityType: 'CLASS',
+          entityId: classId,
+          details: `Member ${clientData?.name || canonicalClientId} ${action === 'join' ? 'joined' : 'left'} class ${classData?.name || classId}`,
+          timestamp: new Date().toISOString(),
+          userId: req.user?.uid || canonicalClientId,
+          userName: req.user?.email || clientData?.name || "Member"
+        });
       });
 
       return res.json({ success: true, message: `Class ${action} successful` });

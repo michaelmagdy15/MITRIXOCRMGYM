@@ -81,8 +81,12 @@ export function ClassBookingDialog({
 
   if (!gymClass || !client) return null;
 
-  const isBooked = (gymClass.attendees || []).includes(client.id);
-  const isWaitlisted = (gymClass.waitlist || []).includes(client.id);
+  const isBooked = (gymClass.attendees || []).includes(client.id) ||
+    Boolean(client.memberId && (gymClass.attendees || []).includes(client.memberId)) ||
+    Boolean(client.portalUserId && (gymClass.attendees || []).includes(client.portalUserId));
+  const isWaitlisted = (gymClass.waitlist || []).includes(client.id) ||
+    Boolean(client.memberId && (gymClass.waitlist || []).includes(client.memberId)) ||
+    Boolean(client.portalUserId && (gymClass.waitlist || []).includes(client.portalUserId));
   const isFull = (gymClass.attendees || []).length >= gymClass.capacity;
   const spotsLeft = Math.max(0, gymClass.capacity - (gymClass.attendees || []).length);
 

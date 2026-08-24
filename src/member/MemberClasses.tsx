@@ -285,8 +285,16 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
           </Card>
         ) : (
           filteredClasses.map(gymClass => {
-            const isBooked = client ? (gymClass.attendees || []).includes(client.id) : false;
-            const isWaitlisted = client ? (gymClass.waitlist || []).includes(client.id) : false;
+            const isBooked = client ? (
+              (gymClass.attendees || []).includes(client.id) ||
+              Boolean(client.memberId && (gymClass.attendees || []).includes(client.memberId)) ||
+              Boolean(client.portalUserId && (gymClass.attendees || []).includes(client.portalUserId))
+            ) : false;
+            const isWaitlisted = client ? (
+              (gymClass.waitlist || []).includes(client.id) ||
+              Boolean(client.memberId && (gymClass.waitlist || []).includes(client.memberId)) ||
+              Boolean(client.portalUserId && (gymClass.waitlist || []).includes(client.portalUserId))
+            ) : false;
             const isFull = (gymClass.attendees || []).length >= gymClass.capacity;
             const spotsLeft = Math.max(0, gymClass.capacity - (gymClass.attendees || []).length);
 
