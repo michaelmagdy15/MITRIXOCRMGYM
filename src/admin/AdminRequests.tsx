@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO } from 'date-fns';
-import { ClipboardList, Target, PauseCircle, CheckCircle2 } from 'lucide-react';
+import { ClipboardList, Target, PauseCircle, CheckCircle2, Phone, User as UserIcon, Clock, MessageSquare, ExternalLink, Calendar, Award, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function AdminRequests() {
@@ -118,54 +118,124 @@ export default function AdminRequests() {
           {assessments.length === 0 && !loading && (
             <Card className="border-dashed"><CardContent className="py-8 text-center text-muted-foreground">No assessment requests found.</CardContent></Card>
           )}
-          {assessments.map(req => (
-            <Card key={req.id}>
-              <CardContent className="p-4 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-                <div className="space-y-1 flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold">{req.clientName}</h3>
-                    <Badge variant="outline" className={req.status === 'Pending' ? 'bg-amber-500/10 text-amber-500' : 'bg-emerald-500/10 text-emerald-500'}>
-                      {req.status}
-                    </Badge>
+          {assessments.map(req => {
+            const cleanPhone = (req.phone || '').replace(/[^0-9]/g, '');
+            return (
+              <Card key={req.id} className="hover:shadow-sm transition-shadow">
+                <CardContent className="p-5 flex flex-col md:flex-row gap-5 justify-between items-start">
+                  <div className="space-y-3 flex-1">
+                    {/* Header info */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-bold text-base">{req.clientName}</h3>
+                      {req.membershipId && (
+                        <Badge variant="outline" className="text-xs bg-muted/60 font-mono">
+                          ID: {req.membershipId}
+                        </Badge>
+                      )}
+                      {req.membershipType && (
+                        <Badge variant="secondary" className="text-xs">
+                          {req.membershipType}
+                        </Badge>
+                      )}
+                      {req.ageGroup && (
+                        <Badge variant="outline" className="text-xs">
+                          Age: {req.ageGroup}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className={req.status === 'Pending' ? 'bg-amber-500/10 text-amber-600 border-amber-300' : 'bg-emerald-500/10 text-emerald-600 border-emerald-300'}>
+                        {req.status}
+                      </Badge>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      Requested: {req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy HH:mm') : 'Recently'}
+                    </p>
+                    
+                    {/* Contact and schedule details grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-muted/30 p-3 rounded-lg border border-border/50">
+                      {req.phone && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="font-semibold text-muted-foreground">WhatsApp:</span>
+                          <a
+                            href={`https://wa.me/${cleanPhone}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-emerald-600 hover:underline flex items-center gap-1"
+                          >
+                            {req.phone} <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      )}
+                      
+                      {(req.timePeriod || req.preferredHour || req.preferredDate || req.preferredTime) && (
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="font-semibold text-muted-foreground">Pref. Time:</span>
+                          <span>{req.timePeriod || req.preferredDate || ''} {req.preferredHour || req.preferredTime ? `• ${req.preferredHour || req.preferredTime}` : ''}</span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2">
+                        <Award className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className="font-semibold text-muted-foreground">Coach Preference:</span>
+                        <span>{req.preferredCoachName || req.coachName || (req.hasCoachPreference ? 'Preferred Coach' : 'Any Coach')}</span>
+                      </div>
+
+                      {req.referralSource && (
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="font-semibold text-muted-foreground">Referral Source:</span>
+                          <span className="font-medium">{req.referralSource}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Notes & Injuries */}
+                    {(req.notes || req.injuries || req.goals) && (
+                      <div className="text-xs bg-amber-500/5 border border-amber-500/20 p-2.5 rounded-lg space-y-1">
+                        {(req.notes || req.injuries) && (
+                          <p>
+                            <span className="font-bold text-amber-700 dark:text-amber-400">Notes / Injuries:</span>{' '}
+                            <span className="text-foreground/90">{req.notes || req.injuries}</span>
+                          </p>
+                        )}
+                        {req.goals && (
+                          <p>
+                            <span className="font-bold text-muted-foreground">Goals:</span>{' '}
+                            <span className="text-foreground/90 italic">{req.goals}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground">Requested: {format(parseISO(req.createdAt), 'dd MMM yyyy HH:mm')}</p>
                   
-                  <div className="grid grid-cols-2 gap-4 mt-2 text-sm">
-                    <div><span className="text-muted-foreground font-semibold">Preferred Coach:</span> {req.preferredCoachName || 'Any'}</div>
-                    <div><span className="text-muted-foreground font-semibold">Pref. Date/Time:</span> {req.preferredDate} {req.preferredTime}</div>
+                  {/* Action Column */}
+                  <div className="flex flex-col gap-2 w-full md:w-52 shrink-0 md:pt-1">
+                    {req.status === 'Pending' ? (
+                      <div className="flex flex-col gap-2">
+                        <Label className="text-xs font-semibold text-muted-foreground">Assign Coach</Label>
+                        <Select onValueChange={(val: string | null) => val && handleAssignAssessment(req.id, val)} disabled={processingId === req.id}>
+                          <SelectTrigger className="h-9 text-xs">
+                            <SelectValue placeholder="Select Coach" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {coaches.map(c => (
+                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="text-xs font-semibold flex items-center justify-end gap-1.5 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 className="h-4 w-4" /> Coach Assigned ({req.preferredCoachName || 'Assigned'})
+                      </div>
+                    )}
                   </div>
-                  
-                  {(req.injuries || req.goals) && (
-                    <div className="mt-2 text-xs bg-muted/50 p-2 rounded-md space-y-1">
-                      {req.injuries && <p><span className="font-semibold text-muted-foreground">Injuries:</span> {req.injuries}</p>}
-                      {req.goals && <p><span className="font-semibold text-muted-foreground">Goals:</span> {req.goals}</p>}
-                    </div>
-                  )}
-                </div>
-                
-                <div className="flex flex-col gap-2 w-full md:w-48">
-                  {req.status === 'Pending' ? (
-                    <div className="flex flex-col gap-2">
-                      <Select onValueChange={(val: string | null) => val && handleAssignAssessment(req.id, val)} disabled={processingId === req.id}>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Assign Coach" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {coaches.map(c => (
-                            <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : (
-                    <div className="text-sm font-semibold flex items-center justify-end gap-1 text-emerald-600">
-                      <CheckCircle2 className="h-4 w-4" /> Assigned
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </TabsContent>
 
         <TabsContent value="freezes" className="mt-4 space-y-4">

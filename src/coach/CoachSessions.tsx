@@ -173,53 +173,113 @@ export default function CoachSessions() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-3">
-              {assessments.map(assessment => (
-                <Card key={assessment.id} className="hover:shadow-sm transition-shadow border-l-4 border-l-primary">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="font-semibold">{assessment.clientName}</p>
-                        <p className="text-xs text-muted-foreground">Requested: {format(new Date(assessment.createdAt), 'MMM d, yyyy')}</p>
+            <div className="grid gap-4">
+              {assessments.map(assessment => {
+                const cleanPhone = (assessment.phone || '').replace(/[^0-9]/g, '');
+                return (
+                  <Card key={assessment.id} className="hover:shadow-sm transition-shadow border-l-4 border-l-primary">
+                    <CardContent className="p-5 space-y-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-base">{assessment.clientName}</p>
+                            {assessment.membershipId && (
+                              <Badge variant="outline" className="text-xs font-mono bg-muted/60">
+                                ID: {assessment.membershipId}
+                              </Badge>
+                            )}
+                            {assessment.membershipType && (
+                              <Badge variant="secondary" className="text-xs">
+                                {assessment.membershipType}
+                              </Badge>
+                            )}
+                            {assessment.ageGroup && (
+                              <Badge variant="outline" className="text-xs">
+                                Age: {assessment.ageGroup}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Requested: {assessment.createdAt ? format(new Date(assessment.createdAt), 'MMM d, yyyy HH:mm') : 'Recently'}
+                          </p>
+                        </div>
+                        <Badge variant={assessment.status === 'Pending' ? 'default' : 'secondary'}>
+                          {assessment.status}
+                        </Badge>
                       </div>
-                      <Badge variant={assessment.status === 'Pending' ? 'default' : 'secondary'}>
-                        {assessment.status}
-                      </Badge>
-                    </div>
-                    
-                    <div className="space-y-2 mt-3 text-sm">
-                      {assessment.preferredDate && (
-                        <div className="flex flex-col">
-                          <span className="text-xs text-muted-foreground font-semibold">Availability</span>
-                          <span>{assessment.preferredDate} - {assessment.preferredTime}</span>
-                        </div>
-                      )}
                       
-                      {assessment.goals && (
-                        <div className="flex flex-col">
-                          <span className="text-xs text-muted-foreground font-semibold">Goals</span>
-                          <span className="italic">{assessment.goals}</span>
-                        </div>
-                      )}
-                      
-                      {assessment.injuries && (
-                        <div className="flex flex-col">
-                          <span className="text-xs text-muted-foreground font-semibold text-red-500">Injuries/Conditions</span>
-                          <span className="text-red-600/80">{assessment.injuries}</span>
-                        </div>
-                      )}
-                    </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-muted/30 p-3 rounded-lg border border-border/50">
+                        {assessment.phone && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-muted-foreground">WhatsApp:</span>
+                            <a
+                              href={`https://wa.me/${cleanPhone}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-emerald-600 hover:underline inline-flex items-center gap-1"
+                            >
+                              {assessment.phone} ↗
+                            </a>
+                          </div>
+                        )}
 
-                    {assessment.status === 'Pending' && (
-                      <div className="flex gap-2 mt-4 pt-3 border-t">
-                        <Button size="sm" onClick={() => updateDoc(doc(db, 'assessments', assessment.id), { status: 'Contacted' })}>
-                          Mark Contacted
-                        </Button>
+                        {(assessment.timePeriod || assessment.preferredHour || assessment.preferredDate || assessment.preferredTime) && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-muted-foreground">Preferred Time:</span>
+                            <span>{assessment.timePeriod || assessment.preferredDate || ''} {assessment.preferredHour || assessment.preferredTime ? `• ${assessment.preferredHour || assessment.preferredTime}` : ''}</span>
+                          </div>
+                        )}
+
+                        {assessment.referralSource && (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-muted-foreground">Source:</span>
+                            <span>{assessment.referralSource}</span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+
+                      {(assessment.notes || assessment.injuries || assessment.goals) && (
+                        <div className="text-xs bg-amber-500/5 border border-amber-500/20 p-2.5 rounded-lg space-y-1">
+                          {(assessment.notes || assessment.injuries) && (
+                            <p>
+                              <span className="font-bold text-amber-700 dark:text-amber-400">Injuries / Notes:</span>{' '}
+                              <span className="text-foreground/90">{assessment.notes || assessment.injuries}</span>
+                            </p>
+                          )}
+                          {assessment.goals && (
+                            <p>
+                              <span className="font-bold text-muted-foreground">Goals:</span>{' '}
+                              <span className="text-foreground/90 italic">{assessment.goals}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {assessment.status === 'Pending' && (
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                          {cleanPhone && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs h-8 text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                              onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
+                            >
+                              Open WhatsApp Chat
+                            </Button>
+                          )}
+                          <Button 
+                            size="sm" 
+                            className="text-xs h-8 ml-auto"
+                            onClick={() => updateDoc(doc(db, 'assessments', assessment.id), { status: 'Contacted', updatedAt: new Date().toISOString() })}
+                          >
+                            Mark as Contacted
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>

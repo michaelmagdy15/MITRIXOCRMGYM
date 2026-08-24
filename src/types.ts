@@ -84,20 +84,35 @@ export interface Session {
 }
 
 export type AssessmentStatus = 'Pending' | 'Contacted' | 'Scheduled' | 'Completed';
+export type AssessmentTimePeriod = 'Morning [8AM - 4PM]' | 'Night [4PM - 11PM]' | string;
+export type AssessmentAgeGroup = 'Under 16' | '16 to 21' | '21 to 30' | '30 to 45' | 'Above 45' | string;
+export type AssessmentMembershipType = 'Premium Annual' | 'Basic Annual' | '6 Months' | '3 Months' | '1 Month' | 'Youth [Under 16]' | 'Guest' | string;
+export type AssessmentReferralSource = 'Social Media' | 'Floor Service' | 'A Friend' | 'Sales person' | string;
 
 export interface Assessment {
   id: string;
   clientId: string;
   clientName: string;
-  preferredCoachId?: string;
+  phone?: string;
+  membershipId?: string;
+  timePeriod?: AssessmentTimePeriod;
+  preferredHour?: string;
+  ageGroup?: AssessmentAgeGroup;
+  membershipType?: AssessmentMembershipType;
+  preferredCoachId?: string | null;
   preferredCoachName?: string;
+  hasCoachPreference?: boolean;
+  coachName?: string;
+  referralSource?: AssessmentReferralSource;
   preferredDate?: string; // e.g., 'Mondays and Wednesdays' or specific date
   preferredTime?: string; // e.g., 'Morning', 'Evening'
   injuries?: string;
+  notes?: string;
   goals?: string;
   status: AssessmentStatus;
   createdAt: string;
   updatedAt: string;
+  tenantId?: string;
 }
 
 export interface ImportBatch {
