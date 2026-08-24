@@ -152,15 +152,45 @@ export const useCoaches = () => {
     }
   };
 
+  const createPortalAccountForCoach = async (coach: Coach): Promise<{ success: boolean; user?: User; error?: string }> => {
+    try {
+      const coachId = await generateCoachId();
+      const coachNum = coachId.split('-')[1] || '000';
+      const firstName = (coach.name || '').split(' ')[0]?.replace(/[^a-zA-Z0-9]/g, '') || 'coach';
+      const tenantPrefix = getTenantId() || 'mitrixogymcrm';
+      const email = `${tenantPrefix}-coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
+      const uid = await createFirebaseUser(email, '12345678');
+
+      const newUser: User = {
+        id: uid,
+        name: coach.name,
+        email,
+        role: 'coach',
+        coachId,
+        mustChangePassword: true,
+        phone: coach.phone || ''
+      };
+
+      await setDoc(doc(db, 'users', uid), newUser);
+      await updateDoc(doc(db, 'coaches', coach.id), { userId: uid });
+      await addAuditLog('CREATE', 'USER', uid, `Created coach portal account for ${coach.name} (${coachId})`);
+
+      return { success: true, user: newUser };
+    } catch (err: any) {
+      console.error("Error creating portal account for coach:", err);
+      return { success: false, error: err?.message || String(err) };
+    }
+  };
+
   const deleteCoach = async (id: string) => {
     try {
       const coachName = coaches.find(c => c.id === id)?.name || id;
-        await deleteDoc(doc(db, 'coaches', id));
+      await deleteDoc(doc(db, 'coaches', id));
       await addAuditLog('DELETE', 'COACH', id, `Deleted coach: ${coachName}`);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `coaches/${id}`, true);
     }
   };
 
-  return { coaches, loading, addCoach, updateCoach, deleteCoach };
+  return { coaches, loading, addCoach, updateCoach, deleteCoach, createPortalAccountForCoach };
 };

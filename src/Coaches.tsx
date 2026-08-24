@@ -8,19 +8,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Coach } from './types';
-import { Plus, Edit, Trash2, Calendar, Phone, DollarSign, Users, Shield, Save, Briefcase, Mail } from 'lucide-react';
+import { Plus, Edit, Trash2, Calendar, Phone, DollarSign, Users, Shield, Save, Briefcase, Mail, RotateCcw, Sparkles, Copy, CheckCircle2 } from 'lucide-react';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { format, parseISO } from 'date-fns';
 
 export default function Coaches() {
   const { currentUser, canAccessSettings, ptPackageRecords, clients, payments, users } = useAppContext();
-  const { coaches, addCoach, updateCoach, deleteCoach } = useCoaches();
+  const { coaches, addCoach, updateCoach, deleteCoach, createPortalAccountForCoach } = useCoaches();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
@@ -37,6 +37,58 @@ export default function Coaches() {
   const [coachSchedule, setCoachSchedule] = useState<Record<string, { enabled: boolean; startTime: string; endTime: string }>>({});
   const [loadingSchedule, setLoadingSchedule] = useState(false);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+
+  // Account creation & password reset states
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [copiedCoachId, setCopiedCoachId] = useState(false);
+
+  const handleCreatePortalAccount = async () => {
+    if (!managingCoach) return;
+    setIsCreatingAccount(true);
+    try {
+      const res = await createPortalAccountForCoach(managingCoach);
+      if (res.success && res.user) {
+        setManagingCoach(prev => prev ? { ...prev, userId: res.user!.id } : null);
+        alert(`Success! Created Coach Portal account for ${managingCoach.name}.\n\nCoach ID: ${res.user.coachId}\nDefault Password: 12345678\n\nThe coach can now sign in using the Coach tab on the login screen.`);
+      } else {
+        alert(`Failed to create coach portal account: ${res.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`Error creating portal account: ${err?.message || String(err)}`);
+    } finally {
+      setIsCreatingAccount(false);
+    }
+  };
+
+  const handleResetCoachPassword = async (targetUserId: string, coachName: string) => {
+    if (!window.confirm(`Reset password for Coach ${coachName}?\n\nThis will reset their password to "12345678" and require them to change it upon their next login.`)) return;
+    setIsResettingPassword(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("No authorization token found. You must be signed in.");
+
+      const response = await fetch('/api/tenant/reset-user-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ targetUserId })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Server returned ${response.status}`);
+      }
+
+      alert(`Done! Coach ${coachName}'s password has been reset to "12345678".`);
+    } catch (err: any) {
+      alert(`Failed to reset password: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
 
   const DAYS = [
     { key: 'monday',    label: 'Monday' },
@@ -273,6 +325,7 @@ export default function Coaches() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Coach ID</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Status</TableHead>
@@ -280,35 +333,79 @@ export default function Coaches() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {coaches.map(coach => (
-                <TableRow key={coach.id}>
-                  <TableCell className="font-medium">{coach.name}</TableCell>
-                  <TableCell>{coach.phone || '-'}</TableCell>
-                  <TableCell>
-                    {coach.active ? (
-                      <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20 border-green-500/20" variant="outline">Active</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-muted-foreground border-muted-foreground/20">Inactive</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end items-center gap-1.5">
-                      <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => openManage(coach)}>
-                        <Briefcase className="h-3.5 w-3.5" /> Manage
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(coach)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-destructive h-8 w-8 hover:bg-destructive/10" onClick={() => handleDelete(coach.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {coaches.map(coach => {
+                const coachUser = users.find(u => u.id === coach.userId || (u.role === 'coach' && u.name?.toLowerCase() === coach.name.toLowerCase()));
+                return (
+                  <TableRow key={coach.id}>
+                    <TableCell>
+                      {coachUser?.coachId ? (
+                        <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-md">
+                          {coachUser.coachId}
+                        </span>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-[11px] gap-1 border-dashed border-primary/40 text-primary hover:bg-primary/10"
+                          onClick={async () => {
+                            const res = await createPortalAccountForCoach(coach);
+                            if (res.success && res.user) {
+                              alert(`Success! Created Coach Portal account for ${coach.name}.\n\nCoach ID: ${res.user.coachId}\nDefault Password: 12345678\n\nThe coach can now sign in using the Coach tab on the login screen.`);
+                            } else {
+                              alert(`Failed to create account: ${res.error || 'Unknown error'}`);
+                            }
+                          }}
+                        >
+                          <Sparkles className="h-3 w-3" /> Create ID
+                        </Button>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      <div>
+                        <p>{coach.name}</p>
+                        {coachUser?.email && (
+                          <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]">{coachUser.email}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{coach.phone || '-'}</TableCell>
+                    <TableCell>
+                      {coach.active ? (
+                        <Badge className="bg-green-500/10 text-green-500 hover:bg-green-500/20 border-green-500/20" variant="outline">Active</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-muted-foreground border-muted-foreground/20">Inactive</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end items-center gap-1.5">
+                        {coachUser && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 text-amber-600 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                            onClick={() => handleResetCoachPassword(coachUser.id, coach.name)}
+                            title="Reset password to 12345678"
+                          >
+                            <RotateCcw className="h-3 w-3" /> Reset PW
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => openManage(coach)}>
+                          <Briefcase className="h-3.5 w-3.5" /> Manage
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(coach)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-destructive h-8 w-8 hover:bg-destructive/10" onClick={() => handleDelete(coach.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {coaches.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                     No coaches found. Create one to get started.
                   </TableCell>
                 </TableRow>
@@ -399,30 +496,97 @@ export default function Coaches() {
 
                   <Card className="bg-muted/30">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                        <Shield className="h-4 w-4" /> Portal Account Details
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-primary" /> Portal Account Details
+                        </span>
+                        {linkedUser && (
+                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[10px]">
+                            Active Account
+                          </Badge>
+                        )}
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2">
+                    <CardContent className="space-y-3">
                       {linkedUser ? (
-                        <div className="space-y-1 text-sm">
-                          <p className="flex items-center gap-1.5">
-                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="font-semibold">{linkedUser.email}</span>
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            Coach ID: <span className="font-mono">{linkedUser.coachId || '-'}</span>
-                          </p>
-                          {linkedUser.mustChangePassword && (
-                            <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px]">
-                              Forced password reset pending
-                            </Badge>
-                          )}
+                        <div className="space-y-3 text-sm">
+                          <div className="bg-background/80 p-3 rounded-lg border border-border/60 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground font-medium">Coach ID (Login ID):</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono font-bold text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                                  {linkedUser.coachId || 'COACH-001'}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(linkedUser.coachId || '');
+                                    setCopiedCoachId(true);
+                                    setTimeout(() => setCopiedCoachId(false), 2000);
+                                  }}
+                                  title="Copy Coach ID"
+                                >
+                                  {copiedCoachId ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">Login Email:</span>
+                              <span className="font-mono text-muted-foreground truncate max-w-[200px]" title={linkedUser.email}>
+                                {linkedUser.email}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
+                              <span className="text-muted-foreground">Default Password:</span>
+                              <span className="font-mono text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded">
+                                12345678
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground bg-muted/50 p-2 rounded">
+                              <span>How to log in:</span>
+                              <span className="font-medium text-foreground">Select Coach tab → Enter Coach ID & Password</span>
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full text-xs h-8 gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/30 border-amber-300"
+                              disabled={isResettingPassword}
+                              onClick={() => handleResetCoachPassword(linkedUser.id, managingCoach?.name || 'Coach')}
+                            >
+                              <RotateCcw className={`h-3.5 w-3.5 ${isResettingPassword ? 'animate-spin' : ''}`} />
+                              {isResettingPassword ? 'Resetting Password...' : 'Reset Password to "12345678"'}
+                            </Button>
+                          </div>
                         </div>
                       ) : (
-                        <div className="text-sm space-y-1">
-                          <p className="text-muted-foreground italic">No linked login account found.</p>
-                          <p className="text-xs text-muted-foreground">Portal accounts are auto-created for Active coaches.</p>
+                        <div className="text-sm space-y-3 py-1">
+                          <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs space-y-1">
+                            <p className="font-semibold text-amber-800 dark:text-amber-400">No login account linked</p>
+                            <p className="text-muted-foreground">
+                              This coach cannot log in yet. Click below to create their Coach Portal login credentials.
+                            </p>
+                          </div>
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="w-full text-xs h-9 gap-1.5 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                            disabled={isCreatingAccount || !managingCoach}
+                            onClick={handleCreatePortalAccount}
+                          >
+                            <Sparkles className={`h-3.5 w-3.5 ${isCreatingAccount ? 'animate-spin' : ''}`} />
+                            {isCreatingAccount ? 'Creating Account...' : '✨ Create Coach Portal Account'}
+                          </Button>
                         </div>
                       )}
                     </CardContent>
