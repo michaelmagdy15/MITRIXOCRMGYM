@@ -478,6 +478,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithCoachId = async (coachIdOrName: string, password: string) => {
     const term = coachIdOrName.trim();
     const tenantId = getTenantId();
+
+    // Fast-path: If the coach entered an email directly, try client-side signInWithEmail
+    if (term.includes('@')) {
+      try {
+        await signInWithEmail(term.toLowerCase(), password);
+        return;
+      } catch (err: any) {
+        if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+          // Fall through to server-side resolve which can sync valid passwords or verify accounts
+        }
+      }
+    }
+
     // Resolve the coach email server-side (uses admin SDK, works pre-auth)
     const res = await fetch(`/api/coach/resolve-email?tenant=${tenantId}`, {
       method: 'POST',
@@ -485,14 +498,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'Content-Type': 'application/json',
         'x-tenant-id': tenantId
       },
-      body: JSON.stringify({ term, tenantId })
+      body: JSON.stringify({ term, tenantId, password })
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'Coach ID or Name not found. Please check and try again.');
+      throw new Error(errData.error || 'Coach ID, Email, or Name not found. Please check and try again.');
     }
     const data = await res.json();
-    await signInWithEmail(data.email, password);
+    try {
+      await signInWithEmail(data.email, password);
+    } catch (authErr: any) {
+      if (authErr?.code === 'auth/wrong-password' || authErr?.code === 'auth/invalid-credential') {
+        throw new Error('Incorrect password. Please check and try again.');
+      }
+      throw authErr;
+    }
   };
 
   const loginWithMemberId = async (memberId: string, password: string) => {

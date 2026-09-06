@@ -677,13 +677,13 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                   <TabsContent value="coach" className="space-y-4">
                     <form onSubmit={handleCoachLogin} className="space-y-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="coach-id">Coach ID</Label>
+                        <Label htmlFor="coach-id">Coach ID or Email</Label>
                         <Input
                           id="coach-id"
-                          placeholder="COACH-001"
+                          placeholder="e.g. COACH-001 or testcoach@inzan.local"
                           value={coachId}
-                          onChange={e => setCoachId(e.target.value.toUpperCase())}
-                          className="font-mono tracking-wide"
+                          onChange={e => setCoachId(e.target.value)}
+                          className="tracking-wide"
                           autoComplete="username"
                           required
                         />
