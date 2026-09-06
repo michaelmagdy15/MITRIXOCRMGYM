@@ -628,6 +628,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                         value={memberId}
                         onChange={e => setMemberId(e.target.value)}
                         className="font-mono tracking-wide"
+                        autoComplete="username"
                         required
                       />
                     </div>
@@ -683,6 +684,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                           value={coachId}
                           onChange={e => setCoachId(e.target.value.toUpperCase())}
                           className="font-mono tracking-wide"
+                          autoComplete="username"
                           required
                         />
                       </div>

@@ -323,16 +323,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             }
 
+            // Member synthetic email resolution fallback: member-{id}@{tenant}...
+            if (!clientRecordId && firebaseUser.email) {
+              const memberEmailMatch = firebaseUser.email.match(/^member-([a-z0-9_-]+)@/i);
+              if (memberEmailMatch && memberEmailMatch[1]) {
+                const extractedMemberId = memberEmailMatch[1];
+                clientRecordId = extractedMemberId;
+                try {
+                  const clientsSnap = await getDocs(collection(db, 'clients'));
+                  const matchedClient = clientsSnap.docs.find(d => {
+                    const cData = d.data();
+                    return String(cData.memberId || '').toLowerCase() === extractedMemberId.toLowerCase();
+                  });
+                  if (matchedClient) {
+                    clientDocId = matchedClient.id;
+                    if (matchedClient.data().name) initialName = matchedClient.data().name;
+                    await updateDoc(doc(db, 'clients', matchedClient.id), { portalUserId: userId });
+                  }
+                } catch (cErr) {
+                  console.warn("Could not match member client doc:", cErr);
+                }
+              }
+            }
+
             const newUser: User = {
               id: userId,
               name: initialName,
               email: firebaseUser.email || '',
               phone: firebaseUser.phoneNumber || '',
               role: role,
-              clientRecordId,
-              clientDocId,
-              coachId
             };
+            if (clientRecordId) newUser.clientRecordId = clientRecordId;
+            if (clientDocId) newUser.clientDocId = clientDocId;
+            if (coachId) newUser.coachId = coachId;
+
             await setDoc(userDocRef, newUser);
             setCurrentUser(newUser);
             setAuthError(null);
@@ -453,11 +477,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithCoachId = async (coachIdOrName: string, password: string) => {
     const term = coachIdOrName.trim();
+    const tenantId = getTenantId();
     // Resolve the coach email server-side (uses admin SDK, works pre-auth)
-    const res = await fetch('/api/coach/resolve-email', {
+    const res = await fetch(`/api/coach/resolve-email?tenant=${tenantId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ term })
+      headers: {
+        'Content-Type': 'application/json',
+        'x-tenant-id': tenantId
+      },
+      body: JSON.stringify({ term, tenantId })
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -486,39 +514,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const uniqueCandidates = [...new Set(candidateEmails)];
 
     let wrongPasswordEncountered = false;
-    let lastError: any = null;
 
     for (const email of uniqueCandidates) {
       try {
         await signInWithEmail(email, password);
         return;
       } catch (err: any) {
-        lastError = err;
         if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
           wrongPasswordEncountered = true;
         }
       }
     }
 
-    if (wrongPasswordEncountered) {
-      throw new Error('Incorrect password. Please check and try again.');
-    }
-
-    // If candidate emails didn't match, fall through to server-side resolve-email
+    // If candidate emails didn't match directly, fall through to server-side resolve-email
     try {
-      const res = await fetch('/api/member/resolve-email', {
+      const res = await fetch(`/api/member/resolve-email?tenant=${tenantId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ memberId: term })
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId
+        },
+        body: JSON.stringify({ memberId: term, tenantId, password })
       });
       if (res.ok) {
         const data = await res.json();
         if (data.email) {
-          await signInWithEmail(data.email, password);
-          return;
+          try {
+            await signInWithEmail(data.email, password);
+            return;
+          } catch (serverAuthErr: any) {
+            if (serverAuthErr?.code === 'auth/wrong-password' || serverAuthErr?.code === 'auth/invalid-credential') {
+              throw new Error('Incorrect password. Please check and try again.');
+            }
+          }
         }
       }
-    } catch { /* ignore server lookup failure */ }
+    } catch (resolveErr: any) {
+      if (resolveErr.message && resolveErr.message.includes('Incorrect password')) {
+        throw resolveErr;
+      }
+    }
+
+    if (wrongPasswordEncountered) {
+      throw new Error('Incorrect password. Please check and try again.');
+    }
 
     throw new Error('Member ID not found. Please check your ID or reset your password.');
   };
@@ -532,8 +571,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email,
       role: 'coach',
       coachId,
-      branch: branch || undefined,
     };
+    if (branch) newUser.branch = branch;
     await setDoc(doc(db, 'users', uid), newUser);
     return { uid, coachId };
   };

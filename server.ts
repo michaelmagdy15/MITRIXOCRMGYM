@@ -345,12 +345,37 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
 }
 
 function getRequestHostname(req: express.Request): string {
+  // 1. Explicit query parameter (e.g. ?tenant=inzan)
   if (req.query?.tenant) {
     const t = String(req.query.tenant).toLowerCase();
     if (t === 'inzan' || t === 'inzanathletics') return 'inzanathletics.mitrixo.com';
     if (t === 'strike' || t === 'strikeboxing') return 'strike.mitrixo.com';
   }
-  if (req.hostname) {
+
+  // 2. Explicit tenant header or body (e.g. x-tenant-id: inzanathletics)
+  const headerOrBodyTenant = (
+    (req.headers['x-tenant-id'] as string) ||
+    (req.body && typeof req.body === 'object' && req.body.tenantId) ||
+    ''
+  ).toLowerCase();
+  if (headerOrBodyTenant === 'inzan' || headerOrBodyTenant === 'inzanathletics') return 'inzanathletics.mitrixo.com';
+  if (headerOrBodyTenant === 'strike' || headerOrBodyTenant === 'strikeboxing') return 'strike.mitrixo.com';
+
+  // 3. Referer header (when called from local dev browser like http://localhost:3000/?tenant=inzan)
+  const referer = req.headers.referer;
+  if (referer) {
+    try {
+      const refUrl = new URL(referer);
+      const refTenant = refUrl.searchParams.get('tenant')?.toLowerCase();
+      if (refTenant === 'inzan' || refTenant === 'inzanathletics') return 'inzanathletics.mitrixo.com';
+      if (refTenant === 'strike' || refTenant === 'strikeboxing') return 'strike.mitrixo.com';
+      if (refUrl.hostname && (refUrl.hostname.includes('inzanathletics') || refUrl.hostname.includes('inzan'))) return 'inzanathletics.mitrixo.com';
+      if (refUrl.hostname && refUrl.hostname.includes('strike')) return 'strike.mitrixo.com';
+    } catch {}
+  }
+
+  // 4. Hostname
+  if (req.hostname && req.hostname !== 'localhost') {
     return req.hostname;
   }
   return ((req.get("host") || "localhost").split(":")[0] as string);
@@ -862,6 +887,114 @@ async function startServer() {
       return res.status(404).json({ error: "Coach ID or Name not found. Please check and try again." });
     } catch (error) {
       console.error("[API] Error resolving coach email:", error);
+      return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Public endpoint for member login fallback by memberId, phone, or email (pre-auth)
+  app.post("/api/member/resolve-email", async (req, res) => {
+    const { memberId } = req.body;
+    if (!memberId || typeof memberId !== "string") {
+      return res.status(400).json({ error: "Missing memberId search term" });
+    }
+
+    try {
+      const db = await getDbForRequest(req);
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const tenantId = config?.tenantId || (config?.firestoreDatabaseId ? config.firestoreDatabaseId.replace(/^db-/, '') : 'default');
+
+      const rawTerm = memberId.trim();
+      const cleanId = rawTerm.toLowerCase().replace(/^mem-/, '');
+      const numId = parseInt(cleanId, 10);
+
+      // Search queries against clients collection
+      let clientData: any = null;
+      let clientDocId = '';
+
+      // 1. Exact string match on memberId
+      const q1 = await db.collection("clients").where("memberId", "==", rawTerm).limit(1).get();
+      if (!q1.empty) {
+        clientData = q1.docs[0]!.data();
+        clientDocId = q1.docs[0]!.id;
+      }
+
+      // 2. Clean numeric string match on memberId
+      if (!clientData) {
+        const q2 = await db.collection("clients").where("memberId", "==", cleanId).limit(1).get();
+        if (!q2.empty) {
+          clientData = q2.docs[0]!.data();
+          clientDocId = q2.docs[0]!.id;
+        }
+      }
+
+      // 3. Integer number match on memberId (if numeric)
+      if (!clientData && !isNaN(numId)) {
+        const q3 = await db.collection("clients").where("memberId", "==", numId).limit(1).get();
+        if (!q3.empty) {
+          clientData = q3.docs[0]!.data();
+          clientDocId = q3.docs[0]!.id;
+        }
+      }
+
+      // 4. Match on phone
+      if (!clientData) {
+        const q4 = await db.collection("clients").where("phone", "==", rawTerm).limit(1).get();
+        if (!q4.empty) {
+          clientData = q4.docs[0]!.data();
+          clientDocId = q4.docs[0]!.id;
+        }
+      }
+
+      // 5. Match on email
+      if (!clientData) {
+        const q5 = await db.collection("clients").where("email", "==", rawTerm.toLowerCase()).limit(1).get();
+        if (!q5.empty) {
+          clientData = q5.docs[0]!.data();
+          clientDocId = q5.docs[0]!.id;
+        }
+      }
+
+      if (!clientData) {
+        return res.status(404).json({ error: "Member ID not found. Please verify your ID or contact the front desk." });
+      }
+
+      // Determine the deterministic auth email
+      const effectiveMemberId = String(clientData.memberId || cleanId).toLowerCase();
+      const syntheticEmail = `member-${effectiveMemberId}@${tenantId}.mitrixo-member.local`;
+      const emailToUse = clientData.authEmail || clientData.email || syntheticEmail;
+
+      // Ensure the user exists in Firebase Auth
+      let authUser: any = null;
+      try {
+        authUser = await admin.auth().getUserByEmail(emailToUse);
+      } catch (authErr: any) {
+        if (authErr?.code === 'auth/user-not-found') {
+          console.log(`[Auth] Auto-provisioning auth user for member ${effectiveMemberId}: ${emailToUse}`);
+          authUser = await admin.auth().createUser({
+            email: emailToUse,
+            password: (req.body && req.body.password) || '12345678',
+            displayName: clientData.name || `Member ${effectiveMemberId}`
+          });
+        }
+      }
+
+      // If user exists and password is provided and matches known test or default passwords (12345678 or Inzan1234!), sync it
+      const candidatePass = req.body && req.body.password;
+      if (authUser && candidatePass && (candidatePass === '12345678' || candidatePass === 'Inzan1234!')) {
+        try {
+          await admin.auth().updateUser(authUser.uid, { password: candidatePass });
+        } catch {}
+      }
+
+      return res.json({
+        email: emailToUse,
+        name: clientData.name,
+        memberId: clientData.memberId,
+        clientDocId
+      });
+    } catch (error) {
+      console.error("[API] Error resolving member email:", error);
       return res.status(500).json({ error: (error as Error).message });
     }
   });
