@@ -1,9 +1,33 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { BrandingSettings, SalesTarget, Branch, FeatureFlags, StorefrontConfig } from '../types';
-import { auth, db } from '../firebase';
+import { auth, db, getTenantId } from '../firebase';
 import { addAuditLog } from '../services/auditService';
 import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
 
+export const TENANT_BRANDING_DEFAULTS: Record<'inzanathletics' | 'strike', BrandingSettings> = {
+  inzanathletics: {
+    companyName: 'INZAN ATHLETICS',
+    logoUrl: '/inzanlogo.png',
+    currencyCode: 'EGP',
+    currencySymbol: 'LE',
+    brandAccentColor: '#1a1a1a',
+  },
+  strike: {
+    companyName: 'STRIKE',
+    logoUrl: '/strikelogo.png',
+    currencyCode: 'EGP',
+    currencySymbol: 'LE',
+    brandAccentColor: '#1a1a1a',
+  },
+};
+
+export const getInitialBranding = (): BrandingSettings => {
+  const tid = (typeof window !== 'undefined' ? getTenantId() : 'default').toLowerCase();
+  if (tid === 'inzanathletics' || tid === 'inzan') {
+    return TENANT_BRANDING_DEFAULTS.inzanathletics;
+  }
+  return TENANT_BRANDING_DEFAULTS.strike;
+};
 
 const DEFAULT_ACCENT = '#1a1a1a';
 
@@ -38,13 +62,8 @@ interface SettingsContextType {
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthenticated?: boolean; role?: string }> = ({ children, isAuthenticated = false, role }) => {
-  const [branding, setBranding] = useState<BrandingSettings>({
-    companyName: 'mitrixogymcrm',
-    logoUrl: '',
-    currencyCode: 'EGP',
-    currencySymbol: 'LE'
-  });
-  const [isBrandingLoaded, setIsBrandingLoaded] = useState(false);
+  const [branding, setBranding] = useState<BrandingSettings>(getInitialBranding);
+  const [isBrandingLoaded, setIsBrandingLoaded] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [salesTarget, setSalesTarget] = useState<SalesTarget>({
     targetAmount: 50000,
@@ -128,56 +147,36 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>(DEFAULT_STOREFRONT);
 
   // Helper to preload image before setting loaded state
-  const preloadBrandingLogo = useCallback((data: BrandingSettings, onComplete: () => void) => {
-    if (data.companyName) {
-      document.title = data.companyName;
-    }
-    const mergedData = {
+  // Apply branding immediately without artificial delay
+  const applyBrandingData = useCallback((data: BrandingSettings) => {
+    const tenantDefault = getInitialBranding();
+    const rawName = (data.companyName || '').trim();
+    const effectiveName = (!rawName || rawName.toLowerCase() === 'mitrixogymcrm') ? tenantDefault.companyName : rawName;
+    const effectiveLogo = data.logoUrl || tenantDefault.logoUrl;
+
+    const mergedData: BrandingSettings = {
       currencyCode: 'EGP',
       currencySymbol: 'LE',
-      ...data
+      ...tenantDefault,
+      ...data,
+      companyName: effectiveName,
+      logoUrl: effectiveLogo,
     };
-    if (data.logoUrl) {
-      const img = new Image();
-      img.src = data.logoUrl;
-      let finished = false;
-      const timeout = setTimeout(() => {
-        if (!finished) {
-          finished = true;
-          setBranding(mergedData);
-          onComplete();
-        }
-      }, 1500);
-      img.onload = () => {
-        clearTimeout(timeout);
-        if (!finished) {
-          finished = true;
-          setBranding(mergedData);
-          onComplete();
-        }
-      };
-      img.onerror = () => {
-        clearTimeout(timeout);
-        if (!finished) {
-          finished = true;
-          setBranding(mergedData);
-          onComplete();
-        }
-      };
-    } else {
-      setBranding(mergedData);
-      onComplete();
+
+    setBranding(mergedData);
+    if (effectiveName) {
+      document.title = effectiveName;
     }
+    setIsBrandingLoaded(true);
   }, []);
 
   useEffect(() => {
     let active = true;
     const safetyTimeout = setTimeout(() => {
       if (active) {
-        console.warn('Branding load safety timeout triggered');
         setIsBrandingLoaded(true);
       }
-    }, 2500);
+    }, 1500);
 
     const unsubscribe = onSnapshot(collection(db, 'settings'), (snap) => {
       clearTimeout(safetyTimeout);
@@ -188,9 +187,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
 
       if (settings.branding) {
         applyBrandAccent(settings.branding.brandAccentColor);
-        preloadBrandingLogo(settings.branding as BrandingSettings, () => {
-          setIsBrandingLoaded(true);
-        });
+        applyBrandingData(settings.branding as BrandingSettings);
       } else {
         setIsBrandingLoaded(true);
       }
@@ -220,7 +217,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       clearTimeout(safetyTimeout);
       unsubscribe();
     };
-  }, [isAuthenticated, role, preloadBrandingLogo]);
+  }, [isAuthenticated, role, applyBrandingData]);
 
   const updateSetting = async (id: string, updates: any) => {
     await setDoc(doc(db, 'settings', id), updates, { merge: true });

@@ -11,40 +11,86 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// Support dynamic tenant configurations loaded based on subdomain
+// Support dynamic tenant configurations loaded based on subdomain or query param
 const getActiveConfig = () => {
   const dynamicConfig = (window as any).__FIREBASE_CONFIG__;
   if (dynamicConfig) {
     return dynamicConfig;
   }
+
+  // Fallback for standalone Vite dev or direct localhost testing
+  try {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const t = (params.get('tenant') || '').toLowerCase();
+      const host = window.location.hostname.toLowerCase();
+      if (t === 'inzan' || t === 'inzanathletics' || host.includes('inzan')) {
+        return {
+          ...firebaseConfig,
+          firestoreDatabaseId: 'db-inzanathletics',
+          tenantId: 'inzanathletics'
+        };
+      }
+      if (t === 'strike' || t === 'strikeboxing' || host.includes('strike')) {
+        return {
+          ...firebaseConfig,
+          tenantId: 'strike'
+        };
+      }
+    }
+  } catch {}
+
   return firebaseConfig;
 };
 
 export const activeConfig = getActiveConfig();
 
 /**
- * Extracts the tenant identifier from the current subdomain or config.
+ * Extracts the tenant identifier from the current subdomain, query param, or config.
  * Used to namespace member emails and prevent Auth collisions between gyms.
- * Examples: "strike" from strike.mitrixo.com, "golds" from golds.mitrixo.com
+ * Examples: "strike" from strike.mitrixo.com, "inzanathletics" from inzanathletics.mitrixo.com
  * Falls back to "default" if no subdomain or on localhost.
  */
 export const getTenantId = (): string => {
-  // First check if the server injected a tenantId in the config
+  // 1. Explicit query parameter override (e.g. ?tenant=inzan or ?tenant=strike)
+  try {
+    if (typeof window !== 'undefined' && window.location?.search) {
+      const params = new URLSearchParams(window.location.search);
+      const t = (params.get('tenant') || '').toLowerCase();
+      if (t === 'inzan' || t === 'inzanathletics') return 'inzanathletics';
+      if (t === 'strike' || t === 'strikeboxing') return 'strike';
+      if (t) return t;
+    }
+  } catch {}
+
+  // 2. Server-injected tenantId in activeConfig
   const configTenantId = (activeConfig as any).tenantId;
   if (configTenantId) return configTenantId;
 
-  // Extract from subdomain
+  // 3. Extract from subdomain or hostname
   try {
-    const hostname = window.location.hostname;
+    const hostname = window.location.hostname.toLowerCase();
     const parts = hostname.split('.');
     // e.g. "strike.mitrixo.com" → parts = ["strike", "mitrixo", "com"]
+    // e.g. "inzanathletics.localhost" → parts = ["inzanathletics", "localhost"]
     if (parts.length >= 3 && parts[0] !== 'www') {
-      return parts[0]!;
+      const sub = parts[0]!;
+      if (sub === 'inzan' || sub === 'inzanathletics') return 'inzanathletics';
+      if (sub === 'strike') return 'strike';
+      return sub;
     }
-    // Custom domains: check the config's databaseId for a hint
+    if (parts.length === 2 && (parts[1] === 'localhost' || parts[1] === 'local')) {
+      const sub = parts[0]!;
+      if (sub === 'inzan' || sub === 'inzanathletics') return 'inzanathletics';
+      if (sub === 'strike') return 'strike';
+      return sub;
+    }
+    if (hostname.includes('inzan')) return 'inzanathletics';
+    if (hostname.includes('strike')) return 'strike';
+
+    // 4. Custom domains: check the config's databaseId for a hint
     const dbId = (activeConfig as any).firestoreDatabaseId;
     if (dbId && dbId !== '(default)') {
-      // "db-golds-gym" → "golds-gym"
       return dbId.replace(/^db-/, '');
     }
   } catch {

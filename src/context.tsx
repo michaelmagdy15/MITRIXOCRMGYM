@@ -73,7 +73,7 @@ export interface AppContextType {
   setActiveClientId: (id: string | null) => void;
   prefilledLeadData: { name?: string; phone?: string } | null;
   setPrefilledLeadData: (data: { name?: string; phone?: string } | null) => void;
-  addClient: (client: Client) => Promise<void>;
+  addClient: (client: Client) => Promise<string>;
   bulkAddClients: (clients: Client[]) => Promise<{success: number, failed: number, errors: {row: number, reason: string}[]}>;
   updateClient: (id: string, updates: Partial<Client>) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;

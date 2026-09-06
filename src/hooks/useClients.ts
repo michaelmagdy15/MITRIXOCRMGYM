@@ -359,7 +359,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     }
   };
 
-  const addClient = async (client: Omit<Client, 'id' | 'createdAt'>): Promise<void> => {
+  const addClient = async (client: Omit<Client, 'id' | 'createdAt'>): Promise<string> => {
     try {
       const { comments, ...clientData } = client;
 
@@ -462,8 +462,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         `Added new ${client.status === 'Lead' ? 'lead' : 'client'}: ${client.name}`,
         currentUser?.name
       );
+      return docRef.id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'clients', true);
+      throw error;
     }
   };
 

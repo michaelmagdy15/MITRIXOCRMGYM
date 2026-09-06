@@ -12,6 +12,7 @@ import {
   Dumbbell, ShoppingBag, CreditCard, Sparkles, Loader2, ArrowRight, Wallet
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { safeFormatDate, safeFormatTime } from '../../utils/dateUtils';
 
 interface ClassBookingDialogProps {
   open: boolean;
@@ -107,22 +108,16 @@ export function ClassBookingDialog({
   const hasActiveCredits = activePackages.length > 0;
 
   const formatClassTime = () => {
-    try {
-      const start = new Date(gymClass.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const end = new Date(gymClass.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return `${start} - ${end}`;
-    } catch {
-      return (gymClass as any).time || 'Class Session';
-    }
+    const start = safeFormatTime(gymClass.startTime, 'HH:mm');
+    const end = safeFormatTime(gymClass.endTime, 'HH:mm');
+    if (start && end) return `${start} - ${end}`;
+    if (start) return start;
+    return (gymClass as any).time || 'Class Session';
   };
 
   const formatClassDate = () => {
-    try {
-      const dateStr = gymClass.startTime ? gymClass.startTime.substring(0, 10) : (gymClass as any).date;
-      return format(parseISO(dateStr), 'EEEE, dd MMMM yyyy');
-    } catch {
-      return (gymClass as any).date || 'Scheduled Date';
-    }
+    const dateStr = gymClass.startTime ? gymClass.startTime.substring(0, 10) : (gymClass as any).date;
+    return safeFormatDate(dateStr, 'EEEE, dd MMMM yyyy', (gymClass as any).date || 'Scheduled Date');
   };
 
   const handleConfirmBooking = async () => {

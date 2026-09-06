@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { db, getTenantId } from '../firebase';
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fns';
+import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { 
   Sparkles, Calendar, CheckCircle2, Trophy, Activity, Dumbbell, Award, Users, 
   ShoppingBag, Bell, Clock, Flame, ChevronRight, MapPin, Zap, User, 
@@ -610,10 +611,13 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
             {lastCheckIn ? (
               <>
                 <p className="text-sm font-bold text-foreground truncate">
-                  {isToday(parseISO(lastCheckIn)) ? 'Today' : format(parseISO(lastCheckIn), 'EEE, dd MMM')}
+                  {(() => {
+                    const d = toValidDate(lastCheckIn);
+                    return d && isToday(d) ? 'Today' : safeFormatDate(lastCheckIn, 'EEE, dd MMM');
+                  })()}
                 </p>
                 <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
-                  {format(parseISO(lastCheckIn), 'h:mm a')}
+                  {safeFormatDate(lastCheckIn, 'h:mm a')}
                 </p>
               </>
             ) : (
@@ -713,7 +717,7 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
                 <CardContent className="p-4 space-y-2">
                   <div className="flex justify-between items-center text-[10px] font-mono text-muted-foreground border-b pb-2">
                     <span className="font-bold text-foreground">Coach {log.coachName}</span>
-                    <span>{format(parseISO(log.date), 'dd MMM yyyy')}</span>
+                    <span>{safeFormatDate(log.date, 'dd MMM yyyy')}</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">

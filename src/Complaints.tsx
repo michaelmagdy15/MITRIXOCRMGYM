@@ -14,6 +14,7 @@ import { collection, query, onSnapshot, setDoc, updateDoc, deleteDoc, doc, order
 import { Complaint, ComplaintCategory } from './types';
 import { downloadCSV } from './utils/download';
 import { format } from 'date-fns';
+import { safeFormatDate } from './utils/dateUtils';
 import { MessageSquare, Plus, AlertTriangle, CheckCircle2, Clock, XCircle, Star, Tag, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -237,7 +238,7 @@ export default function Complaints() {
   const handleExportCSV = () => {
     const header = 'Title,Category,Priority,Status,Member,Branch,Date,Resolution Notes\n';
     const rows = filteredComplaints.map((c) =>
-      `"${c.title}","${c.category || ''}","${c.priority}","${c.status}","${c.memberName || ''}","${c.branch || ''}","${c.createdAt ? format(new Date(c.createdAt), 'yyyy-MM-dd') : ''}","${(c.resolutionNotes || '').replace(/"/g, '""')}"`
+      `"${c.title}","${c.category || ''}","${c.priority}","${c.status}","${c.memberName || ''}","${c.branch || ''}","${c.createdAt ? safeFormatDate(c.createdAt, 'yyyy-MM-dd', '') : ''}","${(c.resolutionNotes || '').replace(/"/g, '""')}"`
     ).join('\n');
     downloadCSV(header + rows, `complaints-${format(new Date(), 'yyyy-MM-dd')}.csv`);
     toast.success('CSV exported');
@@ -414,7 +415,7 @@ export default function Complaints() {
                           <td className="p-3 text-muted-foreground">{complaint.memberName || '—'}</td>
                           <td className="p-3 text-muted-foreground">{complaint.branch || '—'}</td>
                           <td className="p-3 text-muted-foreground">
-                            {complaint.createdAt ? format(new Date(complaint.createdAt), 'MMM dd, yyyy') : '—'}
+                            {safeFormatDate(complaint.createdAt, 'MMM dd, yyyy')}
                           </td>
                           <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
@@ -474,7 +475,7 @@ export default function Complaints() {
                         <tr key={cat.id} className="border-b hover:bg-muted/30 transition-colors">
                           <td className="p-3 font-medium">{cat.name}</td>
                           <td className="p-3 text-muted-foreground">
-                            {cat.createdAt ? format(new Date(cat.createdAt), 'MMM dd, yyyy') : '—'}
+                            {safeFormatDate(cat.createdAt, 'MMM dd, yyyy')}
                           </td>
                           <td className="p-3 text-right">
                             <Button variant="ghost" size="icon" onClick={() => handleDeleteCategory(cat)}>
@@ -629,7 +630,7 @@ export default function Complaints() {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <span className="font-medium text-muted-foreground">Created:</span>
-                    <span className="ml-1">{detailComplaint.createdAt ? format(new Date(detailComplaint.createdAt), 'MMM dd, yyyy') : '—'}</span>
+                    <span className="ml-1">{safeFormatDate(detailComplaint.createdAt, 'MMM dd, yyyy')}</span>
                   </div>
                   <div>
                     <span className="font-medium text-muted-foreground">Created By:</span>
@@ -640,7 +641,7 @@ export default function Complaints() {
                   <div className="grid grid-cols-2 gap-2 border-t pt-2">
                     <div>
                       <span className="font-medium text-muted-foreground">Resolved At:</span>
-                      <span className="ml-1">{format(new Date(detailComplaint.resolvedAt), 'MMM dd, yyyy')}</span>
+                      <span className="ml-1">{safeFormatDate(detailComplaint.resolvedAt, 'MMM dd, yyyy')}</span>
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground">Resolved By:</span>

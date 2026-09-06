@@ -3,7 +3,8 @@ import { useAppContext } from './context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
-import { format, isSameDay, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { safeFormatDate, safeIsSameDay, toValidDate, safeIsoDate } from './utils/dateUtils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -45,7 +46,8 @@ export default function PrivateSessions() {
     const end = endOfMonth(now);
     
     const monthSessions = privateSessions.filter(s => {
-      const d = parseISO(s.date);
+      const d = toValidDate(s.date);
+      if (!d) return false;
       return isWithinInterval(d, { start, end });
     });
     
@@ -65,14 +67,15 @@ export default function PrivateSessions() {
   const handleAddSession = () => {
     if (newSessionClientId && selectedDate) {
       const [hours, minutes] = newSessionTime.split(':');
-      const sessionDate = new Date(selectedDate as Date);
+      const baseDate = toValidDate(selectedDate) || new Date();
+      const sessionDate = new Date(baseDate);
       sessionDate.setHours(parseInt(hours || '0'), parseInt(minutes || '0'));
 
       addPrivateSession({
         clientId: newSessionClientId,
         trainerId: newSessionTrainerId || undefined,
         branch: newSessionBranch || undefined,
-        date: sessionDate.toISOString(),
+        date: safeIsoDate(sessionDate, true),
         status: 'Scheduled',
       });
       setIsNewSessionOpen(false);
@@ -103,15 +106,15 @@ export default function PrivateSessions() {
 
   const sessionsForSelectedDate = privateSessions
     .filter(session => {
-      const matchesDate = selectedDate && isSameDay(parseISO(session.date), selectedDate);
+      const matchesDate = selectedDate && safeIsSameDay(session.date, selectedDate);
       const matchesBranch = filterBranch === 'All' || session.branch === filterBranch;
       return matchesDate && matchesBranch;
     })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a, b) => (toValidDate(a.date)?.getTime() || 0) - (toValidDate(b.date)?.getTime() || 0));
 
   const historySessions = privateSessions
     .filter(s => s.clientId === historyClientId)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0));
 
   const getStatusBadge = (status: PTPackageRecord['status']) => {
     switch (status) {
@@ -252,8 +255,8 @@ export default function PrivateSessions() {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="flex items-start gap-4">
                           <div className="bg-primary/10 p-3 rounded-xl flex flex-col items-center justify-center min-w-[70px]">
-                            <span className="text-sm font-bold text-primary">{format(parseISO(session.date), 'h:mm')}</span>
-                            <span className="text-[10px] font-bold text-primary/70 uppercase">{format(parseISO(session.date), 'a')}</span>
+                            <span className="text-sm font-bold text-primary">{safeFormatDate(session.date, 'h:mm')}</span>
+                            <span className="text-[10px] font-bold text-primary/70 uppercase">{safeFormatDate(session.date, 'a')}</span>
                           </div>
                           <div className="space-y-1">
                             <h4 className="font-bold text-lg">{client?.name || 'Unknown Client'}</h4>
@@ -393,7 +396,7 @@ export default function PrivateSessions() {
                       historySessions.map(session => (
                         <TableRow key={session.id}>
                           <TableCell className="font-medium">
-                            {format(parseISO(session.date), 'MMM d, yyyy @ h:mm a')}
+                            {safeFormatDate(session.date, 'MMM d, yyyy @ h:mm a')}
                           </TableCell>
                           <TableCell className="text-sm">
                             {users.find(u => u.id === session.trainerId)?.name || '-'}

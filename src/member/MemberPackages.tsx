@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { format, parseISO, differenceInDays } from 'date-fns';
+import { safeFormatDate } from '../utils/dateUtils';
 import { Calendar, CheckCircle2, AlertTriangle, PlayCircle, PauseCircle, Package, ShoppingBag, Clock } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
@@ -42,14 +43,7 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
   const activePkgs = packages.filter(p => p.status === 'Active');
   const pastPkgs = packages.filter(p => p.status !== 'Active');
 
-  const formatOptionalDate = (dateStr?: string) => {
-    if (!dateStr) return 'N/A';
-    try {
-      return format(parseISO(dateStr), 'dd MMM yyyy');
-    } catch {
-      return 'N/A';
-    }
-  };
+  const formatOptionalDate = (dateStr?: string) => safeFormatDate(dateStr, 'dd MMM yyyy', 'N/A');
 
   const handleRequestFreeze = async (pkg: any) => {
     if (!client) return;
@@ -256,7 +250,7 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
                           : 'Package Purchase Request'}
                       </h4>
                       <p className="text-[10px] text-muted-foreground">
-                        Requested on {req.createdAt ? format(parseISO(req.createdAt), 'dd MMM yyyy HH:mm') : 'N/A'}
+                        Requested on {safeFormatDate(req.createdAt, 'dd MMM yyyy HH:mm', 'N/A')}
                       </p>
                     </div>
                     <Badge className="bg-strike-green/15 text-strike-green border-strike-green/25 text-[10px]">

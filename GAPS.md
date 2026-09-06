@@ -1,6 +1,33 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-08-23 (Mobile App UX Overhaul, Interactive Booking Flow, Storefront Filters)
+Updated: 2026-09-06 (Inzan PT & Classes System Audit, Unbroken Payment-Package Mirroring, Zero Invalid Time Value Hardening)
+
+---
+
+## RECENT WORK — 2026-09-06 (Inzan PT & Classes Audit, Payment Mirroring & Renewals, Zero Invalid Time Value)
+
+### Fixed This Session
+**INZAN.1 Complete PRD Audit & PT/Classes Dual-Write Sync** — FIXED ✅
+- Dual-write booking synchronization into `classBookings` collection inside `/api/classes/book`.
+- Server-side capacity checks and automatic waitlist FIFO promotion via Cloud Function `onBookingCancelled` (`functions/src/classes/waitlist.ts`).
+- Server-authoritative `/api/classes/book` and `/api/sessions/book` endpoints in `server.ts` protected with strict tenant database scoping (`getDbForRequest(req)`).
+- Synced Admin `Calendar.tsx` with live Firestore `sessions` collection and dual-write session creation.
+- Created verified demo accounts in `db-inzanathletics`: Test Member (`testmember@inzan.local` / `Inzan1234!`, MEM-2001) and Test Coach (`testcoach@inzan.local` / `InzanCoach123!`).
+
+**PAY.1 Unbroken Package-to-Payment Mirroring & Seamless Renewals** — FIXED ✅
+- Resolved broken financial accounts where adding packages from member profile bypassed `processPaymentTransaction`.
+- Enhanced `src/services/transactionService.ts` with `isRenewal` and `amount_paid`: renewing an active package archives previous cycle as `Expired`, activates the new cycle, updates dates/sessions, and records financial entries without duplicate errors.
+- Added walk-in member registration with initial package enrollment in `src/Clients.tsx` "+ Add Member" dialog.
+- Enabled Upgrade, Renew, and Add Package modal triggers in `InzanMemberShow.tsx` with full financial mirroring.
+
+**DATE.1 Platform-Wide Zero "Invalid Time Value" Hardening** — FIXED ✅
+- Centralized date safety library in `src/utils/dateUtils.ts` (`toValidDate`, `safeFormatDate`, `safeFormatTime`, `safeFormatDistanceToNow`, `safeIsoDate`, `safeAddDays`, `safeIsSameDay`, `safeGetAge`).
+- Eliminated raw `new Date(...).toISOString()`, `new Date(...).toLocaleDateString()`, and `format(parseISO(...))` crashes across `InzanMemberShow.tsx`, `Clients.tsx`, `Dashboard.tsx`, `Payments.tsx`, `Leads.tsx`, `PTPackages.tsx`, `PrivateSessions.tsx`, `Tasks.tsx`, `Complaints.tsx`, `LostAndFound.tsx`, `Users.tsx`, `UnconfirmedMemberships.tsx`, `ClassBookingDialog.tsx`, `MemberHome.tsx`, and `CoachSessions.tsx`.
+- Automated test suite `scratch/verify_date_safety.cjs` passed 22 extreme edge cases with 0 uncaught exceptions.
+
+**ISO.1 Multi-Tenant Isolation & Strike Gym Integrity Verification** — VERIFIED ✅
+- Audited Strike's `(default)` database: verified all 1,025 clients, 738 payments, 27 packages, 989 users, and STRIKE branding remain pristine, untouched, and unpolluted.
+- Verified Inzan Athletics data remains strictly isolated in `db-inzanathletics` (3 clients, 1 payment, 3 packages, 5 class schedules).
 
 ---
 

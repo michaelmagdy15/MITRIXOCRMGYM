@@ -36,22 +36,9 @@ import { resolvePaymentCategory } from './utils/paymentCategories';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { InzanMemberShow } from './components/InzanMemberShow';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
+import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
 
-const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => {
-  if (!dateStr) return fallback;
-  try {
-    const parsed = parseISO(dateStr);
-    if (!isValid(parsed)) {
-      const d = new Date(dateStr);
-      if (isValid(d)) return format(d, formatStr);
-      return fallback;
-    }
-    return format(parsed, formatStr);
-  } catch (error) {
-    console.error('Error formatting date:', dateStr, error);
-    return fallback;
-  }
-};
+const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => utilsSafeFormatDate(dateStr, formatStr, fallback);
 
 // Migrate legacy packageType to new packages array format
 const migratePackageData = (client: Client, systemPackages: any[]): Partial<Client> => {
@@ -59,8 +46,8 @@ const migratePackageData = (client: Client, systemPackages: any[]): Partial<Clie
   if (!client.packageType || client.packageType === 'Unknown') return {}; // No legacy data
 
   const sysPkg = systemPackages.find(p => p.name === client.packageType);
-  const startDate = client.startDate || new Date().toISOString();
-  const endDate = sysPkg ? addDays(parseISO(startDate), sysPkg.expiryDays).toISOString() : (client.membershipExpiry || addDays(new Date(), 30).toISOString());
+  const startDate = safeIsoDate(client.startDate, true);
+  const endDate = sysPkg ? safeIsoDate(safeAddDays(startDate, sysPkg.expiryDays), true) : (client.membershipExpiry ? safeIsoDate(client.membershipExpiry, true) : safeIsoDate(safeAddDays(new Date(), 30), true));
 
   return {
     packages: [{
@@ -102,7 +89,7 @@ export default function Clients() {
     if (!activeClient) return;
     const clientPayments = payments.filter(p => p.clientId === activeClient.id);
     const latestPayment = clientPayments.length > 0
-      ? [...clientPayments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+      ? [...clientPayments].sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))[0]
       : null;
     generateClientContract(activeClient, latestPayment?.amount, latestPayment?.method);
   };
@@ -227,6 +214,16 @@ export default function Clients() {
   const [newMemberLinked, setNewMemberLinked] = useState(false);
   const [newMemberGender, setNewMemberGender] = useState<'Male' | 'Female' | 'Other' | 'Prefer not to say'>('Male');
   const [newMemberCategory, setNewMemberCategory] = useState<'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults'>('Adults');
+  // Walk-in enrollment states
+  const [enrollInPackage, setEnrollInPackage] = useState(false);
+  const [enrollPackageName, setEnrollPackageName] = useState('');
+  const [enrollStartDate, setEnrollStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [enrollAmount, setEnrollAmount] = useState('');
+  const [enrollPaymentMethod, setEnrollPaymentMethod] = useState('Cash');
+  const [enrollInstapayRef, setEnrollInstapayRef] = useState('');
+  const [enrollCoachName, setEnrollCoachName] = useState('');
+  const [enrollReceiptSerial, setEnrollReceiptSerial] = useState('');
+  const [enrollNotes, setEnrollNotes] = useState('');
 
   const [upgradeDialogClientId, setUpgradeDialogClientId] = useState<string | null>(null);
   const [upgradePkgName, setUpgradePkgName] = useState('');
@@ -241,6 +238,18 @@ export default function Clients() {
   const [renewPaymentMethod, setRenewPaymentMethod] = useState('Cash');
   const [renewInstapayRef, setRenewInstapayRef] = useState('');
   const [renewSalesRep, setRenewSalesRep] = useState('unassigned');
+
+  // Add Package & Record Payment dialog for existing members
+  const [addPackageDialogClientId, setAddPackageDialogClientId] = useState<string | null>(null);
+  const [addPackageName, setAddPackageName] = useState('');
+  const [addPackageStartDate, setAddPackageStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [addPackageAmount, setAddPackageAmount] = useState('');
+  const [addPackageMethod, setAddPackageMethod] = useState('Cash');
+  const [addPackageInstapayRef, setAddPackageInstapayRef] = useState('');
+  const [addPackageSalesRep, setAddPackageSalesRep] = useState('unassigned');
+  const [addPackageCoachName, setAddPackageCoachName] = useState('');
+  const [addPackageNotes, setAddPackageNotes] = useState('');
+  const [addPackageRecordPayment, setAddPackageRecordPayment] = useState(true);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [searchMode, setSearchMode] = useState<'general' | 'id'>('general');
@@ -295,7 +304,7 @@ export default function Clients() {
   const deferredFilterCategory = useDeferredValue(filterCategory);
   const deferredFilterCoach = useDeferredValue(filterCoach);
 
-  const handleAddMember = () => {
+  const handleAddMember = async () => {
     if (!newMemberName || newMemberName.trim().length < 2) {
       alert('Please enter a valid member name (at least 2 characters).');
       return;
@@ -309,30 +318,87 @@ export default function Clients() {
       alert('Kids and Junior members must be assigned to the Mivida branch.');
       return;
     }
+
+    if (enrollInPackage) {
+      if (!enrollPackageName) {
+        alert('Please select a package or uncheck "Enroll in Package & Record Payment".');
+        return;
+      }
+      if (enrollPaymentMethod === 'Instapay' && enrollInstapayRef && !/^\d{12}$/.test(enrollInstapayRef)) {
+        alert('Please enter a valid 12-digit Instapay reference number.');
+        return;
+      }
+    }
     
-    addClient({
-      id: Math.random().toString(36).substr(2, 9),
-      name: newMemberName,
-      phone: newMemberPhone,
-      status: 'Active',
-      branch: newMemberBranch || undefined,
-      stage: 'Converted',
-      comments: [],
-      interactions: [],
-      assignedTo: newMemberAssignedTo || (currentUser?.role === 'rep' ? currentUser.id : undefined),
-      startDate: new Date().toISOString(),
-      linkedAccount: newMemberLinked || undefined,
-      gender: newMemberGender,
-      memberCategory: newMemberCategory,
-    });
-    setIsNewMemberOpen(false);
-    setNewMemberName('');
-    setNewMemberPhone('');
-    setNewMemberBranch('');
-    setNewMemberAssignedTo('');
-    setNewMemberLinked(false);
-    setNewMemberGender('Male');
-    setNewMemberCategory('Adults');
+    try {
+      const targetClientId = await addClient({
+        id: Math.random().toString(36).substr(2, 9),
+        name: newMemberName,
+        phone: newMemberPhone,
+        status: 'Active',
+        branch: newMemberBranch || undefined,
+        stage: 'Converted',
+        comments: [],
+        interactions: [],
+        assignedTo: newMemberAssignedTo !== 'unassigned' && newMemberAssignedTo ? newMemberAssignedTo : (currentUser?.role === 'rep' ? currentUser.id : undefined),
+        startDate: new Date().toISOString(),
+        linkedAccount: newMemberLinked || undefined,
+        gender: newMemberGender,
+        memberCategory: newMemberCategory,
+      });
+
+      if (enrollInPackage && targetClientId) {
+        const pkg = packages.find(p => p.name === enrollPackageName);
+        const amt = enrollAmount ? parseFloat(enrollAmount) : (pkg ? pkg.price : 0);
+        const repId = newMemberAssignedTo !== 'unassigned' && newMemberAssignedTo ? newMemberAssignedTo : (currentUser?.id || '');
+        const repName = users.find(u => u.id === repId)?.name || '';
+
+        await processPaymentTransaction({
+          clientId: targetClientId,
+          clientName: newMemberName,
+          clientBranch: newMemberBranch,
+          clientStatus: 'Active',
+          amount: amt,
+          method: enrollPaymentMethod as any,
+          instapayRef: enrollPaymentMethod === 'Instapay' ? enrollInstapayRef : undefined,
+          packageType: enrollPackageName,
+          packageCategory: resolvePaymentCategory(enrollPackageName),
+          coachName: enrollCoachName || undefined,
+          notes: enrollNotes || undefined,
+          receiptSerial: enrollReceiptSerial.trim() || undefined,
+          sales_rep_id: repId,
+          salesName: repName,
+          recordedBy: currentUser?.id || '',
+          recordedByName: currentUser?.name || '',
+          paymentDate: safeIsoDate(enrollStartDate, true),
+          startDate: safeIsoDate(enrollStartDate, true),
+          systemPackage: pkg,
+          isUpgradePayment: false,
+          isRenewal: false
+        });
+      }
+
+      setIsNewMemberOpen(false);
+      setNewMemberName('');
+      setNewMemberPhone('');
+      setNewMemberBranch('');
+      setNewMemberAssignedTo('');
+      setNewMemberLinked(false);
+      setNewMemberGender('Male');
+      setNewMemberCategory('Adults');
+      setEnrollInPackage(false);
+      setEnrollPackageName('');
+      setEnrollStartDate(format(new Date(), 'yyyy-MM-dd'));
+      setEnrollAmount('');
+      setEnrollPaymentMethod('Cash');
+      setEnrollInstapayRef('');
+      setEnrollCoachName('');
+      setEnrollReceiptSerial('');
+      setEnrollNotes('');
+    } catch (err: any) {
+      console.error('Error creating member with package:', err);
+      alert(err?.message || 'Failed to create member profile.');
+    }
   };
 
   const handleAddInteraction = async (clientId: string) => {
@@ -400,8 +466,8 @@ export default function Clients() {
         salesName: repName,
         recordedBy: currentUser?.id || '',
         recordedByName: currentUser?.name || '',
-        paymentDate: new Date(upgradeStartDate).toISOString(),
-        startDate: new Date(upgradeStartDate).toISOString(),
+        paymentDate: safeIsoDate(upgradeStartDate, true),
+        startDate: safeIsoDate(upgradeStartDate, true),
         systemPackage: pkg,
         previousPackageName: prevActive?.packageName || client.packageType,
         isUpgradePayment: true
@@ -458,10 +524,11 @@ export default function Clients() {
         salesName: repName,
         recordedBy: currentUser?.id || '',
         recordedByName: currentUser?.name || '',
-        paymentDate: new Date(renewStartDate).toISOString(),
-        startDate: new Date(renewStartDate).toISOString(),
+        paymentDate: safeIsoDate(renewStartDate, true),
+        startDate: safeIsoDate(renewStartDate, true),
         systemPackage: pkg,
-        previousPackageName: undefined,
+        previousPackageName: pkg.name,
+        isRenewal: true,
         isUpgradePayment: false
       });
     } catch (error) {
@@ -474,6 +541,94 @@ export default function Clients() {
       setRenewPaymentMethod('Cash');
       setRenewInstapayRef('');
       setRenewSalesRep('unassigned');
+    }
+  };
+
+  const handleAddPackageToMember = async () => {
+    if (!addPackageDialogClientId || !addPackageName) return;
+    const client = clients.find(c => c.id === addPackageDialogClientId);
+    if (!client) return;
+    const pkg = packages.find(p => p.name === addPackageName);
+    if (!pkg) return;
+
+    const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
+    if (isKidsPackage && client.branch !== 'Mivida') {
+      alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
+      return;
+    }
+
+    if (addPackageMethod === 'Instapay' && addPackageInstapayRef && !/^\d{12}$/.test(addPackageInstapayRef)) {
+      alert('Please enter a valid 12-digit Instapay reference number.');
+      return;
+    }
+
+    const repId = addPackageSalesRep !== 'unassigned' ? addPackageSalesRep : (currentUser?.id || '');
+    const repName = users.find(u => u.id === repId)?.name || '';
+    const amountToPay = addPackageAmount ? parseFloat(addPackageAmount) : pkg.price;
+
+    // Check if client already has an active package of this type -> treat as renewal
+    const isAlreadyActive = (client.packages || []).some(p => p.status === 'Active' && p.packageName === pkg.name);
+
+    try {
+      if (addPackageRecordPayment) {
+        await processPaymentTransaction({
+          clientId: client.id,
+          clientName: client.name,
+          clientBranch: client.branch,
+          clientStatus: client.status,
+          clientPackages: client.packages,
+          amount: amountToPay,
+          method: addPackageMethod as any,
+          instapayRef: addPackageMethod === 'Instapay' ? addPackageInstapayRef : undefined,
+          packageType: pkg.name,
+          packageCategory: resolvePaymentCategory(pkg.name),
+          coachName: addPackageCoachName || undefined,
+          notes: addPackageNotes || undefined,
+          sales_rep_id: repId,
+          salesName: repName,
+          recordedBy: currentUser?.id || '',
+          recordedByName: currentUser?.name || '',
+          paymentDate: safeIsoDate(addPackageStartDate, true),
+          startDate: safeIsoDate(addPackageStartDate, true),
+          systemPackage: pkg,
+          previousPackageName: isAlreadyActive ? pkg.name : undefined,
+          isRenewal: isAlreadyActive,
+          isUpgradePayment: false
+        });
+      } else {
+        // Complimentary / non-payment package addition
+        const startDateObj = toValidDate(addPackageStartDate) || new Date();
+        const endDateObj = safeAddDays(startDateObj, pkg.expiryDays);
+        const newPkg: ClientPackage = {
+          id: Math.random().toString(36).substr(2, 9),
+          packageName: pkg.name,
+          startDate: startDateObj.toISOString(),
+          endDate: endDateObj.toISOString(),
+          sessionsTotal: pkg.sessions,
+          sessionsRemaining: pkg.sessions,
+          status: 'Active'
+        };
+        await updateClient(client.id, {
+          packageType: pkg.name,
+          membershipExpiry: endDateObj.toISOString(),
+          packages: [...(client.packages || []), newPkg]
+        });
+        await addComment(client.id, `Package "${pkg.name}" added (complimentary/unpaid).`, currentUser?.name);
+      }
+    } catch (error: any) {
+      console.error("Error adding package:", error);
+      alert(error?.message || "Failed to add package.");
+    } finally {
+      setAddPackageDialogClientId(null);
+      setAddPackageName('');
+      setAddPackageStartDate(format(new Date(), 'yyyy-MM-dd'));
+      setAddPackageAmount('');
+      setAddPackageMethod('Cash');
+      setAddPackageInstapayRef('');
+      setAddPackageSalesRep('unassigned');
+      setAddPackageCoachName('');
+      setAddPackageNotes('');
+      setAddPackageRecordPayment(true);
     }
   };
 
@@ -1415,7 +1570,7 @@ export default function Clients() {
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700" title="Generate Contract" onClick={() => {
                     const clientPayments = payments.filter(p => p.clientId === client.id);
                     const latestPayment = clientPayments.length > 0 
-                      ? clientPayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                      ? clientPayments.sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))[0]
                       : null;
                     generateClientContract(client, latestPayment?.amount, latestPayment?.method);
                   }}>
@@ -1581,6 +1736,146 @@ export default function Clients() {
                     </p>
                   </div>
                 </label>
+              </div>
+              <div className="mt-6 p-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <Checkbox
+                    checked={enrollInPackage}
+                    onCheckedChange={(checked) => setEnrollInPackage(!!checked)}
+                    className="h-5 w-5 data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600"
+                  />
+                  <div>
+                    <p className="text-sm font-bold text-emerald-950 dark:text-emerald-300">
+                      Enroll in Package & Record Initial Payment (Walk-In / Direct Purchase)
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically assigns the membership or package, records payment in financials, and awards loyalty points.
+                    </p>
+                  </div>
+                </label>
+
+                {enrollInPackage && (
+                  <div className="pt-4 border-t border-emerald-500/20 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Select Package *</Label>
+                        <Select
+                          value={enrollPackageName}
+                          onValueChange={(val) => {
+                            if (!val) return;
+                            setEnrollPackageName(val);
+                            const sysPkg = packages.find(p => p.name === val);
+                            if (sysPkg) {
+                              setEnrollAmount(sysPkg.price.toString());
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-11 rounded-xl bg-background/80">
+                            <SelectValue placeholder="Select package..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {visiblePackages.map(p => (
+                              <SelectItem key={p.id} value={p.name}>
+                                {p.name} ({p.price.toLocaleString()} LE)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Start Date</Label>
+                        <Input
+                          type="date"
+                          className="h-11 rounded-xl bg-background/80"
+                          value={enrollStartDate}
+                          onChange={(e) => setEnrollStartDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount Paid (LE) *</Label>
+                        <Input
+                          type="number"
+                          placeholder="Amount in LE"
+                          className="h-11 rounded-xl bg-background/80 font-mono font-bold"
+                          value={enrollAmount}
+                          onChange={(e) => setEnrollAmount(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Payment Method</Label>
+                        <Select value={enrollPaymentMethod} onValueChange={(val) => val && setEnrollPaymentMethod(val)}>
+                          <SelectTrigger className="h-11 rounded-xl bg-background/80">
+                            <SelectValue placeholder="Payment Method" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Cash">Cash</SelectItem>
+                            <SelectItem value="Credit Card">Credit Card / Visa</SelectItem>
+                            <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                            <SelectItem value="Instapay">Instapay</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {enrollPaymentMethod === 'Instapay' && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Instapay Ref (12 digits) *</Label>
+                        <Input
+                          placeholder="123456789012"
+                          maxLength={12}
+                          value={enrollInstapayRef}
+                          onChange={(e) => setEnrollInstapayRef(e.target.value.replace(/\D/g, ''))}
+                          className="h-11 rounded-xl bg-background/80 font-mono"
+                        />
+                      </div>
+                    )}
+
+                    {enrollPackageName && (resolvePaymentCategory(enrollPackageName) === 'PT' || enrollPackageName.toLowerCase().includes('pt')) && (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Assigned Coach (PT)</Label>
+                        <Select value={enrollCoachName} onValueChange={(val) => setEnrollCoachName(val || '')}>
+                          <SelectTrigger className="h-11 rounded-xl bg-background/80">
+                            <SelectValue placeholder="Select Coach (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None / Unassigned</SelectItem>
+                            {users.filter(u => u.role?.toLowerCase() === 'coach' || u.role?.toLowerCase() === 'trainer').map(c => (
+                              <SelectItem key={c.id} value={c.name || c.email}>{c.name || c.email}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Receipt Number / Serial (Optional)</Label>
+                        <Input
+                          placeholder="e.g. REC-1049"
+                          className="h-11 rounded-xl bg-background/80"
+                          value={enrollReceiptSerial}
+                          onChange={(e) => setEnrollReceiptSerial(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Notes (Optional)</Label>
+                        <Input
+                          placeholder="Registration notes..."
+                          className="h-11 rounded-xl bg-background/80"
+                          value={enrollNotes}
+                          onChange={(e) => setEnrollNotes(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="mt-6">
                 <Button onClick={handleAddMember} className="w-full h-16 rounded-2xl text-xl font-extrabold shadow-2xl shadow-primary/30 hover:shadow-primary/50 transition-all hover:scale-[1.01] active:scale-[0.99]">
@@ -1896,6 +2191,10 @@ export default function Clients() {
                 setUpgradeDialogClientId={setUpgradeDialogClientId}
                 setUpgradePkgName={setUpgradePkgName}
                 setUpgradeStartDate={setUpgradeStartDate}
+                setAddPackageDialogClientId={setAddPackageDialogClientId}
+                setRenewDialogClientId={setRenewDialogClientId}
+                setRenewPkgName={setRenewPkgName}
+                setRenewStartDate={setRenewStartDate}
               />
             </DialogContent>
           ) : (
@@ -2073,7 +2372,7 @@ export default function Clients() {
                             disabled={getTenantId().toLowerCase().includes('inzan') && !isEditing}
                             onChange={(e) => {
                               const val = e.target.value;
-                              updateClient(activeClient.id, { dateOfBirth: val ? new Date(val).toISOString() : '' });
+                              updateClient(activeClient.id, { dateOfBirth: val ? safeIsoDate(val) : '' });
                             }}
                           />
                         </div>
@@ -2378,13 +2677,17 @@ export default function Clients() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-7 text-[10px] bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200"
+                            className="h-7 text-[10px] bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200 font-bold"
                             onClick={() => {
-                              const newPkg = { id: Math.random().toString(36).substring(7), packageName: '', status: 'Active' as const };
-                              updateClientPackages([...(activeClient.packages || []), newPkg]);
+                              setAddPackageDialogClientId(activeClient.id);
+                              setAddPackageName('');
+                              setAddPackageStartDate(format(new Date(), 'yyyy-MM-dd'));
+                              setAddPackageAmount('');
+                              setAddPackageMethod('Cash');
+                              setAddPackageRecordPayment(true);
                             }}
                           >
-                            <Plus className="h-3 w-3 mr-1" /> Add
+                            <Plus className="h-3 w-3 mr-1" /> Add Package
                           </Button>
                         </div>
                       </div>
@@ -2405,7 +2708,7 @@ export default function Clients() {
                                     packageName: val,
                                     sessionsTotal: sysPkg?.sessions,
                                     sessionsRemaining: sysPkg?.sessions,
-                                    endDate: sysPkg && cur.startDate ? addDays(parseISO(cur.startDate), sysPkg.expiryDays).toISOString() : cur.endDate,
+                                    endDate: sysPkg && cur.startDate ? safeIsoDate(safeAddDays(cur.startDate, sysPkg.expiryDays)) : cur.endDate,
                                   };
                                   updateClientPackages(updated);
                                 }}
@@ -2437,12 +2740,11 @@ export default function Clients() {
                                       if (!cur) return;
                                       const sysPkg = packages.find((p) => p.name === cur.packageName);
                                       const val = e.target.value;
-                                      const ns = val ? new Date(val).toISOString() : '';
-                                      const parsedNs = ns ? parseISO(ns) : null;
+                                      const ns = val ? safeIsoDate(val) : '';
                                       updated[idx] = {
                                         ...cur,
                                         startDate: ns,
-                                        endDate: sysPkg && parsedNs && !isNaN(parsedNs.getTime()) ? addDays(parsedNs, sysPkg.expiryDays).toISOString() : cur.endDate,
+                                        endDate: sysPkg && ns ? safeIsoDate(safeAddDays(ns, sysPkg.expiryDays)) : cur.endDate,
                                       };
                                       updateClientPackages(updated);
                                     }}
@@ -2459,7 +2761,7 @@ export default function Clients() {
                                       const cur = updated[idx];
                                       if (!cur) return;
                                       const val = e.target.value;
-                                      const ns = val ? new Date(val).toISOString() : '';
+                                      const ns = val ? safeIsoDate(val) : '';
                                       updated[idx] = { ...cur, endDate: ns };
                                       updateClientPackages(updated);
                                     }}
@@ -3383,7 +3685,7 @@ export default function Clients() {
             {upgradePkgName && upgradeStartDate && (() => {
               const pkg = packages.find(p => p.name === upgradePkgName);
               if (!pkg) return null;
-              const endDate = format(addDays(new Date(upgradeStartDate), pkg.expiryDays), 'dd MMM yyyy');
+              const endDate = safeFormatDate(safeAddDays(upgradeStartDate, pkg.expiryDays), 'dd MMM yyyy');
               const upgradeClient = upgradeDialogClientId ? clients.find(c => c.id === upgradeDialogClientId) : null;
               const currentActivePkg = upgradeClient?.packages?.find(p => p.status === 'Active');
               const currentSysPkg = currentActivePkg ? packages.find(p => p.name === currentActivePkg.packageName) : null;
@@ -3508,7 +3810,7 @@ export default function Clients() {
             {renewPkgName && renewStartDate && (() => {
               const pkg = packages.find(p => p.name === renewPkgName);
               if (!pkg) return null;
-              const endDate = format(addDays(new Date(renewStartDate), pkg.expiryDays), 'dd MMM yyyy');
+              const endDate = safeFormatDate(safeAddDays(renewStartDate, pkg.expiryDays), 'dd MMM yyyy');
               return (
                 <div className="rounded-xl bg-muted/30 p-3 text-sm space-y-1.5">
                   <div className="flex justify-between"><span className="text-muted-foreground">Price:</span><span className="font-semibold">{pkg.price.toLocaleString()} LE</span></div>
@@ -3570,6 +3872,208 @@ export default function Clients() {
             </Button>
             <Button className="flex-1 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!renewPkgName} onClick={handleRenewPackage}>
               Confirm Renewal
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!addPackageDialogClientId} onOpenChange={(open) => { 
+        if (!open) { 
+          setAddPackageDialogClientId(null); 
+          setAddPackageName(''); 
+          setAddPackageStartDate(format(new Date(), 'yyyy-MM-dd')); 
+          setAddPackageAmount('');
+          setAddPackageMethod('Cash');
+          setAddPackageInstapayRef('');
+          setAddPackageSalesRep('unassigned');
+          setAddPackageCoachName('');
+          setAddPackageNotes('');
+          setAddPackageRecordPayment(true);
+        } 
+      }}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Plus className="h-5 w-5 text-emerald-600" />
+              Add Package & Record Payment
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {addPackageDialogClientId && (() => {
+              const client = clients.find(c => c.id === addPackageDialogClientId);
+              return client ? (
+                <div className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-xl flex justify-between">
+                  <span>Member: <strong className="text-foreground">{client.name}</strong></span>
+                  <span>Branch: <strong className="text-foreground">{client.branch || 'General'}</strong></span>
+                </div>
+              ) : null;
+            })()}
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Select Package</Label>
+              <Select 
+                value={addPackageName} 
+                onValueChange={v => {
+                  if (!v) return;
+                  setAddPackageName(v);
+                  const pkg = packages.find(p => p.name === v);
+                  if (pkg) {
+                    setAddPackageAmount(pkg.price.toString());
+                  }
+                }}
+              >
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue placeholder="Select package" />
+                </SelectTrigger>
+                <SelectContent>
+                  {visiblePackages.map(p => (
+                    <SelectItem key={p.id} value={p.name}>{p.name} ({p.price.toLocaleString()} LE)</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Start Date</Label>
+              <Input
+                type="date"
+                className="h-11 rounded-xl"
+                value={addPackageStartDate}
+                onChange={e => setAddPackageStartDate(e.target.value)}
+              />
+            </div>
+
+            {addPackageName && addPackageStartDate && (() => {
+              const pkg = packages.find(p => p.name === addPackageName);
+              if (!pkg) return null;
+              const endDate = safeFormatDate(safeAddDays(addPackageStartDate, pkg.expiryDays), 'dd MMM yyyy');
+              const client = clients.find(c => c.id === addPackageDialogClientId);
+              const isAlreadyActive = (client?.packages || []).some(p => p.status === 'Active' && p.packageName === pkg.name);
+
+              return (
+                <div className="rounded-xl bg-muted/30 p-3 text-sm space-y-1.5 border">
+                  {isAlreadyActive && (
+                    <div className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 p-2 rounded-lg font-medium mb-1">
+                      ℹ️ Note: Member already has an active cycle of this package. Adding this will register a Renewal and extend their membership.
+                    </div>
+                  )}
+                  <div className="flex justify-between"><span className="text-muted-foreground">Standard Price:</span><span className="font-semibold">{pkg.price.toLocaleString()} LE</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Sessions:</span><span className="font-semibold">{pkg.sessions === 0 ? 'Unlimited' : pkg.sessions}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Expires:</span><span className="font-semibold">{endDate}</span></div>
+                </div>
+              );
+            })()}
+
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Amount to Collect (LE)</Label>
+              <Input
+                type="number"
+                placeholder="Amount in LE"
+                className="h-11 rounded-xl font-mono font-bold"
+                value={addPackageAmount}
+                onChange={e => setAddPackageAmount(e.target.value)}
+              />
+            </div>
+
+            {addPackageName && (resolvePaymentCategory(addPackageName) === 'PT' || addPackageName.toLowerCase().includes('pt')) && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Assigned Coach (PT)</Label>
+                <Select value={addPackageCoachName} onValueChange={(val) => setAddPackageCoachName(val || '')}>
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue placeholder="Select Coach" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Unassigned</SelectItem>
+                    {users.filter(u => u.role?.toLowerCase() === 'coach' || u.role?.toLowerCase() === 'trainer').map(c => (
+                      <SelectItem key={c.id} value={c.name || c.email}>{c.name || c.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="pt-2 border-t space-y-3">
+              <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold">
+                <Checkbox
+                  checked={addPackageRecordPayment}
+                  onCheckedChange={(checked) => setAddPackageRecordPayment(!!checked)}
+                  className="h-4 w-4"
+                />
+                <span>Record Payment Document in Financials</span>
+              </label>
+
+              {addPackageRecordPayment && (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Payment Method</Label>
+                    <Select value={addPackageMethod} onValueChange={(val) => val && setAddPackageMethod(val)}>
+                      <SelectTrigger className="h-11 rounded-xl">
+                        <SelectValue placeholder="Select Method" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Cash">Cash</SelectItem>
+                        <SelectItem value="Credit Card">Credit Card / Visa</SelectItem>
+                        <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                        <SelectItem value="Instapay">Instapay</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {addPackageMethod === 'Instapay' && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-semibold">Instapay Ref (12 digits)</Label>
+                      <Input
+                        placeholder="123456789012"
+                        maxLength={12}
+                        value={addPackageInstapayRef}
+                        onChange={(e) => setAddPackageInstapayRef(e.target.value.replace(/\D/g, ''))}
+                        className="h-11 rounded-xl font-mono"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Sales Representative</Label>
+                    <Select value={addPackageSalesRep} onValueChange={(val) => val && setAddPackageSalesRep(val)}>
+                      <SelectTrigger className="h-11 rounded-xl">
+                        <SelectValue placeholder="Select Sales Rep" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === addPackageSalesRep)).map(rep => (
+                          <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Notes / Receipt Ref</Label>
+                    <Input
+                      placeholder="Optional notes or receipt #"
+                      className="h-11 rounded-xl"
+                      value={addPackageNotes}
+                      onChange={e => setAddPackageNotes(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-3 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => { 
+              setAddPackageDialogClientId(null); 
+              setAddPackageName(''); 
+              setAddPackageStartDate(format(new Date(), 'yyyy-MM-dd')); 
+              setAddPackageAmount('');
+              setAddPackageMethod('Cash'); 
+              setAddPackageSalesRep('unassigned'); 
+            }}>
+              Cancel
+            </Button>
+            <Button className="flex-1 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white" disabled={!addPackageName} onClick={handleAddPackageToMember}>
+              Confirm & Add Package
             </Button>
           </div>
         </DialogContent>

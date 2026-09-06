@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Client, User, SessionType, Session } from '../types';
-import { auth, db } from '../firebase';
+import { auth, db, getTenantId } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { useSessions } from '../hooks/useSessions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -138,7 +138,9 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     if (!selectedCoachId || !bookingDate || !bookingTime || !client.id) return;
 
     if (client.status === 'Expired') {
-      setBookingError("Your membership is expired. You must head to the STRIKE branch to renew before booking sessions.");
+      const isTenantInzan = getTenantId().toLowerCase().includes('inzan');
+      const gymName = isTenantInzan ? 'Inzan Athletics' : 'STRIKE';
+      setBookingError(`Your membership is expired. You must head to the ${gymName} branch to renew before booking sessions.`);
       return;
     }
 

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useTheme } from '../contexts/ThemeContext';
 import { format, parseISO } from 'date-fns';
+import { safeFormatDate } from '../utils/dateUtils';
 import { Activity, Award, Calendar, MessageSquare, TrendingUp, Apple, Dumbbell } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
@@ -63,8 +64,8 @@ export default function MemberProgress({ client }: { client: Client | null }) {
   const weightChartData = [...performanceLogs]
     .filter(log => log.weight !== null && log.weight !== undefined && !isNaN(parseFloat(log.weight)))
     .map(log => ({
-      date: format(parseISO(log.date), 'dd MMM'),
-      dateFull: format(parseISO(log.date), 'dd MMM yyyy'),
+      date: safeFormatDate(log.date, 'dd MMM'),
+      dateFull: safeFormatDate(log.date, 'dd MMM yyyy'),
       weight: parseFloat(log.weight)
     }))
     .reverse(); // Reverse so oldest is first for chronological chart
@@ -200,7 +201,7 @@ export default function MemberProgress({ client }: { client: Client | null }) {
                     )}
                   </div>
                   <span className="text-[9px] text-zinc-500 font-mono">
-                    {format(parseISO(pr.date), 'dd MMM yyyy')}
+                    {safeFormatDate(pr.date, 'dd MMM yyyy')}
                   </span>
                 </div>
               ))}
@@ -234,7 +235,7 @@ export default function MemberProgress({ client }: { client: Client | null }) {
                       </span>
                       <span className="font-mono flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {format(parseISO(log.date), 'dd MMM yyyy, h:mm a')}
+                        {safeFormatDate(log.date, 'dd MMM yyyy, h:mm a')}
                       </span>
                     </div>
 

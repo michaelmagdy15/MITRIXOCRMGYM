@@ -16,6 +16,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { safeFormatDate, safeGetAge, toValidDate } from '../utils/dateUtils';
 import { Textarea } from '@/components/ui/textarea';
 import { db, storage } from '../firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -37,6 +38,10 @@ interface InzanMemberShowProps {
   setUpgradeDialogClientId: (id: string | null) => void;
   setUpgradePkgName: (name: string) => void;
   setUpgradeStartDate: (date: string) => void;
+  setAddPackageDialogClientId?: (id: string | null) => void;
+  setRenewDialogClientId?: (id: string | null) => void;
+  setRenewPkgName?: (name: string) => void;
+  setRenewStartDate?: (date: string) => void;
 }
 
 type TabType = 
@@ -61,7 +66,11 @@ export function InzanMemberShow({
   currentUser,
   setUpgradeDialogClientId,
   setUpgradePkgName,
-  setUpgradeStartDate
+  setUpgradeStartDate,
+  setAddPackageDialogClientId,
+  setRenewDialogClientId,
+  setRenewPkgName,
+  setRenewStartDate
 }: InzanMemberShowProps) {
   const [activeTab, setActiveTab] = useState<TabType>('member_data');
   const [isEditing, setIsEditing] = useState(false);
@@ -255,23 +264,30 @@ export function InzanMemberShow({
     );
   };
 
-  const getAge = (dob: string | undefined) => {
-    if (!dob) return '';
-    try {
-      const birthDate = new Date(dob);
-      const difference = Date.now() - birthDate.getTime();
-      const ageDate = new Date(difference);
-      const age = Math.abs(ageDate.getUTCFullYear() - 1970);
-      return ` (Age ${age})`;
-    } catch {
-      return '';
-    }
-  };
+  const getAge = (dob: string | undefined) => safeGetAge(dob);
 
   const handleUpgradeClick = () => {
     setUpgradeDialogClientId(client.id);
     setUpgradePkgName('');
     setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd'));
+  };
+
+  const handleRenewClick = () => {
+    if (setRenewDialogClientId) {
+      setRenewDialogClientId(client.id);
+      if (setRenewPkgName) setRenewPkgName('');
+      if (setRenewStartDate) setRenewStartDate(format(new Date(), 'yyyy-MM-dd'));
+    } else {
+      handleUpgradeClick();
+    }
+  };
+
+  const handleAddPackageClick = () => {
+    if (setAddPackageDialogClientId) {
+      setAddPackageDialogClientId(client.id);
+    } else {
+      handleUpgradeClick();
+    }
   };
 
   return (
@@ -493,7 +509,7 @@ export function InzanMemberShow({
                   {renderField('Phone', client.phone, 'phone')}
                   {renderField('Backup Mobile', client.backupPhone, 'backupPhone')}
                   {renderField('Job', client.jobTitle, 'jobTitle')}
-                  {renderField('Birthday', (client.dateOfBirth ? format(new Date(client.dateOfBirth), 'yyyy-MM-dd') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date')}
+                  {renderField('Birthday', (client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'yyyy-MM-dd', '') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date')}
                   {renderField('National ID', client.nationalId, 'nationalId')}
                   {renderField('Email', client.email, 'email')}
                   {renderField('Area', client.city, 'city')}
@@ -553,7 +569,7 @@ export function InzanMemberShow({
                     { value: 'pink', label: '🩷 Pink' },
                     { value: 'brown', label: '🟤 Brown' }
                   ])}
-                  {renderField('Created On', client.createdAt ? format(new Date(client.createdAt), 'yyyy-MM-dd HH:mm:ss') : '—')}
+                  {renderField('Created On', safeFormatDate(client.createdAt, 'yyyy-MM-dd HH:mm:ss'))}
                 </div>
               </div>
             </div>
@@ -593,12 +609,13 @@ export function InzanMemberShow({
               <h3 className="text-sm font-bold uppercase text-primary">Package Status</h3>
               <div className="flex gap-2">
                 <Button
-                  onClick={handleUpgradeClick}
+                  onClick={client.packages && client.packages.some(p => p.status === 'Active') ? handleRenewClick : handleAddPackageClick}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8"
                 >
                   <Plus className="h-3.5 w-3.5 mr-1" /> Add Membership (Renew)
                 </Button>
                 <Button
+                  onClick={handleAddPackageClick}
                   variant="outline"
                   className="text-xs h-8"
                 >
@@ -624,15 +641,15 @@ export function InzanMemberShow({
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t border-border text-xs">
                     <div>
                       <span className="text-muted-foreground block font-medium">Start Date:</span>
-                      <span className="font-bold text-foreground">{pkg.startDate ? format(new Date(pkg.startDate), 'dd MMM yyyy') : '—'}</span>
+                      <span className="font-bold text-foreground">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block font-medium">Expiry Date:</span>
-                      <span className="font-bold text-foreground">{pkg.endDate ? format(new Date(pkg.endDate), 'dd MMM yyyy') : '—'}</span>
+                      <span className="font-bold text-foreground">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block font-medium">Created On:</span>
-                      <span className="font-bold text-foreground">{client.createdAt ? format(new Date(client.createdAt), 'dd MMM yyyy') : '—'}</span>
+                      <span className="font-bold text-foreground">{safeFormatDate(client.createdAt, 'dd MMM yyyy')}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block font-medium">Status:</span>
@@ -672,7 +689,7 @@ export function InzanMemberShow({
                 <span>No active membership package found on this profile.</span>
                 <Button
                   size="sm"
-                  onClick={handleUpgradeClick}
+                  onClick={handleAddPackageClick}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs mt-2"
                 >
                   Purchase a Package
@@ -697,12 +714,12 @@ export function InzanMemberShow({
                   <TableBody>
                     {client.packages && client.packages.length > 0 ? (
                       [...client.packages]
-                        .sort((a, b) => new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime())
+                        .sort((a, b) => (toValidDate(b.startDate)?.getTime() || 0) - (toValidDate(a.startDate)?.getTime() || 0))
                         .map(pkg => (
                           <TableRow key={pkg.id} className="hover:bg-muted/50 border-b border-border/50 transition-colors">
                             <TableCell className="py-3 px-4 text-xs font-medium text-foreground">{pkg.packageName}</TableCell>
-                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{pkg.startDate ? format(new Date(pkg.startDate), 'dd MMM yyyy') : '—'}</TableCell>
-                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{pkg.endDate ? format(new Date(pkg.endDate), 'dd MMM yyyy') : '—'}</TableCell>
+                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</TableCell>
+                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</TableCell>
                             <TableCell className="py-3 px-4 text-xs text-muted-foreground text-center">
                               {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} / ${pkg.sessionsTotal ?? '?'}` : '—'}
                             </TableCell>
@@ -736,10 +753,19 @@ export function InzanMemberShow({
         {activeTab === 'financials' && (
           <div className="space-y-4 text-left">
             <div className="flex justify-between items-center border-b border-border pb-3">
-              <h3 className="text-sm font-bold uppercase text-primary">Financial Accounts / Payments</h3>
-              <Badge variant="secondary" className="border-none">
-                {clientPayments.length} entries
-              </Badge>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold uppercase text-primary">Financial Accounts / Payments</h3>
+                <Badge variant="secondary" className="border-none">
+                  {clientPayments.length} entries
+                </Badge>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleAddPackageClick}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Record Payment / Package
+              </Button>
             </div>
 
             <div className="rounded-xl border border-border bg-background overflow-hidden">
@@ -756,10 +782,10 @@ export function InzanMemberShow({
                 <TableBody>
                   {clientPayments.length > 0 ? (
                     [...clientPayments]
-                      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+                      .sort((a, b) => (toValidDate(b.created_at)?.getTime() || 0) - (toValidDate(a.created_at)?.getTime() || 0))
                       .map(p => (
                         <TableRow key={p.id} className="hover:bg-muted/50 border-b border-border/50 transition-colors">
-                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{p.created_at ? format(new Date(p.created_at), 'dd MMM yyyy HH:mm') : '—'}</TableCell>
+                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(p.created_at, 'dd MMM yyyy HH:mm')}</TableCell>
                           <TableCell className="py-3 px-4 text-xs font-bold text-emerald-500">{p.amount} LE</TableCell>
                           <TableCell className="py-3 px-4 text-xs text-muted-foreground">{p.method}</TableCell>
                           <TableCell className="py-3 px-4 text-xs text-muted-foreground">
@@ -804,10 +830,10 @@ export function InzanMemberShow({
                 <TableBody>
                   {clientAttendances.length > 0 ? (
                     [...clientAttendances]
-                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))
                       .map(a => (
                         <TableRow key={a.id} className="hover:bg-muted/50 border-b border-border/50 transition-colors">
-                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{format(new Date(a.date), 'dd MMM yyyy HH:mm:ss')}</TableCell>
+                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(a.date, 'dd MMM yyyy HH:mm:ss')}</TableCell>
                           <TableCell className="py-3 px-4 text-xs font-semibold text-foreground">{a.packageName || 'Attendance Check-in'}</TableCell>
                           <TableCell className="py-3 px-4 text-center">
                             <Badge className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px]">
@@ -849,7 +875,7 @@ export function InzanMemberShow({
                       <FileCheck className="h-5 w-5 text-primary shrink-0" />
                       <div className="overflow-hidden">
                         <p className="text-xs font-bold text-foreground truncate">{doc.name}</p>
-                        <span className="text-[10px] text-muted-foreground">{format(new Date(doc.uploadDate), 'dd MMM yyyy')}</span>
+                        <span className="text-[10px] text-muted-foreground">{safeFormatDate(doc.uploadDate, 'dd MMM yyyy')}</span>
                       </div>
                     </div>
                     <Button
@@ -919,7 +945,7 @@ export function InzanMemberShow({
                   <div key={c.id || i} className="bg-muted/10 border border-border rounded-lg p-3">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-xs font-bold text-foreground">#{client.comments!.length - i} — {c.author}</span>
-                      <span className="text-[10px] text-muted-foreground">{c.date ? format(new Date(c.date), 'dd MMM yyyy HH:mm') : '—'}</span>
+                      <span className="text-[10px] text-muted-foreground">{safeFormatDate(c.date, 'dd MMM yyyy HH:mm')}</span>
                     </div>
                     <p className="text-xs text-foreground/80">{c.text}</p>
                   </div>
@@ -955,7 +981,7 @@ export function InzanMemberShow({
                         <TableCell className="py-3 px-4 text-xs">{t.fromSalesName}</TableCell>
                         <TableCell className="py-3 px-4 text-xs font-bold text-foreground">{t.toSalesName}</TableCell>
                         <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdByName || t.createdBy}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdAt ? format(new Date(t.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(t.createdAt, 'yyyy-MM-dd HH:mm')}</TableCell>
                       </TableRow>
                     )) : (
                       <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No sales transfer records.</TableCell></TableRow>
@@ -984,7 +1010,7 @@ export function InzanMemberShow({
                         <TableCell className="py-3 px-4 text-xs">{t.fromTrainerName}</TableCell>
                         <TableCell className="py-3 px-4 text-xs font-bold text-foreground">{t.toTrainerName}</TableCell>
                         <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdByName || t.createdBy}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdAt ? format(new Date(t.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</TableCell>
+                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(t.createdAt, 'yyyy-MM-dd HH:mm')}</TableCell>
                       </TableRow>
                     )) : (
                       <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No trainer transfer records.</TableCell></TableRow>

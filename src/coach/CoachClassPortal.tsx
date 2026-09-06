@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Users, CheckCircle, XCircle, Clock, Search } from 'lucide-react';
 import { format, parseISO, isSameDay } from 'date-fns';
+import { safeFormatDate, safeIsSameDay, toValidDate } from '../utils/dateUtils';
 import { Input } from '@/components/ui/input';
 
 export default function CoachClassPortal() {
@@ -37,12 +38,13 @@ export default function CoachClassPortal() {
       now.setHours(0,0,0,0);
       
       const upcoming = records.filter(c => {
-        const d = new Date(c.startTime);
+        const d = toValidDate(c.startTime);
+        if (!d) return false;
         d.setHours(0,0,0,0);
         return d.getTime() >= now.getTime();
       });
       
-      upcoming.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+      upcoming.sort((a, b) => (toValidDate(a.startTime)?.getTime() || 0) - (toValidDate(b.startTime)?.getTime() || 0));
       setClasses(upcoming);
       setLoading(false);
     });
@@ -99,8 +101,7 @@ export default function CoachClassPortal() {
       ) : (
         <div className="grid gap-3">
           {classes.map(c => {
-            const date = new Date(c.startTime);
-            const isToday = isSameDay(date, new Date());
+            const isToday = safeIsSameDay(c.startTime, new Date());
             return (
               <Card 
                 key={c.id} 
@@ -114,7 +115,7 @@ export default function CoachClassPortal() {
                       {isToday && <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/20">Today</Badge>}
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {format(date, 'EEEE, MMM d • h:mm a')}
+                      {safeFormatDate(c.startTime, 'EEEE, MMM d • h:mm a')}
                     </p>
                     <div className="flex items-center gap-3 mt-2">
                       <Badge variant="outline" className="text-xs">Capacity: {c.capacity}</Badge>
@@ -188,7 +189,7 @@ function ClassRosterView({ classData, clientMap, onBack }: { classData: ClassSch
         <CardContent className="p-4">
           <h2 className="text-xl font-bold">{classData.name}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            {format(new Date(classData.startTime), 'EEEE, MMMM d, yyyy • h:mm a')}
+            {safeFormatDate(classData.startTime, 'EEEE, MMMM d, yyyy • h:mm a')}
           </p>
           <div className="flex gap-2 mt-3">
             <Badge variant="secondary">{attendees.length} / {classData.capacity} Booked</Badge>

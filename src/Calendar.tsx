@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useLanguage } from './contexts/LanguageContext';
 import { db, auth } from './firebase';
-import { collection, onSnapshot, setDoc, doc, deleteDoc, writeBatch, getDocs, query } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, doc, deleteDoc, writeBatch, getDocs, query, updateDoc } from 'firebase/firestore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
   format, 
@@ -159,6 +159,40 @@ export default function CalendarView() {
     return () => unsub();
   }, []);
 
+  // Live Sessions State (from Firestore sessions collection)
+  const [liveSessions, setLiveSessions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const q = collection(db, 'sessions');
+    const unsub = onSnapshot(q, (snap) => {
+      const records = snap.docs.map(d => {
+        const data = d.data();
+        const datePart = data.date || (data.startTime ? data.startTime.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'));
+        const timePart = data.startTime || '10:00';
+        const isoDate = datePart.includes('T') ? datePart : `${datePart}T${timePart.length === 5 ? timePart + ':00' : timePart}`;
+        return {
+          id: d.id,
+          clientId: data.clientId,
+          clientName: data.clientName,
+          trainerId: data.coachId || data.trainerId,
+          trainerName: data.coachName || data.trainerName || 'Coach',
+          packageId: data.packageId || '',
+          date: isoDate,
+          status: data.status || 'Scheduled',
+          branch: data.branch || 'Main Branch',
+          notes: data.notes || '',
+          type: data.type || '1-on-1',
+          isLiveSession: true
+        };
+      });
+      setLiveSessions(records);
+    }, (err) => {
+      console.error("Error listening to sessions in Calendar:", err);
+    });
+
+    return () => unsub();
+  }, []);
+
   // Month days generator
   const monthDays = useMemo(() => {
     const startMonth = startOfMonth(currentDate);
@@ -175,14 +209,19 @@ export default function CalendarView() {
     return eachDayOfInterval({ start: startWeek, end: endWeek });
   }, [currentDate]);
 
-  // Filtered sessions
+  // Filtered sessions (merging ptPackageRecords and canonical sessions)
   const filteredRecords = useMemo(() => {
     if (features?.ptPackages === false) return [];
-    return ptPackageRecords.filter(record => {
+    const ptIds = new Set(ptPackageRecords.map(r => r.id));
+    const merged = [
+      ...ptPackageRecords,
+      ...liveSessions.filter(s => !ptIds.has(s.id))
+    ];
+    return merged.filter(record => {
       if (selectedBranch !== 'All' && record.branch !== selectedBranch) return false;
       return true;
     });
-  }, [ptPackageRecords, selectedBranch, features]);
+  }, [ptPackageRecords, liveSessions, selectedBranch, features]);
 
   // Filtered classes
   const filteredClasses = useMemo(() => {
@@ -198,7 +237,11 @@ export default function CalendarView() {
       return item.time.split(' - ')[0] || '00:00';
     } else {
       // PT Session
-      return format(parseISO(item.date), 'HH:mm');
+      try {
+        return format(parseISO(item.date), 'HH:mm');
+      } catch {
+        return '10:00';
+      }
     }
   };
 
@@ -266,6 +309,30 @@ export default function CalendarView() {
         notes: bookNotes || undefined
       });
 
+      // Also create canonical Session document for member app synchronization
+      try {
+        const client = clients.find(c => c.id === bookClientId);
+        const coach = users.find(u => u.id === bookTrainerId);
+        const newSessionRef = doc(collection(db, 'sessions'));
+        await setDoc(newSessionRef, {
+          clientId: bookClientId,
+          clientName: client?.name || 'Member',
+          coachId: bookTrainerId || '',
+          trainerId: bookTrainerId || '',
+          coachName: coach?.name || 'Coach',
+          branch: bookBranch,
+          date: bookDate,
+          startTime: bookTime,
+          endTime: classEndTime || '11:00',
+          type: '1-on-1',
+          status: 'Scheduled',
+          notes: bookNotes || '',
+          createdAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error("Error creating synced session doc:", err);
+      }
+
       // Reset fields
       setBookClientId('');
       setBookTrainerId('');
@@ -327,7 +394,19 @@ export default function CalendarView() {
   };
 
   const handleStatusChange = async (recordId: string, status: PTPackageRecord['status']) => {
-    await updatePTPackageRecord(recordId, { status });
+    try {
+      await updateDoc(doc(db, 'sessions', recordId), { 
+        status,
+        updatedAt: new Date().toISOString()
+      });
+    } catch {
+      // ignore if record only exists in ptPackageRecords
+    }
+    try {
+      await updatePTPackageRecord(recordId, { status });
+    } catch {
+      // ignore if record only exists in sessions
+    }
     setSelectedRecord(null);
   };
 

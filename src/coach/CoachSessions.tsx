@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, updateDoc, doc, getDocs } from 'firebase/firestore';
-import { PTPackageRecord, Client } from '../types';
+import { collection, query, where, onSnapshot, updateDoc, doc, getDocs, or } from 'firebase/firestore';
+import { Session, SessionStatus, Client } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,20 +10,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dumbbell, CheckCircle, XCircle, Clock, Ban, ClipboardList } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { Assessment } from '../types';
 
-type StatusFilter = 'all' | 'Scheduled' | 'Attended' | 'No Show' | 'Cancelled';
+type StatusFilter = 'all' | SessionStatus;
 
-const STATUS_STYLES: Record<PTPackageRecord['status'], { badge: string; icon: React.ReactNode }> = {
-  Scheduled:  { badge: 'bg-blue-500/10 text-blue-600',   icon: <Clock className="h-3.5 w-3.5" /> },
-  Attended:   { badge: 'bg-green-500/10 text-green-600', icon: <CheckCircle className="h-3.5 w-3.5" /> },
-  'No Show':  { badge: 'bg-red-500/10 text-red-600',     icon: <XCircle className="h-3.5 w-3.5" /> },
-  Cancelled:  { badge: 'bg-gray-500/10 text-gray-500',   icon: <Ban className="h-3.5 w-3.5" /> },
+const DEFAULT_STYLE = { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50', icon: <Clock className="h-3.5 w-3.5" /> };
+
+const STATUS_STYLES: Record<string, { badge: string; icon: React.ReactNode }> = {
+  Scheduled:   { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50',   icon: <Clock className="h-3.5 w-3.5" /> },
+  Completed:   { badge: 'bg-green-500/10 text-green-600 border-green-200/50', icon: <CheckCircle className="h-3.5 w-3.5" /> },
+  Attended:    { badge: 'bg-green-500/10 text-green-600 border-green-200/50', icon: <CheckCircle className="h-3.5 w-3.5" /> },
+  'No Show':   { badge: 'bg-red-500/10 text-red-600 border-red-200/50',     icon: <XCircle className="h-3.5 w-3.5" /> },
+  Rescheduled: { badge: 'bg-amber-500/10 text-amber-600 border-amber-200/50', icon: <Clock className="h-3.5 w-3.5" /> },
+  Cancelled:   { badge: 'bg-gray-500/10 text-gray-500 border-gray-200/50',   icon: <Ban className="h-3.5 w-3.5" /> },
 };
 
 export default function CoachSessions() {
   const { currentUser } = useAuth();
-  const [sessions, setSessions] = useState<PTPackageRecord[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [clientMap, setClientMap] = useState<Record<string, Client>>({});
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -33,15 +38,27 @@ export default function CoachSessions() {
   useEffect(() => {
     if (!currentUser) return;
     
-    // Fetch Sessions
-    const qSessions = query(collection(db, 'sessions'), where('trainerId', '==', currentUser.id));
+    // Fetch Sessions matching either coachId or trainerId
+    let qSessions;
+    try {
+      qSessions = query(
+        collection(db, 'sessions'),
+        or(
+          where('coachId', '==', currentUser.id),
+          where('trainerId', '==', currentUser.id)
+        )
+      );
+    } catch {
+      qSessions = query(collection(db, 'sessions'), where('coachId', '==', currentUser.id));
+    }
+
     const unsubSessions = onSnapshot(qSessions, async (snap) => {
-      const records = snap.docs.map(d => ({ ...d.data(), id: d.id } as PTPackageRecord));
-      records.sort((a, b) => b.date.localeCompare(a.date));
+      const records = snap.docs.map(d => ({ ...d.data(), id: d.id } as Session));
+      records.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       setSessions(records);
 
       // Fetch client names for sessions
-      const ids = [...new Set(records.map(r => r.clientId))];
+      const ids = [...new Set(records.map(r => r.clientId).filter(Boolean))];
       const map: Record<string, Client> = {};
       for (let i = 0; i < ids.length; i += 30) {
         const batch = ids.slice(i, i + 30);
@@ -51,13 +68,23 @@ export default function CoachSessions() {
       }
       setClientMap(prev => ({...prev, ...map}));
       setLoading(false);
+    }, (err) => {
+      console.error("Error fetching coach sessions:", err);
+      // Fallback query if 'or' query requires indexing or fails
+      const fallbackQ = query(collection(db, 'sessions'), where('coachId', '==', currentUser.id));
+      onSnapshot(fallbackQ, (s) => {
+        const fallbackRecords = s.docs.map(d => ({ ...d.data(), id: d.id } as Session));
+        fallbackRecords.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        setSessions(fallbackRecords);
+        setLoading(false);
+      });
     });
 
     // Fetch Assessments
     const qAssessments = query(collection(db, 'assessments'), where('preferredCoachId', '==', currentUser.id));
     const unsubAssessments = onSnapshot(qAssessments, (snap) => {
       const records = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assessment));
-      records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      records.sort((a, b) => (toValidDate(b.createdAt)?.getTime() || 0) - (toValidDate(a.createdAt)?.getTime() || 0));
       setAssessments(records);
     });
 
@@ -67,8 +94,15 @@ export default function CoachSessions() {
     };
   }, [currentUser?.id]);
 
-  const handleStatusUpdate = async (id: string, newStatus: PTPackageRecord['status']) => {
-    await updateDoc(doc(db, 'sessions', id), { status: newStatus });
+  const handleStatusUpdate = async (id: string, newStatus: SessionStatus) => {
+    try {
+      await updateDoc(doc(db, 'sessions', id), { 
+        status: newStatus,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.error("Failed to update session status:", e);
+    }
   };
 
   const filtered = statusFilter === 'all' ? sessions : sessions.filter(s => s.status === statusFilter);
@@ -125,15 +159,28 @@ export default function CoachSessions() {
             <div className="grid gap-3">
               {filtered.map(session => {
                 const client = clientMap[session.clientId];
-                const style = STATUS_STYLES[session.status] ?? STATUS_STYLES['Scheduled'];
+                const clientDisplayName = session.clientName || client?.name || 'Unknown Member';
+                const style: { badge: string; icon: React.ReactNode } = STATUS_STYLES[session.status] || DEFAULT_STYLE;
+                const formattedDate = safeFormatDate(session.date, 'EEEE, MMMM d, yyyy', session.date || '—');
+
                 return (
                   <Card key={session.id} className="hover:shadow-sm transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="font-semibold">{client?.name ?? 'Unknown Member'}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {format(parseISO(session.date), 'EEEE, MMMM d, yyyy')}
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-base">{clientDisplayName}</p>
+                            {session.type && (
+                              <Badge variant="secondary" className="text-xs">
+                                {session.type}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+                            <span>{formattedDate}</span>
+                            {session.startTime && (
+                              <span>• {session.startTime} {session.endTime ? `- ${session.endTime}` : ''}</span>
+                            )}
                           </p>
                           {session.notes && <p className="text-xs text-muted-foreground mt-1 italic">{session.notes}</p>}
                         </div>
@@ -143,11 +190,14 @@ export default function CoachSessions() {
                       </div>
                       {session.status === 'Scheduled' && (
                         <div className="flex gap-2 mt-3">
-                          <Button size="sm" variant="outline" className="gap-1 text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleStatusUpdate(session.id, 'Attended')}>
-                            <CheckCircle className="h-3.5 w-3.5" /> Mark Attended
+                          <Button size="sm" variant="outline" className="gap-1 text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleStatusUpdate(session.id, 'Completed')}>
+                            <CheckCircle className="h-3.5 w-3.5" /> Mark Completed
                           </Button>
                           <Button size="sm" variant="outline" className="gap-1 text-red-500 border-red-200 hover:bg-red-50" onClick={() => handleStatusUpdate(session.id, 'No Show')}>
                             <XCircle className="h-3.5 w-3.5" /> No Show
+                          </Button>
+                          <Button size="sm" variant="ghost" className="gap-1 text-muted-foreground hover:text-foreground" onClick={() => handleStatusUpdate(session.id, 'Cancelled')}>
+                            Cancel
                           </Button>
                         </div>
                       )}
@@ -195,7 +245,7 @@ export default function CoachSessions() {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            Requested: {assessment.createdAt ? format(new Date(assessment.createdAt), 'MMM d, yyyy HH:mm') : 'Recently'}
+                            Requested: {safeFormatDate(assessment.createdAt, 'MMM d, yyyy HH:mm', 'Recently')}
                           </p>
                         </div>
                         <Badge variant={assessment.status === 'Pending' ? 'default' : 'secondary'}>

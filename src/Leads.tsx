@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format, parseISO, isBefore, addDays, differenceInDays } from 'date-fns';
+import { safeFormatDate, toValidDate, safeIsoDate } from './utils/dateUtils';
 import { Client, LeadCategory, LeadInterest, LeadSource, LeadStage, Branch, InteractionType, InteractionOutcome, Gender } from './types';
 import { Phone, Calendar, MessageSquare, Plus, FileSpreadsheet, Download, UserCheck, ArrowRight } from 'lucide-react';
 import ImportData from './ImportData';
@@ -215,8 +216,11 @@ export default function Leads() {
     // Days since last contact
     let daysDiff = 20; 
     if (lead.lastContactDate) {
-      const diff = differenceInDays(new Date(), parseISO(lead.lastContactDate));
-      daysDiff = Math.max(0, Math.min(20, diff));
+      const d = toValidDate(lead.lastContactDate);
+      if (d) {
+        const diff = differenceInDays(new Date(), d);
+        daysDiff = Math.max(0, Math.min(20, diff));
+      }
     }
     score -= daysDiff;
 
@@ -383,9 +387,9 @@ export default function Leads() {
           `"${l.stage || ''}"`,
           `"${l.interest || ''}"`,
           `"${l.category || ''}"`,
-          `"${l.trialDate ? format(parseISO(l.trialDate), 'yyyy-MM-dd') : ''}"`,
-          `"${l.lastContactDate ? format(parseISO(l.lastContactDate), 'yyyy-MM-dd') : ''}"`,
-          `"${l.nextReminderDate ? format(parseISO(l.nextReminderDate), 'yyyy-MM-dd') : ''}"`,
+          `"${safeFormatDate(l.trialDate, 'yyyy-MM-dd')}"`,
+          `"${safeFormatDate(l.lastContactDate, 'yyyy-MM-dd')}"`,
+          `"${safeFormatDate(l.nextReminderDate, 'yyyy-MM-dd')}"`,
           `"${assignedUser}"`
         ].join(',');
       })
@@ -532,8 +536,8 @@ export default function Leads() {
 
   // Check if reminder is due (overdue or due within the next 3 days)
   const isReminderDue = (lead: Client) => {
-    if (!lead.nextReminderDate) return false;
-    const nextReminder = parseISO(lead.nextReminderDate);
+    const nextReminder = toValidDate(lead.nextReminderDate);
+    if (!nextReminder) return false;
     const now = new Date();
     const threeDaysFromNow = addDays(now, 3);
     
@@ -548,8 +552,9 @@ export default function Leads() {
           <div className="py-12 text-center text-sm text-muted-foreground">No leads found.</div>
         ) : leadsData.map(lead => {
           const score = calculateLeadScore(lead);
-          const overdue = lead.nextReminderDate && isBefore(parseISO(lead.nextReminderDate), new Date());
-          const dueSoon = !overdue && lead.nextReminderDate && isBefore(parseISO(lead.nextReminderDate), addDays(new Date(), 3));
+          const reminderD = toValidDate(lead.nextReminderDate);
+          const overdue = reminderD && isBefore(reminderD, new Date());
+          const dueSoon = !overdue && reminderD && isBefore(reminderD, addDays(new Date(), 3));
           return (
             <div
               key={lead.id}
@@ -634,7 +639,10 @@ export default function Leads() {
         </TableHeader>
         <TableBody>
           {leadsData.map(lead => (
-            <TableRow key={lead.id} className={isReminderDue(lead) ? (isBefore(parseISO(lead.nextReminderDate!), new Date()) ? 'bg-red-50/50 dark:bg-red-900/10' : 'bg-amber-50/50 dark:bg-amber-900/10') : ''}>
+            <TableRow key={lead.id} className={isReminderDue(lead) ? (() => {
+              const d = toValidDate(lead.nextReminderDate);
+              return d && isBefore(d, new Date()) ? 'bg-red-50/50 dark:bg-red-900/10' : 'bg-amber-50/50 dark:bg-amber-900/10';
+            })() : ''}>
               <TableCell>
                 <Checkbox 
                   checked={selectedLeadIds.includes(lead.id)}
@@ -684,26 +692,28 @@ export default function Leads() {
                 {lead.trialDate || lead.expectedVisitDate ? (
                   <div className="flex items-center">
                     <Calendar className="h-3 w-3 mr-2 text-blue-500" />
-                    {format(parseISO((lead.trialDate || lead.expectedVisitDate)!), 'MMM d, yyyy')}
+                    {safeFormatDate(lead.trialDate || lead.expectedVisitDate, 'MMM d, yyyy')}
                   </div>
                 ) : (
                   <span className="text-muted-foreground text-sm">Not set</span>
                 )}
               </TableCell>
               <TableCell className="hidden md:table-cell">
-                {lead.lastContactDate ? format(parseISO(lead.lastContactDate), 'MMM d') : 'Never'}
+                {safeFormatDate(lead.lastContactDate, 'MMM d', 'Never')}
               </TableCell>
                <TableCell>
                 {lead.nextReminderDate ? (
                   <div className="flex flex-col space-y-1">
                     <span className="text-sm">
-                      {format(parseISO(lead.nextReminderDate), 'MMM d, yyyy')}
+                      {safeFormatDate(lead.nextReminderDate, 'MMM d, yyyy')}
                     </span>
-                    {isBefore(parseISO(lead.nextReminderDate), new Date()) ? (
-                      <Badge variant="destructive" className="w-fit text-[10px] h-4 px-1">OVERDUE</Badge>
-                    ) : isBefore(parseISO(lead.nextReminderDate), addDays(new Date(), 3)) ? (
-                      <Badge className="bg-amber-500 hover:bg-amber-600 w-fit text-[10px] h-4 px-1">DUE SOON</Badge>
-                    ) : null}
+                    {(() => {
+                      const d = toValidDate(lead.nextReminderDate);
+                      if (!d) return null;
+                      if (isBefore(d, new Date())) return <Badge variant="destructive" className="w-fit text-[10px] h-4 px-1">OVERDUE</Badge>;
+                      if (isBefore(d, addDays(new Date(), 3))) return <Badge className="bg-amber-500 hover:bg-amber-600 w-fit text-[10px] h-4 px-1">DUE SOON</Badge>;
+                      return null;
+                    })()}
                   </div>
                 ) : (
                   <span className="text-muted-foreground text-sm">Not set</span>
@@ -930,8 +940,8 @@ export default function Leads() {
                                 <Input 
                                   type="date" 
                                   className="w-full bg-background/50 border-white/5 rounded-xl h-12"
-                                  defaultValue={lead.trialDate || lead.expectedVisitDate ? format(parseISO((lead.trialDate || lead.expectedVisitDate) as string), 'yyyy-MM-dd') : ''}
-                                  onChange={(e) => updateClient(lead.id, { trialDate: new Date(e.target.value).toISOString(), expectedVisitDate: new Date(e.target.value).toISOString() })}
+                                  defaultValue={safeFormatDate(lead.trialDate || lead.expectedVisitDate, 'yyyy-MM-dd')}
+                                  onChange={(e) => updateClient(lead.id, { trialDate: safeIsoDate(e.target.value), expectedVisitDate: safeIsoDate(e.target.value) })}
                                 />
                               </div>
                             </div>
@@ -942,8 +952,8 @@ export default function Leads() {
                                 <Input 
                                   type="date" 
                                   className="w-full bg-background/50 border-white/5 rounded-xl h-12"
-                                  defaultValue={lead.nextReminderDate ? format(parseISO(lead.nextReminderDate), 'yyyy-MM-dd') : ''}
-                                  onChange={(e) => updateClient(lead.id, { nextReminderDate: new Date(e.target.value).toISOString() })}
+                                  defaultValue={safeFormatDate(lead.nextReminderDate, 'yyyy-MM-dd')}
+                                  onChange={(e) => updateClient(lead.id, { nextReminderDate: safeIsoDate(e.target.value) })}
                                 />
                               </div>
                               <div className="flex items-center space-x-3 pt-8">
@@ -969,7 +979,7 @@ export default function Leads() {
                                     <p className="text-xs text-muted-foreground mt-2">Loading interactions...</p>
                                   </div>
                                 ) : activeLeadDetails?.leadId === lead.id && activeLeadDetails.interactions.length > 0 ? (
-                                  [...activeLeadDetails.interactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(interaction => (
+                                  [...activeLeadDetails.interactions].sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0)).map(interaction => (
                                     <div key={interaction.id} className="bg-background/40 p-5 rounded-2xl border border-white/5 shadow-sm space-y-3">
                                       <div className="flex justify-between items-start">
                                         <div className="flex items-center gap-2">
@@ -986,7 +996,7 @@ export default function Leads() {
                                           </Badge>
                                         </div>
                                         <span className="text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
-                                          {format(parseISO(interaction.date), 'MMM d, h:mm a')}
+                                          {safeFormatDate(interaction.date, 'MMM d, h:mm a')}
                                         </span>
                                       </div>
                                       <p className="text-sm leading-relaxed text-foreground/90 italic">"{interaction.notes}"</p>
@@ -994,7 +1004,7 @@ export default function Leads() {
                                         <span className="flex items-center gap-1"><User className="h-3 w-3" /> {interaction.author}</span>
                                         {interaction.nextFollowUp && (
                                           <span className="flex items-center gap-1 text-amber-500/80">
-                                            <Calendar className="h-3 w-3" /> Follow-up: {format(parseISO(interaction.nextFollowUp), 'MMM d')}
+                                            <Calendar className="h-3 w-3" /> Follow-up: {safeFormatDate(interaction.nextFollowUp, 'MMM d')}
                                           </span>
                                         )}
                                       </div>
@@ -1103,7 +1113,10 @@ export default function Leads() {
                                   </div>
                                   <div className="p-4 bg-background/50 rounded-2xl border border-white/5">
                                     <div className="text-2xl font-black text-primary">
-                                      {lead.lastContactDate ? differenceInDays(new Date(), parseISO(lead.lastContactDate)) : '∞'}
+                                      {(() => {
+                                        const d = toValidDate(lead.lastContactDate);
+                                        return d ? differenceInDays(new Date(), d) : '∞';
+                                      })()}
                                     </div>
                                     <div className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">Last Interacted</div>
                                   </div>
@@ -1123,12 +1136,12 @@ export default function Leads() {
                                     <p className="text-xs text-muted-foreground mt-2">Loading notes...</p>
                                   </div>
                                 ) : activeLeadDetails?.leadId === lead.id && activeLeadDetails.comments.length > 0 ? (
-                                  [...activeLeadDetails.comments].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(comment => (
+                                  [...activeLeadDetails.comments].sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0)).map(comment => (
                                     <div key={comment.id} className="bg-background/40 p-4 rounded-2xl text-sm border border-white/5 shadow-sm">
                                       <p className="leading-relaxed text-foreground/90">{comment.text}</p>
                                       <div className="flex justify-between mt-3 text-[10px] uppercase tracking-wider font-extrabold text-muted-foreground/60">
                                         <span className="flex items-center gap-1.5"><User className="h-3 w-3" /> {comment.author}</span>
-                                        <span>{format(parseISO(comment.date), 'MMM d, h:mm a')}</span>
+                                        <span>{safeFormatDate(comment.date, 'MMM d, h:mm a')}</span>
                                       </div>
                                     </div>
                                   ))
@@ -1671,7 +1684,7 @@ export default function Leads() {
                   {(selectedLead.interactions || []).slice().reverse().map((ia, i) => (
                     <div key={i} className="text-xs bg-muted/30 rounded-lg p-3">
                       <div className="font-bold">{ia.type} — {ia.outcome}</div>
-                      <div className="text-muted-foreground mt-0.5">{ia.date ? format(parseISO(ia.date), 'MMM d, yyyy') : ''}</div>
+                      <div className="text-muted-foreground mt-0.5">{safeFormatDate(ia.date, 'MMM d, yyyy')}</div>
                       {ia.notes && <div className="mt-1">{ia.notes}</div>}
                     </div>
                   ))}
@@ -1682,7 +1695,7 @@ export default function Leads() {
                   {(selectedLead.comments || []).slice().reverse().map(c => (
                     <div key={c.id} className="text-xs bg-muted/30 rounded-lg p-3">
                       <p>{c.text}</p>
-                      <div className="text-muted-foreground mt-1">{c.author} · {format(parseISO(c.date), 'MMM d')}</div>
+                      <div className="text-muted-foreground mt-1">{c.author} · {safeFormatDate(c.date, 'MMM d')}</div>
                     </div>
                   ))}
                   <Textarea placeholder="Add note..." value={newComment} onChange={e => setNewComment(e.target.value)} className="min-h-[80px]" />

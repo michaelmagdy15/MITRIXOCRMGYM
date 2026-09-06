@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { UserRole, User } from './types';
 import { Shield, User as UserIcon, Plus, Trash2, Edit, BarChart, Clock, KeyRound, Loader2, CheckCircle2, RotateCcw, Search } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+import { safeFormatDistanceToNow } from './utils/dateUtils';
 import { UserPerformanceDialog } from './components/UserPerformanceDialog';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -360,7 +361,7 @@ export default function Users() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {user.lastSeen ? formatDistanceToNow(parseISO(user.lastSeen), { addSuffix: true }) : 'Never'}
+                        {safeFormatDistanceToNow(user.lastSeen, { addSuffix: true }, 'Never')}
                       </TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>
                       <TableCell>
@@ -485,7 +486,7 @@ export default function Users() {
                         <TableCell className="font-medium">{req.name || '—'}</TableCell>
                         <TableCell>{req.email}</TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {formatDistanceToNow(parseISO(req.requestedAt), { addSuffix: true })}
+                          {safeFormatDistanceToNow(req.requestedAt, { addSuffix: true }, 'Recently')}
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-2">
@@ -598,7 +599,7 @@ export default function Users() {
                               {user.isPending ? 'Pending (not logged in yet)' : user.status === 'nonworking' ? 'Non-Working' : 'Active'}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {user.lastSeen ? `Last seen ${formatDistanceToNow(parseISO(user.lastSeen), { addSuffix: true })}` : 'Never logged in'}
+                              {user.lastSeen ? `Last seen ${safeFormatDistanceToNow(user.lastSeen, { addSuffix: true })}` : 'Never logged in'}
                             </span>
                           </div>
                         </TableCell>

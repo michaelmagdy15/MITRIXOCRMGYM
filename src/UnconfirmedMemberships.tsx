@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { format, parseISO } from 'date-fns';
+import { safeFormatDate } from './utils/dateUtils';
 import { Client, ClientPackage } from './types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -143,12 +144,7 @@ export default function UnconfirmedMemberships() {
   }, [allPendingItems, searchTerm, selectedBranch]);
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'N/A';
-    try {
-      return format(parseISO(dateStr), 'dd MMM yyyy');
-    } catch {
-      return dateStr;
-    }
+    return safeFormatDate(dateStr, 'dd MMM yyyy');
   };
 
   const getSubscriptionTypeBadge = (subType?: string) => {

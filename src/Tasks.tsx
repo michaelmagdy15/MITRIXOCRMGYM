@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Calendar as CalendarIcon, CheckCircle2, Circle, Clock, AlertCircle, Trash2, Edit } from 'lucide-react';
 import { format, parseISO, isBefore, isToday } from 'date-fns';
+import { safeFormatDate, toValidDate } from './utils/dateUtils';
 import { Task, TaskStatus, TaskPriority } from './types';
 import { Badge } from '@/components/ui/badge';
 
@@ -104,7 +105,7 @@ export default function Tasks() {
   const sortedTasks = [...tasks].sort((a, b) => {
     if (a.status === 'Completed' && b.status !== 'Completed') return 1;
     if (a.status !== 'Completed' && b.status === 'Completed') return -1;
-    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    return (toValidDate(a.dueDate)?.getTime() || 0) - (toValidDate(b.dueDate)?.getTime() || 0);
   });
 
   return (
@@ -205,7 +206,8 @@ export default function Tasks() {
           </div>
         ) : (
           sortedTasks.map(task => {
-            const isOverdue = task.status !== 'Completed' && isBefore(parseISO(task.dueDate), new Date()) && !isToday(parseISO(task.dueDate));
+            const due = toValidDate(task.dueDate);
+            const isOverdue = due ? (task.status !== 'Completed' && isBefore(due, new Date()) && !isToday(due)) : false;
             const assignedUser = users.find(u => u.id === task.assignedTo);
             const relatedClient = clients.find(c => c.id === task.clientId);
 
@@ -252,7 +254,7 @@ export default function Tasks() {
                     <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-muted-foreground">
                       <div className={`flex items-center gap-1 ${isOverdue ? 'text-destructive font-medium' : ''}`}>
                         <CalendarIcon className="h-3.5 w-3.5" />
-                        {format(parseISO(task.dueDate), 'MMM d, yyyy')}
+                        {safeFormatDate(task.dueDate, 'MMM d, yyyy')}
                         {isOverdue && <AlertCircle className="h-3.5 w-3.5 ml-1" />}
                       </div>
                       

@@ -11,19 +11,13 @@ import { useAppContext } from './context';
 import { SALES_NAME_MAPPING } from './constants';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { differenceInDays, isSameDay, parseISO, isAfter, isBefore, addDays, subDays, subMonths, startOfMonth, endOfMonth, isWithinInterval, format, getDay } from 'date-fns';
+import { safeFormatDate, toValidDate } from './utils/dateUtils';
 import { useLanguage } from './contexts/LanguageContext';
 import { toast } from 'sonner';
 
 const safeParseISO = (dateStr: any): Date => {
-  if (!dateStr) return new Date(NaN);
-  try {
-    const parsed = parseISO(dateStr);
-    if (!isNaN(parsed.getTime())) return parsed;
-    const d = new Date(dateStr);
-    return d;
-  } catch {
-    return new Date(NaN);
-  }
+  const valid = toValidDate(dateStr);
+  return valid || new Date(NaN);
 };
 
 const PRIVATE_PACKAGES = [
@@ -390,9 +384,7 @@ export default function Dashboard() {
 
     let relevantPayments = payments.filter(p => {
       if (!p.date) return false;
-      const d = parseISO(p.date);
-      if (isNaN(d.getTime())) return false;
-      return format(d, 'yyyy-MM') === currentMonthStr;
+      return safeFormatDate(p.date, 'yyyy-MM') === currentMonthStr;
     });
 
     if (canViewGlobalDashboard && effectiveRepId !== 'all') {
@@ -557,9 +549,7 @@ export default function Dashboard() {
     return reps.map(rep => {
       const repTarget = userTargets.find(t => t.userId === rep.id && t.month === currentMonthStr);
       const repPayments = payments.filter(p => {
-        const d = safeParseISO(p.date);
-        if (isNaN(d.getTime())) return false;
-        if (format(d, 'yyyy-MM') !== currentMonthStr) return false;
+        if (safeFormatDate(p.date, 'yyyy-MM') !== currentMonthStr) return false;
         return isPaymentAttributedToRep(p, rep.id, rep.name || '');
       });
       return {
@@ -618,7 +608,7 @@ export default function Dashboard() {
       const targetAmount = repTarget?.targetAmount || 0;
 
       const repPayments = payments.filter(p => {
-        if (format(parseISO(p.date), 'yyyy-MM') !== currentMonthStr) return false;
+        if (safeFormatDate(p.date, 'yyyy-MM') !== currentMonthStr) return false;
         return isPaymentAttributedToRep(p, rep.id, rep.name || '');
       });
       const revenue = repPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
@@ -1250,7 +1240,7 @@ export default function Dashboard() {
                           >
                             {client.name}
                           </button>
-                          <p className="text-xs text-muted-foreground">{t('members.table.expiry_date') || 'Expired'}: {client.membershipExpiry ? new Date(client.membershipExpiry).toLocaleDateString() : 'Unknown'}</p>
+                          <p className="text-xs text-muted-foreground">{t('members.table.expiry_date') || 'Expired'}: {client.membershipExpiry ? safeFormatDate(client.membershipExpiry, 'dd MMM yyyy', 'Unknown') : 'Unknown'}</p>
                         </div>
                         <Badge variant="destructive">{t('members.tabs.expired') || 'Expired'}</Badge>
                       </div>
@@ -1291,7 +1281,7 @@ export default function Dashboard() {
                           >
                             {client.name}
                           </button>
-                          <p className="text-xs text-muted-foreground">{t('dashboard.expected_visit')}: {new Date(client.expectedVisitDate!).toLocaleDateString()}</p>
+                          <p className="text-xs text-muted-foreground">{t('dashboard.expected_visit')}: {safeFormatDate(client.expectedVisitDate, 'dd MMM yyyy', 'Unknown')}</p>
                         </div>
                       </div>
                     )} 
@@ -1318,7 +1308,7 @@ export default function Dashboard() {
                           >
                             {client.name}
                           </button>
-                          <p className="text-xs text-muted-foreground">{t('members.table.expiry_date') || 'Expires'}: {client.membershipExpiry ? new Date(client.membershipExpiry).toLocaleDateString() : 'Unknown'}</p>
+                          <p className="text-xs text-muted-foreground">{t('members.table.expiry_date') || 'Expires'}: {client.membershipExpiry ? safeFormatDate(client.membershipExpiry, 'dd MMM yyyy', 'Unknown') : 'Unknown'}</p>
                         </div>
                       </div>
                     )} 

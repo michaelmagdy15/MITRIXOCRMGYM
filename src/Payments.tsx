@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO, addDays } from 'date-fns';
+import { safeFormatDate, safeAddDays, toValidDate, safeIsoDate } from './utils/dateUtils';
 import { Payment } from './types';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { getEgyptDate } from './utils';
@@ -273,10 +274,8 @@ export default function Payments() {
       setAmount(pkg.price.toString());
       setPaymentCategory(resolvePaymentCategory(pkg.name));
       if (startDate) {
-        const s = new Date(startDate);
-        const e = new Date(s);
-        e.setDate(e.getDate() + pkg.expiryDays);
-        setEndDate(format(e, 'yyyy-MM-dd'));
+        const end = safeAddDays(startDate, pkg.expiryDays);
+        setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
       }
     }
   };
@@ -354,16 +353,11 @@ export default function Payments() {
     try {
       const selectedClient = clients.find(c => c.id === clientId);
 
-      // Validation: Check for existing active packages with same type to prevent duplicates
+      // Check for existing active packages with same type -> seamlessly process as Renewal cycle
       const existingActivePackage = (selectedClient?.packages || []).find(
         p => p.status === 'Active' && p.packageName === finalPackageType
       );
-      if (existingActivePackage) {
-        setAlertTitle('Active Package Exists');
-        setAlertDescription(`Member "${selectedClient?.name}" already has an active "${finalPackageType}" package. Please upgrade from the Members tab or expire the existing package first.`);
-        setAlertOpen(true);
-        return;
-      }
+      const isRenewalPayment = !!existingActivePackage;
 
       const pkg = packages.find(p => p.name === packageType);
       const clientBranch = newClientBranch || selectedClient?.branch || '';
@@ -386,14 +380,16 @@ export default function Payments() {
         salesName: salesName || '',
         recordedBy: recordedById || currentUser?.id || '',
         recordedByName: users.find(u => u.id === (recordedById || currentUser?.id))?.name || '',
-        paymentDate: new Date(paymentDate).toISOString(),
-        startDate: new Date(startDate).toISOString(),
-        endDate: endDate ? new Date(endDate).toISOString() : undefined,
+        paymentDate: safeIsoDate(paymentDate, true),
+        startDate: safeIsoDate(startDate, true),
+        endDate: endDate ? safeIsoDate(endDate) : undefined,
         discountType: discountType ? (discountType as 'percentage' | 'amount') : undefined,
         discountValue: discountValue ? parseFloat(discountValue) : undefined,
         discountedAmount: discountedAmount ? parseFloat(discountedAmount) : undefined,
         isMemberOnHold,
-        systemPackage: pkg
+        systemPackage: pkg,
+        isRenewal: isRenewalPayment,
+        previousPackageName: isRenewalPayment ? finalPackageType : undefined
       });
     } catch (error) {
       console.error('Error processing payment:', error);
@@ -526,8 +522,8 @@ export default function Payments() {
         salesName: payment.salesName || '',
         recordedBy: currentUser?.id || '',
         recordedByName: currentUser?.name || '',
-        paymentDate: new Date(upgradeStartDate).toISOString(),
-        startDate: new Date(upgradeStartDate).toISOString(),
+        paymentDate: safeIsoDate(upgradeStartDate, true),
+        startDate: safeIsoDate(upgradeStartDate, true),
         systemPackage: pkg,
         previousPackageName: prevActive?.packageName || payment.packageType,
         isUpgradePayment: true
@@ -588,8 +584,8 @@ export default function Payments() {
     }
 
     const formattedDate = isArabic 
-      ? new Date(payment.date).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-      : format(getEgyptDate(payment.date), 'MMMM d, yyyy h:mm a');
+      ? (toValidDate(payment.date)?.toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }) || '—')
+      : safeFormatDate(getEgyptDate(payment.date), 'MMMM d, yyyy h:mm a');
 
     win.document.write(`
       <html dir="${isRtl ? 'rtl' : 'ltr'}" lang="${language}">
@@ -630,7 +626,7 @@ export default function Payments() {
         </head>
         <body>
           <div class="header">
-            <div class="logo"><img src="/mitrixogymcrmlogo.png" alt="${branding.companyName}" /></div>
+            <div class="logo"><img src="${branding.logoUrl || '/strikelogo.png'}" alt="${branding.companyName}" /></div>
             <div class="invoice-title">${labelReceiptTitle}</div>
           </div>
           
@@ -1017,10 +1013,8 @@ export default function Payments() {
                       setStartDate(e.target.value);
                       const pkg = packages.find(p => p.name === packageType);
                       if (pkg && e.target.value) {
-                        const s = new Date(e.target.value);
-                        const end = new Date(s);
-                        end.setDate(end.getDate() + pkg.expiryDays);
-                        setEndDate(format(end, 'yyyy-MM-dd'));
+                        const end = safeAddDays(e.target.value, pkg.expiryDays);
+                        setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
                       }
                     }}
                   />
@@ -1483,14 +1477,14 @@ export default function Payments() {
                             return (
                               <>
                                 <div className="font-medium">
-                                  {format(egyptDate, 'MMM d')}
+                                  {safeFormatDate(egyptDate, 'MMM d')}
                                   {paymentYear !== new Date().getFullYear() && (
                                     <span className="text-[10px] text-amber-600 font-semibold ml-1">
                                       {paymentYear}
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[10px] text-muted-foreground">{payment.created_at ? format(getEgyptDate(payment.created_at), 'h:mm a') : format(egyptDate, 'h:mm a')}</div>
+                                <div className="text-[10px] text-muted-foreground">{payment.created_at ? safeFormatDate(getEgyptDate(payment.created_at), 'h:mm a') : safeFormatDate(egyptDate, 'h:mm a')}</div>
                               </>
                             );
                           })() : (
@@ -1819,7 +1813,7 @@ export default function Payments() {
                                           salesName: editSalesName || undefined,
                                           sales_rep_id: salesRepId || undefined,
                                           coachName: (editCoachName && editCoachName !== 'unassigned') ? editCoachName : undefined,
-                                          date: editPaymentDate ? new Date(editPaymentDate).toISOString() : payment.date,
+                                          date: editPaymentDate ? safeIsoDate(editPaymentDate) : payment.date,
                                         });
                                         setEditingPaymentId(null);
                                       }}

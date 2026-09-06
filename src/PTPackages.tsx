@@ -3,7 +3,8 @@ import { useAppContext } from './context';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
-import { format, isSameDay, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { safeFormatDate, safeIsSameDay, toValidDate, safeIsoDate } from './utils/dateUtils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -45,7 +46,8 @@ export default function PTPackages() {
     const end = endOfMonth(now);
     
     const monthPackages = ptPackageRecords.filter(s => {
-      const d = parseISO(s.date);
+      const d = toValidDate(s.date);
+      if (!d) return false;
       return isWithinInterval(d, { start, end });
     });
     
@@ -65,14 +67,15 @@ export default function PTPackages() {
   const handleAddPackageUsage = () => {
     if (newPackageClientId && selectedDate) {
       const [hours, minutes] = newPackageTime.split(':');
-      const packageDate = new Date(selectedDate);
+      const baseDate = toValidDate(selectedDate) || new Date();
+      const packageDate = new Date(baseDate);
       packageDate.setHours(parseInt(hours || '0'), parseInt(minutes || '0'));
 
       addPTPackageRecord({
         clientId: newPackageClientId,
         trainerId: newPackageTrainerId || undefined,
         branch: newPackageBranch || undefined,
-        date: packageDate.toISOString(),
+        date: safeIsoDate(packageDate, true),
         status: 'Scheduled',
       });
       setIsNewPackageOpen(false);
@@ -102,15 +105,15 @@ export default function PTPackages() {
 
   const packagesForSelectedDate = ptPackageRecords
     .filter(record => {
-      const matchesDate = selectedDate && isSameDay(parseISO(record.date), selectedDate);
+      const matchesDate = selectedDate && safeIsSameDay(record.date, selectedDate);
       const matchesBranch = filterBranch === 'All' || record.branch === filterBranch;
       return matchesDate && matchesBranch;
     })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .sort((a, b) => (toValidDate(a.date)?.getTime() || 0) - (toValidDate(b.date)?.getTime() || 0));
 
   const historyPackages = ptPackageRecords
     .filter(s => s.clientId === historyClientId)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0));
 
   const getStatusBadge = (status: PTPackageRecord['status']) => {
     switch (status) {
@@ -251,8 +254,8 @@ export default function PTPackages() {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="flex items-start gap-4">
                           <div className="bg-primary/10 p-3 rounded-xl flex flex-col items-center justify-center min-w-[70px]">
-                            <span className="text-sm font-bold text-primary">{format(parseISO(record.date), 'h:mm')}</span>
-                            <span className="text-[10px] font-bold text-primary/70 uppercase">{format(parseISO(record.date), 'a')}</span>
+                            <span className="text-sm font-bold text-primary">{safeFormatDate(record.date, 'h:mm')}</span>
+                            <span className="text-[10px] font-bold text-primary/70 uppercase">{safeFormatDate(record.date, 'a')}</span>
                           </div>
                           <div className="space-y-1">
                             <h4 className="font-bold text-lg">{client?.name || 'Unknown Client'}</h4>
@@ -391,7 +394,7 @@ export default function PTPackages() {
                       historyPackages.map(record => (
                         <TableRow key={record.id}>
                           <TableCell className="font-medium">
-                            {format(parseISO(record.date), 'MMM d, yyyy @ h:mm a')}
+                            {safeFormatDate(record.date, 'MMM d, yyyy @ h:mm a')}
                           </TableCell>
                           <TableCell className="text-sm">
                             {users.find(u => u.id === record.trainerId)?.name || '-'}

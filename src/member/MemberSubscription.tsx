@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CreditCard, ShieldAlert, CheckCircle2, History, Send } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { safeFormatDate } from '../utils/dateUtils';
 import { useLanguage } from '../contexts/LanguageContext';
 
 interface SubscriptionRequest {
@@ -167,7 +168,7 @@ export default function MemberSubscription({ client }: { client: Client | null }
           <p className="text-lg font-bold tracking-tight">{client?.packageType || 'No Active Subscription'}</p>
           {client?.membershipExpiry && (
             <p className="text-xs text-muted-foreground">
-              Expires: <strong>{format(parseISO(client.membershipExpiry), 'dd MMM yyyy')}</strong>
+              Expires: <strong>{safeFormatDate(client.membershipExpiry, 'dd MMM yyyy')}</strong>
             </p>
           )}
         </CardContent>
@@ -238,7 +239,7 @@ export default function MemberSubscription({ client }: { client: Client | null }
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-foreground">Requested: {req.requestedTier}</p>
                     <p className="text-[10px] text-muted-foreground">
-                      Current at time: {req.currentTier} · {format(parseISO(req.requestedAt), 'dd MMM yyyy')}
+                      Current at time: {req.currentTier} · {safeFormatDate(req.requestedAt, 'dd MMM yyyy')}
                     </p>
                     {req.notes && (
                       <p className="text-[10px] text-muted-foreground italic mt-1 bg-muted/20 p-2 rounded-lg border">

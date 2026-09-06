@@ -333,7 +333,15 @@ async function getTenantInfoForHost(hostname: string): Promise<{ config: any; st
 async function injectFirebaseConfig(html: string, hostname: string): Promise<string> {
   const { config } = await getTenantInfoForHost(hostname);
   const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(config)};</script>`;
-  return html.replace("<!-- FIREBASE_CONFIG_PLACEHOLDER -->", scriptTag);
+  let updatedHtml = html.replace("<!-- FIREBASE_CONFIG_PLACEHOLDER -->", scriptTag);
+  
+  const isTenantInzan = config?.tenantId === 'inzanathletics' || hostname.includes('inzan');
+  const tenantName = isTenantInzan ? 'INZAN ATHLETICS' : 'STRIKE';
+  const favicon = isTenantInzan ? '/inzan-favicon.png' : '/favicon.png';
+
+  updatedHtml = updatedHtml.replace(/<title>.*?<\/title>/i, `<title>${tenantName}</title>`);
+  updatedHtml = updatedHtml.replace(/\/favicon\.png/g, favicon);
+  return updatedHtml;
 }
 
 function getRequestHostname(req: express.Request): string {
@@ -1186,14 +1194,50 @@ async function startServer() {
             }
 
             attendees.push(canonicalClientId);
+
+            // Dual-write into classBookings for analytics and background triggers
+            const bookingDocRef = db.collection("classBookings").doc(`${classId}_${canonicalClientId}`);
+            transaction.set(bookingDocRef, {
+              classId,
+              scheduleId: classId,
+              clientId: canonicalClientId,
+              memberId: memberIdStr,
+              memberName: clientData?.name || 'Member',
+              status: 'booked',
+              bookedAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
           } else {
             // Class full, add to waitlist
             waitlist.push(canonicalClientId);
+
+            // Dual-write waitlist record into classBookings
+            const bookingDocRef = db.collection("classBookings").doc(`${classId}_${canonicalClientId}`);
+            transaction.set(bookingDocRef, {
+              classId,
+              scheduleId: classId,
+              clientId: canonicalClientId,
+              memberId: memberIdStr,
+              memberName: clientData?.name || 'Member',
+              status: 'waitlist',
+              bookedAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            });
           }
         } else if (action === 'leave') {
           const attendeeIndex = attendees.findIndex(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
           if (attendeeIndex > -1) {
             attendees.splice(attendeeIndex, 1);
+
+            // Mark cancelled in classBookings
+            const bookingDocRef = db.collection("classBookings").doc(`${classId}_${canonicalClientId}`);
+            transaction.set(bookingDocRef, {
+              status: 'cancelled',
+              cancelledAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
 
             // Refund 1 credit to member
             if (currentClientData) {
@@ -1216,12 +1260,25 @@ async function startServer() {
               const promotedId = waitlist.shift();
               if (promotedId) {
                 attendees.push(promotedId);
+                // Update promoted user status in classBookings
+                const promotedDocRef = db.collection("classBookings").doc(`${classId}_${promotedId}`);
+                transaction.set(promotedDocRef, {
+                  status: 'booked',
+                  promotedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+                }, { merge: true });
               }
             }
           } else {
             const waitlistIndex = waitlist.findIndex(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
             if (waitlistIndex > -1) {
               waitlist.splice(waitlistIndex, 1);
+              const bookingDocRef = db.collection("classBookings").doc(`${classId}_${canonicalClientId}`);
+              transaction.set(bookingDocRef, {
+                status: 'cancelled',
+                cancelledAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              }, { merge: true });
             } else {
               throw new Error("Client not found in attendees or waitlist");
             }
@@ -1238,10 +1295,10 @@ async function startServer() {
 
         // Audit log
         transaction.set(db.collection("auditLogs").doc(), {
-          action: action === 'join' ? 'JOIN_CLASS' : 'LEAVE_CLASS',
+          action: "UPDATE",
           entityType: 'CLASS',
           entityId: classId,
-          details: `Member ${clientData?.name || canonicalClientId} ${action === 'join' ? 'joined' : 'left'} class ${classData?.name || classId}`,
+          details: `${action === 'join' ? 'Booked or Waitlisted' : 'Cancelled booking'} for class ${classData?.name || classId}`,
           timestamp: new Date().toISOString(),
           userId: req.user?.uid || canonicalClientId,
           userName: req.user?.email || clientData?.name || "Member"
@@ -1281,10 +1338,20 @@ async function startServer() {
         const clientDoc = await transaction.get(clientRef);
         const existingSnap = await transaction.get(existingSessionsQuery);
 
-        if (!coachDoc.exists) throw new Error("Coach schedule not found");
         if (!clientDoc.exists) throw new Error("Client not found");
 
-        const coachSchedule = coachDoc.data()?.days || {};
+        // Standard default schedule if coach hasn't customized their schedule in portal yet
+        const defaultDays: Record<string, any> = {
+          monday:    { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
+          tuesday:   { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
+          wednesday: { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
+          thursday:  { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
+          friday:    { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
+          saturday:  { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
+          sunday:    { enabled: false, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } }
+        };
+
+        const coachSchedule = (coachDoc.exists && coachDoc.data()?.days) ? coachDoc.data()?.days : defaultDays;
         const dateObj = new Date(sessionData.date);
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
         const dayOfWeek = days[dateObj.getDay()] as typeof days[number];
@@ -1339,6 +1406,8 @@ async function startServer() {
 
         const newSession = {
           ...sessionData,
+          coachId: sessionData.coachId,
+          trainerId: sessionData.coachId, // Ensure backwards compatibility for legacy components
           packageId: packageIdToUse,
           status: 'Scheduled',
           createdAt: new Date().toISOString()

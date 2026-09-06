@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { CheckCircle2, Eye, EyeOff, Dumbbell, Flame, Target, Activity, Key, Phone, Mail, ShieldAlert } from 'lucide-react';
 import { addDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 import { Client } from '../types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -149,12 +149,14 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
 
     try {
       const clientId = clientDocId || currentUser?.clientDocId || currentUser?.clientRecordId || 'GUEST-LEAD';
-      const companyName = (branding?.companyName && branding.companyName !== 'mitrixogymcrm') ? branding.companyName : 'STRIKE';
+      const defaultTenantName = getTenantId() === 'inzanathletics' ? 'INZAN ATHLETICS' : 'STRIKE';
+      const defaultTenantLogo = getTenantId() === 'inzanathletics' ? `${window.location.origin}/inzanlogo.png` : `${window.location.origin}/strikelogo.png`;
+      const companyName = (branding?.companyName && branding.companyName.toLowerCase() !== 'mitrixogymcrm') ? branding.companyName : defaultTenantName;
       let logoUrlToUse = branding?.logoUrl || '';
       if (!logoUrlToUse || logoUrlToUse === '/mitrixogymcrmlogo.png') {
-        logoUrlToUse = `${window.location.origin}/strikelogo.png`;
+        logoUrlToUse = defaultTenantLogo;
       }
-      const signatureTeamName = companyName.toUpperCase().includes('STRIKE') ? 'Strike Team' : `${companyName} Team`;
+      const signatureTeamName = `${companyName} Team`;
 
       const description = items.map(i => `${i.quantity}x ${i.pkg.name} (${(i.pkg.price * i.quantity).toLocaleString()} EGP)`).join('\n') + 
         `\n\nTotal Price: ${totalPrice.toLocaleString()} EGP` +

@@ -4,6 +4,7 @@ import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
 import { addAuditLog } from './auditService';
 import { PaymentCategory } from '../utils/paymentCategories';
+import { toValidDate, safeIsoDate, safeAddDays, safeFormatDate } from '../utils/dateUtils';
 
 /**
  * Transaction Service: Handles member package upgrades and payments
@@ -48,12 +49,15 @@ export interface PaymentTransactionParams {
   startDate: string; // ISO
   endDate?: string; // ISO
 
+  amount_paid?: number; // Actual amount collected, defaults to amount if full
+
   discountType?: 'percentage' | 'amount';
   discountValue?: number;
   discountedAmount?: number;
 
   isMemberOnHold?: boolean;
   isUpgradePayment?: boolean; // True when payment is from Members tab upgrade (not manual Payments entry)
+  isRenewal?: boolean; // True when payment is renewing an existing package
   systemPackage?: Package; // The matched package configuration, if any
   previousPackageName?: string;
 }
@@ -65,7 +69,8 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
   let paymentsToUpdateRefs: { ref: any; data: any }[] = [];
   let transferredPaymentsCount = 0;
 
-  if (params.isUpgradePayment && params.previousPackageName) {
+  // Only transfer payments when upgrading to a different package type, not when renewing
+  if (params.isUpgradePayment && !params.isRenewal && params.previousPackageName && params.previousPackageName !== params.packageType) {
     const paymentsRef = collection(db, 'payments');
     const q = query(
       paymentsRef,
@@ -103,22 +108,22 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       walletSnap = await transaction.get(walletRef);
     }
 
-    // A. Validation: Prevent duplicate active packages if not an upgrade payment
-    if (!params.isUpgradePayment) {
+    // A. Validation: Prevent duplicate active packages if not an upgrade payment and not a renewal
+    if (!params.isUpgradePayment && !params.isRenewal) {
       const existingActivePackage = clientPackages.find((p: any) => p.status === 'Active' && p.packageName === params.packageType);
       if (existingActivePackage) {
-        throw new Error(`Member already has an active "${params.packageType}" package. Please expire or replace the existing package first.`);
+        throw new Error(`Member already has an active "${params.packageType}" package. Choose Renew to renew this package, or expire the existing package first.`);
       }
     }
 
     // B. If upgrading, find and transfer the payments of the previous active package to the new package type and category
-    if (params.isUpgradePayment && params.previousPackageName) {
+    if (params.isUpgradePayment && !params.isRenewal && params.previousPackageName && params.previousPackageName !== params.packageType) {
       const prevActive = clientPackages.find(
         (p: any) => p.status === 'Active' && p.packageName === params.previousPackageName
       );
       const targetPackage = prevActive || clientPackages.find((p: any) => p.packageName === params.previousPackageName);
       const packageStartDateStr = targetPackage?.startDate || legacyStartDate;
-      const packageStart = packageStartDateStr ? new Date(packageStartDateStr) : null;
+      const packageStart = packageStartDateStr ? toValidDate(packageStartDateStr) : null;
 
       const filteredPayments = paymentsToUpdateRefs.filter(p => {
         const data = p.data;
@@ -127,7 +132,8 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
 
         // Filter payments belonging to the active package (on/after start date minus 10 days buffer)
         if (packageStart) {
-          const paymentDate = new Date(data.date);
+          const paymentDate = toValidDate(data.date);
+          if (!paymentDate) return false;
           const bufferTime = packageStart.getTime() - 10 * 24 * 60 * 60 * 1000;
           return paymentDate.getTime() >= bufferTime;
         }
@@ -148,14 +154,15 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
 
     // C. Create New Payment Document
     const paymentRef = doc(collection(db, 'payments'));
+    const actualAmountPaid = params.amount_paid !== undefined ? params.amount_paid : params.amount;
     const paymentData: Partial<Payment> = {
       id: paymentRef.id,
       clientId: params.clientId,
       client_name: params.clientName,
       amount: params.amount,
-      amount_paid: params.amount,
+      amount_paid: actualAmountPaid,
       method: params.method,
-      date: params.paymentDate,
+      date: safeIsoDate(params.paymentDate, true),
       instapayRef: params.instapayRef,
       packageType: params.packageType,
       package_category_type: params.packageCategory,
@@ -180,26 +187,31 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     };
     transaction.set(paymentRef, cleanData(paymentData));
 
-    // D. Client Upgrade Logic
-    const pkgStartDate = new Date(params.startDate);
-    let resolvedEndDate = params.endDate;
+    // D. Client Upgrade/Renewal Logic
+    const validPkgStart = toValidDate(params.startDate) || new Date();
+    const resolvedStartDateIso = validPkgStart.toISOString();
+    let resolvedEndDate = params.endDate ? safeIsoDate(params.endDate) : undefined;
     if (!resolvedEndDate && params.systemPackage) {
-       const end = new Date(pkgStartDate);
-       end.setDate(end.getDate() + params.systemPackage.expiryDays);
+       const end = safeAddDays(validPkgStart, params.systemPackage.expiryDays);
        resolvedEndDate = end.toISOString();
     }
 
-    // Expire ONLY the package being upgraded from
-    const updatedPkgs = clientPackages.map((p: any) =>
-      p.status === 'Active' && (params.isUpgradePayment ? p.packageName === params.previousPackageName : false)
-        ? { ...p, status: 'Expired' }
-        : p
-    );
+    // Expire previous active package if renewing the same package or upgrading from previous package
+    const updatedPkgs = clientPackages.map((p: any) => {
+      if (p.status !== 'Active') return p;
+      if (params.isRenewal && p.packageName === params.packageType) {
+        return { ...p, status: 'Expired' };
+      }
+      if (params.isUpgradePayment && params.previousPackageName && p.packageName === params.previousPackageName) {
+        return { ...p, status: 'Expired' };
+      }
+      return p;
+    });
 
     let newClientPackage: any = {
       id: Math.random().toString(36).substr(2, 9),
       packageName: params.packageType,
-      startDate: pkgStartDate.toISOString(),
+      startDate: resolvedStartDateIso,
       endDate: resolvedEndDate,
       status: 'Active'
     };
@@ -222,7 +234,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
 
     const clientUpdate: any = {
       packageType: params.packageType,
-      startDate: pkgStartDate.toISOString(),
+      startDate: resolvedStartDateIso,
       status: params.isMemberOnHold ? 'Hold' : 'Active',
       hasDiscount: !!params.discountType,
       lastContactDate: new Date().toISOString(),
@@ -299,13 +311,16 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     // E. Comment Document
     const commentRef = doc(collection(db, 'clients', params.clientId, 'comments'));
     let commentMsg = '';
-    if (params.previousPackageName) {
-      commentMsg = `Package upgraded: "${params.previousPackageName}" → "${params.packageType}" starting ${pkgStartDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. Amount collected: ${params.amount.toLocaleString()} LE.`;
+    const formattedStartDate = safeFormatDate(validPkgStart, 'd MMM yyyy');
+    if (params.isRenewal) {
+      commentMsg = `Package renewed: "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${params.amount.toLocaleString()} LE.`;
+    } else if (params.previousPackageName && params.isUpgradePayment) {
+      commentMsg = `Package upgraded: "${params.previousPackageName}" → "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${params.amount.toLocaleString()} LE.`;
       if (transferredPaymentsCount > 0) {
         commentMsg += ` Transferred ${transferredPaymentsCount} previous payment(s) from "${params.previousPackageName}" to the new package.`;
       }
     } else {
-      commentMsg = `Payment recorded: "${params.packageType}" starting ${pkgStartDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. Amount collected: ${params.amount.toLocaleString()} LE.`;
+      commentMsg = `Payment recorded: "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${params.amount.toLocaleString()} LE.`;
     }
     transaction.set(commentRef, {
       text: commentMsg,
@@ -314,9 +329,11 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     });
   });
 
-  // Log audit entry for payment creation/upgrade
-  const logAction = params.isUpgradePayment ? 'UPDATE' : 'CREATE';
-  const logDetails = params.isUpgradePayment
+  // Log audit entry for payment creation/upgrade/renewal
+  const logAction = params.isRenewal ? 'UPDATE' : params.isUpgradePayment ? 'UPDATE' : 'CREATE';
+  const logDetails = params.isRenewal
+    ? `Renewed package "${params.packageType}" for ${params.clientName} (+${params.amount.toLocaleString()} LE)`
+    : params.isUpgradePayment
     ? `Upgraded "${params.previousPackageName}" → "${params.packageType}" for ${params.clientName} (+${params.amount.toLocaleString()} LE)`
     : `Recorded payment of ${params.amount.toLocaleString()} LE for ${params.clientName} (${params.packageType})`;
 

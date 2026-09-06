@@ -8,16 +8,68 @@
 
 **MitrixoGYM** — a multi-tenant Firebase CRM platform for fitness gyms and fitness studios. Mission: comprehensive member management, staff management, payments, packages, attendance tracking, and guest management for multiple gym brands under a single platform.
 
-**Current state:** v1.0 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics), Firebase Firestore-only backend (CockroachDB removed 2026-08-18), full feature set including clients, leads, payments, packages, coaches, attendance, announcements, and club operations. Member portal permission architecture overhauled 2026-08-19 (commit `028301b`) and rules deployed to production. Frontend hooks now use native Firestore SDK directly instead of proxying through legacy `/api/*` endpoints.
+**Current state:** v1.1 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics). Complete PT & Class booking system with FIFO waitlist promotion, dual-write calendar synchronization, unified payment/package mirroring with seamless renewals & upgrades, and platform-wide safe date handling eliminating all `RangeError: Invalid time value` crashes. Full isolation verified: Strike `(default)` database (1,025 clients, 738 payments) and Inzan Athletics (`db-inzanathletics`) remain strictly isolated.
 
-**Active session (2026-08-19):**
-- Member portal permission architecture fixed — all member-facing auth flows moved to server endpoints, Firestore rules tightened (Gap #5 / C5–C12)
-- Rules deployed to production project `faa-test-guide-v2` — all 4 databases `(default)`, `db-vbt`, `db-registry-2`, `db-inzanathletics` — and synced to ATPL/Gamen/Matchmaking repos (shared consolidated rules file, verified byte-identical after sync)
-- Member login bug root-caused: commit `703db01` restricted `users` reads but `loginWithMemberId` queried `users` pre-auth → permission denied (member 624 / 12345678)
+**Active session (2026-09-06):**
+- Inzan PT & Classes System fully verified and audited against PRD; dual-write booking sync, server-side capacity/waitlist promotion, and coach portal integration complete.
+- Test accounts provisioned in `db-inzanathletics`: Test Member (`testmember@inzan.local` / `Inzan1234!`, MEM-2001) and Test Coach (`testcoach@inzan.local` / `InzanCoach123!`).
+- Unified Transaction Service & Payment Mirroring: adding packages or walk-in enrollments directly records financial entries in `payments` collection; renewals archive previous active cycles without duplicate errors.
+- Platform-wide zero "Invalid Time Value" hardening via `src/utils/dateUtils.ts` across 15+ core components.
+- Multi-tenant isolation verified: live database health check confirms Strike data is 100% untouched and pristine.
 
 ---
 
-## 8. Live Session Log — 2026-08-23 (most recent)
+## 8. Live Session Log — 2026-09-06 (most recent)
+
+### Fixed & Built this session
+1. **Inzan PT & Classes System Complete Audit & Implementation:**
+   - Audited PRD (`docs/INZAN_CLASSES_PRD.md`) against live implementation across backend, CRM, and portal components.
+   - Built dual-write synchronization into `classBookings` collection inside `/api/classes/book` for background waitlist triggers and analytics.
+   - Enhanced Cloud Function `onBookingCancelled` in `functions/src/classes/waitlist.ts` with automatic FIFO waitlist promotion, capacity guards, and atomic document array updates.
+   - Hardened `server.ts` `/api/classes/book` and `/api/sessions/book` with tenant-scoped database resolution (`getDbForRequest(req)`).
+   - Updated `src/Calendar.tsx` to listen to live Firestore `sessions` collection and dual-write session bookings.
+   - Verified Coach Portal (`CoachClassPortal.tsx`, `CoachSessions.tsx`) and Member Portal (`ClassBookingDialog.tsx`, `MemberClasses.tsx`).
+   - Provisioned verified test accounts in `db-inzanathletics`: Member `testmember@inzan.local` (`Inzan1234!`, Member ID `MEM-2001`) and Coach `testcoach@inzan.local` (`InzanCoach123!`).
+
+2. **Unified Payment & Package Mirroring (Seamless Renewals & Upgrades):**
+   - Fixed broken package-to-payment mirroring where adding packages from member profile bypassed `processPaymentTransaction`, leaving financial accounts empty.
+   - Enhanced `src/services/transactionService.ts` to support seamless `isRenewal` and `amount_paid`: renewing an active package archives the previous cycle as `Expired`, activates the new cycle with updated dates/sessions, and records financial entries without duplicate errors.
+   - Added walk-in member registration with initial package enrollment directly in `src/Clients.tsx` "+ Add Member" dialog.
+   - Enabled Upgrade, Renew, and Add Package modal triggers from `InzanMemberShow.tsx` with full financial mirroring.
+
+3. **Platform-Wide Zero "Invalid Time Value" Hardening:**
+   - Created centralized, robust date utility `src/utils/dateUtils.ts` providing `toValidDate`, `safeFormatDate`, `safeFormatTime`, `safeFormatDistanceToNow`, `safeIsoDate`, `safeAddDays`, `safeIsSameDay`, and `safeGetAge`.
+   - Hardened `getEgyptDate` in `src/utils.ts` against `Intl.DateTimeFormat` invalid date errors.
+   - Eliminated raw `new Date(...).toISOString()`, `new Date(...).toLocaleDateString()`, and `format(parseISO(...))` crashes across `InzanMemberShow.tsx`, `Clients.tsx`, `Dashboard.tsx`, `Payments.tsx`, `Leads.tsx`, `PTPackages.tsx`, `PrivateSessions.tsx`, `Tasks.tsx`, `Complaints.tsx`, `LostAndFound.tsx`, `Users.tsx`, `UnconfirmedMemberships.tsx`, `ClassBookingDialog.tsx`, `MemberHome.tsx`, and `CoachSessions.tsx`.
+   - Automated unit test suite `scratch/verify_date_safety.cjs` passed 22 extreme edge cases with 0 errors.
+
+4. **Multi-Tenant Isolation & Strike Gym Integrity Verification:**
+   - Audited Strike's `(default)` database: verified all 1,025 clients, 738 payments, 27 packages, 989 users, and STRIKE branding remain pristine, untouched, and unpolluted.
+   - Verified Inzan Athletics data remains strictly isolated in `db-inzanathletics` (3 clients, 1 payment, 3 packages, 5 class schedules).
+5. **Instant Tenant Logo & Branding System (Zero Flash / Zero Delay):**
+   - Eliminated initial `'mitrixogymcrm'` fallback text and empty logo state in `src/contexts/SettingsContext.tsx`.
+   - Built synchronous `getInitialBranding()` resolver in `SettingsContext.tsx` that evaluates tenant ID on frame 1 before React mounts:
+     - Inzan: `{ companyName: 'INZAN ATHLETICS', logoUrl: '/inzanlogo.png' }`
+     - Strike: `{ companyName: 'STRIKE', logoUrl: '/strikelogo.png' }`
+   - Generated high-resolution transparent `public/inzanlogo.png` and square tab icon `public/inzan-favicon.png` alongside Strike's `public/strikelogo.png` and `public/favicon.png`.
+   - Updated Inzan Firestore document `settings/branding` in `db-inzanathletics` from `"mitrixogymcrm"` to `"INZAN ATHLETICS"` with `/inzanlogo.png`.
+   - Sanitized any legacy `"mitrixogymcrm"` company name strings in snapshot listeners.
+   - Updated `server.ts` and `index.html` to inject tenant-specific `<title>` and favicons in the initial HTML packet so browser tabs and titles update with 0ms delay.
+   - Replaced hardcoded `/mitrixogymcrmlogo.png` in `src/Payments.tsx` (receipts), `src/components/QRCodePage.tsx` (app install QR), and `src/member/Checkout.tsx`.
+   - Verified via Playwright headless browser: both Inzan and Strike load their respective branding instantly on frame 1.
+   - Started local dev server daemon on `http://localhost:3000`.
+
+### Verification status
+- `npm run lint` (`tsc --noEmit`) → ✓ 0 errors.
+- `npm run build` → ✓ 0 errors (`dist-server/server.cjs` and Vite client bundle built in 9.90s).
+- Automated Date Suite (`scratch/verify_date_safety.cjs`) → 22/22 test cases passed, 0 uncaught exceptions.
+- Logo verification (`scratch/verify_ui_cards.cjs`) → ✓ Inzan and Strike rendered with 100% correct transparent logos and titles.
+- Server daemon running on `http://localhost:3000` (PID task-1658).
+- Live database queries: Strike `(default)` and Inzan `db-inzanathletics` healthy and strictly isolated.
+
+---
+
+## 9. Live Session Log — 2026-08-23
 
 ### Fixed & Built this session
 1. **Automated Phone Auth & SMS OTP Password Reset:**
@@ -41,7 +93,7 @@
 
 ---
 
-## 9. Live Session Log — 2026-08-21
+## 10. Live Session Log — 2026-08-21
 
 ### Fixed this session
 1. **PT Edge Cases & Session Management** — Completed full lifecycle for PT Sessions.
@@ -60,7 +112,7 @@
 
 ---
 
-## 9. Live Session Log — 2026-08-19 (most recent)
+## 11. Live Session Log — 2026-08-19
 
 ### Fixed this session (commit `028301b` — 9 files, 1019 insertions, 607 deletions)
 1. **Member login "missing or insufficient permissions"** — root cause: `703db01` restricted `users` reads while `loginWithMemberId`/`loginWithCoachId` queried `users` pre-auth. All pre-auth lookups moved to server endpoints (admin SDK bypasses rules):
@@ -95,7 +147,7 @@
 
 ---
 
-## 10. Live Session Log — 2026-08-18
+## 12. Live Session Log — 2026-08-18
 
 ### Fixed this session
 1. **Branding settings not loading** — GET /api/settings was returning empty object without fetching from Firestore, causing all tenants to show "mitrixogymcrm" and logos not persisting. Fixed to properly fetch branding, features, storefront, branches, commission, and sales-target from tenant's Firestore.

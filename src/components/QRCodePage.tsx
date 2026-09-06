@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useSettings } from '../contexts/SettingsContext';
 
 const DEFAULT_URL = window.location.origin;
 
 export function QRCodePage() {
+  const { branding } = useSettings();
   const [appUrl, setAppUrl] = useState(DEFAULT_URL);
   const [copied, setCopied] = useState(false);
 
@@ -71,7 +73,7 @@ export function QRCodePage() {
                 level="H"
                 includeMargin={false}
                 imageSettings={{
-                  src: '/mitrixogymcrmlogo.png',
+                  src: branding.logoUrl || '/strikelogo.png',
                   height: 44,
                   width: 44,
                   excavate: true,

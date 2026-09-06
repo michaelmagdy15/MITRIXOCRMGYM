@@ -17,10 +17,13 @@ export const onBookingCancelled = onDocumentUpdated(
 
     // We only care if a booking goes from 'booked' to 'cancelled'
     if (beforeData.status === 'booked' && afterData.status === 'cancelled') {
-      const scheduleId = afterData.scheduleId;
+      const scheduleId = afterData.scheduleId || afterData.classId;
+      if (!scheduleId) {
+        logger.warn(`[waitlist] No scheduleId or classId found on booking ${event.params.bookingId}`);
+        return;
+      }
       logger.info(`Booking ${event.params.bookingId} cancelled for schedule ${scheduleId}. Checking waitlist...`);
 
-      // For a specific database in admin sdk v12:
       const tenantDb = getFirestore("db-inzanathletics");
 
       try {
@@ -33,58 +36,87 @@ export const onBookingCancelled = onDocumentUpdated(
             return;
           }
 
-          // const scheduleData = scheduleDoc.data()!;
+          const scheduleData = scheduleDoc.data() || {};
+          const capacity = scheduleData.capacity || 0;
+          const attendees: string[] = Array.isArray(scheduleData.attendees) ? [...scheduleData.attendees] : [];
+          const waitlist: string[] = Array.isArray(scheduleData.waitlist) ? [...scheduleData.waitlist] : [];
 
-          // If the client side didn't decrement it yet, we should be careful. 
-          // Usually, it's safer if the cloud function strictly manages the counts, but for now we'll just check if there is room.
-          // Since one person cancelled, there is at least 1 spot open conceptually.
-          
-          // Let's query the waitlist.
-          const waitlistQuery = tenantDb.collection("classBookings")
-            .where("scheduleId", "==", scheduleId)
-            .where("status", "==", "waitlist")
-            .orderBy("createdAt", "asc")
-            .limit(1);
+          // Remove cancelling user from attendees array if present
+          const cancellingUserId = afterData.clientId || afterData.memberId;
+          if (cancellingUserId) {
+            const idx = attendees.indexOf(cancellingUserId);
+            if (idx > -1) {
+              attendees.splice(idx, 1);
+            }
+          }
 
-          const waitlistDocs = await transaction.get(waitlistQuery);
-
-          if (waitlistDocs.empty) {
-            logger.info(`No users on waitlist for schedule ${scheduleId}.`);
-            // We should decrement the bookedCount if not already handled by client.
-            // But let's assume the client decremented it.
+          // Check if there is capacity to promote someone
+          // If attendees are already >= capacity (e.g. server already promoted someone), do not promote another
+          if (attendees.length >= capacity) {
+            logger.info(`Class ${scheduleId} already at capacity (${attendees.length}/${capacity}). No promotion needed.`);
+            transaction.update(scheduleRef, {
+              attendees,
+              updatedAt: new Date().toISOString()
+            });
             return;
           }
 
-          const firstWaitlistDoc = waitlistDocs.docs[0];
+          // Query waitlist in classBookings
+          const waitlistQuery = tenantDb.collection("classBookings")
+            .where("classId", "==", scheduleId);
+
+          const waitlistDocs = await transaction.get(waitlistQuery);
+          const eligibleWaitlist = waitlistDocs.docs
+            .filter(d => {
+              const st = d.data().status;
+              return st === 'waitlist' || st === 'waitlisted';
+            })
+            .sort((a, b) => {
+              const aTime = a.data().bookedAt || a.data().createdAt || '';
+              const bTime = b.data().bookedAt || b.data().createdAt || '';
+              return aTime.localeCompare(bTime);
+            });
+
+          if (eligibleWaitlist.length === 0) {
+            logger.info(`No eligible users on waitlist for schedule ${scheduleId}.`);
+            transaction.update(scheduleRef, {
+              attendees,
+              updatedAt: new Date().toISOString()
+            });
+            return;
+          }
+
+          const firstWaitlistDoc = eligibleWaitlist[0];
           const promotedUser = firstWaitlistDoc.data();
+          const promotedUserId = promotedUser.clientId || promotedUser.memberId || promotedUser.userId;
 
-          logger.info(`Promoting user ${promotedUser.userId} from waitlist to booked.`);
+          logger.info(`Promoting user ${promotedUserId} from waitlist to booked for schedule ${scheduleId}.`);
 
-          // Update the promoted booking
+          // Update the promoted booking doc
           transaction.update(firstWaitlistDoc.ref, {
             status: "booked",
-            promotedAt: new Date().toISOString()
+            promotedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
           });
 
-          // We don't increment bookedCount because 1 cancelled and 1 took their place (net 0 change).
-          // But if the client already decremented it when cancelling, we should increment it back.
-          // Let's assume the client UI handled the cancellation decrement, so we should increment it.
-          // Wait, it's much safer if the transaction handles the exact count.
-          // Let's just do an increment to be safe if the client decremented it.
-          // Actually, if we just rely on net 0, we don't change the schedule.
-          // To be absolutely robust, we should calculate the real count of "booked" status.
-          
-          // As an asynchronous action, send email (do outside transaction)
-          // We'll queue the email promise
-        });
+          // Update schedule document arrays
+          if (promotedUserId) {
+            const wIdx = waitlist.indexOf(promotedUserId);
+            if (wIdx > -1) waitlist.splice(wIdx, 1);
+            if (!attendees.includes(promotedUserId)) {
+              attendees.push(promotedUserId);
+            }
+          }
 
-        // After transaction, send email to promoted user
-        // We'll need their email. We can fetch user from 'users' collection.
-        // Wait, 'users' collection is usually in the default DB, unless they are tenant-specific users.
-        // In this CRM, users are in the default database! `db-inzanathletics` only holds CRM data (clients, packages).
-        // Let's verify where `users` live.
+          transaction.update(scheduleRef, {
+            attendees,
+            waitlist,
+            updatedAt: new Date().toISOString()
+          });
+        });
       } catch (error) {
         logger.error("Error processing waitlist promotion:", error);
       }
     }
-});
+  }
+);

@@ -19,13 +19,36 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/pwa-icon.png" />
 
     <!-- Browser tab favicon -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
-    <link rel="shortcut icon" href="/favicon.png" />
+    <link id="favicon-32" rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link id="favicon-16" rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
+    <link id="favicon-shortcut" rel="shortcut icon" href="/favicon.png" />
 
-    <title>mitrixogymcrm</title>
+    <title>CRM</title>
     <!-- FIREBASE_CONFIG_PLACEHOLDER -->
     <script type="text/javascript">
+      // Immediately resolve tenant title and favicon before React mounts
+      (function() {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var t = (params.get('tenant') || '').toLowerCase();
+          var host = window.location.hostname.toLowerCase();
+          var cfgTenant = (window.__FIREBASE_CONFIG__ && window.__FIREBASE_CONFIG__.tenantId) ? window.__FIREBASE_CONFIG__.tenantId.toLowerCase() : '';
+          var isInzan = t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1 || cfgTenant.indexOf('inzan') !== -1;
+          
+          var companyName = isInzan ? 'INZAN ATHLETICS' : 'STRIKE';
+          var faviconPath = isInzan ? '/inzan-favicon.png' : '/favicon.png';
+          
+          document.title = companyName;
+          
+          var f32 = document.getElementById('favicon-32');
+          if (f32) f32.href = faviconPath;
+          var f16 = document.getElementById('favicon-16');
+          if (f16) f16.href = faviconPath;
+          var fsc = document.getElementById('favicon-shortcut');
+          if (fsc) fsc.href = faviconPath;
+        } catch(e) {}
+      })();
+
       // Force cache-busting on mobile WebViews to bypass stale cache
       (function() {
         var isWebView = /mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent);

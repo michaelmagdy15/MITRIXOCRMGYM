@@ -14,6 +14,7 @@ import { collection, query, onSnapshot, setDoc, updateDoc, deleteDoc, doc, order
 import { LostFoundItem, LostFoundCategory } from './types';
 import { downloadCSV } from './utils/download';
 import { format } from 'date-fns';
+import { safeFormatDate } from './utils/dateUtils';
 import { Search, Plus, Package, CheckCircle2, Trash2, Tag, Star, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -355,7 +356,7 @@ export default function LostAndFound() {
                           <td className="p-3 font-medium">{item.name}</td>
                           <td className="p-3 text-muted-foreground">{item.category || '—'}</td>
                           <td className="p-3 text-muted-foreground">
-                            {item.foundDate ? format(new Date(item.foundDate), 'MMM dd, yyyy') : '—'}
+                            {safeFormatDate(item.foundDate, 'MMM dd, yyyy')}
                           </td>
                           <td className="p-3 text-muted-foreground">{item.branch || '—'}</td>
                           <td className="p-3 text-muted-foreground">{item.foundBy || '—'}</td>
@@ -430,7 +431,7 @@ export default function LostAndFound() {
                         <tr key={cat.id} className="border-b hover:bg-muted/30 transition-colors">
                           <td className="p-3 font-medium">{cat.name}</td>
                           <td className="p-3 text-muted-foreground">
-                            {cat.createdAt ? format(new Date(cat.createdAt), 'MMM dd, yyyy') : '—'}
+                            {safeFormatDate(cat.createdAt, 'MMM dd, yyyy')}
                           </td>
                           <td className="p-3 text-right">
                             <Button variant="ghost" size="icon" onClick={() => handleDeleteCategory(cat)}>
@@ -531,7 +532,7 @@ export default function LostAndFound() {
               )}
               <div className="grid grid-cols-2 gap-2">
                 <div><span className="font-medium text-muted-foreground">Category:</span> <span className="ml-1">{viewItem.category || '—'}</span></div>
-                <div><span className="font-medium text-muted-foreground">Found Date:</span> <span className="ml-1">{viewItem.foundDate ? format(new Date(viewItem.foundDate), 'MMM dd, yyyy') : '—'}</span></div>
+                <div><span className="font-medium text-muted-foreground">Found Date:</span> <span className="ml-1">{safeFormatDate(viewItem.foundDate, 'MMM dd, yyyy')}</span></div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div><span className="font-medium text-muted-foreground">Found By:</span> <span className="ml-1">{viewItem.foundBy || '—'}</span></div>
@@ -540,12 +541,12 @@ export default function LostAndFound() {
               {viewItem.status === 'Claimed' && (
                 <div className="border-t pt-3 mt-3 space-y-1">
                   <div><span className="font-medium text-muted-foreground">Claimed By:</span> <span className="ml-1">{viewItem.claimedByName || '—'}</span></div>
-                  <div><span className="font-medium text-muted-foreground">Claimed Date:</span> <span className="ml-1">{viewItem.claimedDate ? format(new Date(viewItem.claimedDate), 'MMM dd, yyyy') : '—'}</span></div>
+                  <div><span className="font-medium text-muted-foreground">Claimed Date:</span> <span className="ml-1">{safeFormatDate(viewItem.claimedDate, 'MMM dd, yyyy')}</span></div>
                 </div>
               )}
-              {viewItem.status === 'Disposed' && viewItem.disposedDate && (
+              {viewItem.status === 'Disposed' && (
                 <div className="border-t pt-3 mt-3">
-                  <span className="font-medium text-muted-foreground">Disposed Date:</span> <span className="ml-1">{format(new Date(viewItem.disposedDate), 'MMM dd, yyyy')}</span>
+                  <span className="font-medium text-muted-foreground">Disposed Date:</span> <span className="ml-1">{safeFormatDate(viewItem.disposedDate, 'MMM dd, yyyy')}</span>
                 </div>
               )}
             </div>

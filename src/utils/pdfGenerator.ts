@@ -1,6 +1,6 @@
 import { PDFDocument } from 'pdf-lib';
 import { Client } from '../types';
-import { format } from 'date-fns';
+import { safeFormatDate } from './dateUtils';
 
 export const generateClientContract = async (client: Client, paymentAmount?: number, paymentMethod?: string): Promise<Blob | null> => {
   try {
@@ -45,10 +45,10 @@ export const generateClientContract = async (client: Client, paymentAmount?: num
     }
     
     // text_5inc -> Start Date
-    setFieldSafely('text_5inc', client.startDate ? format(new Date(client.startDate), 'dd/MM/yyyy') : format(new Date(), 'dd/MM/yyyy'));
+    setFieldSafely('text_5inc', client.startDate ? safeFormatDate(client.startDate, 'dd/MM/yyyy') : safeFormatDate(new Date(), 'dd/MM/yyyy'));
     
     // text_6lmen -> Exp. Date
-    setFieldSafely('text_6lmen', client.membershipExpiry ? format(new Date(client.membershipExpiry), 'dd/MM/yyyy') : '');
+    setFieldSafely('text_6lmen', client.membershipExpiry ? safeFormatDate(client.membershipExpiry, 'dd/MM/yyyy') : '');
     
     // text_7acxg -> Package
     setFieldSafely('text_7acxg', client.packageType || '');
@@ -60,7 +60,7 @@ export const generateClientContract = async (client: Client, paymentAmount?: num
     const pdfBytes = await pdfDoc.save();
 
     const fileName = `Contract_${client.name.replace(/\s+/g, '_')}.pdf`;
-    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
 
     // 5. Prefer the native Web Share API (mobile browsers / WebViews) so sales
     // staff can share the contract directly to WhatsApp or file storage.
