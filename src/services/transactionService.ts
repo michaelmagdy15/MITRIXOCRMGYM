@@ -90,7 +90,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
   }
 
   // 2. Run Firestore transaction for write atomicity and read consistency
-  await runTransaction(db, async (transaction) => {
+  const txnResult = await runTransaction(db, async (transaction) => {
     // Fetch client details inside transaction to guarantee data integrity
     const clientSnap = await transaction.get(clientRef);
     if (!clientSnap.exists()) {
@@ -327,7 +327,26 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       date: new Date().toISOString(),
       author: params.recordedByName || 'System'
     });
+    
+    return { resolvedStartDateIso, resolvedEndDate, paymentId: paymentRef.id };
   });
+
+  // F. Create Entitlement
+  if (params.systemPackage) {
+    try {
+      const { createEntitlement, activateEntitlement } = await import('./entitlementService');
+      const ent = await createEntitlement(
+        params.clientId,
+        params.systemPackage,
+        txnResult.paymentId,
+        txnResult.resolvedStartDateIso,
+        txnResult.resolvedEndDate
+      );
+      await activateEntitlement(ent.id);
+    } catch (err) {
+      console.error("Failed to create entitlement:", err);
+    }
+  }
 
   // Log audit entry for payment creation/upgrade/renewal
   const logAction = params.isRenewal ? 'UPDATE' : params.isUpgradePayment ? 'UPDATE' : 'CREATE';

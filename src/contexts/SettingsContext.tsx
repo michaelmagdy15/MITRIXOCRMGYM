@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { BrandingSettings, SalesTarget, Branch, FeatureFlags, StorefrontConfig } from '../types';
+import { PayoutConfig } from '../types/payout';
 import { auth, db, getTenantId } from '../firebase';
 import { addAuditLog } from '../services/auditService';
 import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -53,6 +54,8 @@ interface SettingsContextType {
   updateBranches: (branches: Branch[]) => Promise<void>;
   commissionRates: { ptRate: number; groupRate: number };
   updateCommissionRates: (rates: { ptRate: number; groupRate: number }) => Promise<void>;
+  defaultPayoutRates: PayoutConfig;
+  updateDefaultPayoutRates: (rates: Partial<PayoutConfig>) => Promise<void>;
   features: FeatureFlags;
   updateFeatures: (updates: Partial<FeatureFlags>) => Promise<void>;
   storefrontConfig: StorefrontConfig;
@@ -73,6 +76,14 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   });
   const [branches, setBranches] = useState<Branch[]>(['Maxim Compound', 'Mivida Compound', 'Impact by Strike']);
   const [commissionRates, setCommissionRates] = useState({ ptRate: 8, groupRate: 5 });
+  const [defaultPayoutRates, setDefaultPayoutRates] = useState<PayoutConfig>({
+    coachId: 'default',
+    ptFixedRate: 0,
+    ptPercentage: 0,
+    freeClassRate: 0,
+    paidClassPercentage: 0,
+    paidClassFixedRate: 0
+  });
   const [features, setFeatures] = useState<FeatureFlags>({
     leads: true,
     ptPackages: false,
@@ -152,8 +163,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     const tenantDefault = getInitialBranding();
     const rawName = (data.companyName || '').trim();
     const effectiveName = (!rawName || rawName.toLowerCase() === 'mitrixogymcrm') ? tenantDefault.companyName : rawName;
-    const effectiveLogo = data.logoUrl || tenantDefault.logoUrl;
-
+    const rawLogo = (data.logoUrl || '').trim();
+    const effectiveLogo = (!rawLogo || rawLogo.includes('mitrixogymcrmlogo.png')) ? tenantDefault.logoUrl : rawLogo;
     const mergedData: BrandingSettings = {
       currencyCode: 'EGP',
       currencySymbol: 'LE',
@@ -200,6 +211,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       
       if (isAuthenticated && role !== 'client' && role !== 'coach') {
         if (settings.commission) setCommissionRates(settings.commission);
+        if (settings.defaultPayoutRates) setDefaultPayoutRates(prev => ({ ...prev, ...settings.defaultPayoutRates }));
         if (settings['sales-target']) {
           setSalesTarget(prev => ({ ...prev, ...settings['sales-target'] }));
         }
@@ -260,6 +272,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     await addAuditLog('UPDATE', 'TARGET', 'commission', `Updated commission rates: PT ${rates.ptRate}%, Group ${rates.groupRate}%`);
   }, []);
 
+  const updateDefaultPayoutRates = useCallback(async (rates: Partial<PayoutConfig>) => {
+    await updateSetting('defaultPayoutRates', rates);
+    setDefaultPayoutRates(prev => ({ ...prev, ...rates }));
+    await addAuditLog('UPDATE', 'SYSTEM', 'payout-rates', `Updated default payout rates`);
+  }, []);
+
   const updateFeatures = useCallback(async (updates: Partial<FeatureFlags>) => {
     await updateSetting('features', updates);
     setFeatures(prev => ({ ...prev, ...updates }));
@@ -284,11 +302,13 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     updateBranches,
     commissionRates,
     updateCommissionRates,
+    defaultPayoutRates,
+    updateDefaultPayoutRates,
     features,
     updateFeatures,
     storefrontConfig,
     updateStorefrontConfig,
-  }), [branding, searchQuery, salesTarget, branches, commissionRates, features, storefrontConfig, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates, updateFeatures, updateStorefrontConfig]);
+  }), [branding, searchQuery, salesTarget, branches, commissionRates, defaultPayoutRates, features, storefrontConfig, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates, updateDefaultPayoutRates, updateFeatures, updateStorefrontConfig]);
 
   const [isExiting, setIsExiting] = useState(false);
   const [isDone, setIsDone] = useState(false);

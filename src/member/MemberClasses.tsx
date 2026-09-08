@@ -10,6 +10,7 @@ import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-
 
 import { ClassSchedule } from '../types/class';
 import { ClassBookingDialog } from './components/ClassBookingDialog';
+import { isSessionTierAllowed, isSessionBranchAllowed, getMemberCategory } from '../utils/memberCategories';
 
 export default function MemberClasses({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: (packageId?: string) => void }) {
   const [classes, setClasses] = useState<ClassSchedule[]>([]);
@@ -120,36 +121,32 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     return '10:00 - 11:15';
   };
 
-  // Filter classes for selected date and client branch
+  const memberCategory = useMemo(() => getMemberCategory(client), [client]);
+
+  // Filter classes for selected date, client tier, and client branch
   const filteredClasses = classes.filter(c => {
     try {
       const dateStr = getClassDateStr(c);
       if (!dateStr) return false;
       const isDateMatch = isSameDay(parseISO(dateStr), selectedDate);
-      const classBranch = c.branch?.trim().toLowerCase();
-      const clientBranch = client?.branch?.trim().toLowerCase();
-      const isBranchMatch = !classBranch 
-        || classBranch === 'all' 
-        || classBranch === 'all branches'
-        || !clientBranch 
-        || clientBranch === 'all'
-        || classBranch === clientBranch;
-      return isDateMatch && isBranchMatch;
+      const isBranchMatch = isSessionBranchAllowed(c.branch, client?.branch);
+      const isTierMatch = isSessionTierAllowed(
+        { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
+        memberCategory
+      );
+      return isDateMatch && isBranchMatch && isTierMatch;
     } catch { return false; }
   });
 
   // Count classes per date for dot indicators
   const classCountByDate = new Map<string, number>();
   classes.forEach(c => {
-    const classBranch = c.branch?.trim().toLowerCase();
-    const clientBranch = client?.branch?.trim().toLowerCase();
-    const isBranchMatch = !classBranch 
-      || classBranch === 'all' 
-      || classBranch === 'all branches'
-      || !clientBranch 
-      || clientBranch === 'all'
-      || classBranch === clientBranch;
-    if (isBranchMatch) {
+    const isBranchMatch = isSessionBranchAllowed(c.branch, client?.branch);
+    const isTierMatch = isSessionTierAllowed(
+      { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
+      memberCategory
+    );
+    if (isBranchMatch && isTierMatch) {
       const key = getClassDateStr(c);
       if (key) {
         classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);

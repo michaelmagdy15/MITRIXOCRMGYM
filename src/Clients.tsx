@@ -3,6 +3,7 @@ import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { ASSIGNABLE_ROLES, toCanonical } from './constants';
 import { usePackages } from './hooks/usePackages';
+import CascadingPackageSelector from './components/CascadingPackageSelector';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -1074,18 +1075,27 @@ export default function Clients() {
 
     let filtered = base;
 
-    // Search
+    // Search (supports member name, member ID, phone, and parent phone across family members)
     if (deferredSearchTerm) {
-      const term = deferredSearchTerm.toLowerCase();
+      const term = deferredSearchTerm.toLowerCase().trim();
       if (searchMode === 'id') {
         const idTerm = term.replace(/^#/, '');
         filtered = filtered.filter(m => m.memberId && m.memberId.toString().includes(idTerm));
       } else {
-        filtered = filtered.filter(m => 
-          m.name.toLowerCase().includes(term) || 
-          m.phone.includes(term) ||
-          (m.memberId && m.memberId.toString().includes(term))
-        );
+        const cleanDigits = term.replace(/[^0-9]/g, '');
+        filtered = filtered.filter(m => {
+          if (m.name.toLowerCase().includes(term)) return true;
+          if (m.memberId && m.memberId.toString().toLowerCase().includes(term)) return true;
+          if (cleanDigits.length >= 4) {
+            const mPhoneDigits = (m.phone || '').replace(/[^0-9]/g, '');
+            const mParentPhoneDigits = ((m as any).parentPhone || '').replace(/[^0-9]/g, '');
+            if (mPhoneDigits.includes(cleanDigits) || mParentPhoneDigits.includes(cleanDigits)) return true;
+          } else {
+            if (m.phone && m.phone.toLowerCase().includes(term)) return true;
+            if ((m as any).parentPhone && (m as any).parentPhone.toLowerCase().includes(term)) return true;
+          }
+          return false;
+        });
       }
     }
 
@@ -2425,21 +2435,96 @@ export default function Clients() {
                               ))}
                           </select>
                         </div>
-                        <div className="space-y-1 col-span-1 sm:col-span-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Linked Family Members (App Profile Switching)</Label>
-                          <div className="flex flex-wrap gap-2 mb-2">
+                        <div className="space-y-2 col-span-1 sm:col-span-2 pt-2 border-t">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <Users className="h-3.5 w-3.5 text-primary" />
+                              Linked Family / Siblings ({(activeClient.linkedClientIds || []).length})
+                            </Label>
+                          </div>
+
+                          {/* Currently Linked */}
+                          <div className="flex flex-wrap gap-2">
                             {(activeClient.linkedClientIds || []).map(linkedId => {
                               const linkedC = clients.find(c => c.id === linkedId);
                               return (
-                                <Badge key={linkedId} variant="secondary" className="flex items-center gap-1">
-                                  {linkedC?.name || linkedId}
-                                  <button onClick={() => updateClient(activeClient.id, { linkedClientIds: activeClient.linkedClientIds?.filter(id => id !== linkedId) })}>
-                                    <X className="h-3 w-3 hover:text-red-500" />
+                                <div key={linkedId} className="flex items-center gap-1.5 bg-muted/40 border px-2.5 py-1 rounded-lg text-xs">
+                                  <span className="font-semibold">{linkedC?.name || linkedId}</span>
+                                  {linkedC && (
+                                    <span className="text-[10px] text-muted-foreground">({getMemberCategory(linkedC)})</span>
+                                  )}
+                                  <button 
+                                    className="text-primary hover:underline text-[10px] ml-1"
+                                    onClick={() => setActiveClientId(linkedId)}
+                                    title="View Profile"
+                                  >
+                                    View
                                   </button>
-                                </Badge>
+                                  <button 
+                                    className="text-emerald-600 hover:underline text-[10px] ml-1 font-medium"
+                                    onClick={() => {
+                                      setRenewDialogClientId(linkedId);
+                                      setRenewPkgName(linkedC?.packageType || '');
+                                    }}
+                                    title="Quick Renew Sibling"
+                                  >
+                                    Renew
+                                  </button>
+                                  <button onClick={() => updateClient(activeClient.id, { linkedClientIds: activeClient.linkedClientIds?.filter(id => id !== linkedId) })}>
+                                    <X className="h-3 w-3 hover:text-red-500 ml-1" />
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>
+
+                          {/* Detected unlinked siblings sharing phone/parentId */}
+                          {(() => {
+                            const rawPhone = (activeClient.phone || '').replace(/[^0-9]/g, '').slice(-9);
+                            const rawParentPhone = ((activeClient as any).parentPhone || '').replace(/[^0-9]/g, '').slice(-9);
+                            const unlinkedSiblings = clients.filter(c => {
+                              if (c.id === activeClient.id) return false;
+                              if ((activeClient.linkedClientIds || []).includes(c.id)) return false;
+                              const cPhone = (c.phone || '').replace(/[^0-9]/g, '').slice(-9);
+                              const cParentPhone = ((c as any).parentPhone || '').replace(/[^0-9]/g, '').slice(-9);
+                              if (rawPhone.length >= 8 && (cPhone === rawPhone || cParentPhone === rawPhone)) return true;
+                              if (rawParentPhone.length >= 8 && (cPhone === rawParentPhone || cParentPhone === rawParentPhone)) return true;
+                              if ((activeClient as any).parentId && (c as any).parentId === (activeClient as any).parentId) return true;
+                              return false;
+                            });
+
+                            if (unlinkedSiblings.length === 0) return null;
+
+                            return (
+                              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
+                                <p className="font-semibold text-amber-600 dark:text-amber-400 text-[11px] flex items-center gap-1.5">
+                                  <span>💡 Detected {unlinkedSiblings.length} sibling profile{unlinkedSiblings.length > 1 ? 's' : ''} sharing phone:</span>
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {unlinkedSiblings.map(sib => (
+                                    <div key={sib.id} className="flex items-center gap-2 bg-background/80 px-2 py-1 rounded border text-[11px]">
+                                      <span><strong>{sib.name}</strong> ({getMemberCategory(sib)})</span>
+                                      <Button 
+                                        size="sm" 
+                                        variant="outline" 
+                                        className="h-5 px-1.5 text-[10px]"
+                                        onClick={() => {
+                                          const currentLinked = activeClient.linkedClientIds || [];
+                                          updateClient(activeClient.id, { linkedClientIds: Array.from(new Set([...currentLinked, sib.id])) });
+                                          const sibLinked = sib.linkedClientIds || [];
+                                          updateClient(sib.id, { linkedClientIds: Array.from(new Set([...sibLinked, activeClient.id])) });
+                                        }}
+                                      >
+                                        + Link
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Manual link dropdown */}
                           <select
                             className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                             value=""
@@ -2450,9 +2535,9 @@ export default function Clients() {
                               }
                             }}
                           >
-                            <option value="">+ Link another client...</option>
+                            <option value="">+ Link another client manually...</option>
                             {clients.filter(c => c.id !== activeClient.id && !(activeClient.linkedClientIds || []).includes(c.id)).map(c => (
-                              <option key={c.id} value={c.id}>{c.name} ({c.phone || 'No Phone'})</option>
+                              <option key={c.id} value={c.id}>{c.name} ({c.phone || 'No Phone'}) - {getMemberCategory(c)}</option>
                             ))}
                           </select>
                         </div>
@@ -3786,17 +3871,21 @@ export default function Clients() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Select Package</Label>
-              <Select value={renewPkgName} onValueChange={v => v && setRenewPkgName(v)}>
-                <SelectTrigger className="h-11 rounded-xl">
-                  <SelectValue placeholder="Select package" />
-                </SelectTrigger>
-                <SelectContent>
-                  {visiblePackages.map(p => (
-                    <SelectItem key={p.id} value={p.name}>{p.name} ({p.price.toLocaleString()} LE)</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {(() => {
+                const renewClient = renewDialogClientId ? clients.find(c => c.id === renewDialogClientId) : null;
+                return (
+                  <CascadingPackageSelector
+                    packages={visiblePackages}
+                    selectedPackageName={renewPkgName}
+                    initialCategory={renewClient?.memberCategory || renewClient?.category || 'Adults'}
+                    initialBranch={renewClient?.branch || 'All Branches'}
+                    branches={branches}
+                    onPackageSelect={(pkg) => {
+                      if (pkg) setRenewPkgName(pkg.name);
+                    }}
+                  />
+                );
+              })()}
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Start Date</Label>

@@ -8,6 +8,8 @@ export type UserRole = 'manager' | 'rep' | 'admin' | 'super_admin' | 'crm_admin'
 export type InteractionType = 'Call' | 'WhatsApp' | 'Email' | 'Visit';
 export type InteractionOutcome = 'Interested' | 'Not Answered' | 'Scheduled Trial' | 'Rejected' | 'Other';
 import { PaymentCategory } from './utils/paymentCategories';
+export * from './types/payout';
+export * from './types/approval';
 
 export type Branch = string;
 
@@ -183,7 +185,7 @@ export interface AuditLog {
   userId: string;
   userName?: string;
   action: 'CREATE' | 'UPDATE' | 'DELETE';
-  entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION';
+  entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION' | 'PAYOUT';
   entityId: string;
   details: string;
   timestamp: string;
@@ -224,6 +226,7 @@ export interface Payment {
   deleted_at?: string | null; // ISO string (soft delete)
   currency?: string;
   receiptSerial?: string;
+  linkedEntitlementId?: string; // Link to an entitlement record
 }
 
 export type Gender = 'Male' | 'Female' | 'Other' | 'Prefer not to say';
@@ -492,6 +495,7 @@ export interface FeatureFlags {
   serviceCategoryTargets?: boolean;
   customMemberProfile?: boolean;
   classBookingSystem?: boolean;
+  nutrition?: boolean;
 }
 
 export interface CallCenterLog {

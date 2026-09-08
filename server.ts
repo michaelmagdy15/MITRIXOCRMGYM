@@ -7,6 +7,8 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 import { startNoShowJob } from './src/jobs/noShowJob.js';
+import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus } from './src/jobs/membershipExpirationJob.js';
+import { isSessionTierAllowed, isSessionBranchAllowed } from './src/utils/memberCategories.js';
 
 declare global {
   namespace Express {
@@ -999,8 +1001,10 @@ async function startServer() {
   });
 
   // Public endpoint for member login fallback by memberId, phone, or email (pre-auth)
+  // Public endpoint for member login fallback by memberId, phone, or email (pre-auth)
+  // Supports multi-profile family accounts sharing 1 phone number
   app.post("/api/member/resolve-email", async (req, res) => {
-    const { memberId } = req.body;
+    const { memberId, selectedMemberId, childId } = req.body;
     if (!memberId || typeof memberId !== "string") {
       return res.status(400).json({ error: "Missing memberId search term" });
     }
@@ -1014,16 +1018,87 @@ async function startServer() {
       const rawTerm = memberId.trim();
       const cleanId = rawTerm.toLowerCase().replace(/^mem-/, '');
       const numId = parseInt(cleanId, 10);
+      const chosenTarget = (selectedMemberId || childId || '').toString().trim();
 
       // Search queries against clients collection
       let clientData: any = null;
       let clientDocId = '';
 
+      // Phone & Multi-Child / Family Account Detection
+      const phoneDigits = rawTerm.replace(/[^\d+]/g, '');
+      const isLikelyPhone = phoneDigits.length >= 8;
+
+      if (isLikelyPhone) {
+        const phoneVariants = [rawTerm, phoneDigits];
+        if (phoneDigits.startsWith('01')) {
+          phoneVariants.push('+20' + phoneDigits.substring(1));
+          phoneVariants.push('20' + phoneDigits.substring(1));
+        } else if (phoneDigits.startsWith('201')) {
+          phoneVariants.push('+' + phoneDigits);
+          phoneVariants.push('01' + phoneDigits.substring(3));
+        } else if (phoneDigits.startsWith('+201')) {
+          phoneVariants.push(phoneDigits.substring(1));
+          phoneVariants.push('01' + phoneDigits.substring(4));
+        }
+        const uniquePhoneVariants = [...new Set(phoneVariants)];
+
+        const phoneQueries = [
+          ...uniquePhoneVariants.map(pv => db.collection("clients").where("phone", "==", pv).get()),
+          ...uniquePhoneVariants.map(pv => db.collection("clients").where("parentPhone", "==", pv).get()),
+          db.collection("clients").where("parentId", "==", rawTerm).get()
+        ];
+
+        const phoneSnaps = await Promise.all(phoneQueries);
+        const matchedMap = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+        for (const snap of phoneSnaps) {
+          for (const doc of snap.docs) {
+            matchedMap.set(doc.id, doc);
+          }
+        }
+
+        const matchedDocs = Array.from(matchedMap.values());
+
+        if (chosenTarget) {
+          const found = matchedDocs.find(d => d.id === chosenTarget || String(d.data().memberId) === chosenTarget);
+          if (found) {
+            clientData = found.data();
+            clientDocId = found.id;
+          }
+        } else if (matchedDocs.length > 1) {
+          // Multiple siblings / family profiles share this parent phone
+          const profiles = matchedDocs.map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              memberId: data.memberId || d.id,
+              name: data.name || 'Student',
+              category: data.memberCategory || data.category || 'Adults',
+              branch: data.branch || data.branchId || 'main',
+              status: getEffectiveClientStatus(data),
+              phone: data.phone || rawTerm,
+              parentId: data.parentId || rawTerm,
+              membershipExpiry: data.membershipExpiry || data.endDate || ''
+            };
+          });
+
+          return res.json({
+            requiresProfileSelection: true,
+            parentPhone: rawTerm,
+            profiles
+          });
+        } else if (matchedDocs.length === 1) {
+          clientData = matchedDocs[0]!.data();
+          clientDocId = matchedDocs[0]!.id;
+        }
+      }
+
       // 1. Exact string match on memberId
-      const q1 = await db.collection("clients").where("memberId", "==", rawTerm).limit(1).get();
-      if (!q1.empty) {
-        clientData = q1.docs[0]!.data();
-        clientDocId = q1.docs[0]!.id;
+      if (!clientData) {
+        const q1 = await db.collection("clients").where("memberId", "==", rawTerm).limit(1).get();
+        if (!q1.empty) {
+          clientData = q1.docs[0]!.data();
+          clientDocId = q1.docs[0]!.id;
+        }
       }
 
       // 2. Clean numeric string match on memberId
@@ -1044,12 +1119,12 @@ async function startServer() {
         }
       }
 
-      // 4. Match on phone
+      // 4. Direct doc ID match
       if (!clientData) {
-        const q4 = await db.collection("clients").where("phone", "==", rawTerm).limit(1).get();
-        if (!q4.empty) {
-          clientData = q4.docs[0]!.data();
-          clientDocId = q4.docs[0]!.id;
+        const docById = await db.collection("clients").doc(rawTerm).get();
+        if (docById.exists) {
+          clientData = docById.data();
+          clientDocId = docById.id;
         }
       }
 
@@ -1063,7 +1138,7 @@ async function startServer() {
       }
 
       if (!clientData) {
-        return res.status(404).json({ error: "Member ID not found. Please verify your ID or contact the front desk." });
+        return res.status(404).json({ error: "Member ID or phone not found. Please verify your details or contact the front desk." });
       }
 
       // Determine the deterministic auth email
@@ -1094,15 +1169,180 @@ async function startServer() {
         } catch {}
       }
 
+      const effectiveStatus = getEffectiveClientStatus(clientData);
+
       return res.json({
         email: emailToUse,
         name: clientData.name,
         memberId: clientData.memberId,
-        clientDocId
+        clientDocId,
+        category: clientData.memberCategory || clientData.category || 'Adults',
+        branch: clientData.branch || clientData.branchId || 'main',
+        status: effectiveStatus
       });
     } catch (error) {
       console.error("[API] Error resolving member email:", error);
       return res.status(500).json({ error: (error as Error).message });
+    }
+  });
+
+  // Switch Active Profile for Multi-Child / Family Accounts
+  app.post("/api/auth/switch-profile", requireAuth, async (req, res) => {
+    try {
+      const { targetClientId } = req.body;
+      if (!targetClientId) {
+        return res.status(400).json({ error: "Missing targetClientId" });
+      }
+
+      const db = await getDbForRequest(req);
+      const callerEmail = (req as any).user?.email || '';
+      const callerUid = (req as any).user?.uid || '';
+
+      // Resolve target profile doc
+      let targetDoc = await db.collection("clients").doc(targetClientId).get();
+      if (!targetDoc.exists) {
+        const snap = await db.collection("clients").where("memberId", "==", targetClientId).limit(1).get();
+        if (!snap.empty) {
+          targetDoc = snap.docs[0]!;
+        }
+      }
+
+      if (!targetDoc.exists) {
+        return res.status(404).json({ error: "Target student profile not found" });
+      }
+
+      const targetData = targetDoc.data()!;
+
+      // Verify permission: caller must either be admin or share phone/parentId
+      let callerClient: any = null;
+      const callerSnap = await db.collection("clients").where("authEmail", "==", callerEmail).limit(1).get();
+      if (!callerSnap.empty) {
+        callerClient = callerSnap.docs[0]!.data();
+      }
+
+      const isCallerAdmin = callerEmail === PLATFORM_SUPER_ADMIN_EMAIL || (req as any).user?.role === 'admin';
+      const sharesParent = callerClient?.parentId && callerClient.parentId === targetData.parentId;
+      const sharesPhone = callerClient?.phone && targetData.phone && (callerClient.phone === targetData.phone || callerClient.phone.includes(targetData.phone) || targetData.phone.includes(callerClient.phone));
+      const isSameMember = callerClient && (callerClient.id === targetDoc.id || callerClient.memberId === targetData.memberId);
+
+      if (!isCallerAdmin && !sharesParent && !sharesPhone && !isSameMember) {
+        return res.status(403).json({ error: "Unauthorized: You do not have access to switch to this student profile." });
+      }
+
+      const effectiveStatus = getEffectiveClientStatus(targetData);
+
+      return res.json({
+        success: true,
+        activeProfile: {
+          id: targetDoc.id,
+          memberId: targetData.memberId || targetDoc.id,
+          name: targetData.name || 'Student',
+          category: targetData.memberCategory || targetData.category || 'Adults',
+          branch: targetData.branch || targetData.branchId || 'main',
+          phone: targetData.phone || '',
+          parentId: targetData.parentId || '',
+          status: effectiveStatus,
+          membershipExpiry: targetData.membershipExpiry || targetData.endDate || '',
+          packages: targetData.packages || [],
+          sessionsRemaining: targetData.sessionsRemaining || 0
+        }
+      });
+    } catch (err) {
+      console.error("[API] Error switching profile:", err);
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // Admin endpoint: Run membership expiration worker on demand
+  app.post("/api/admin/run-expiry-scan", requireAuth, async (req, res) => {
+    try {
+      const db = await getDbForRequest(req);
+      const callerEmail = (req as any).user?.email || '';
+      const callerRole = (req as any).user?.role || '';
+      const ADMIN_ROLES = ["admin", "super_admin", "crm_admin", "manager"];
+
+      if (!ADMIN_ROLES.includes(callerRole.toLowerCase()) && callerEmail !== PLATFORM_SUPER_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Forbidden: Only staff and admins can run the expiry scan." });
+      }
+
+      const singleTenantResult = await runMembershipExpirationWorker(db);
+      return res.json({
+        success: true,
+        message: "Membership expiration scan completed successfully.",
+        result: singleTenantResult
+      });
+    } catch (err) {
+      console.error("[API] Error running expiry scan:", err);
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // AGENT 3: RBAC & Branch-Level Session Gating Engine
+  // Strict tier and branch filtering for session schedule
+  app.get("/api/v1/sessions", async (req, res) => {
+    try {
+      const db = await getDbForRequest(req);
+      const { memberId, date, branch, tier } = req.query;
+
+      let memberCategory = (tier as string) || '';
+      let memberBranch = (branch as string) || '';
+
+      // If memberId is provided, look up member's profile for authoritative category & branch
+      if (memberId && typeof memberId === 'string') {
+        let clientDoc = await db.collection("clients").doc(memberId).get();
+        if (!clientDoc.exists) {
+          const snap = await db.collection("clients").where("memberId", "==", memberId).limit(1).get();
+          if (!snap.empty) clientDoc = snap.docs[0]!;
+        }
+        if (clientDoc.exists) {
+          const cData = clientDoc.data()!;
+          memberCategory = cData.memberCategory || cData.category || memberCategory || 'Adults';
+          memberBranch = cData.branch || cData.branchId || memberBranch || 'main';
+        }
+      }
+
+      let classQuery: FirebaseFirestore.Query = db.collection("classSchedules");
+      if (date && typeof date === 'string') {
+        classQuery = classQuery.where("date", "==", date);
+      }
+
+      const classSnap = await classQuery.get();
+      const sessions: any[] = [];
+
+      for (const doc of classSnap.docs) {
+        const data = doc.data();
+        if (data.status === 'cancelled') continue;
+
+        const sessionTier = data.tier || data.category || data.name || '';
+        const sessionBranch = data.branch || data.branchId || data.location || '';
+
+        // Strict tier gating
+        if (memberCategory && !isSessionTierAllowed({ tier: data.tier, category: data.category, name: data.name, allowedTiers: data.allowedTiers }, memberCategory)) {
+          continue;
+        }
+
+        // Strict branch gating
+        if (memberBranch && !isSessionBranchAllowed(sessionBranch, memberBranch)) {
+          continue;
+        }
+
+        sessions.push({
+          id: doc.id,
+          ...data
+        });
+      }
+
+      return res.json({
+        total: sessions.length,
+        filterApplied: {
+          memberCategory: memberCategory || 'none',
+          memberBranch: memberBranch || 'none'
+        },
+        sessions
+      });
+    } catch (err) {
+      console.error("[API] Error in GET /api/v1/sessions:", err);
+      return res.status(500).json({ error: (err as Error).message });
     }
   });
 
@@ -1369,33 +1609,121 @@ async function startServer() {
         const isAlreadyAttendee = attendees.some(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
         const isAlreadyWaitlisted = waitlist.some(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
 
+        const clientEffective = currentClientData || clientData;
+
+        // 1. Fallback guardrail: check client membership status
+        const effectiveStatus = getEffectiveClientStatus(clientEffective);
+        if (effectiveStatus === 'Expired') {
+          throw new Error("Your membership has expired. Please renew your package to book classes.");
+        }
+        if (effectiveStatus === 'Frozen' || effectiveStatus === 'Suspended') {
+          throw new Error(`Your membership is currently ${effectiveStatus.toLowerCase()}. Please contact the front desk.`);
+        }
+
+        // 2. Strict Tier Gating
+        const clientCategory = clientEffective?.memberCategory || clientEffective?.category || 'Adults';
+        if (!isSessionTierAllowed({ tier: classData?.tier, category: classData?.category, name: classData?.name, allowedTiers: classData?.allowedTiers }, clientCategory)) {
+          throw new Error(`Your membership category (${clientCategory}) is not permitted to book this class (${classData?.tier || classData?.name || 'Restricted'}).`);
+        }
+
+        // 3. Strict Branch Gating
+        const clientBranch = clientEffective?.branch || clientEffective?.branchId || '';
+        const classBranch = classData?.branch || classData?.branchId || classData?.location || '';
+        if (!isSessionBranchAllowed(classBranch, clientBranch)) {
+          throw new Error(`Your registered branch (${clientBranch || 'Standard'}) is not permitted to book sessions at ${classBranch || 'this branch'}.`);
+        }
+
         if (action === 'join') {
           if (isAlreadyAttendee || isAlreadyWaitlisted) {
             throw new Error("Already booked or waitlisted");
           }
 
           if (attendees.length < capacity) {
-            // Deduct 1 credit from member's active package if available
-            if (currentClientData) {
-              const packagesCopy = currentClientData.packages ? [...currentClientData.packages] : [];
-              const pkgIdx = packagesCopy.findIndex((p: any) => 
-                p.status === 'Active' && !p.isOnHold && typeof p.sessionsRemaining === 'number' && p.sessionsRemaining > 0
-              );
+            // -- ENTITLEMENT ENGINE INTEGRATION --
+            // Find a valid class entitlement and deduct from it
+            const entQuery = db.collection("entitlements")
+              .where("clientId", "==", canonicalClientId)
+              .where("status", "==", "active");
+            
+            const entSnap = await transaction.get(entQuery);
+            let validEnt: any = null;
+            let validEntRef: any = null;
+            
+            const now = new Date().getTime();
+            for (const d of entSnap.docs) {
+              const entData = d.data();
+              if (entData.type !== 'class' && entData.type !== 'all') continue;
+              if (entData.validUntil && new Date(entData.validUntil).getTime() < now) continue;
+              if (entData.sessionsTotal !== 'unlimited' && entData.sessionsUsed >= entData.sessionsTotal) continue;
+              
+              validEnt = entData;
+              validEntRef = d.ref;
+              break;
+            }
 
-              const updateData: any = {};
-              if (pkgIdx !== -1) {
-                packagesCopy[pkgIdx].sessionsRemaining -= 1;
-                updateData.packages = packagesCopy;
-              } else if (typeof currentClientData.sessionsRemaining === 'number' && currentClientData.sessionsRemaining > 0) {
-                updateData.sessionsRemaining = currentClientData.sessionsRemaining - 1;
+            if (validEnt) {
+              // Deduct from entitlement document
+              if (validEnt.sessionsTotal !== 'unlimited') {
+                transaction.update(validEntRef, {
+                  sessionsUsed: validEnt.sessionsUsed + 1
+                });
               }
 
-              // Award +10 points for booking a class
-              const currentPoints = typeof currentClientData.points === 'number' ? currentClientData.points : 0;
-              updateData.points = currentPoints + 10;
-              updateData.updatedAt = new Date().toISOString();
+              // Record adjustment
+              const adjRef = db.collection(`entitlements/${validEntRef.id}/adjustments`).doc();
+              transaction.set(adjRef, {
+                entitlementId: validEntRef.id,
+                type: 'deduct',
+                amount: 1,
+                reason: `Booked Class: ${classData?.name || 'Unknown'}`,
+                performedBy: clientId,
+                createdAt: new Date().toISOString()
+              });
+            } else {
+              // Fallback for Strike tenant or direct client packages
+              const packages: any[] = Array.isArray(clientEffective?.packages) ? [...clientEffective.packages] : [];
+              let packageDeducted = false;
 
-              transaction.update(clientRef, updateData);
+              for (let i = 0; i < packages.length; i++) {
+                const pkg = packages[i];
+                const pkgStatus = (pkg.status || '').toLowerCase();
+                if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
+                if (pkg.endDate && new Date(pkg.endDate).getTime() < now) continue;
+                if (pkg.sessionsTotal !== 'unlimited' && pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining <= 0) continue;
+
+                if (pkg.sessionsRemaining !== undefined && pkg.sessionsTotal !== 'unlimited') {
+                  pkg.sessionsRemaining = Math.max(0, pkg.sessionsRemaining - 1);
+                  pkg.usedSessions = (pkg.usedSessions || 0) + 1;
+                }
+                packageDeducted = true;
+                break;
+              }
+
+              const rawRemaining = clientEffective?.sessionsRemaining;
+              const hasRemaining = typeof rawRemaining === 'number' && rawRemaining > 0;
+              const isUnlimited = clientEffective?.membershipType === 'unlimited' || clientEffective?.isUnlimited === true;
+
+              if (!packageDeducted && !hasRemaining && !isUnlimited) {
+                throw new Error("No active package or remaining sessions found for this member.");
+              }
+
+              if (currentClientDoc?.exists) {
+                const newRemaining = typeof rawRemaining === 'number' ? Math.max(0, rawRemaining - 1) : rawRemaining;
+                transaction.update(clientRef, {
+                  packages,
+                  sessionsRemaining: newRemaining,
+                  updatedAt: new Date().toISOString()
+                });
+              }
+            }
+
+            // Update client points (legacy)
+            if (currentClientData) {
+              const currentPoints = typeof currentClientData.points === 'number' ? currentClientData.points : 0;
+              transaction.update(clientRef, {
+                points: currentPoints + 10,
+                updatedAt: new Date().toISOString()
+              });
 
               // Update points wallet if present
               const walletRef = db.collection("pointsWallets").doc(memberIdStr);
@@ -1480,19 +1808,41 @@ async function startServer() {
             }, { merge: true });
 
             // Refund 1 credit to member
-            if (currentClientData) {
-              const packagesCopy = currentClientData.packages ? [...currentClientData.packages] : [];
-              const pkgIdx = packagesCopy.findIndex((p: any) => p.status === 'Active' && !p.isOnHold);
-              const updateData: any = {};
-              if (pkgIdx !== -1 && typeof packagesCopy[pkgIdx].sessionsRemaining === 'number') {
-                packagesCopy[pkgIdx].sessionsRemaining += 1;
-                updateData.packages = packagesCopy;
-              } else if (typeof currentClientData.sessionsRemaining === 'number') {
-                updateData.sessionsRemaining = currentClientData.sessionsRemaining + 1;
+            // -- ENTITLEMENT REFUND INTEGRATION --
+            const entQuery = db.collection("entitlements")
+              .where("clientId", "==", canonicalClientId)
+              .where("status", "==", "active");
+            
+            const entSnap = await transaction.get(entQuery);
+            let entToRefund: any = null;
+            let entToRefundRef: any = null;
+            
+            // Find the most appropriate entitlement to refund (one that has used sessions)
+            for (const d of entSnap.docs) {
+              const entData = d.data();
+              if (entData.type !== 'class' && entData.type !== 'all') continue;
+              if (entData.sessionsTotal !== 'unlimited' && entData.sessionsUsed > 0) {
+                entToRefund = entData;
+                entToRefundRef = d.ref;
+                break;
               }
-              if (Object.keys(updateData).length > 0) {
-                transaction.update(clientRef, updateData);
-              }
+            }
+
+            if (entToRefund && entToRefund.sessionsTotal !== 'unlimited') {
+              transaction.update(entToRefundRef, {
+                sessionsUsed: Math.max(0, entToRefund.sessionsUsed - 1)
+              });
+
+              // Record adjustment
+              const adjRef = db.collection(`entitlements/${entToRefundRef.id}/adjustments`).doc();
+              transaction.set(adjRef, {
+                entitlementId: entToRefundRef.id,
+                type: 'refund',
+                amount: 1,
+                reason: `Cancelled Class: ${classData?.name || 'Unknown'}`,
+                performedBy: clientId,
+                createdAt: new Date().toISOString()
+              });
             }
 
             // Waitlist FIFO Promotion
@@ -1611,51 +1961,109 @@ async function startServer() {
         }
 
         const client = clientDoc.data()!;
-        let packageToDeduct = null;
-        let packageIdToUse = sessionData.packageId || null;
-        let rootSessionsToDeduct = false;
 
-        const packagesCopy = client.packages ? [...client.packages] : [];
-        if (packageIdToUse) {
-           const pkgIdx = packagesCopy.findIndex((p: any) => p.id === packageIdToUse && p.status === 'Active');
-           if (pkgIdx !== -1 && typeof packagesCopy[pkgIdx].sessionsRemaining === 'number' && packagesCopy[pkgIdx].sessionsRemaining > 0) {
-             packageToDeduct = pkgIdx;
-           } else {
-             throw new Error("Selected package is invalid or has no sessions remaining");
-           }
-        } else {
-           // Find any active package
-           const pkgIdx = packagesCopy.findIndex((p: any) => p.status === 'Active' && typeof p.sessionsRemaining === 'number' && p.sessionsRemaining > 0);
-           if (pkgIdx !== -1) {
-             packageToDeduct = pkgIdx;
-             packageIdToUse = packagesCopy[pkgIdx].id;
-           } else if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-             rootSessionsToDeduct = true;
-           } else {
-             throw new Error("Client has no sessions remaining in active packages");
-           }
+        // Fallback guardrail: check client membership status
+        const effectiveStatus = getEffectiveClientStatus(client);
+        if (effectiveStatus === 'Expired') {
+          throw new Error("Your membership has expired. Please renew your package to book sessions.");
+        }
+        if (effectiveStatus === 'Frozen' || effectiveStatus === 'Suspended') {
+          throw new Error(`Your membership is currently ${effectiveStatus.toLowerCase()}. Please contact the front desk.`);
         }
 
-        const updateData: any = {};
-        if (packageToDeduct !== null) {
-          packagesCopy[packageToDeduct].sessionsRemaining -= 1;
-          updateData.packages = packagesCopy;
-        } else if (rootSessionsToDeduct) {
-          updateData.sessionsRemaining = client.sessionsRemaining - 1;
+        // Branch check if branch is specified on session
+        if (sessionData.branch) {
+          const clientBranch = client.branch || client.branchId || '';
+          if (!isSessionBranchAllowed(sessionData.branch, clientBranch)) {
+            throw new Error(`Your registered branch (${clientBranch || 'Standard'}) cannot book sessions at ${sessionData.branch}.`);
+          }
+        }
+        
+        // -- ENTITLEMENT ENGINE INTEGRATION --
+        const entQuery = db.collection("entitlements")
+          .where("clientId", "==", sessionData.clientId)
+          .where("status", "==", "active");
+        
+        const entSnap = await transaction.get(entQuery);
+        let validEnt: any = null;
+        let validEntRef: any = null;
+        
+        const now = new Date().getTime();
+        for (const d of entSnap.docs) {
+          const entData = d.data();
+          if (entData.type !== 'pt' && entData.type !== 'all') continue;
+          if (entData.validUntil && new Date(entData.validUntil).getTime() < now) continue;
+          if (entData.sessionsTotal !== 'unlimited' && entData.sessionsUsed >= entData.sessionsTotal) continue;
+          
+          validEnt = entData;
+          validEntRef = d.ref;
+          break;
+        }
+
+        if (validEnt) {
+          // Deduct session
+          if (validEnt.sessionsTotal !== 'unlimited') {
+            transaction.update(validEntRef, {
+              sessionsUsed: validEnt.sessionsUsed + 1
+            });
+          }
+
+          // Record adjustment
+          const adjRef = db.collection(`entitlements/${validEntRef.id}/adjustments`).doc();
+          transaction.set(adjRef, {
+            entitlementId: validEntRef.id,
+            type: 'deduct',
+            amount: 1,
+            reason: `Booked PT Session on ${sessionData.date}`,
+            performedBy: sessionData.clientId,
+            createdAt: new Date().toISOString()
+          });
+        } else {
+          // Fallback for Strike tenant or direct client packages
+          const packages: any[] = Array.isArray(client.packages) ? [...client.packages] : [];
+          let ptDeducted = false;
+
+          for (let i = 0; i < packages.length; i++) {
+            const pkg = packages[i];
+            const pkgStatus = (pkg.status || '').toLowerCase();
+            if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
+            if (pkg.endDate && new Date(pkg.endDate).getTime() < now) continue;
+            
+            const isPtPkg = pkg.type === 'pt' || pkg.isPT === true || (pkg.name || '').toLowerCase().includes('pt') || (pkg.name || '').toLowerCase().includes('private');
+            if (isPtPkg) {
+              if (pkg.sessionsTotal !== 'unlimited' && pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining <= 0) continue;
+              if (pkg.sessionsRemaining !== undefined && pkg.sessionsTotal !== 'unlimited') {
+                pkg.sessionsRemaining = Math.max(0, pkg.sessionsRemaining - 1);
+                pkg.usedSessions = (pkg.usedSessions || 0) + 1;
+              }
+              ptDeducted = true;
+              break;
+            }
+          }
+
+          const rawPtRemaining = client.ptSessionsRemaining ?? client.sessionsRemaining;
+          const hasPtSessions = typeof rawPtRemaining === 'number' && rawPtRemaining > 0;
+          const isUnlimitedPt = client.membershipType === 'unlimited_pt';
+
+          if (!ptDeducted && !hasPtSessions && !isUnlimitedPt) {
+            throw new Error("No active PT entitlement or private training package with remaining sessions found.");
+          }
+
+          const newPtRemaining = typeof rawPtRemaining === 'number' ? Math.max(0, rawPtRemaining - 1) : rawPtRemaining;
+          transaction.update(clientRef, {
+            packages,
+            ptSessionsRemaining: newPtRemaining,
+            updatedAt: new Date().toISOString()
+          });
         }
 
         const newSession = {
           ...sessionData,
           coachId: sessionData.coachId,
           trainerId: sessionData.coachId, // Ensure backwards compatibility for legacy components
-          packageId: packageIdToUse,
           status: 'Scheduled',
           createdAt: new Date().toISOString()
         };
-
-        if (Object.keys(updateData).length > 0) {
-          transaction.update(clientRef, updateData);
-        }
         transaction.set(newSessionRef, newSession);
         
         transaction.set(db.collection("auditLogs").doc(), {
@@ -2007,6 +2415,7 @@ async function startServer() {
     
     // Start background jobs
     startNoShowJob();
+    startMembershipExpirationJob();
   });
 }
 

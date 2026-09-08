@@ -91,21 +91,32 @@ export function ClassBookingDialog({
   const isFull = (gymClass.attendees || []).length >= gymClass.capacity;
   const spotsLeft = Math.max(0, gymClass.capacity - (gymClass.attendees || []).length);
 
-  // ── Credit & Package Verification ──
-  const activePackages = (client.packages || []).filter(p => {
-    if (p.status !== 'Active' || p.isOnHold) return false;
-    if (p.endDate) {
-      try {
-        if (new Date(p.endDate) < new Date()) return false;
-      } catch { /* ignore */ }
-    }
-    const hasRemaining = typeof p.sessionsRemaining === 'number' ? p.sessionsRemaining > 0 : true;
-    const isUnlimited = false;
-    return hasRemaining || isUnlimited;
-  });
+  // ── Credit & Package Verification (Entitlements) ──
+  const [hasActiveCredits, setHasActiveCredits] = useState<boolean>(false);
+  const [checkingEntitlement, setCheckingEntitlement] = useState(true);
 
-  const matchingPackage = activePackages[0] || null;
-  const hasActiveCredits = activePackages.length > 0;
+  useEffect(() => {
+    const verifyEntitlement = async () => {
+      if (!client?.id) return;
+      try {
+        const { checkEntitlement } = await import('../../services/entitlementService');
+        const check = await checkEntitlement(client.id, 'class');
+        setHasActiveCredits(check.canBook);
+      } catch (err) {
+        console.error("Failed to verify entitlement:", err);
+        setHasActiveCredits(false);
+      } finally {
+        setCheckingEntitlement(false);
+      }
+    };
+    verifyEntitlement();
+  }, [client?.id]);
+
+  const matchingPackage: { packageName: string; sessionsRemaining?: any } | null = (client.packages || []).find(
+    (p: any) => p.status === 'Active' && (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0)
+  ) || (client.packageType && (client.sessionsRemaining === 'unlimited' || Number(client.sessionsRemaining) > 0)
+    ? { packageName: client.packageType, sessionsRemaining: client.sessionsRemaining } 
+    : null);
 
   const formatClassTime = () => {
     const start = safeFormatTime(gymClass.startTime, 'HH:mm');
@@ -126,6 +137,7 @@ export function ClassBookingDialog({
 
     try {
       const token = await auth.currentUser?.getIdToken();
+      const action = isWaitlisted || isBooked ? 'leave' : 'join';
       const res = await fetch('/api/classes/book', {
         method: 'POST',
         headers: {
@@ -134,7 +146,7 @@ export function ClassBookingDialog({
         },
         body: JSON.stringify({
           classId: gymClass.id,
-          action: isWaitlisted || isBooked ? 'leave' : 'join',
+          action,
           clientId: client.id,
         })
       });
@@ -142,6 +154,12 @@ export function ClassBookingDialog({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         throw new Error(data.error || "Failed to complete booking. Please try again.");
+      }
+
+      // If joining a class, verify success
+      if (action === 'join' && !isWaitlisted && !isBooked) {
+        // Atomic deduction is now handled by the /api/classes/book endpoint securely!
+        console.log("Successfully joined class via atomic transaction.");
       }
 
       setIsSuccess(true);

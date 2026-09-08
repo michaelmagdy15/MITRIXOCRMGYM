@@ -14,18 +14,10 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User } from '../types';
 import { ClassSchedule } from '../types/class';
-import { 
-  Plus, 
-  Calendar as CalendarIcon, 
-  Clock, 
-  Users, 
-  Dumbbell, 
-  Trash2, 
-  Edit, 
-  Search, 
-  Filter, 
-  AlertCircle 
-} from 'lucide-react';
+import { Calendar, Search, Filter, Plus, Trash2, Edit2, Users, Flame, Clock, CalendarDays, ChevronLeft, ChevronRight, MapPin, CheckCircle2, Copy, Trash, Dumbbell, Calendar as CalendarIcon, Edit, AlertCircle } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useAuth } from '../contexts/AuthContext';
+import { createApprovalRequest } from '../services/approvalService';
 import { format, parseISO, addWeeks } from 'date-fns';
 import { safeFormatDate, safeFormatTime, toValidDate } from '../utils/dateUtils';
 
@@ -43,6 +35,7 @@ const CATEGORIES = [
 
 export const InzanClassManager: React.FC = () => {
   const { classes, loading, addClass, updateClass, deleteClass } = useClasses();
+  const { currentUser } = useAuth();
   const [coaches, setCoaches] = useState<User[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassSchedule | null>(null);
@@ -63,6 +56,12 @@ export const InzanClassManager: React.FC = () => {
   const [branch, setBranch] = useState('Main Studio');
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState(4);
+  
+  // Cancel/Delete Dialog State
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [cancelClassId, setCancelClassId] = useState('');
+  const [cancelClassName, setCancelClassName] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -206,13 +205,34 @@ export const InzanClassManager: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string, className: string) => {
-    if (window.confirm(`Are you sure you want to delete "${className}"?`)) {
-      try {
-        await deleteClass(id);
-      } catch (err) {
-        console.error("Failed to delete class:", err);
-      }
+  const handleDelete = (id: string, className: string) => {
+    setCancelClassId(id);
+    setCancelClassName(className);
+    setCancelReason('');
+    setIsCancelDialogOpen(true);
+  };
+
+  const confirmCancelClass = async () => {
+    if (!currentUser || !cancelClassId) return;
+    try {
+      const cls = classes.find(c => c.id === cancelClassId);
+      await createApprovalRequest(
+        'class_cancellation',
+        { classId: cancelClassId, className: cancelClassName, instructorId: cls?.instructorId },
+        cancelReason,
+        currentUser.id,
+        currentUser.name || 'Instructor',
+        currentUser.role,
+        cancelClassId,
+        'class'
+      );
+      setIsCancelDialogOpen(false);
+      setCancelClassId('');
+      setCancelReason('');
+      alert("Cancellation request submitted for approval.");
+    } catch (err: any) {
+      console.error("Failed to request cancellation:", err);
+      alert(err.message || "Failed to submit request.");
     }
   };
 
@@ -554,6 +574,37 @@ export const InzanClassManager: React.FC = () => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Request Dialog */}
+      <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Request Class Cancellation</DialogTitle>
+            <DialogDescription>
+              Submit a request to cancel "{cancelClassName}". A manager must approve this request before the class is fully cancelled.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="cancelReason">Reason for Cancellation</Label>
+              <Input
+                id="cancelReason"
+                placeholder="e.g. Sick leave, emergency..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCancelDialogOpen(false)}>
+              Back
+            </Button>
+            <Button variant="destructive" onClick={confirmCancelClass} disabled={!cancelReason.trim()}>
+              Submit Request
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

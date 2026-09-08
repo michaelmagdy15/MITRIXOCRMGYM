@@ -51,7 +51,7 @@
 
       // Force cache-busting on mobile WebViews to bypass stale cache
       (function() {
-        var isWebView = /mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent);
+        var isWebView = /mitrixogymcrmCRM-Mobile|Strike.*Mobile|STRIKE/i.test(navigator.userAgent) || window.ReactNativeWebView;
         if (isWebView && window.location.search.indexOf('cb=') === -1) {
           var separator = window.location.search ? '&' : '?';
           window.location.replace(

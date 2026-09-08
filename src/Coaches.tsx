@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { format, parseISO } from 'date-fns';
+import PayoutCalculator from './components/PayoutCalculator';
 
 export default function Coaches() {
   const { currentUser, canAccessSettings, ptPackageRecords, clients, payments, users } = useAppContext();
@@ -508,11 +509,12 @@ export default function Coaches() {
 
           <div className="flex-1 overflow-y-auto px-6 pb-6">
             <Tabs defaultValue="profile" className="w-full">
-              <TabsList className="grid w-full grid-cols-4 mb-4">
+              <TabsList className="grid w-full grid-cols-5 mb-4">
                 <TabsTrigger value="profile">Profile</TabsTrigger>
                 <TabsTrigger value="schedule">Schedule</TabsTrigger>
                 <TabsTrigger value="clients">Clients</TabsTrigger>
                 <TabsTrigger value="revenue">Revenue</TabsTrigger>
+                <TabsTrigger value="payouts">Payouts & Rates</TabsTrigger>
               </TabsList>
 
               {/* Profile Tab */}
@@ -811,6 +813,16 @@ export default function Coaches() {
                     </div>
                   )}
                 </div>
+              </TabsContent>
+              
+              {/* Payouts & Rates Tab */}
+              <TabsContent value="payouts" className="space-y-4">
+                {managingCoach && (
+                  <PayoutCalculator 
+                    coachId={managingCoach.id} 
+                    coachName={managingCoach.name} 
+                  />
+                )}
               </TabsContent>
             </Tabs>
           </div>

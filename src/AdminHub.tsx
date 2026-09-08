@@ -32,6 +32,7 @@ export default function AdminHub() {
   const [surveys, setSurveys] = useState(features.surveys === true);
   const [serviceCategoryTargets, setServiceCategoryTargets] = useState(features.serviceCategoryTargets === true);
   const [classBookingSystem, setClassBookingSystem] = useState(features.classBookingSystem === true);
+  const [nutrition, setNutrition] = useState(features.nutrition === true);
 
   const handleSave = async () => {
     setIsLoading(true);
@@ -53,7 +54,8 @@ export default function AdminHub() {
         advancedReports,
         surveys,
         serviceCategoryTargets,
-        classBookingSystem
+        classBookingSystem,
+        nutrition
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -159,6 +161,22 @@ export default function AdminHub() {
                   </div>
                 </div>
                 <Switch checked={attendance} onCheckedChange={setAttendance} disabled={isLoading} />
+              </div>
+
+              {/* Nutrition Module */}
+              <div className="flex items-center justify-between py-4">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-muted rounded-lg mt-0.5">
+                    <Target className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <Label className="font-bold text-sm">Nutrition Module</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Enable nutrition profiles, consultation booking, and dietary planning.
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={nutrition} onCheckedChange={setNutrition} disabled={isLoading} />
               </div>
 
               {/* Class Booking System */}

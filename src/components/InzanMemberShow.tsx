@@ -25,6 +25,7 @@ import { SalesTransferLog, TrainerTransferLog } from '../types';
 import { toast } from 'sonner';
 import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette } from 'lucide-react';
 import { compressImage } from '../utils/imageUtils';
+import EntitlementManager from './EntitlementManager';
 
 interface InzanMemberShowProps {
   client: Client;
@@ -53,7 +54,8 @@ type TabType =
   | 'files'
   | 'others'
   | 'comments'
-  | 'transfers';
+  | 'transfers'
+  | 'entitlements';
 
 export function InzanMemberShow({
   client,
@@ -304,7 +306,8 @@ export function InzanMemberShow({
             { id: 'files', label: 'Files' },
             { id: 'others', label: 'Others' },
             { id: 'comments', label: 'Comments Log' },
-            { id: 'transfers', label: 'Transfer History' }
+            { id: 'transfers', label: 'Transfer History' },
+            { id: 'entitlements', label: 'Entitlements' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -1019,6 +1022,13 @@ export function InzanMemberShow({
                 </Table>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'entitlements' && (
+          <div className="space-y-6 text-left">
+            <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3 mb-3">Booking Entitlements</h3>
+            <EntitlementManager memberId={client.id} />
           </div>
         )}
       </div>

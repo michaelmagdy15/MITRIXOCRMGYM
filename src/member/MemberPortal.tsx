@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins, AlertCircle } from 'lucide-react';
+import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins, AlertCircle, Activity } from 'lucide-react';
 import { db, getTenantId } from '../firebase';
 import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
 import { Client } from '../types';
@@ -21,6 +21,7 @@ import MemberProgress from './MemberProgress';
 import MemberLocker from './MemberLocker';
 import MemberJuiceBar from './MemberJuiceBar';
 import MemberInvites from './MemberInvites';
+import MemberNutrition from './MemberNutrition';
 import GuestPortal from './GuestPortal';
 import CartDrawer from './CartDrawer';
 import MemberNotificationBell from './MemberNotificationBell';
@@ -31,7 +32,7 @@ import MemberBodyTracker from './MemberBodyTracker';
 import { MemberScreenSkeleton } from './components/Skeleton';
 
 
-type MemberTab = 'home' | 'booking' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'profile';
+type MemberTab = 'home' | 'booking' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'nutrition' | 'profile';
 
 const NAV_ITEMS: { tab: MemberTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Pass',       icon: <QrCode className="h-5 w-5" /> },
@@ -40,6 +41,7 @@ const NAV_ITEMS: { tab: MemberTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'wallet',   label: 'Wallet',     icon: <Coins className="h-5 w-5" /> },
   { tab: 'locker',   label: 'Locker',     icon: <Lock className="h-5 w-5" /> },
   { tab: 'invites',  label: 'Invites',    icon: <UserPlus className="h-5 w-5" /> },
+  { tab: 'nutrition', label: 'Nutrition', icon: <Activity className="h-5 w-5" /> },
   { tab: 'profile',  label: 'Profile',    icon: <User className="h-5 w-5" /> },
 ];
 
@@ -61,7 +63,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   }, [branding?.companyName]);
 
   const isMobile = useMemo(() => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM/i.test(navigator.userAgent) || window.innerWidth < 768;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike/i.test(navigator.userAgent) || window.innerWidth < 768;
   }, []);
   
   const filteredNavItems = useMemo(() => {
@@ -77,6 +79,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       }
       if (item.tab === 'wallet' && features.wallet === false) return false;
       if (item.tab === 'invites' && features.operations === false) return false;
+      if (item.tab === 'nutrition' && features.nutrition === false) return false;
       return true;
     }).map(item => {
       if (item.tab === 'home' && isStrike && isMobile) {
@@ -155,6 +158,8 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       if (features.locker !== false) setActiveTab('locker');
     } else if (target === 'invites') {
       if (features.operations !== false) setActiveTab('invites');
+    } else if (target === 'nutrition') {
+      if (features.nutrition !== false) setActiveTab('nutrition');
     }
   };
 
@@ -299,36 +304,73 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     return () => unsub();
   }, [selectedClientId]);
 
-  // 3. Fetch linked clients (family members)
+  // 3. Fetch linked clients (family members sharing phone, parentId, or linkedClientIds)
   useEffect(() => {
     if (!primaryClient) {
       setLinkedClients([]);
       return;
     }
 
+    const parentPhone = primaryClient.phone || (primaryClient as any).parentPhone;
+    const parentId = (primaryClient as any).parentId;
     const linkedIds = primaryClient.linkedClientIds || [];
-    if (linkedIds.length === 0) {
-      setLinkedClients([]);
-      return;
-    }
 
-    const q = query(
-      collection(db, 'clients'),
-      where(documentId(), 'in', linkedIds)
-    );
+    const loadSiblings = async () => {
+      const siblingsMap = new Map<string, Client>();
 
-    getDocs(q)
-      .then((snapshot) => {
-        const list = snapshot.docs.map(docSnap => ({
-          ...docSnap.data(),
-          id: docSnap.id
-        } as Client));
-        setLinkedClients(list);
-      })
-      .catch((err) => {
-        console.warn("Could not load linked clients:", err.code || err.message);
-      });
-  }, [primaryClient?.linkedClientIds]);
+      // A. Load by linkedClientIds
+      if (linkedIds.length > 0) {
+        try {
+          const q = query(
+            collection(db, 'clients'),
+            where(documentId(), 'in', linkedIds.slice(0, 10))
+          );
+          const snap = await getDocs(q);
+          snap.docs.forEach(d => {
+            if (d.id !== primaryClient.id) {
+              siblingsMap.set(d.id, { ...d.data(), id: d.id } as Client);
+            }
+          });
+        } catch {}
+      }
+
+      // B. Load siblings sharing the same parentId
+      if (parentId) {
+        try {
+          const qParent = query(
+            collection(db, 'clients'),
+            where('parentId', '==', parentId)
+          );
+          const snap = await getDocs(qParent);
+          snap.docs.forEach(d => {
+            if (d.id !== primaryClient.id) {
+              siblingsMap.set(d.id, { ...d.data(), id: d.id } as Client);
+            }
+          });
+        } catch {}
+      }
+
+      // C. Load siblings sharing the same phone
+      if (parentPhone) {
+        try {
+          const qPhone = query(
+            collection(db, 'clients'),
+            where('phone', '==', parentPhone)
+          );
+          const snap = await getDocs(qPhone);
+          snap.docs.forEach(d => {
+            if (d.id !== primaryClient.id) {
+              siblingsMap.set(d.id, { ...d.data(), id: d.id } as Client);
+            }
+          });
+        } catch {}
+      }
+
+      setLinkedClients(Array.from(siblingsMap.values()));
+    };
+
+    loadSiblings().catch(err => console.warn("Could not load family siblings:", err));
+  }, [primaryClient?.id, primaryClient?.phone, primaryClient?.linkedClientIds, (primaryClient as any)?.parentId]);
 
   if (isGuest) {
     return <GuestPortal onSwitchToCRM={onSwitchToCRM || (() => {})} />;
@@ -464,6 +506,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         {activeTab === 'wallet' && <MemberWallet client={activeClient} />}
         {activeTab === 'locker' && <MemberLocker client={activeClient} />}
         {activeTab === 'invites' && <MemberInvites client={activeClient} />}
+        {activeTab === 'nutrition' && <MemberNutrition />}
         
         {activeTab === 'profile' && (
           <div className="space-y-4">

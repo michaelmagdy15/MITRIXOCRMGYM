@@ -40,7 +40,8 @@ import {
   Attendance,
   Branch,
   CommissionRates,
-  FeatureFlags
+  FeatureFlags,
+  PayoutConfig
 } from './types';
 import { cleanData } from './utils';
 import { processPaymentTransaction, PaymentTransactionParams } from './services/transactionService';
@@ -122,6 +123,8 @@ export interface AppContextType {
   selfCheckIn: (identifier: string, pin: string, branch: Branch) => Promise<{ success: boolean; message: string }>;
   commissionRates: CommissionRates;
   updateCommissionRates: (rates: CommissionRates) => Promise<void>;
+  defaultPayoutRates: PayoutConfig;
+  updateDefaultPayoutRates: (rates: Partial<PayoutConfig>) => Promise<void>;
   isManagerOrSama: boolean;
   branches: Branch[];
   updateBranches: (branches: Branch[]) => Promise<void>;
@@ -158,6 +161,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateBranches,
     commissionRates,
     updateCommissionRates,
+    defaultPayoutRates,
+    updateDefaultPayoutRates,
     features,
     updateFeatures
   } = useSettings();
@@ -524,7 +529,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selfCheckIn,
     commissionRates,
     updateCommissionRates,
-    isManagerOrSama,
+    defaultPayoutRates,
+    updateDefaultPayoutRates,
+    isManagerOrSama: ['super_admin', 'crm_admin', 'manager'].includes(effectiveRole || ''),
     branches,
     updateBranches,
     processPaymentTransaction,

@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon } from 'lucide-react';
+import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import CoachHome from './CoachHome';
 import CoachSchedule from './CoachSchedule';
@@ -11,8 +11,9 @@ import CoachClients from './CoachClients';
 import CoachSessions from './CoachSessions';
 import CoachProfile from './CoachProfile';
 import CoachClassPortal from './CoachClassPortal';
+import CoachEarnings from './CoachEarnings';
 
-type CoachTab = 'home' | 'classes' | 'schedule' | 'members' | 'sessions' | 'profile';
+type CoachTab = 'home' | 'classes' | 'schedule' | 'members' | 'sessions' | 'earnings' | 'profile';
 
 const NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Home',     icon: <Home className="h-5 w-5" /> },
@@ -20,6 +21,7 @@ const NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'schedule', label: 'Schedule', icon: <Calendar className="h-5 w-5" /> },
   { tab: 'members',  label: 'Members',  icon: <Users className="h-5 w-5" /> },
   { tab: 'sessions', label: 'Sessions', icon: <Dumbbell className="h-5 w-5" /> },
+  { tab: 'earnings', label: 'Earnings', icon: <DollarSign className="h-5 w-5" /> },
   { tab: 'profile',  label: 'Profile',  icon: <User className="h-5 w-5" /> },
 ];
 
@@ -64,6 +66,7 @@ export default function CoachPortal() {
         {activeTab === 'schedule' && <CoachSchedule />}
         {activeTab === 'members'  && <CoachClients />}
         {activeTab === 'sessions' && <CoachSessions />}
+        {activeTab === 'earnings' && <CoachEarnings />}
         {activeTab === 'profile'  && <CoachProfile />}
       </main>
 

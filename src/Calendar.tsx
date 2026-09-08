@@ -111,6 +111,7 @@ export default function CalendarView() {
   const [classCapacity, setClassCapacity] = useState(15);
   const [classType, setClassType] = useState<'Class' | 'Event'>('Class');
   const [classDescription, setClassDescription] = useState('');
+  const [classTier, setClassTier] = useState<string>('All Tiers');
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState(4);
 
@@ -366,6 +367,10 @@ export default function CalendarView() {
           waitlist: [],
           type: classType,
           category: classType,
+          tier: classTier,
+          allowedTiers: classTier === 'All Tiers' 
+            ? ['All Tiers', 'Kids Only', 'Kids Pro', 'Junior Only', 'Junior Advanced', 'Adults'] 
+            : [classTier],
           status: 'active',
           price: 0,
           description: classDescription || undefined,
@@ -386,6 +391,7 @@ export default function CalendarView() {
       setClassCapacity(15);
       setClassType('Class');
       setClassDescription('');
+      setClassTier('All Tiers');
       setRepeatWeekly(false);
       setRepeatWeeks(4);
     }
@@ -913,6 +919,23 @@ export default function CalendarView() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-muted-foreground uppercase">{language === 'ar' ? 'فئة / مستوى المشتركين' : 'Target Tier / Category'}</Label>
+                  <Select value={classTier} onValueChange={(v) => v && setClassTier(v)}>
+                    <SelectTrigger className="w-full bg-muted/20 border-white/5 rounded-xl h-10">
+                      <SelectValue placeholder="Select allowed tier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All Tiers">All Tiers (Open to Everyone)</SelectItem>
+                      <SelectItem value="Kids Only">Kids Only</SelectItem>
+                      <SelectItem value="Kids Pro">Kids Pro Only</SelectItem>
+                      <SelectItem value="Junior Only">Junior Only</SelectItem>
+                      <SelectItem value="Junior Advanced">Junior Advanced / Pro</SelectItem>
+                      <SelectItem value="Adults">Adults Only</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 items-center pt-2">

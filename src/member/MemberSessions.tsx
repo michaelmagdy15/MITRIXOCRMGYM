@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar, Clock, MapPin, Dumbbell, CalendarRange, User as UserIcon, CheckCircle2, MessageSquare, AlertCircle, ShoppingBag, ClipboardList, Star } from 'lucide-react';
 import { AssessmentDialog } from './components/AssessmentDialog';
 import { SessionRatingDialog } from './components/SessionRatingDialog';
+import { createApprovalRequest } from '../services/approvalService';
+import { useAuth } from '../contexts/AuthContext';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
   Scheduled:  { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50',   text: 'Scheduled' },
@@ -45,11 +47,18 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
   const [assessmentDialogOpen, setAssessmentDialogOpen] = useState(false);
 
   // Rescheduling & Cancellation state
-  const [selectedRescheduleSession, setSelectedRescheduleSession] = useState<any | null>(null);
-  const [rescheduleDate, setRescheduleDate] = useState<string>('');
-  const [rescheduleTime, setRescheduleTime] = useState<string>('');
+  const [selectedRescheduleSession, setSelectedRescheduleSession] = useState<Session | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('');
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
+
+  // Late Cancellation Approval State
+  const [isLateCancelDialogOpen, setIsLateCancelDialogOpen] = useState(false);
+  const [lateCancelSession, setLateCancelSession] = useState<Session | null>(null);
+  const [lateCancelReason, setLateCancelReason] = useState('');
+
+  const { currentUser } = useAuth();
 
   const [selectedRatingSession, setSelectedRatingSession] = useState<Session | null>(null);
 
@@ -149,6 +158,14 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     setBookingError(null);
 
     try {
+      const { checkEntitlement, deductSession } = await import('../services/entitlementService');
+      
+      // Enforce entitlement check
+      const entitlementCheck = await checkEntitlement(client.id, 'pt');
+      if (!entitlementCheck.canBook) {
+        throw new Error(entitlementCheck.reason || "You do not have a valid entitlement to book this session.");
+      }
+
       const selectedDateTime = new Date(`${bookingDate}T${bookingTime}`);
       if (selectedDateTime <= new Date()) {
         throw new Error("Please select a future date and time.");
@@ -159,6 +176,8 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       const [hours = 0, minutes = 0] = bookingTime.split(':').map(Number);
       const endHours = String((hours + 1) % 24).padStart(2, '0');
       const endTime = `${endHours}:${String(minutes).padStart(2, '0')}`;
+
+      // Atomic deduction is now handled securely inside the server-side transaction!
 
       await bookSession({
         clientId: client.id,
@@ -189,8 +208,8 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     e.preventDefault();
     if (!selectedRescheduleSession || !rescheduleDate || !rescheduleTime) return;
 
-    if (selectedRescheduleSession.date && selectedRescheduleSession.time) {
-      const [hours, minutes] = selectedRescheduleSession.time.split(':').map(Number);
+    if (selectedRescheduleSession.date && selectedRescheduleSession.startTime) {
+      const [hours, minutes] = selectedRescheduleSession.startTime.split(':').map(Number);
       const sessionStart = new Date(selectedRescheduleSession.date);
       sessionStart.setHours(hours || 0, minutes || 0, 0, 0);
       
@@ -211,10 +230,6 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
         throw new Error("Please select a future date and time.");
       }
       
-      // For rescheduling, since our hook doesn't have a direct reschedule endpoint, we can either
-      // implement a specific function in useSessions, or just delete and re-book, or do updateDoc directly.
-      // Wait, updateSessionStatus just updates status.
-      // It's better to update the document directly.
       const { updateDoc } = await import('firebase/firestore');
       await updateDoc(doc(db, 'sessions', selectedRescheduleSession.id), {
         date: rescheduleDate,
@@ -237,7 +252,9 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     const diffHours = (sessionStart.getTime() - now.getTime()) / (1000 * 60 * 60);
 
     if (diffHours < 24) {
-      alert("Sessions cannot be cancelled less than 24 hours before the start time. Please contact the front desk.");
+      setLateCancelSession(session);
+      setLateCancelReason('');
+      setIsLateCancelDialogOpen(true);
       return;
     }
 
@@ -247,6 +264,32 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     } catch (err: any) {
       console.error("Error cancelling session:", err);
       alert("Failed to cancel session: " + err.message);
+    }
+  };
+
+  const handleLateCancelSubmit = async () => {
+    if (!currentUser || !lateCancelSession) return;
+    
+    try {
+      await createApprovalRequest(
+        'cancellation',
+        { sessionId: lateCancelSession.id, type: lateCancelSession.type, date: lateCancelSession.date },
+        lateCancelReason,
+        currentUser.id,
+        client.name, // Member requesting
+        'member',
+        lateCancelSession.id,
+        'session'
+      );
+      
+      setIsLateCancelDialogOpen(false);
+      setLateCancelSession(null);
+      setLateCancelReason('');
+      
+      alert("Late cancellation request submitted for approval. A manager will review your request.");
+    } catch (err: any) {
+      console.error("Failed to submit late cancellation request:", err);
+      alert(err.message || "Failed to submit request.");
     }
   };
 
@@ -450,9 +493,6 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
             const dateObj = new Date(`${session.date}T${session.startTime}`);
             const style = STATUS_STYLES[session.status] || { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50', text: 'Scheduled' };
             
-            const diffHours = (dateObj.getTime() - new Date().getTime()) / (1000 * 60 * 60);
-            const canCancel = diffHours >= 24;
-
             return (
               <Card key={session.id} className="border bg-card/40 hover:bg-card/75 transition-colors shadow-sm">
                 <CardContent className="p-4 flex justify-between items-center gap-4">
@@ -506,8 +546,6 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         size="xs"
                         variant="outline"
                         type="button"
-                        disabled={!canCancel}
-                        title={!canCancel ? "Cannot cancel within 24 hours" : ""}
                         className="text-[10px] text-muted-foreground border-border hover:bg-secondary hover:text-foreground h-7 font-bold px-2.5 disabled:opacity-50"
                         onClick={() => handleCancelSession(session)}
                       >
@@ -543,7 +581,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                 <Card key={session.id} className="border bg-card/40 opacity-75 shadow-sm">
                   <CardContent className="p-4 flex justify-between items-center gap-4">
                     <div className="space-y-1">
-                      <p className="text-xs font-bold text-muted-foreground">{getTrainerName(session.trainerId)}</p>
+                      <p className="text-xs font-bold text-muted-foreground">{getTrainerName(session.coachId)}</p>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <span className="font-mono">{format(dateObj, 'dd MMM yyyy')}</span>
                         <span className="font-mono">{format(dateObj, 'h:mm a')}</span>
@@ -579,7 +617,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
           <DialogHeader>
             <DialogTitle>Reschedule Session</DialogTitle>
             <DialogDescription>
-              Select a new date and time for your session with {selectedRescheduleSession && getTrainerName(selectedRescheduleSession.trainerId)}.
+              Select a new date and time for your session with {selectedRescheduleSession && getTrainerName(selectedRescheduleSession.coachId)}.
             </DialogDescription>
           </DialogHeader>
 
@@ -623,6 +661,38 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Late Cancel Request Dialog */}
+      <Dialog open={isLateCancelDialogOpen} onOpenChange={setIsLateCancelDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Late Cancellation Request</DialogTitle>
+            <DialogDescription>
+              Cancellations within 24 hours require manager approval. Please provide a valid reason for this late cancellation. If rejected, the session may be marked as a No Show.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="lateCancelReason">Reason for Late Cancellation</Label>
+              <Input
+                id="lateCancelReason"
+                placeholder="Medical emergency, stuck at work..."
+                value={lateCancelReason}
+                onChange={(e) => setLateCancelReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLateCancelDialogOpen(false)}>
+              Back
+            </Button>
+            <Button variant="destructive" onClick={handleLateCancelSubmit} disabled={!lateCancelReason.trim()}>
+              Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
       <AssessmentDialog
         open={assessmentDialogOpen}
         onOpenChange={setAssessmentDialogOpen}

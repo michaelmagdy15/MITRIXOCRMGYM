@@ -31,7 +31,7 @@ import AdminGamificationManager from './components/AdminGamificationManager';
 import AdminStorefrontManager from './components/AdminStorefrontManager';
 
 export default function Settings() {
-  const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches } = useAppContext();
+  const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches, defaultPayoutRates, updateDefaultPayoutRates } = useAppContext();
   const { changeMyPassword, runExistingUsersMigration } = useAuth();
   const [companyName, setCompanyName] = useState(branding.companyName);
   const [logoUrl, setLogoUrl] = useState(branding.logoUrl);
@@ -46,6 +46,17 @@ export default function Settings() {
   const [isSavingPin, setIsSavingPin] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   const [selectedAccent, setSelectedAccent] = React.useState(branding.brandAccentColor ?? '#1a1a1a');
+
+  // Payout Rates State
+  const [payoutRates, setPayoutRates] = useState(defaultPayoutRates || {
+    coachId: 'default',
+    ptFixedRate: 0,
+    ptPercentage: 0,
+    freeClassRate: 0,
+    paidClassPercentage: 0,
+    paidClassFixedRate: 0
+  });
+  const [isSavingPayoutRates, setIsSavingPayoutRates] = useState(false);
 
   // Change password state
   const [currentPwd, setCurrentPwd] = useState('');
@@ -252,6 +263,18 @@ export default function Settings() {
       await updateBranding({ kioskPin, dailyCheckinPin: dailyPin });
     } finally {
       setIsSavingPin(false);
+    }
+  };
+
+  const handleSavePayoutRates = async () => {
+    setIsSavingPayoutRates(true);
+    try {
+      await updateDefaultPayoutRates(payoutRates);
+      alert('Global payout rates saved!');
+    } catch (e: any) {
+      alert(`Error saving payout rates: ${e.message}`);
+    } finally {
+      setIsSavingPayoutRates(false);
     }
   };
 
@@ -544,8 +567,12 @@ export default function Settings() {
             Coaches
           </TabsTrigger>
           <TabsTrigger value="commission" className="flex items-center gap-2 whitespace-nowrap">
-            <BadgePercent className="h-4 w-4" />
-            Commission
+            <BadgePercent className="w-4 h-4" />
+            Commissions
+          </TabsTrigger>
+          <TabsTrigger value="payouts" className="flex items-center gap-2 whitespace-nowrap">
+            <Coins className="w-4 h-4" />
+            Payout Rates
           </TabsTrigger>
           <TabsTrigger value="backup" className="flex items-center gap-2 whitespace-nowrap">
             <Download className="h-4 w-4" />
@@ -895,6 +922,67 @@ export default function Settings() {
 
         <TabsContent value="commission" className="animate-in fade-in-50 duration-500">
           <CommissionReport />
+        </TabsContent>
+
+        <TabsContent value="payouts" className="animate-in fade-in-50 duration-500">
+          <Card>
+            <CardHeader>
+              <CardTitle>Global Default Payout Rates</CardTitle>
+              <CardDescription>Configure the default payout rates applied to all coaches when generating payout reports. These can be overridden per coach in the Coaches tab.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>PT Session Fixed Rate ({currencySymbol})</Label>
+                  <Input 
+                    type="number" 
+                    value={payoutRates.ptFixedRate || 0} 
+                    onChange={e => setPayoutRates({...payoutRates, ptFixedRate: Number(e.target.value)})} 
+                  />
+                  <p className="text-xs text-muted-foreground">Fixed payout per completed PT session.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>PT Session Percentage (%)</Label>
+                  <Input 
+                    type="number" 
+                    value={payoutRates.ptPercentage || 0} 
+                    onChange={e => setPayoutRates({...payoutRates, ptPercentage: Number(e.target.value)})} 
+                  />
+                  <p className="text-xs text-muted-foreground">Percentage of PT package price paid to the coach per session.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Free Class Fixed Rate ({currencySymbol})</Label>
+                  <Input 
+                    type="number" 
+                    value={payoutRates.freeClassRate || 0} 
+                    onChange={e => setPayoutRates({...payoutRates, freeClassRate: Number(e.target.value)})} 
+                  />
+                  <p className="text-xs text-muted-foreground">Fixed payout for teaching a free class.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Paid Class Percentage (%)</Label>
+                  <Input 
+                    type="number" 
+                    value={payoutRates.paidClassPercentage || 0} 
+                    onChange={e => setPayoutRates({...payoutRates, paidClassPercentage: Number(e.target.value)})} 
+                  />
+                  <p className="text-xs text-muted-foreground">Percentage of total paid class revenue (price × attendees).</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Paid Class Fixed Rate ({currencySymbol})</Label>
+                  <Input 
+                    type="number" 
+                    value={payoutRates.paidClassFixedRate || 0} 
+                    onChange={e => setPayoutRates({...payoutRates, paidClassFixedRate: Number(e.target.value)})} 
+                  />
+                  <p className="text-xs text-muted-foreground">Alternative: Fixed payout per attendee for paid classes.</p>
+                </div>
+              </div>
+              <Button onClick={handleSavePayoutRates} disabled={isSavingPayoutRates}>
+                {isSavingPayoutRates ? 'Saving...' : 'Save Payout Rates'}
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ── Backup ── */}

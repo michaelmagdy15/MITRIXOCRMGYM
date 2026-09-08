@@ -19,10 +19,12 @@ import { Payment } from './types';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
-import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt } from 'lucide-react';
+import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt, RotateCcw } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog } from './components/AlertDialog';
 import { PaymentCategory, PAYMENT_CATEGORIES, resolvePaymentCategory } from './utils/paymentCategories';
+import { createApprovalRequest } from './services/approvalService';
+import CascadingPackageSelector from './components/CascadingPackageSelector';
 
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
@@ -47,6 +49,11 @@ export default function Payments() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertTitle, setAlertTitle] = useState('');
   const [alertDescription, setAlertDescription] = useState('');
+  
+  const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false);
+  const [refundPaymentId, setRefundPaymentId] = useState<string | null>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundMethod, setRefundMethod] = useState('Cash');
   
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
@@ -543,6 +550,38 @@ export default function Payments() {
       console.error('Error upgrading package:', error);
       setAlertTitle('Error');
       setAlertDescription(error instanceof Error ? error.message : 'Failed to upgrade package. Please try again.');
+      setAlertOpen(true);
+    }
+  };
+
+  const handleRequestRefund = async () => {
+    if (!refundPaymentId || !currentUser) return;
+    
+    const payment = payments.find(p => p.id === refundPaymentId);
+    if (!payment) return;
+    
+    try {
+      await createApprovalRequest(
+        'refund',
+        { paymentId: payment.id, amount: payment.amount, refundMethod },
+        refundReason,
+        currentUser.id,
+        currentUser.name || 'Admin',
+        currentUser.role,
+        payment.id,
+        'payment'
+      );
+      
+      setIsRefundDialogOpen(false);
+      setRefundPaymentId(null);
+      setRefundReason('');
+      
+      setAlertTitle('Success');
+      setAlertDescription('Refund request has been submitted for approval.');
+      setAlertOpen(true);
+    } catch (err: any) {
+      setAlertTitle('Error');
+      setAlertDescription(err.message || 'Failed to submit refund request.');
       setAlertOpen(true);
     }
   };
@@ -1124,21 +1163,38 @@ export default function Payments() {
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.package_type')}</Label>
-                  <Select value={packageType} onValueChange={handlePackageChange}>
-                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder={t('payments.package_type')} />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      {visiblePackages.map(pkg => (
-                        <SelectItem key={pkg.id} value={pkg.name} className="rounded-xl py-3 px-4">
-                          {pkg.name} ({pkg.price} LE)
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="Custom" className="rounded-xl py-3 px-4 italic">Custom Package...</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="col-span-full">
+                  {(() => {
+                    const currentSelectedClient = clientId ? clients.find(c => c.id === clientId) : null;
+                    return (
+                      <CascadingPackageSelector
+                        packages={visiblePackages}
+                        selectedPackageName={packageType}
+                        initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
+                        initialBranch={currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
+                        branches={branches}
+                        onCategoryChange={(cat) => {
+                          if (isCreatingNew) setNewClientCategory(cat);
+                        }}
+                        onBranchChange={(b) => {
+                          if (isCreatingNew) setNewClientBranch(b);
+                        }}
+                        onPackageSelect={(pkg, isPt) => {
+                          if (!pkg) {
+                            setPackageType('Custom');
+                            return;
+                          }
+                          setPackageType(pkg.name);
+                          setAmount(pkg.price.toString());
+                          setPaymentCategory(isPt ? 'PT' : resolvePaymentCategory(pkg.name));
+                          if (startDate) {
+                            const end = safeAddDays(startDate, pkg.expiryDays);
+                            setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
+                          }
+                        }}
+                      />
+                    );
+                  })()}
                 </div>
 
                 {packageType === 'Custom' && (
@@ -1542,7 +1598,14 @@ export default function Payments() {
                         </TableCell>
                         <TableCell className="hidden md:table-cell">
                           <div className="flex flex-col gap-1 items-start">
-                            <Badge variant="outline" className="text-[10px] sm:text-xs">{payment.packageType}</Badge>
+                            <div className="flex items-center gap-1">
+                              <Badge variant="outline" className="text-[10px] sm:text-xs">{payment.packageType}</Badge>
+                              {payment.linkedEntitlementId && (
+                                <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 text-[9px] px-1 h-4 shadow-none" title="Linked to Entitlement">
+                                  Entitled
+                                </Badge>
+                              )}
+                            </div>
                             {payment.coachName && (
                               <span className="text-[10px] text-muted-foreground flex items-center">
                                 <span className="font-medium">{t('payments.coach')}:</span> <span className="ml-1">{payment.coachName}</span>
@@ -1882,6 +1945,65 @@ export default function Payments() {
                                 <Play className="h-4 w-4" />
                               </Button>
                             )}
+
+                            {/* Refund Request Button */}
+                            {(payment as any).status !== 'Refunded' && (
+                              <Dialog open={isRefundDialogOpen && refundPaymentId === payment.id} onOpenChange={(open) => {
+                                if (open) {
+                                  setRefundPaymentId(payment.id);
+                                  setIsRefundDialogOpen(true);
+                                  setRefundReason('');
+                                } else {
+                                  setIsRefundDialogOpen(false);
+                                  setRefundPaymentId(null);
+                                }
+                              }}>
+                                <DialogTrigger render={<Button variant="ghost" size="sm" title="Request Refund" className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20" />}>
+                                  <RotateCcw className="h-4 w-4" />
+                                </DialogTrigger>
+                                <DialogContent className="max-w-md">
+                                  <DialogHeader>
+                                    <DialogTitle>Request Refund</DialogTitle>
+                                  </DialogHeader>
+                                  <div className="space-y-4">
+                                    <p className="text-sm text-muted-foreground">
+                                      Request approval to refund {payment.amount} LE for this payment.
+                                    </p>
+                                    <div className="space-y-2">
+                                      <Label className="text-sm font-semibold">Refund Method</Label>
+                                      <Select value={refundMethod} onValueChange={(val) => setRefundMethod(val || 'Cash')}>
+                                        <SelectTrigger className="h-9">
+                                          <SelectValue placeholder="Select Method" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Cash">Cash</SelectItem>
+                                          <SelectItem value="Credit Card">Credit Card</SelectItem>
+                                          <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label className="text-sm font-semibold">Reason for Refund</Label>
+                                      <Input
+                                        placeholder="Explain why this refund is requested..."
+                                        value={refundReason}
+                                        onChange={(e) => setRefundReason(e.target.value)}
+                                        className="rounded-lg"
+                                      />
+                                    </div>
+                                    <div className="flex gap-2 justify-end pt-4">
+                                      <Button variant="outline" onClick={() => setIsRefundDialogOpen(false)}>
+                                        Cancel
+                                      </Button>
+                                      <Button onClick={handleRequestRefund} disabled={!refundReason.trim()} className="bg-blue-600 hover:bg-blue-700">
+                                        Submit Request
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                            )}
+
                             {canDeletePayment && (
                               <Button
                                 variant="ghost"

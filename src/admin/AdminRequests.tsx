@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context';
 import { db } from '../firebase';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { format, parseISO } from 'date-fns';
-import { ClipboardList, Target, PauseCircle, CheckCircle2, Phone, User as UserIcon, Clock, MessageSquare, ExternalLink, Calendar, Award, Shield } from 'lucide-react';
+import { ClipboardList, Target, PauseCircle, CheckCircle2, Phone, User as UserIcon, Clock, MessageSquare, ExternalLink, Calendar, Award, Shield, Check, X, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { ApprovalRequest } from '../types/approval';
+import { approveRequest, rejectRequest } from '../services/approvalService';
 
 export default function AdminRequests() {
   const { users } = useAppContext();
@@ -18,8 +21,10 @@ export default function AdminRequests() {
   
   const [assessments, setAssessments] = useState<any[]>([]);
   const [freezes, setFreezes] = useState<any[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<Record<string, string>>({});
 
   const coaches = users.filter(u => u.role === 'coach' || u.role === 'admin');
 
@@ -35,6 +40,11 @@ export default function AdminRequests() {
       const reqsSnap = await getDocs(query(collection(db, 'bookingRequests'), orderBy('createdAt', 'desc')));
       const allReqs = reqsSnap.docs.map(d => ({ id: d.id, ...d.data() as any }));
       setFreezes(allReqs.filter(r => r.type === 'freeze'));
+      
+      // Fetch Approvals
+      const appSnap = await getDocs(query(collection(db, 'approvalRequests'), orderBy('createdAt', 'desc')));
+      setApprovals(appSnap.docs.map(d => ({ ...(d.data() as ApprovalRequest), id: d.id })));
+      
       
     } catch (err) {
       console.error("Error loading requests:", err);
@@ -85,6 +95,45 @@ export default function AdminRequests() {
     }
   };
 
+  const handleApproveAction = async (request: ApprovalRequest) => {
+    if (!currentUser) return;
+    setProcessingId(request.id);
+    try {
+      await approveRequest(request.id, currentUser.id, currentUser.name || 'Admin');
+      await fetchRequests();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to approve: ${err.message}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRejectAction = async (request: ApprovalRequest) => {
+    if (!currentUser) return;
+    const reason = rejectionReason[request.id] || 'No reason provided';
+    setProcessingId(request.id);
+    try {
+      await rejectRequest(request.id, currentUser.id, currentUser.name || 'Admin', reason);
+      await fetchRequests();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Failed to reject: ${err.message}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // Check if current user can approve (based on role)
+  const canApprove = (reqRole: string) => {
+    if (!currentUser) return false;
+    const role = currentUser.role;
+    if (role === 'super_admin' || role === 'crm_admin') return true;
+    if (role === 'admin' && reqRole !== 'super_admin' && reqRole !== 'crm_admin') return true;
+    if (role === 'manager' && reqRole === 'manager') return true;
+    return false;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -100,7 +149,7 @@ export default function AdminRequests() {
       </div>
 
       <Tabs defaultValue="assessments" className="w-full">
-        <TabsList className="w-full sm:w-auto grid grid-cols-2">
+        <TabsList className="w-full sm:w-auto grid grid-cols-3">
           <TabsTrigger value="assessments" className="flex items-center gap-2">
             <Target className="h-4 w-4" /> Assessments
             {assessments.filter(a => a.status === 'Pending').length > 0 && (
@@ -113,7 +162,106 @@ export default function AdminRequests() {
               <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary">{freezes.filter(f => f.status === 'Pending').length}</Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="approvals" className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4" /> Approvals
+            {approvals.filter(a => a.status === 'pending').length > 0 && (
+              <Badge variant="secondary" className="ml-2 bg-primary/20 text-primary">{approvals.filter(a => a.status === 'pending').length}</Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="approvals" className="mt-4 space-y-4">
+          {approvals.length === 0 && !loading && (
+            <Card className="border-dashed"><CardContent className="py-8 text-center text-muted-foreground">No pending approvals found.</CardContent></Card>
+          )}
+          {approvals.map(req => {
+            const isProcessing = processingId === req.id;
+            const hasPermission = canApprove(req.approverRole);
+            
+            return (
+              <Card key={req.id} className="hover:shadow-sm transition-shadow">
+                <CardContent className="p-5">
+                  <div className="flex flex-col md:flex-row justify-between gap-4">
+                    <div className="space-y-3 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="text-xs bg-muted/60 font-mono">
+                          {req.type.replace('_', ' ').toUpperCase()}
+                        </Badge>
+                        <Badge variant={req.status === 'pending' ? 'secondary' : req.status === 'approved' ? 'default' : 'destructive'}>
+                          {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground ml-auto">
+                          Requested on {format(parseISO(req.createdAt), 'MMM d, yyyy h:mm a')}
+                        </span>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-semibold text-lg">
+                          Target: {req.targetEntityType} ({req.targetEntityId.substring(0, 8)}...)
+                        </h4>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          <p><strong>Reason:</strong> {req.reason}</p>
+                          <p><strong>Requester:</strong> {req.requesterName} ({req.requesterRole})</p>
+                          {req.rejectionReason && (
+                            <p className="text-destructive mt-1"><strong>Rejection Reason:</strong> {req.rejectionReason}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Details Dump */}
+                      {req.details && Object.keys(req.details).length > 0 && (
+                        <div className="bg-muted p-3 rounded-md text-sm mt-2">
+                          <p className="font-medium mb-1">Details:</p>
+                          <ul className="list-disc pl-5 space-y-1">
+                            {Object.entries(req.details).map(([key, value]) => (
+                              <li key={key}><span className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>: {String(value)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {req.status === 'pending' && (
+                      <div className="flex flex-col gap-2 min-w-[200px] border-l pl-4">
+                        {hasPermission ? (
+                          <>
+                            <Button size="sm" onClick={() => handleApproveAction(req)} disabled={isProcessing} className="w-full bg-green-600 hover:bg-green-700">
+                              {isProcessing ? 'Processing...' : <><Check className="h-4 w-4 mr-2"/> Approve</>}
+                            </Button>
+                            
+                            <div className="pt-2 border-t mt-2">
+                              <Label className="text-xs text-muted-foreground mb-1 block">Rejection Reason</Label>
+                              <Textarea 
+                                className="h-16 text-xs resize-none mb-2"
+                                placeholder="Required for rejection..."
+                                value={rejectionReason[req.id] || ''}
+                                onChange={(e) => setRejectionReason(prev => ({...prev, [req.id]: e.target.value}))}
+                              />
+                              <Button 
+                                size="sm" 
+                                variant="destructive" 
+                                className="w-full"
+                                disabled={isProcessing || !rejectionReason[req.id]}
+                                onClick={() => handleRejectAction(req)}
+                              >
+                                {isProcessing ? 'Processing...' : <><X className="h-4 w-4 mr-2"/> Reject</>}
+                              </Button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-sm text-muted-foreground bg-muted p-3 rounded flex items-start gap-2 h-full">
+                            <AlertCircle className="h-4 w-4 mt-0.5 text-amber-500" />
+                            <span>Requires {req.approverRole} role or higher to approve.</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </TabsContent>
 
         <TabsContent value="assessments" className="mt-4 space-y-4">
           {assessments.length === 0 && !loading && (

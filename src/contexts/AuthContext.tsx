@@ -29,7 +29,7 @@ interface AuthContextType {
   passwordResetRequests: PasswordResetRequest[];
   loginWithEmail: (email: string, password: string) => Promise<void>;
   loginWithCoachId: (coachId: string, password: string) => Promise<void>;
-  loginWithMemberId: (memberId: string, password: string) => Promise<void>;
+  loginWithMemberId: (memberId: string, password: string, selectedMemberId?: string) => Promise<any>;
   logout: () => Promise<void>;
   updateUser: (id: UserId, updates: Partial<User>) => Promise<void>;
   refreshUserData: () => Promise<void>;
@@ -515,38 +515,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loginWithMemberId = async (memberId: string, password: string) => {
+  const loginWithMemberId = async (memberId: string, password: string, selectedMemberId?: string): Promise<{ success?: boolean; requiresProfileSelection?: boolean; profiles?: any[]; parentPhone?: string }> => {
     const term = memberId.trim();
     const cleanId = term.toLowerCase().replace(/^mem-/, '');
     const tenantId = getTenantId();
 
-    const candidateEmails = [
-      getMemberEmail(cleanId),
-      `member-${cleanId}@${tenantId}-member.local`,
-      `member-${cleanId}@${tenantId}.mitrixo-member.local`,
-      `member-${cleanId}@strike-member.local`,
-      `member-${cleanId}@inzan-member.local`,
-      `member-${cleanId}@inzanathletics-member.local`,
-      `member-${cleanId}@mitrixogymcrm-member.local`,
-      `member-${cleanId}@default.mitrixo-member.local`
-    ];
-    // Remove duplicates
-    const uniqueCandidates = [...new Set(candidateEmails)];
-
     let wrongPasswordEncountered = false;
 
-    for (const email of uniqueCandidates) {
-      try {
-        await signInWithEmail(email, password);
-        return;
-      } catch (err: any) {
-        if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
-          wrongPasswordEncountered = true;
+    // Only try deterministic email patterns if no specific child profile is requested
+    if (!selectedMemberId) {
+      const candidateEmails = [
+        getMemberEmail(cleanId),
+        `member-${cleanId}@${tenantId}-member.local`,
+        `member-${cleanId}@${tenantId}.mitrixo-member.local`,
+        `member-${cleanId}@strike-member.local`,
+        `member-${cleanId}@inzan-member.local`,
+        `member-${cleanId}@inzanathletics-member.local`,
+        `member-${cleanId}@mitrixogymcrm-member.local`,
+        `member-${cleanId}@default.mitrixo-member.local`
+      ];
+      const uniqueCandidates = [...new Set(candidateEmails)];
+
+      for (const email of uniqueCandidates) {
+        try {
+          await signInWithEmail(email, password);
+          return { success: true };
+        } catch (err: any) {
+          if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+            wrongPasswordEncountered = true;
+          }
         }
       }
     }
 
-    // If candidate emails didn't match directly, fall through to server-side resolve-email
+    // Fall through to server-side resolve-email with multi-profile family support
     try {
       const res = await fetch(`/api/member/resolve-email?tenant=${tenantId}`, {
         method: 'POST',
@@ -554,14 +556,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'Content-Type': 'application/json',
           'x-tenant-id': tenantId
         },
-        body: JSON.stringify({ memberId: term, tenantId, password })
+        body: JSON.stringify({ memberId: term, tenantId, password, selectedMemberId })
       });
+
       if (res.ok) {
         const data = await res.json();
+
+        // Multi-child profile selection needed
+        if (data.requiresProfileSelection && Array.isArray(data.profiles)) {
+          return {
+            requiresProfileSelection: true,
+            profiles: data.profiles,
+            parentPhone: data.parentPhone
+          };
+        }
+
         if (data.email) {
           try {
             await signInWithEmail(data.email, password);
-            return;
+            return { success: true };
           } catch (serverAuthErr: any) {
             if (serverAuthErr?.code === 'auth/wrong-password' || serverAuthErr?.code === 'auth/invalid-credential') {
               throw new Error('Incorrect password. Please check and try again.');
@@ -579,7 +592,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Incorrect password. Please check and try again.');
     }
 
-    throw new Error('Member ID not found. Please check your ID or reset your password.');
+    throw new Error('Member ID or phone not found. Please check your details or contact the front desk.');
   };
 
   const createCoachAccount = async (name: string, email: string, branch?: string) => {

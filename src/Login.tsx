@@ -84,6 +84,10 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Multi-profile family selection state ("Who is training today?")
+  const [familyProfiles, setFamilyProfiles] = useState<any[] | null>(null);
+  const [showProfileSelector, setShowProfileSelector] = useState(false);
+
   const handleError = (err: unknown) => {
     const code = (err as any)?.code || '';
     if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
@@ -211,11 +215,34 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
 
   const handleMemberLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!memberId || !memberPassword) { setError('Please enter your Member ID and password.'); return; }
+    if (!memberId || !memberPassword) { setError('Please enter your Member ID or phone number and password.'); return; }
     setError('');
     setIsLoading(true);
-    try { await loginWithMemberId(memberId, memberPassword); } catch (err) { handleError(err); }
-    finally { setIsLoading(false); }
+    try {
+      const result = await loginWithMemberId(memberId, memberPassword);
+      if (result?.requiresProfileSelection && result.profiles && result.profiles.length > 0) {
+        setFamilyProfiles(result.profiles);
+        setShowProfileSelector(true);
+      }
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSelectFamilyProfile = async (profile: any) => {
+    setError('');
+    setIsLoading(true);
+    try {
+      await loginWithMemberId(memberId, memberPassword, profile.memberId || profile.id);
+      setShowProfileSelector(false);
+      setFamilyProfiles(null);
+    } catch (err) {
+      handleError(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -621,10 +648,10 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                 <TabsContent value="member" className="space-y-4">
                   <form onSubmit={handleMemberLogin} className="space-y-3">
                     <div className="space-y-1.5">
-                      <Label htmlFor="member-id">Member ID</Label>
+                      <Label htmlFor="member-id">Member ID or Phone Number</Label>
                       <Input
                         id="member-id"
-                        placeholder="e.g. MEM-001"
+                        placeholder="e.g. 01000680580 or MEM-001"
                         value={memberId}
                         onChange={e => setMemberId(e.target.value)}
                         className="font-mono tracking-wide"
@@ -930,6 +957,74 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
               )}
             </TabsContent>
           </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Multi-profile Family Account Selector ("Who is training today?") ── */}
+      <Dialog open={showProfileSelector} onOpenChange={(open) => { if (!open) setShowProfileSelector(false); }}>
+        <DialogContent className="max-w-md p-6 bg-zinc-950 border border-zinc-800 text-white rounded-2xl shadow-2xl">
+          <DialogHeader className="text-center space-y-2 pb-2">
+            <div className="mx-auto w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500">
+              <Users className="w-6 h-6" />
+            </div>
+            <DialogTitle className="text-xl font-bold tracking-tight">Who is training today?</DialogTitle>
+            <DialogDescription className="text-xs text-zinc-400">
+              Multiple student profiles are linked to this phone number. Select the profile to continue:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2.5 py-2 max-h-[60vh] overflow-y-auto">
+            {familyProfiles?.map((profile) => (
+              <button
+                key={profile.id}
+                type="button"
+                disabled={isLoading}
+                onClick={() => handleSelectFamilyProfile(profile)}
+                className="w-full text-left p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-900/60 hover:bg-zinc-800 hover:border-rose-500/50 transition-all flex items-center justify-between group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-300 font-bold border border-zinc-700 overflow-hidden shrink-0">
+                    {profile.photoUrl ? (
+                      <img src={profile.photoUrl} alt={profile.name} className="w-full h-full object-cover" />
+                    ) : (
+                      profile.name?.slice(0, 2).toUpperCase() || 'ST'
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-semibold text-sm text-zinc-100 group-hover:text-rose-400 transition-colors">
+                      {profile.name}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                        {profile.category || 'Member'}
+                      </span>
+                      {profile.branch && (
+                        <span className="text-[10px] text-zinc-400">
+                          • {profile.branch}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        ({profile.memberId})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <span className="text-xs text-zinc-500 group-hover:text-rose-400 font-medium shrink-0 ml-2">
+                  {isLoading ? 'Loading...' : 'Select →'}
+                </span>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-zinc-800 hover:bg-zinc-900 text-zinc-300"
+              onClick={() => setShowProfileSelector(false)}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

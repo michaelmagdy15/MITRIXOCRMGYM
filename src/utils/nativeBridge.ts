@@ -39,7 +39,7 @@ export function isRunningInNativeApp(): boolean {
   return !!(
     window.ReactNativeWebView ||
     window.expoPushToken ||
-    /mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent)
+    /mitrixogymcrmCRM-Mobile|Strike.*Mobile|STRIKE/i.test(navigator.userAgent)
   );
 }
 
