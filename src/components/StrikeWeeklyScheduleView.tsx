@@ -1,10 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { STRIKE_SCHEDULES, StrikeScheduleSlot, generateStrikeClassesForDateRange } from '../constants/strikeSchedules';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Calendar as CalendarIcon, Clock, MapPin, Sparkles, RefreshCw, CheckCircle2, Users, ShieldAlert } from 'lucide-react';
+import { Clock, MapPin, Sparkles, RefreshCw, CheckCircle2, Users, LayoutGrid, CalendarDays, ArrowRight } from 'lucide-react';
 import { doc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { toast } from 'sonner';
@@ -36,34 +35,46 @@ export default function StrikeWeeklyScheduleView({
 }: StrikeWeeklyScheduleViewProps) {
   const [selectedBranch, setSelectedBranch] = useState<'maxim' | 'mivida' | 'impact'>(initialBranch);
   const [categoryFilter, setCategoryFilter] = useState<'ALL' | 'Kids' | 'Juniors' | 'Adults'>('ALL');
+  const [layoutMode, setLayoutMode] = useState<'day' | 'grid'>('day');
+  const currentDayOfWeek = (new Date().getDay()) as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  const [activeDay, setActiveDay] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6>(currentDayOfWeek);
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedSuccess, setSeedSuccess] = useState(false);
 
   const canManage = ['admin', 'manager', 'super_admin', 'crm_admin'].includes(userRole || '');
-  const currentDayOfWeek = new Date().getDay();
 
   const currentSchedule = STRIKE_SCHEDULES[selectedBranch];
 
-  // Distinct time slots present for the branch
+  // Distinct time slots for the branch
   const timeSlots = useMemo(() => {
     const times = new Set<string>();
     currentSchedule.slots.forEach(s => times.add(s.timeDisplay));
-    // Sort chronologically (5:00 PM -> 6:00 PM -> 7:00 PM -> 8:00 PM -> 9:00 PM)
     const order = ['5:00 PM', '6:00 PM', '7:00 PM', '8:00 PM', '9:00 PM'];
     return order.filter(t => times.has(t));
   }, [currentSchedule]);
 
-  // One-click seed to Firestore classSchedules
+  // Slots for currently active day in day-view
+  const activeDaySlots = useMemo(() => {
+    return currentSchedule.slots.filter(s => {
+      const matchDay = s.dayOfWeek === activeDay;
+      const matchCat = categoryFilter === 'ALL' || s.category === categoryFilter;
+      return matchDay && matchCat;
+    }).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, [currentSchedule, activeDay, categoryFilter]);
+
+  const isCurrentDayOff = useMemo(() => {
+    if (selectedBranch === 'maxim' && activeDay === 5) return true; // Maxim Friday OFF
+    if (selectedBranch === 'impact' && activeDay === 4) return true; // Impact Thursday OFF
+    return false;
+  }, [selectedBranch, activeDay]);
+
   const handleSeedSchedulesToFirestore = async () => {
     if (!canManage) return;
     setIsSeeding(true);
     setSeedSuccess(false);
 
     try {
-      // Generate 60 days of classes for the selected branch (or all branches)
       const classesToSeed = generateStrikeClassesForDateRange(new Date(), 60, selectedBranch);
-      
-      // Batch write in chunks of 450 (Firestore limit is 500)
       const chunkSize = 400;
       for (let i = 0; i < classesToSeed.length; i += chunkSize) {
         const chunk = classesToSeed.slice(i, i + chunkSize);
@@ -86,129 +97,297 @@ export default function StrikeWeeklyScheduleView({
     }
   };
 
-  const getSlotBadgeStyle = (slot: StrikeScheduleSlot) => {
-    if (slot.category === 'Kids') {
-      return 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:border-amber-400';
+  const getCategoryBadgeClass = (category: string) => {
+    if (category === 'Kids') {
+      return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20';
     }
-    if (slot.category === 'Juniors') {
-      return 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40 hover:border-indigo-400';
+    if (category === 'Juniors') {
+      return 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20';
     }
-    return 'bg-zinc-800 text-zinc-200 border-zinc-700 hover:border-zinc-500';
+    return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
   };
 
   return (
-    <div className={`space-y-6 ${className}`}>
-      {/* ── Header & Location Tabs ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-zinc-950 p-5 rounded-2xl border border-zinc-800 shadow-xl">
-        <div>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[10px] uppercase tracking-wider font-bold">
-              Strike Gym Official
-            </Badge>
-            <span className="text-xs text-zinc-500">• Weekly Timetable</span>
-          </div>
-          <h2 className="text-2xl font-black tracking-wider uppercase text-white mt-1">
-            {currentSchedule.title}
-          </h2>
-          <p className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1.5">
-            <MapPin className="h-3.5 w-3.5 text-rose-500" />
-            Location: <strong className="text-zinc-200">{currentSchedule.branchName}</strong>
-          </p>
-        </div>
-
-        {/* Branch Selector Tabs */}
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <Tabs value={selectedBranch} onValueChange={(v) => setSelectedBranch(v as any)}>
-            <TabsList className="bg-zinc-900 border border-zinc-800 p-1 rounded-xl">
-              <TabsTrigger value="maxim" className="text-xs font-bold px-3 py-1.5 data-[state=active]:bg-rose-600 data-[state=active]:text-white">
-                Maxim
-              </TabsTrigger>
-              <TabsTrigger value="mivida" className="text-xs font-bold px-3 py-1.5 data-[state=active]:bg-rose-600 data-[state=active]:text-white">
-                Mivida
-              </TabsTrigger>
-              <TabsTrigger value="impact" className="text-xs font-bold px-3 py-1.5 data-[state=active]:bg-rose-600 data-[state=active]:text-white">
-                Impact
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {/* Admin / Manager One-Click Calendar Sync */}
-          {canManage && (
-            <Button
-              size="sm"
-              onClick={handleSeedSchedulesToFirestore}
-              disabled={isSeeding}
-              className="h-9 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border border-zinc-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 shrink-0"
-              title="Populate classSchedules in Firestore for next 60 days"
-            >
-              {isSeeding ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-400" />
-              ) : seedSuccess ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-              )}
-              {isSeeding ? 'Syncing...' : seedSuccess ? 'Synced 60 Days!' : 'Sync to Calendar'}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* ── Category Filter Pills ── */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 mr-2 shrink-0">Filter Tier:</span>
-        {(['ALL', 'Kids', 'Juniors', 'Adults'] as const).map(cat => (
-          <button
-            key={cat}
-            onClick={() => setCategoryFilter(cat)}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
-              categoryFilter === cat
-                ? 'bg-rose-600 text-white shadow-md shadow-rose-900/40'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-            }`}
-          >
-            {cat === 'ALL' ? 'All Classes' : cat}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Timetable Grid (Poster Design Match) ── */}
-      <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
-        <div className="min-w-[760px]">
-          {/* Table Header: Days */}
-          <div className="grid grid-cols-8 border-b border-zinc-800/80 bg-zinc-900/80 p-3 text-center font-bold text-xs uppercase tracking-wider">
-            <div className="text-zinc-500 flex items-center justify-center gap-1">
-              <Clock className="h-3.5 w-3.5" /> Time
+    <div className={`space-y-4 ${className}`}>
+      {/* ── Top Header Card (Clean on White & Dark) ── */}
+      <div className="bg-card text-card-foreground p-4 sm:p-5 rounded-2xl border border-border/80 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-[10px] uppercase font-bold tracking-wider">
+                Official Schedule
+              </Badge>
+              <span className="text-xs text-muted-foreground font-medium">Weekly Timetable</span>
             </div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-foreground uppercase mt-1">
+              {currentSchedule.title}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+              <span>{currentSchedule.branchName}</span>
+            </p>
+          </div>
+
+          {/* Controls: Branch Switcher & Admin Sync */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {canManage && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSeedSchedulesToFirestore}
+                disabled={isSeeding}
+                className="h-8 text-xs font-semibold rounded-xl border-border gap-1.5"
+              >
+                {isSeeding ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+                ) : seedSuccess ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                )}
+                <span>{isSeeding ? 'Syncing...' : seedSuccess ? 'Synced!' : 'Sync 60 Days'}</span>
+              </Button>
+            )}
+
+            {/* View Mode Switcher (Day vs Grid) */}
+            <div className="flex items-center bg-muted p-1 rounded-xl border border-border/60">
+              <button
+                type="button"
+                onClick={() => setLayoutMode('day')}
+                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                  layoutMode === 'day'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Easy mobile day-by-day view"
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                <span>Day</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutMode('grid')}
+                className={`flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                  layoutMode === 'grid'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                title="Full weekly grid"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span>Grid</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Branch Tabs ── */}
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-muted/70 rounded-xl border border-border/60">
+          {(['maxim', 'mivida', 'impact'] as const).map(bKey => {
+            const isActive = selectedBranch === bKey;
+            const bConfig = STRIKE_SCHEDULES[bKey];
+            return (
+              <button
+                key={bKey}
+                type="button"
+                onClick={() => setSelectedBranch(bKey)}
+                className={`py-2 px-2 text-xs font-bold rounded-lg transition-all text-center truncate ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                }`}
+              >
+                {bConfig.displayName}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Category Filter Pills ── */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mr-1 shrink-0">
+            Programs:
+          </span>
+          {(['ALL', 'Adults', 'Juniors', 'Kids'] as const).map(cat => {
+            const isCatActive = categoryFilter === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategoryFilter(cat)}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all shrink-0 border ${
+                  isCatActive
+                    ? 'bg-foreground text-background border-foreground shadow-xs'
+                    : 'bg-background border-border text-muted-foreground hover:text-foreground hover:border-border/80'
+                }`}
+              >
+                {cat === 'ALL' ? 'All Classes' : cat}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── MODE A: Mobile-First Day Focus View (Clean, Easy UX) ── */}
+      {layoutMode === 'day' ? (
+        <div className="space-y-3">
+          {/* Day of week ribbon */}
+          <div className="grid grid-cols-7 gap-1 bg-card p-1.5 rounded-2xl border border-border/80 shadow-xs">
             {DAYS_ORDER.map(({ dayOfWeek, label }) => {
+              const isSelected = activeDay === dayOfWeek;
               const isToday = dayOfWeek === currentDayOfWeek;
+              const isOff = (selectedBranch === 'maxim' && dayOfWeek === 5) || (selectedBranch === 'impact' && dayOfWeek === 4);
+              const daySlotCount = currentSchedule.slots.filter(s => {
+                const matchDay = s.dayOfWeek === dayOfWeek;
+                const matchCat = categoryFilter === 'ALL' || s.category === categoryFilter;
+                return matchDay && matchCat;
+              }).length;
+
               return (
-                <div
+                <button
                   key={label}
-                  className={`py-1 rounded-lg font-black tracking-wider transition-colors ${
-                    isToday ? 'bg-rose-600/20 text-rose-400 border border-rose-500/30' : 'text-zinc-300'
+                  type="button"
+                  onClick={() => setActiveDay(dayOfWeek)}
+                  className={`py-2 px-1 flex flex-col items-center rounded-xl transition-all relative ${
+                    isSelected
+                      ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                      : isToday
+                      ? 'bg-primary/10 text-primary border border-primary/20 font-semibold'
+                      : 'text-muted-foreground hover:bg-muted/60 font-medium'
                   }`}
                 >
-                  {label}
-                  {isToday && <span className="block text-[9px] font-medium text-rose-400 tracking-normal">(Today)</span>}
-                </div>
+                  <span className="text-[10px] tracking-wider uppercase opacity-90">{label}</span>
+                  {isOff ? (
+                    <span className="text-[9px] mt-0.5 opacity-60 font-bold uppercase">Off</span>
+                  ) : (
+                    <span className="text-xs font-mono font-bold mt-0.5">{daySlotCount}</span>
+                  )}
+                  {isToday && !isSelected && (
+                    <span className="h-1 w-1 rounded-full bg-primary mt-1" />
+                  )}
+                </button>
               );
             })}
           </div>
 
-          {/* Table Rows: Time Slots */}
-          <div className="divide-y divide-zinc-800/50">
-            {timeSlots.map(time => {
-              return (
-                <div key={time} className="grid grid-cols-8 p-2.5 items-stretch min-h-[85px] gap-2">
+          {/* Active Day Header */}
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+              <span>{DAYS_ORDER.find(d => d.dayOfWeek === activeDay)?.full}</span>
+              {activeDay === currentDayOfWeek && (
+                <Badge variant="outline" className="text-[9px] font-bold text-primary border-primary/30 bg-primary/5 py-0 px-1.5 h-4">
+                  Today
+                </Badge>
+              )}
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              {activeDaySlots.length} {activeDaySlots.length === 1 ? 'session' : 'sessions'}
+            </span>
+          </div>
+
+          {/* Day Slots List */}
+          {isCurrentDayOff ? (
+            <Card className="border border-dashed border-border/80 bg-muted/20 rounded-2xl">
+              <CardContent className="py-12 text-center text-muted-foreground space-y-2">
+                <Clock className="h-8 w-8 mx-auto opacity-30 text-muted-foreground" />
+                <p className="font-bold text-sm text-foreground">Club Rest Day</p>
+                <p className="text-xs text-muted-foreground">
+                  No classes scheduled at {currentSchedule.displayName} on {DAYS_ORDER.find(d => d.dayOfWeek === activeDay)?.full}s.
+                </p>
+              </CardContent>
+            </Card>
+          ) : activeDaySlots.length === 0 ? (
+            <Card className="border border-dashed border-border/80 bg-muted/20 rounded-2xl">
+              <CardContent className="py-10 text-center text-muted-foreground text-xs space-y-1">
+                <p className="font-bold text-foreground">No classes matching "{categoryFilter}" on this day.</p>
+                <p className="text-muted-foreground">Try selecting "All Classes" to see everything scheduled.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2.5">
+              {activeDaySlots.map(slot => (
+                <div
+                  key={`${slot.dayOfWeek}_${slot.startTime}_${slot.className}`}
+                  className="bg-card border border-border/80 rounded-2xl p-4 shadow-xs hover:border-primary/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1 text-xs font-mono font-bold text-foreground">
+                        <Clock className="h-3.5 w-3.5 text-primary" />
+                        <span>{slot.timeDisplay}</span>
+                      </div>
+                      <Badge variant="outline" className={`text-[10px] font-bold py-0.5 px-2 rounded-md ${getCategoryBadgeClass(slot.category)}`}>
+                        {slot.category}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] font-semibold text-muted-foreground border-border/80 py-0.5 px-2">
+                        {slot.tier}
+                      </Badge>
+                    </div>
+
+                    <h4 className="text-sm font-black uppercase text-foreground tracking-tight">
+                      {slot.className}
+                    </h4>
+
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground font-medium">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" /> Cap: {slot.capacity}
+                      </span>
+                      <span>•</span>
+                      <span>Coach Strike Team</span>
+                    </div>
+                  </div>
+
+                  {onSelectSlot && (
+                    <Button
+                      size="sm"
+                      className="h-9 px-4 text-xs font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 shrink-0 shadow-xs"
+                      onClick={() => onSelectSlot(slot, currentSchedule.branchName)}
+                    >
+                      <span>Book Class</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ── MODE B: Full Weekly Grid (Clean Light Card Design) ── */
+        <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-xs">
+          <div className="min-w-[760px]">
+            {/* Table Header: Days */}
+            <div className="grid grid-cols-8 border-b border-border bg-muted/50 p-3 text-center font-bold text-xs uppercase tracking-wider">
+              <div className="text-muted-foreground flex items-center justify-center gap-1">
+                <Clock className="h-3.5 w-3.5" /> Time
+              </div>
+              {DAYS_ORDER.map(({ dayOfWeek, label }) => {
+                const isToday = dayOfWeek === currentDayOfWeek;
+                return (
+                  <div
+                    key={label}
+                    className={`py-1.5 px-1 rounded-lg font-black tracking-wider transition-colors ${
+                      isToday ? 'bg-primary/10 text-primary border border-primary/30' : 'text-foreground'
+                    }`}
+                  >
+                    <span>{label}</span>
+                    {isToday && <span className="block text-[9px] font-bold text-primary tracking-normal">(Today)</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Table Rows: Time Slots */}
+            <div className="divide-y divide-border/60">
+              {timeSlots.map(time => (
+                <div key={time} className="grid grid-cols-8 p-2.5 items-stretch min-h-[90px] gap-2">
                   {/* Time Label Column */}
-                  <div className="flex items-center justify-center font-black text-sm text-zinc-400 bg-zinc-900/40 rounded-xl border border-zinc-800/40 p-2">
+                  <div className="flex items-center justify-center font-black text-xs text-muted-foreground bg-muted/40 rounded-xl border border-border/40 p-2 font-mono">
                     {time}
                   </div>
 
                   {/* Day Columns */}
                   {DAYS_ORDER.map(({ dayOfWeek, label }) => {
-                    // Check if Thursday is OFF on Impact or Friday is OFF on Maxim
                     const isImpactOffThursday = selectedBranch === 'impact' && dayOfWeek === 4;
                     const isMaximOffFriday = selectedBranch === 'maxim' && dayOfWeek === 5;
                     const isOffDay = isImpactOffThursday || isMaximOffFriday;
@@ -223,29 +402,18 @@ export default function StrikeWeeklyScheduleView({
                       return (
                         <div
                           key={label}
-                          className="flex items-center justify-center bg-zinc-900/20 border border-zinc-800/30 rounded-xl text-zinc-600 font-bold text-xs uppercase tracking-wider"
+                          className="flex items-center justify-center bg-muted/20 border border-dashed border-border/40 rounded-xl text-muted-foreground/60 font-bold text-xs uppercase"
                         >
                           OFF
                         </div>
                       );
                     }
 
-                    if (!slot) {
+                    if (!slot || !isMatch) {
                       return (
                         <div
                           key={label}
-                          className="flex items-center justify-center bg-zinc-900/10 border border-zinc-900/40 rounded-xl text-zinc-700 text-xs font-mono"
-                        >
-                          —
-                        </div>
-                      );
-                    }
-
-                    if (!isMatch) {
-                      return (
-                        <div
-                          key={label}
-                          className="flex items-center justify-center bg-zinc-900/10 border border-zinc-900/30 rounded-xl text-zinc-700 text-xs opacity-30"
+                          className="flex items-center justify-center bg-muted/10 border border-border/30 rounded-xl text-muted-foreground/40 text-xs font-mono"
                         >
                           —
                         </div>
@@ -256,72 +424,66 @@ export default function StrikeWeeklyScheduleView({
                       <div
                         key={label}
                         onClick={() => onSelectSlot?.(slot, currentSchedule.branchName)}
-                        className={`flex flex-col justify-between p-2.5 rounded-xl border transition-all ${getSlotBadgeStyle(slot)} ${
-                          onSelectSlot ? 'cursor-pointer transform hover:scale-[1.02]' : ''
+                        className={`flex flex-col justify-between p-2 rounded-xl border transition-all ${getCategoryBadgeClass(slot.category)} ${
+                          onSelectSlot ? 'cursor-pointer hover:shadow-xs hover:scale-[1.02] active:scale-95' : ''
                         }`}
                       >
                         <div>
-                          <div className="text-[11px] font-black tracking-tight leading-tight uppercase line-clamp-2">
+                          <div className="text-[11px] font-black tracking-tight leading-tight uppercase line-clamp-2 text-foreground">
                             {slot.className}
                           </div>
-                          <div className="text-[10px] opacity-80 mt-1 font-medium">
+                          <div className="text-[9px] opacity-80 mt-1 font-semibold">
                             {slot.tier}
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-white/10 text-[9px] opacity-75">
+                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40 text-[9px] opacity-80">
                           <span>Cap: {slot.capacity}</span>
                           {onSelectSlot && (
-                            <span className="font-bold text-rose-400 hover:underline">Book →</span>
+                            <span className="font-bold text-primary hover:underline">Book →</span>
                           )}
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* ── Legend / Quick Summary ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-        <Card className="bg-zinc-950 border-zinc-800">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-xs">
-              KP
-            </div>
-            <div>
-              <div className="font-bold text-sm text-zinc-100">Kids / Pro Classes</div>
-              <p className="text-[11px] text-zinc-400">Strictly for Kids Only & Kids Pro members.</p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* ── Legend ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+        <div className="bg-card border border-border/80 rounded-xl p-3 flex items-center gap-2.5 shadow-xs">
+          <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 font-black text-xs flex items-center justify-center">
+            K
+          </div>
+          <div>
+            <div className="font-bold text-xs text-foreground">Kids / Pro Classes</div>
+            <p className="text-[10px] text-muted-foreground">All Kids & Kids Pro members</p>
+          </div>
+        </div>
 
-        <Card className="bg-zinc-950 border-zinc-800">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-xs">
-              JA
-            </div>
-            <div>
-              <div className="font-bold text-sm text-zinc-100">Juniors / Advanced</div>
-              <p className="text-[11px] text-zinc-400">Exclusive to Junior members & Juniors Pro.</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-card border border-border/80 rounded-xl p-3 flex items-center gap-2.5 shadow-xs">
+          <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-600 dark:text-sky-400 font-black text-xs flex items-center justify-center">
+            J
+          </div>
+          <div>
+            <div className="font-bold text-xs text-foreground">Juniors / Advanced</div>
+            <p className="text-[10px] text-muted-foreground">All Junior members</p>
+          </div>
+        </div>
 
-        <Card className="bg-zinc-950 border-zinc-800">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 font-bold text-xs">
-              AD
-            </div>
-            <div>
-              <div className="font-bold text-sm text-zinc-100">Adult Boxing & Conditioning</div>
-              <p className="text-[11px] text-zinc-400">Available across Maxim, Mivida, and Impact.</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="bg-card border border-border/80 rounded-xl p-3 flex items-center gap-2.5 shadow-xs">
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black text-xs flex items-center justify-center">
+            A
+          </div>
+          <div>
+            <div className="font-bold text-xs text-foreground">Adult Boxing & Cond.</div>
+            <p className="text-[10px] text-muted-foreground">Adult members across all branches</p>
+          </div>
+        </div>
       </div>
     </div>
   );

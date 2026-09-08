@@ -10,7 +10,7 @@ import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-
 
 import { ClassSchedule } from '../types/class';
 import { ClassBookingDialog } from './components/ClassBookingDialog';
-import { isSessionTierAllowed, isSessionBranchAllowed, getMemberCategory } from '../utils/memberCategories';
+import { isSessionTierAllowed, isSessionBranchAllowed, getMemberCategory, normalizeBranchName } from '../utils/memberCategories';
 import { getTenantId } from '../firebase';
 import { useSettings } from '../contexts/SettingsContext';
 import StrikeWeeklyScheduleView from '../components/StrikeWeeklyScheduleView';
@@ -170,38 +170,93 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     return '10:00 - 11:15';
   };
 
+  const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'mine' | 'Kids' | 'Juniors' | 'Adults'>('mine');
+
   const memberCategory = useMemo(() => getMemberCategory(client), [client]);
 
-  // Filter classes for selected date, client tier, and client branch
-  const filteredClasses = classes.filter(c => {
-    try {
-      const dateStr = getClassDateStr(c);
-      if (!dateStr) return false;
-      const isDateMatch = isSameDay(parseISO(dateStr), selectedDate);
-      const isBranchMatch = isSessionBranchAllowed(c.branch, client?.branch);
-      const isTierMatch = isSessionTierAllowed(
-        { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
-        memberCategory
-      );
-      return isDateMatch && isBranchMatch && isTierMatch;
-    } catch { return false; }
-  });
+  // Filter classes for selected date, client tier/category, and branch
+  const filteredClasses = useMemo(() => {
+    return classes.filter(c => {
+      try {
+        const dateStr = getClassDateStr(c);
+        if (!dateStr) return false;
+        const isDateMatch = isSameDay(parseISO(dateStr), selectedDate);
+        if (!isDateMatch) return false;
+
+        // Branch filter
+        if (branchFilter !== 'all') {
+          const bNorm = normalizeBranchName(c.branch);
+          if (bNorm !== branchFilter) return false;
+        }
+
+        // Category filter
+        if (categoryFilter === 'mine') {
+          return isSessionTierAllowed(
+            { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
+            memberCategory
+          );
+        } else if (categoryFilter === 'Adults') {
+          const t = ((c as any).tier || '').toLowerCase();
+          const n = (c.name || '').toLowerCase();
+          const cat = ((c as any).category || '').toLowerCase();
+          return t.includes('adult') || n.includes('adult') || cat.includes('adult');
+        } else if (categoryFilter === 'Kids') {
+          const t = ((c as any).tier || '').toLowerCase();
+          const n = (c.name || '').toLowerCase();
+          const cat = ((c as any).category || '').toLowerCase();
+          return t.includes('kid') || n.includes('kid') || cat.includes('kid');
+        } else if (categoryFilter === 'Juniors') {
+          const t = ((c as any).tier || '').toLowerCase();
+          const n = (c.name || '').toLowerCase();
+          const cat = ((c as any).category || '').toLowerCase();
+          return t.includes('junior') || n.includes('junior') || cat.includes('junior');
+        }
+
+        return true;
+      } catch { return false; }
+    });
+  }, [classes, selectedDate, branchFilter, categoryFilter, memberCategory]);
 
   // Count classes per date for dot indicators
-  const classCountByDate = new Map<string, number>();
-  classes.forEach(c => {
-    const isBranchMatch = isSessionBranchAllowed(c.branch, client?.branch);
-    const isTierMatch = isSessionTierAllowed(
-      { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
-      memberCategory
-    );
-    if (isBranchMatch && isTierMatch) {
+  const classCountByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    classes.forEach(c => {
+      if (branchFilter !== 'all') {
+        const bNorm = normalizeBranchName(c.branch);
+        if (bNorm !== branchFilter) return;
+      }
+
+      if (categoryFilter === 'mine') {
+        const isTierMatch = isSessionTierAllowed(
+          { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
+          memberCategory
+        );
+        if (!isTierMatch) return;
+      } else if (categoryFilter === 'Adults') {
+        const t = ((c as any).tier || '').toLowerCase();
+        const n = (c.name || '').toLowerCase();
+        const cat = ((c as any).category || '').toLowerCase();
+        if (!t.includes('adult') && !n.includes('adult') && !cat.includes('adult')) return;
+      } else if (categoryFilter === 'Kids') {
+        const t = ((c as any).tier || '').toLowerCase();
+        const n = (c.name || '').toLowerCase();
+        const cat = ((c as any).category || '').toLowerCase();
+        if (!t.includes('kid') && !n.includes('kid') && !cat.includes('kid')) return;
+      } else if (categoryFilter === 'Juniors') {
+        const t = ((c as any).tier || '').toLowerCase();
+        const n = (c.name || '').toLowerCase();
+        const cat = ((c as any).category || '').toLowerCase();
+        if (!t.includes('junior') && !n.includes('junior') && !cat.includes('junior')) return;
+      }
+
       const key = getClassDateStr(c);
       if (key) {
-        classCountByDate.set(key, (classCountByDate.get(key) || 0) + 1);
+        map.set(key, (map.get(key) || 0) + 1);
       }
-    }
-  });
+    });
+    return map;
+  }, [classes, branchFilter, categoryFilter, memberCategory]);
 
   // If currently selected date has 0 classes, but there are classes on other dates, find the next date with classes
   const nextDateWithClasses = useMemo(() => {
@@ -293,6 +348,60 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
         />
       ) : (
         <>
+          {/* Branch & Program Filters for Strike */}
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mr-1 shrink-0">
+                Location:
+              </span>
+              {[
+                { id: 'all', label: 'All Branches' },
+                { id: 'maxim', label: 'Maxim' },
+                { id: 'mivida', label: 'Mivida' },
+                { id: 'impact', label: 'Impact' },
+              ].map(b => (
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => setBranchFilter(b.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 border ${
+                    branchFilter === b.id
+                      ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                      : 'bg-card text-muted-foreground hover:text-foreground border-border/80'
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mr-1 shrink-0">
+                Programs:
+              </span>
+              {[
+                { id: 'mine', label: `My Plan (${memberCategory})` },
+                { id: 'all', label: 'All Classes' },
+                { id: 'Juniors', label: 'Juniors' },
+                { id: 'Kids', label: 'Kids' },
+                { id: 'Adults', label: 'Adults' },
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setCategoryFilter(cat.id as any)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all shrink-0 border ${
+                    categoryFilter === cat.id
+                      ? 'bg-foreground text-background border-foreground shadow-xs'
+                      : 'bg-card text-muted-foreground hover:text-foreground border-border/80'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* ─── Horizontal Date Ribbon ─── */}
           <div className="relative">
             <div
@@ -394,10 +503,18 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                       <div className="flex justify-between items-start">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-[9px] uppercase tracking-wider font-semibold py-0.5 px-2 rounded-md border-border">
+                            <Badge variant="outline" className={`text-[9px] uppercase tracking-wider font-bold py-0.5 px-2 rounded-md ${
+                              (gymClass.category || '').toLowerCase().includes('kid') ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' :
+                              (gymClass.category || '').toLowerCase().includes('junior') ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20' :
+                              'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                            }`}>
                               {(gymClass.category || 'Class')}
                             </Badge>
-                            <span className="text-[11px] text-muted-foreground font-medium">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                              (gymClass.branch || '').toLowerCase().includes('maxim') ? 'text-rose-600 bg-rose-500/10 border-rose-500/20' :
+                              (gymClass.branch || '').toLowerCase().includes('mivida') ? 'text-sky-600 bg-sky-500/10 border-sky-500/20' :
+                              'text-amber-600 bg-amber-500/10 border-amber-500/20'
+                            }`}>
                               {gymClass.branch}
                             </span>
                           </div>

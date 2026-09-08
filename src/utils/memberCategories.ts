@@ -69,48 +69,57 @@ export function isSessionTierAllowed(
     ? session.allowedTiers.map(t => t.trim().toLowerCase()) 
     : [];
   const sessionName = (session.name || '').trim().toLowerCase();
+  const sessionCat = (session.category || '').trim().toLowerCase();
 
   // Explicit 'All' or 'All Tiers' tag
   if (sessionTier === 'all' || sessionTier === 'all tiers' || allowed.includes('all') || allowed.includes('all tiers')) {
     return true;
   }
 
+  // If session explicitly lists this member's category in allowedTiers, it is allowed!
+  const normCatLower = normCategory.toLowerCase();
+  if (
+    allowed.includes(normCatLower) || 
+    (normCategory === 'Junior Only' && (allowed.includes('junior only') || allowed.includes('juniors only') || allowed.includes('juniors') || allowed.includes('junior'))) || 
+    (normCategory === 'Kids Only' && (allowed.includes('kids only') || allowed.includes('kids') || allowed.includes('kid')))
+  ) {
+    return true;
+  }
+
   // 1. Kids Only (Standard Kids)
   if (normCategory === 'Kids Only') {
-    if (sessionTier === 'kids pro' || allowed.includes('kids pro') || sessionName.includes('pro')) return false;
-    if (sessionTier === 'adults' || allowed.includes('adults') || sessionName.includes('adult')) return false;
-    if (sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior')) return false;
-    return sessionTier === 'kids only' || sessionTier === 'kids' || allowed.includes('kids only') || allowed.includes('kids') || sessionName.includes('kid');
+    if (sessionTier === 'adults' || allowed.includes('adults') || sessionName.includes('adult') || sessionCat.includes('adult')) return false;
+    if (sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior') || sessionCat.includes('junior')) return false;
+    // In Strike, "Kids / Pro Boxing" is open to all Kids
+    return sessionTier.includes('kid') || allowed.some(t => t.includes('kid')) || sessionName.includes('kid') || sessionCat.includes('kid');
   }
 
   // 2. Kids Pro
   if (normCategory === 'Kids Pro') {
-    if (sessionTier === 'adults' || allowed.includes('adults') || sessionName.includes('adult')) return false;
-    if (sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior')) return false;
-    return sessionTier === 'kids pro' || sessionTier === 'kids only' || sessionTier === 'kids' || 
-           allowed.includes('kids pro') || allowed.includes('kids only') || allowed.includes('kids') ||
-           sessionName.includes('kid');
+    if (sessionTier === 'adults' || allowed.includes('adults') || sessionName.includes('adult') || sessionCat.includes('adult')) return false;
+    if (sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior') || sessionCat.includes('junior')) return false;
+    return sessionTier.includes('kid') || allowed.some(t => t.includes('kid')) || sessionName.includes('kid') || sessionCat.includes('kid');
   }
 
   // 3. Junior Only
   if (normCategory === 'Junior Only') {
-    if (sessionTier.includes('advanced') || sessionTier.includes('pro') || allowed.some(t => t.includes('advanced') || t.includes('pro')) || sessionName.includes('pro') || sessionName.includes('advanced')) return false;
-    if (sessionTier.includes('kid') || allowed.some(t => t.includes('kid')) || sessionName.includes('kid')) return false;
-    if (sessionTier === 'adults' || allowed.includes('adults') || sessionName.includes('adult')) return false;
-    return sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior');
+    if (sessionTier.includes('kid') || allowed.some(t => t.includes('kid')) || sessionName.includes('kid') || sessionCat.includes('kid')) return false;
+    if (sessionTier === 'adults' || allowed.includes('adults') || sessionName.includes('adult') || sessionCat.includes('adult')) return false;
+    // In Strike, "Juniors / Advanced Boxing" is open to all Juniors
+    return sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior') || sessionCat.includes('junior');
   }
 
   // 4. Junior Advanced
   if (normCategory === 'Junior Advanced') {
-    if (sessionTier.includes('kid') || allowed.some(t => t.includes('kid')) || sessionName.includes('kid')) return false;
-    if (sessionTier === 'adults' || allowed.includes('adults') || sessionName.includes('adult')) return false;
-    return sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior');
+    if (sessionTier.includes('kid') || allowed.some(t => t.includes('kid')) || sessionName.includes('kid') || sessionCat.includes('kid')) return false;
+    if (sessionTier === 'adults' || allowed.includes('adults') || sessionName.includes('adult') || sessionCat.includes('adult')) return false;
+    return sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior') || sessionCat.includes('junior');
   }
 
   // 5. Adults
   if (normCategory === 'Adults') {
-    if (sessionTier.includes('kid') || allowed.some(t => t.includes('kid')) || sessionName.includes('kid')) return false;
-    if (sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior')) return false;
+    if (sessionTier.includes('kid') || allowed.some(t => t.includes('kid')) || sessionName.includes('kid') || sessionCat.includes('kid')) return false;
+    if (sessionTier.includes('junior') || allowed.some(t => t.includes('junior')) || sessionName.includes('junior') || sessionCat.includes('junior')) return false;
     return true;
   }
 
