@@ -1169,6 +1169,27 @@ async function startServer() {
         } catch {}
       }
 
+      // Ensure user document exists in tenant users collection for requireAuth middleware
+      if (authUser) {
+        await db.collection("users").doc(authUser.uid).set({
+          uid: authUser.uid,
+          email: emailToUse,
+          name: clientData.name || `Member ${effectiveMemberId}`,
+          role: 'client',
+          clientRecordId: String(clientData.memberId || clientDocId),
+          tenantId,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+
+        // Link portalUserId on client document
+        if (clientDocId) {
+          await db.collection("clients").doc(clientDocId).set({
+            portalUserId: authUser.uid,
+            authEmail: emailToUse
+          }, { merge: true });
+        }
+      }
+
       const effectiveStatus = getEffectiveClientStatus(clientData);
 
       return res.json({
