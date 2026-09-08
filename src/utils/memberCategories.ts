@@ -295,3 +295,212 @@ export function isSessionBranchAllowed(
 
   return sRaw === mRaw;
 }
+
+// ===============================================================
+// STRICT TIER & BRANCH ACCESS CONTROL ENGINE (CANONICAL RBAC)
+// ===============================================================
+
+export type CanonicalTier = 'KIDS' | 'KIDS_PRO' | 'JUNIORS' | 'JUNIORS_PRO' | 'ADULT';
+export type CanonicalBranchId = 'strike_maxim' | 'strike_mivida' | 'impact';
+
+export const CANONICAL_TIERS: CanonicalTier[] = ['KIDS', 'KIDS_PRO', 'JUNIORS', 'JUNIORS_PRO', 'ADULT'];
+export const ALLOWED_ADULT_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida', 'impact'];
+export const ALLOWED_YOUTH_HOME_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida'];
+
+/**
+ * Maps any tier string, category string, or class name to its canonical tier.
+ * Rules:
+ * - Kids Only / Kids -> KIDS
+ * - Kids Pro -> KIDS_PRO
+ * - Junior Only / Juniors -> JUNIORS
+ * - Junior Advanced / Juniors Pro -> JUNIORS_PRO
+ * - Adults / Adult -> ADULT
+ */
+export function toCanonicalTier(val?: string | null): CanonicalTier {
+  if (!val) return 'ADULT';
+  const lower = val.trim().toLowerCase().replace(/[-_]/g, ' ');
+
+  if (lower.includes('kid')) {
+    if (lower.includes('pro') || lower.includes('advanced')) {
+      return 'KIDS_PRO';
+    }
+    return 'KIDS';
+  }
+
+  if (lower.includes('junior')) {
+    if (lower.includes('pro') || lower.includes('advanced')) {
+      return 'JUNIORS_PRO';
+    }
+    return 'JUNIORS';
+  }
+
+  if (lower.includes('adult')) {
+    return 'ADULT';
+  }
+
+  return 'ADULT';
+}
+
+/**
+ * Maps any branch string or ID to its canonical branch ID ('strike_maxim', 'strike_mivida', 'impact').
+ */
+export function toCanonicalBranchId(val?: string | null): CanonicalBranchId | '' {
+  if (!val) return '';
+  const lower = val.trim().toLowerCase().replace(/[-_]/g, ' ');
+
+  if (lower.includes('maxim') || lower.includes('complex')) {
+    return 'strike_maxim';
+  }
+  if (lower.includes('mivida') || lower.includes('mvida')) {
+    return 'strike_mivida';
+  }
+  if (lower.includes('impact')) {
+    return 'impact';
+  }
+
+  return '';
+}
+
+/**
+ * Checks exact tier equality with zero cross-tier access.
+ */
+export function isExactTierMatch(memberTier: string, sessionTier: string): boolean {
+  return toCanonicalTier(memberTier) === toCanonicalTier(sessionTier);
+}
+
+export interface MemberAccessContext {
+  id?: string;
+  memberId?: string;
+  name?: string;
+  tier?: string;
+  category?: string;
+  memberCategory?: string;
+  home_branch_id?: string;
+  branch_id?: string;
+  branchId?: string;
+  branch?: string;
+  homeBranch?: string;
+  has_all_branch_access?: boolean;
+}
+
+export interface SessionAccessContext {
+  id?: string;
+  name?: string;
+  tier?: string;
+  category?: string;
+  branch_id?: string;
+  branchId?: string;
+  branch?: string;
+  location?: string;
+}
+
+export interface BookingValidationResult {
+  allowed: boolean;
+  status: number;
+  error?: string;
+  details?: {
+    memberTier?: CanonicalTier;
+    sessionTier?: CanonicalTier;
+    memberHomeBranch?: CanonicalBranchId | '';
+    sessionBranch?: CanonicalBranchId | '';
+    allowedBranches?: CanonicalBranchId[];
+    [key: string]: any;
+  };
+}
+
+/**
+ * Strict Server-Side Booking Interceptor & Access Guard.
+ * Enforces:
+ * 1. Under-18s (Kids & Juniors):
+ *    - Must book only at their assigned immutable home branch (Maxim or Mivida).
+ *    - Exact tier matching (Zero cross-tier access).
+ * 2. Adults:
+ *    - Multi-branch access across Maxim, Mivida, and Impact.
+ *    - Adult classes only (Zero cross-tier access).
+ */
+export function validateBookingRules(
+  member?: MemberAccessContext | null,
+  session?: SessionAccessContext | null
+): BookingValidationResult {
+  const m = member || {};
+  const s = session || {};
+
+  const memberTier = toCanonicalTier(m.tier || m.memberCategory || m.category);
+  const sessionTier = toCanonicalTier(s.tier || s.category || s.name);
+
+  const memberHomeBranch = toCanonicalBranchId(
+    m.home_branch_id || m.branch_id || m.branchId || m.homeBranch || m.branch
+  );
+  const sessionBranch = toCanonicalBranchId(
+    s.branch_id || s.branchId || s.branch || s.location
+  );
+
+  const isAdult = memberTier === 'ADULT' || m.category?.toUpperCase() === 'ADULT';
+
+  if (!isAdult) {
+    // Under-18s (Kids, Kids Pro, Juniors, Juniors Pro):
+    // Rule 1: Home branch isolation
+    if (sessionBranch !== memberHomeBranch) {
+      return {
+        allowed: false,
+        status: 403,
+        error: "Members in Kids/Juniors can only book at their home branch.",
+        details: {
+          memberHomeBranch,
+          sessionBranch
+        }
+      };
+    }
+
+    // Rule 2: Strict Tier Gating (Zero Cross-Tier Access)
+    if (sessionTier !== memberTier) {
+      return {
+        allowed: false,
+        status: 403,
+        error: "Session tier does not match member package tier.",
+        details: {
+          memberTier,
+          sessionTier
+        }
+      };
+    }
+  } else {
+    // Adults:
+    // Rule 1: Facility access (Allowed: strike_maxim, strike_mivida, impact)
+    if (!ALLOWED_ADULT_BRANCHES.includes(sessionBranch as CanonicalBranchId)) {
+      return {
+        allowed: false,
+        status: 403,
+        error: "Invalid facility for adult membership.",
+        details: {
+          sessionBranch,
+          allowedBranches: ALLOWED_ADULT_BRANCHES
+        }
+      };
+    }
+
+    // Rule 2: Zero Cross-Tier Access (Adults only book adult sessions)
+    if (sessionTier !== 'ADULT') {
+      return {
+        allowed: false,
+        status: 403,
+        error: "Session tier does not match member package tier.",
+        details: {
+          memberTier: 'ADULT',
+          sessionTier
+        }
+      };
+    }
+  }
+
+  return {
+    allowed: true,
+    status: 200,
+    details: {
+      memberTier,
+      sessionTier,
+      memberHomeBranch,
+      sessionBranch
+    }
+  };
+}

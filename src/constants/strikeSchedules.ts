@@ -167,6 +167,7 @@ export function generateStrikeClassesForDateRange(
           id,
           name: slot.className,
           branch: branchSchedule.branchName,
+          branch_id: key === 'impact' ? 'impact' : key === 'mivida' ? 'strike_mivida' : 'strike_maxim',
           date: dateStr,
           time: `${slot.timeDisplay} - ${slot.endTime.startsWith('22') ? '10:00 PM' : slot.endTime.startsWith('21') ? '9:00 PM' : slot.endTime.startsWith('20') ? '8:00 PM' : slot.endTime.startsWith('19') ? '7:00 PM' : '6:00 PM'}`,
           startTime: startIso,

@@ -8,7 +8,18 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 import { startNoShowJob } from './src/jobs/noShowJob.js';
 import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus } from './src/jobs/membershipExpirationJob.js';
-import { isSessionTierAllowed, isSessionBranchAllowed, isPackageMatchingFilter } from './src/utils/memberCategories.js';
+import {
+  isSessionTierAllowed,
+  isSessionBranchAllowed,
+  isPackageMatchingFilter,
+  toCanonicalTier,
+  toCanonicalBranchId,
+  validateBookingRules,
+  ALLOWED_ADULT_BRANCHES,
+  ALLOWED_YOUTH_HOME_BRANCHES,
+  CanonicalTier,
+  CanonicalBranchId
+} from './src/utils/memberCategories.js';
 
 declare global {
   namespace Express {
@@ -1342,29 +1353,48 @@ async function startServer() {
   app.get("/api/packages", handleGetPackages);
   app.get("/api/v1/packages", handleGetPackages);
 
-  // AGENT 3: RBAC & Branch-Level Session Gating Engine
-  // Strict tier and branch filtering for session schedule
+  // ===============================================================
+  // AGENT 3: STRICT TIER & BRANCH ACCESS CONTROL ENGINE
+  // Endpoint: GET /api/v1/sessions
+  // Objective: Enforce strict branch isolation for youth & zero cross-tier access
+  // ===============================================================
   app.get("/api/v1/sessions", async (req, res) => {
     try {
       const db = await getDbForRequest(req);
-      const { memberId, date, branch, tier } = req.query;
+      const { memberId, clientId, member_id, client_id, date, branch, branch_id, tier, category } = req.query;
 
-      let memberCategory = (tier as string) || '';
-      let memberBranch = (branch as string) || '';
+      const targetMemberId = (memberId || clientId || member_id || client_id || '') as string;
+      const explicitTier = (tier || category || '') as string;
+      const explicitBranch = (branch || branch_id || '') as string;
 
-      // If memberId is provided, look up member's profile for authoritative category & branch
-      if (memberId && typeof memberId === 'string') {
-        let clientDoc = await db.collection("clients").doc(memberId).get();
+      let memberData: any = null;
+      let memberCanonicalTier: CanonicalTier | null = explicitTier ? toCanonicalTier(explicitTier) : null;
+      let memberHomeBranch: CanonicalBranchId | '' = explicitBranch ? toCanonicalBranchId(explicitBranch) : '';
+
+      // If member ID is provided, retrieve authoritative member record from Firestore
+      if (targetMemberId) {
+        let clientDoc = await db.collection("clients").doc(targetMemberId).get();
         if (!clientDoc.exists) {
-          const snap = await db.collection("clients").where("memberId", "==", memberId).limit(1).get();
+          const snap = await db.collection("clients").where("memberId", "==", targetMemberId).limit(1).get();
           if (!snap.empty) clientDoc = snap.docs[0]!;
         }
+        if (!clientDoc.exists) {
+          const snap = await db.collection("clients").where("portalUserId", "==", targetMemberId).limit(1).get();
+          if (!snap.empty) clientDoc = snap.docs[0]!;
+        }
+
         if (clientDoc.exists) {
-          const cData = clientDoc.data()!;
-          memberCategory = cData.memberCategory || cData.category || memberCategory || 'Adults';
-          memberBranch = cData.branch || cData.branchId || memberBranch || 'main';
+          memberData = clientDoc.data()!;
+          memberCanonicalTier = toCanonicalTier(
+            memberData.tier || memberData.memberCategory || memberData.category || explicitTier
+          );
+          memberHomeBranch = toCanonicalBranchId(
+            memberData.home_branch_id || memberData.branch_id || memberData.branchId || memberData.homeBranch || memberData.branch || explicitBranch
+          );
         }
       }
+
+      const isAdult = memberCanonicalTier === 'ADULT';
 
       let classQuery: FirebaseFirestore.Query = db.collection("classSchedules");
       if (date && typeof date === 'string') {
@@ -1378,36 +1408,245 @@ async function startServer() {
         const data = doc.data();
         if (data.status === 'cancelled') continue;
 
-        const sessionTier = data.tier || data.category || data.name || '';
-        const sessionBranch = data.branch || data.branchId || data.location || '';
+        const sessionCanonicalBranch = toCanonicalBranchId(
+          data.branch_id || data.branchId || data.branch || data.location
+        );
+        const sessionCanonicalTier = toCanonicalTier(
+          data.tier || data.category || data.name
+        );
 
-        // Strict tier gating
-        if (memberCategory && !isSessionTierAllowed({ tier: data.tier, category: data.category, name: data.name, allowedTiers: data.allowedTiers }, memberCategory)) {
-          continue;
-        }
+        if (memberCanonicalTier) {
+          if (!isAdult) {
+            // 1. Branch Isolation for Under-18s (Kids & Juniors):
+            // Members with tiers Kids, Kids Pro, Juniors, Juniors Pro MUST have an immutable home_branch_id.
+            // session.branch_id == member.home_branch_id
+            // Mivida youth must NEVER see Maxim; Maxim youth must NEVER see Mivida.
+            if (!sessionCanonicalBranch || sessionCanonicalBranch !== memberHomeBranch) {
+              continue;
+            }
 
-        // Strict branch gating (Adults have unrestricted multi-branch access)
-        if (memberBranch && !isSessionBranchAllowed(sessionBranch, memberBranch, false, memberCategory)) {
-          continue;
+            // 2. Strict Tier Gating (Zero Cross-Tier Access):
+            // Exact tier matching required:
+            // Kids -> session.tier == 'KIDS'
+            // Kids Pro -> session.tier == 'KIDS_PRO'
+            // Juniors -> session.tier == 'JUNIORS'
+            // Juniors Pro -> session.tier == 'JUNIORS_PRO'
+            if (sessionCanonicalTier !== memberCanonicalTier) {
+              continue;
+            }
+          } else {
+            // 3. Adult Multi-Branch Access:
+            // Allowed branches: strike_maxim, strike_mivida, impact.
+            // allows filtering by any of these 3 branch IDs, or returns all three if no filter is passed.
+            if (!ALLOWED_ADULT_BRANCHES.includes(sessionCanonicalBranch as CanonicalBranchId)) {
+              continue;
+            }
+
+            // Optional explicit branch filter
+            const filterBranch = toCanonicalBranchId(explicitBranch);
+            if (filterBranch && sessionCanonicalBranch !== filterBranch) {
+              continue;
+            }
+
+            // Zero cross-tier access: Adult only sees Adult classes
+            if (sessionCanonicalTier !== 'ADULT') {
+              continue;
+            }
+          }
+        } else {
+          // Public or non-member discovery:
+          const filterBranch = toCanonicalBranchId(explicitBranch);
+          if (filterBranch && sessionCanonicalBranch !== filterBranch) {
+            continue;
+          }
+          if (explicitTier && sessionCanonicalTier !== toCanonicalTier(explicitTier)) {
+            continue;
+          }
         }
 
         sessions.push({
           id: doc.id,
-          ...data
+          ...data,
+          branch_id: sessionCanonicalBranch,
+          tier: sessionCanonicalTier
         });
       }
 
       return res.json({
         total: sessions.length,
         filterApplied: {
-          memberCategory: memberCategory || 'none',
-          memberBranch: memberBranch || 'none'
+          memberId: targetMemberId || null,
+          tier: memberCanonicalTier || 'ALL',
+          home_branch_id: memberHomeBranch || null,
+          has_all_branch_access: isAdult,
+          allowed_branches: isAdult ? ALLOWED_ADULT_BRANCHES : (memberHomeBranch ? [memberHomeBranch] : [])
         },
         sessions
       });
     } catch (err) {
       console.error("[API] Error in GET /api/v1/sessions:", err);
       return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ===============================================================
+  // AGENT 3: STRICT SERVER-SIDE BOOKING INTERCEPTOR & ACCESS GUARD
+  // Endpoint: POST /api/v1/bookings
+  // Objective: Intercept and reject invalid bookings before insertion
+  // ===============================================================
+  app.post("/api/v1/bookings", async (req, res) => {
+    try {
+      const db = await getDbForRequest(req);
+      const {
+        memberId, member_id, clientId, client_id,
+        sessionId, session_id, classId, class_id,
+        member: directMember,
+        session: directSession,
+        date
+      } = req.body || {};
+
+      const targetMemberId = (memberId || member_id || clientId || client_id || req.user?.uid || '') as string;
+      const targetSessionId = (sessionId || session_id || classId || class_id || '') as string;
+
+      // 1. Resolve Member Record
+      let memberRecord: any = directMember ? { ...directMember } : null;
+      let memberDocRef: FirebaseFirestore.DocumentReference | null = null;
+
+      if (!memberRecord && targetMemberId) {
+        let clientDoc = await db.collection("clients").doc(targetMemberId).get();
+        if (!clientDoc.exists) {
+          const snap = await db.collection("clients").where("memberId", "==", targetMemberId).limit(1).get();
+          if (!snap.empty) clientDoc = snap.docs[0]!;
+        }
+        if (!clientDoc.exists) {
+          const snap = await db.collection("clients").where("portalUserId", "==", targetMemberId).limit(1).get();
+          if (!snap.empty) clientDoc = snap.docs[0]!;
+        }
+
+        if (clientDoc.exists) {
+          memberDocRef = clientDoc.ref;
+          memberRecord = { id: clientDoc.id, ...clientDoc.data() };
+        }
+      }
+
+      if (!memberRecord) {
+        return res.status(404).json({ error: "Member not found" });
+      }
+
+      // 2. Resolve Session Record
+      let sessionRecord: any = directSession ? { ...directSession } : null;
+      let sessionDocRef: FirebaseFirestore.DocumentReference | null = null;
+
+      if (!sessionRecord && targetSessionId) {
+        const classDoc = await db.collection("classSchedules").doc(targetSessionId).get();
+        if (classDoc.exists) {
+          sessionDocRef = classDoc.ref;
+          sessionRecord = { id: classDoc.id, ...classDoc.data() };
+        } else {
+          // Check 'sessions' collection fallback
+          const sessDoc = await db.collection("sessions").doc(targetSessionId).get();
+          if (sessDoc.exists) {
+            sessionDocRef = sessDoc.ref;
+            sessionRecord = { id: sessDoc.id, ...sessDoc.data() };
+          }
+        }
+      }
+
+      if (!sessionRecord) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      // 3. Server-side Interceptor: Strict Tier & Branch Access Validation
+      const validation = validateBookingRules(memberRecord, sessionRecord);
+      if (!validation.allowed) {
+        return res.status(validation.status).json({
+          error: validation.error,
+          code: "PERMISSION_DENIED",
+          details: validation.details
+        });
+      }
+
+      // 4. Booking Execution & State Persistence
+      const canonicalMemberId = memberRecord.id || targetMemberId || 'member';
+      const canonicalSessionId = sessionRecord.id || targetSessionId || `session_${Date.now()}`;
+      const bookingId = `${canonicalSessionId}_${canonicalMemberId}`;
+
+      // Update Firestore session attendees and record booking if documents exist
+      if (sessionDocRef) {
+        await db.runTransaction(async (transaction) => {
+          const sDoc = await transaction.get(sessionDocRef!);
+          if (sDoc.exists) {
+            const sData = sDoc.data()!;
+            const attendees: string[] = sData.attendees ? [...sData.attendees] : [];
+            if (!attendees.includes(canonicalMemberId)) {
+              attendees.push(canonicalMemberId);
+              transaction.update(sessionDocRef!, {
+                attendees,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          }
+
+          // Record in classBookings collection
+          const bookingDocRef = db.collection("classBookings").doc(bookingId);
+          transaction.set(bookingDocRef, {
+            bookingId,
+            sessionId: canonicalSessionId,
+            classId: canonicalSessionId,
+            memberId: canonicalMemberId,
+            memberName: memberRecord.name || 'Member',
+            branch_id: validation.details?.sessionBranch,
+            tier: validation.details?.sessionTier,
+            status: 'confirmed',
+            bookedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+
+          // Record in auditLogs
+          const auditRef = db.collection("auditLogs").doc();
+          transaction.set(auditRef, {
+            action: "BOOKING_CREATED",
+            entityType: "CLASS_BOOKING",
+            entityId: bookingId,
+            details: `Booked session ${sessionRecord.name || canonicalSessionId} for ${memberRecord.name || canonicalMemberId}`,
+            timestamp: new Date().toISOString(),
+            userId: req.user?.uid || canonicalMemberId,
+            userName: req.user?.email || memberRecord.name || "Member"
+          });
+        });
+      } else {
+        // Direct object booking (e.g. from tests or mock sessions)
+        const bookingDocRef = db.collection("classBookings").doc(bookingId);
+        await bookingDocRef.set({
+          bookingId,
+          sessionId: canonicalSessionId,
+          classId: canonicalSessionId,
+          memberId: canonicalMemberId,
+          memberName: memberRecord.name || 'Member',
+          branch_id: validation.details?.sessionBranch,
+          tier: validation.details?.sessionTier,
+          status: 'confirmed',
+          bookedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+
+      return res.status(200).json({
+        success: true,
+        bookingId,
+        message: "Booking confirmed successfully",
+        booking: {
+          memberId: canonicalMemberId,
+          sessionId: canonicalSessionId,
+          branch_id: validation.details?.sessionBranch,
+          tier: validation.details?.sessionTier
+        }
+      });
+    } catch (err: any) {
+      console.error("[API] Error in POST /api/v1/bookings:", err);
+      return res.status(500).json({ error: err.message || "Failed to process booking" });
     }
   });
 
@@ -1685,18 +1924,10 @@ async function startServer() {
           throw new Error(`Your membership is currently ${effectiveStatus.toLowerCase()}. Please contact the front desk.`);
         }
 
-        // 2. Strict Tier Gating
-        const clientCategory = clientEffective?.memberCategory || clientEffective?.category || 'Adults';
-        if (!isSessionTierAllowed({ tier: classData?.tier, category: classData?.category, name: classData?.name, allowedTiers: classData?.allowedTiers }, clientCategory)) {
-          throw new Error(`Your membership category (${clientCategory}) is not permitted to book this class (${classData?.tier || classData?.name || 'Restricted'}).`);
-        }
-
-        // 3. Strict Branch Gating (RBAC: Adults have unrestricted multi-branch access, Youth restricted to home facility)
-        const clientBranch = clientEffective?.branch || clientEffective?.branchId || clientEffective?.homeBranch || '';
-        const classBranch = classData?.branch || classData?.branchId || classData?.location || '';
-        const hasMultiBranch = Boolean(clientEffective?.has_multi_branch_access || clientEffective?.isMultiBranch);
-        if (!isSessionBranchAllowed(classBranch, clientBranch, hasMultiBranch, clientCategory)) {
-          throw new Error(`Your registered facility (${clientBranch || 'Home Facility'}) is not permitted to book sessions at ${classBranch || 'other branches'}.`);
+        // 2 & 3. Strict Tier & Branch Access Control Engine
+        const validation = validateBookingRules(clientEffective, classData);
+        if (!validation.allowed) {
+          throw new Error(validation.error);
         }
 
         if (action === 'join') {
