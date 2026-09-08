@@ -9,7 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useLanguage } from './contexts/LanguageContext';
-import { db, auth } from './firebase';
+import { useSettings } from './contexts/SettingsContext';
+import { db, auth, getTenantId } from './firebase';
+import StrikeWeeklyScheduleView from './components/StrikeWeeklyScheduleView';
 import { collection, onSnapshot, setDoc, doc, deleteDoc, writeBatch, getDocs, query, updateDoc } from 'firebase/firestore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
@@ -81,6 +83,13 @@ export default function CalendarView() {
   } = useAppContext();
 
   const { t, language, isRtl } = useLanguage();
+  const { branding } = useSettings();
+  const [isStrikeTimetableOpen, setIsStrikeTimetableOpen] = useState(false);
+
+  const isStrike = useMemo(() => {
+    const tenantId = getTenantId();
+    return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
+  }, [branding?.companyName]);
 
   // Calendar State
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -480,6 +489,17 @@ export default function CalendarView() {
               {language === 'ar' ? 'أسبوعي' : 'Week'}
             </Button>
           </div>
+
+          {isStrike && (
+            <Button 
+              variant="outline"
+              onClick={() => setIsStrikeTimetableOpen(true)}
+              className="rounded-xl border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 font-bold text-sm h-10 px-4 flex items-center gap-1.5"
+            >
+              <Sparkles className="h-4 w-4" />
+              {language === 'ar' ? 'جدول الحصص الأسبوعي' : 'Weekly Timetable'}
+            </Button>
+          )}
 
           <Button 
             onClick={() => handleOpenBooking(new Date(), 'class')}
@@ -1221,6 +1241,14 @@ export default function CalendarView() {
           );
         })()}
       </Dialog>
+      {/* Strike Weekly Timetable Modal */}
+      {isStrike && (
+        <Dialog open={isStrikeTimetableOpen} onOpenChange={setIsStrikeTimetableOpen}>
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-zinc-950 border-zinc-800 p-6 rounded-3xl">
+            <StrikeWeeklyScheduleView userRole={currentUser?.role} />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -1708,57 +1708,66 @@ async function startServer() {
               }
 
               if (currentClientDoc?.exists) {
-                const newRemaining = typeof rawRemaining === 'number' ? Math.max(0, rawRemaining - 1) : rawRemaining;
+                let newRemaining: any;
+                if (typeof rawRemaining === 'number') {
+                  newRemaining = Math.max(0, rawRemaining - 1);
+                } else if (packageDeducted) {
+                  const activePkg = packages.find(p => p.sessionsRemaining !== undefined);
+                  newRemaining = activePkg ? activePkg.sessionsRemaining : 0;
+                } else {
+                  newRemaining = rawRemaining;
+                }
+
+                const currentUsed = typeof currentClientData?.usedSessions === 'number' ? currentClientData.usedSessions : 0;
+                const newUsed = currentUsed + 1;
+                const currentPoints = typeof currentClientData?.points === 'number' ? currentClientData.points : 0;
+                const newPoints = currentPoints + 10;
+
+                console.log(`[Classes Book] Deducted 1 session for client ${canonicalClientId}. Previous: ${rawRemaining}, New: ${newRemaining}, Used: ${newUsed}`);
+
                 transaction.update(clientRef, {
                   packages,
                   sessionsRemaining: newRemaining,
+                  usedSessions: newUsed,
+                  points: newPoints,
                   updatedAt: new Date().toISOString()
                 });
-              }
-            }
 
-            // Update client points (legacy)
-            if (currentClientData) {
-              const currentPoints = typeof currentClientData.points === 'number' ? currentClientData.points : 0;
-              transaction.update(clientRef, {
-                points: currentPoints + 10,
-                updatedAt: new Date().toISOString()
-              });
+                // Update points wallet if present
+                const walletRef = db.collection("pointsWallets").doc(memberIdStr);
+                const walletDoc = await transaction.get(walletRef);
+                if (walletDoc.exists) {
+                  const wData = walletDoc.data()!;
+                  const newBalance = (wData.balance || 0) + 10;
+                  transaction.update(walletRef, {
+                    balance: newBalance,
+                    totalEarned: (wData.totalEarned || 0) + 10,
+                    lastUpdated: new Date().toISOString()
+                  });
+                } else {
+                  transaction.set(walletRef, {
+                    memberId: memberIdStr,
+                    balance: 10,
+                    totalEarned: 10,
+                    totalSpent: 0,
+                    lastUpdated: new Date().toISOString()
+                  });
+                }
 
-              // Update points wallet if present
-              const walletRef = db.collection("pointsWallets").doc(memberIdStr);
-              const walletDoc = await transaction.get(walletRef);
-              if (walletDoc.exists) {
-                const wData = walletDoc.data()!;
-                const newBalance = (wData.balance || 0) + 10;
-                transaction.update(walletRef, {
-                  balance: newBalance,
-                  totalEarned: (wData.totalEarned || 0) + 10,
-                  lastUpdated: new Date().toISOString()
-                });
-              } else {
-                transaction.set(walletRef, {
+                // Log points transaction
+                const pointsTxnRef = db.collection("pointsTransactions").doc();
+                transaction.set(pointsTxnRef, {
                   memberId: memberIdStr,
-                  balance: 10,
-                  totalEarned: 10,
-                  totalSpent: 0,
-                  lastUpdated: new Date().toISOString()
+                  type: 'credit',
+                  amount: 10,
+                  reason: 'gift',
+                  description: `Class Booking: ${classData?.name || 'Workout Class'}`,
+                  balanceBefore: currentPoints,
+                  balanceAfter: newPoints,
+                  createdBy: 'system',
+                  createdAt: new Date().toISOString()
                 });
               }
-
-              // Log points transaction
-              const pointsTxnRef = db.collection("pointsTransactions").doc();
-              transaction.set(pointsTxnRef, {
-                memberId: memberIdStr,
-                type: 'credit',
-                amount: 10,
-                reason: 'gift',
-                description: `Class Booking: ${classData?.name || 'Workout Class'}`,
-                balanceBefore: currentPoints,
-                balanceAfter: currentPoints + 10,
-                createdBy: 'system',
-                createdAt: new Date().toISOString()
-              });
             }
 
             attendees.push(canonicalClientId);
@@ -1843,6 +1852,26 @@ async function startServer() {
                 performedBy: clientId,
                 createdAt: new Date().toISOString()
               });
+            } else if (!entToRefund && currentClientDoc?.exists) {
+              // Strike tenant fallback refund for embedded package or sessionsRemaining
+              const packages: any[] = Array.isArray(clientEffective?.packages) ? [...clientEffective.packages] : [];
+              for (let i = 0; i < packages.length; i++) {
+                const pkg = packages[i];
+                if (pkg.sessionsTotal !== 'unlimited' && pkg.usedSessions && pkg.usedSessions > 0) {
+                  pkg.usedSessions = Math.max(0, pkg.usedSessions - 1);
+                  if (typeof pkg.sessionsRemaining === 'number') {
+                    pkg.sessionsRemaining = pkg.sessionsRemaining + 1;
+                  }
+                  break;
+                }
+              }
+              const rawRemaining = clientEffective?.sessionsRemaining;
+              const newRemaining = typeof rawRemaining === 'number' ? rawRemaining + 1 : rawRemaining;
+              transaction.update(clientRef, {
+                packages,
+                sessionsRemaining: newRemaining,
+                updatedAt: new Date().toISOString()
+              });
             }
 
             // Waitlist FIFO Promotion
@@ -1899,6 +1928,52 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Classes Book] Error:", err);
       return res.status(500).json({ error: err.message || "Failed to process booking" });
+    }
+  });
+
+  // Admin seeder for Strike Gym official weekly schedules (Maxim, Mivida, Impact)
+  app.post("/api/admin/seed-strike-schedules", requireAuth, async (req, res) => {
+    try {
+      const hostname = getRequestHostname(req);
+      const { config } = await getTenantInfoForHost(hostname);
+      const tenantId = (config?.tenantId || '').toLowerCase();
+      if (!tenantId.includes('strike') && tenantId !== '') {
+        return res.status(403).json({ error: "This schedule seeder is exclusively for Strike Gym." });
+      }
+
+      // Check caller role
+      const db = await getDbForRequest(req);
+      const userRef = db.collection("users").doc(req.user?.uid || '');
+      const userSnap = await userRef.get();
+      const userData = userSnap.data();
+      const role = userData?.role || '';
+      if (!['admin', 'manager', 'super_admin', 'crm_admin'].includes(role) && req.user?.email !== PLATFORM_SUPER_ADMIN_EMAIL) {
+        return res.status(403).json({ error: "Admin or Manager privileges required." });
+      }
+
+      const days = Number(req.body.days) || 60;
+      const branchFilter = req.body.branch ? String(req.body.branch).toLowerCase() : undefined;
+
+      const { generateStrikeClassesForDateRange } = await import('./src/constants/strikeSchedules.js');
+      const classesToSeed = generateStrikeClassesForDateRange(new Date(), days, branchFilter as any);
+
+      const chunkSize = 400;
+      let count = 0;
+      for (let i = 0; i < classesToSeed.length; i += chunkSize) {
+        const chunk = classesToSeed.slice(i, i + chunkSize);
+        const batch = db.batch();
+        for (const item of chunk) {
+          const docRef = db.collection('classSchedules').doc(item.id);
+          batch.set(docRef, item, { merge: true });
+        }
+        await batch.commit();
+        count += chunk.length;
+      }
+
+      return res.json({ success: true, count, message: `Successfully seeded ${count} class sessions across ${days} days.` });
+    } catch (err: any) {
+      console.error("[Seed Strike Schedules] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to seed schedules" });
     }
   });
 

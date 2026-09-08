@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { auth, db } from '../../firebase';
+import { auth, db, getTenantId } from '../../firebase';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { Client, Package } from '../../types';
 import { ClassSchedule } from '../../types/class';
@@ -99,18 +99,39 @@ export function ClassBookingDialog({
     const verifyEntitlement = async () => {
       if (!client?.id) return;
       try {
+        // First check client's direct packages / session balance (Strike tenant format)
+        const now = Date.now();
+        const hasActiveDirectPkg = (client.packages || []).some(
+          (p: any) => (p.status === 'Active' || String(p.status).toLowerCase() === 'active') &&
+            (!p.endDate || new Date(p.endDate).getTime() > now) &&
+            (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0)
+        ) || (
+          (client.status === 'Active' || String(client.status).toLowerCase() === 'active') &&
+          (client.sessionsRemaining === 'unlimited' || Number(client.sessionsRemaining) > 0)
+        );
+
+        if (hasActiveDirectPkg) {
+          setHasActiveCredits(true);
+          return;
+        }
+
+        // Fallback to Inzan entitlements collection
         const { checkEntitlement } = await import('../../services/entitlementService');
         const check = await checkEntitlement(client.id, 'class');
         setHasActiveCredits(check.canBook);
       } catch (err) {
         console.error("Failed to verify entitlement:", err);
-        setHasActiveCredits(false);
+        const fallbackActive = (client.packages || []).some(
+          (p: any) => (p.status === 'Active' || String(p.status).toLowerCase() === 'active') &&
+            (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0)
+        ) || ((client.status === 'Active' || String(client.status).toLowerCase() === 'active') && Number(client.sessionsRemaining) > 0);
+        setHasActiveCredits(fallbackActive);
       } finally {
         setCheckingEntitlement(false);
       }
     };
     verifyEntitlement();
-  }, [client?.id]);
+  }, [client?.id, client?.packages, client?.sessionsRemaining, client?.status]);
 
   const matchingPackage: { packageName: string; sessionsRemaining?: any } | null = (client.packages || []).find(
     (p: any) => p.status === 'Active' && (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0)
@@ -138,16 +159,19 @@ export function ClassBookingDialog({
     try {
       const token = await auth.currentUser?.getIdToken();
       const action = isWaitlisted || isBooked ? 'leave' : 'join';
+      const tenantId = getTenantId();
       const res = await fetch('/api/classes/book', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-tenant-id': tenantId,
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           classId: gymClass.id,
           action,
           clientId: client.id,
+          tenantId,
         })
       });
 

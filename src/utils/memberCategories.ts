@@ -27,6 +27,20 @@ export const normalizeMemberCategory = (val?: string | null): MemberCategory => 
 export const getMemberCategory = (client: any): MemberCategory => {
   if (!client) return 'Adults';
   if (client.memberCategory) return normalizeMemberCategory(client.memberCategory);
+  if (client.category) return normalizeMemberCategory(client.category);
+
+  // Check packages array (Strike Gym stores active packages here)
+  if (Array.isArray(client.packages) && client.packages.length > 0) {
+    for (const pkg of client.packages) {
+      const name = (pkg.packageName || pkg.name || '').toLowerCase();
+      if (name.includes('kids pro')) return 'Kids Pro';
+      if (name.includes('kids') || name.includes('kid')) return 'Kids Only';
+      if (name.includes('junior advanced') || name.includes('juniors advanced') || name.includes('junior pro') || name.includes('juniors pro')) return 'Junior Advanced';
+      if (name.includes('junior')) return 'Junior Only';
+      if (name.includes('adult')) return 'Adults';
+    }
+  }
+
   const pkgStr = (client.packageType || '').toLowerCase();
   if (pkgStr.includes('kids pro')) return 'Kids Pro';
   if (pkgStr.includes('kids')) return 'Kids Only';
@@ -104,9 +118,22 @@ export function isSessionTierAllowed(
 }
 
 /**
+ * Normalizes branch names so variations ("Maxim", "Maxim Compound", "Strike Maxim") match.
+ */
+export function normalizeBranchName(branch?: string): string {
+  if (!branch) return '';
+  const lower = branch.trim().toLowerCase();
+  if (lower.includes('maxim')) return 'maxim';
+  if (lower.includes('mivida') || lower.includes('mvida')) return 'mivida';
+  if (lower.includes('impact')) return 'impact';
+  if (lower.includes('envida')) return 'envida';
+  return lower;
+}
+
+/**
  * Strict Branch / Location Gating check.
- * Enforces that members assigned to specific branches (e.g. Envida) can only view & book
- * sessions located at that branch, excluding other branches (e.g. Main Complex) unless
+ * Enforces that members assigned to specific branches can only view & book
+ * sessions located at that branch, excluding other branches unless
  * multi-branch access is enabled.
  */
 export function isSessionBranchAllowed(
@@ -115,14 +142,18 @@ export function isSessionBranchAllowed(
   isMultiBranch: boolean = false
 ): boolean {
   if (isMultiBranch) return true;
-  const sBranch = (sessionBranch || '').trim().toLowerCase();
-  const mBranch = (memberBranch || '').trim().toLowerCase();
+  const sRaw = (sessionBranch || '').trim().toLowerCase();
+  const mRaw = (memberBranch || '').trim().toLowerCase();
 
   // Open to all branches
-  if (!sBranch || sBranch === 'all' || sBranch === 'all branches') return true;
+  if (!sRaw || sRaw === 'all' || sRaw === 'all branches') return true;
 
   // Member has no branch constraint
-  if (!mBranch || mBranch === 'all' || mBranch === 'all branches') return true;
+  if (!mRaw || mRaw === 'all' || mRaw === 'all branches') return true;
 
-  return sBranch === mBranch;
+  const sNorm = normalizeBranchName(sessionBranch);
+  const mNorm = normalizeBranchName(memberBranch);
+  if (sNorm && mNorm && sNorm === mNorm) return true;
+
+  return sRaw === mRaw;
 }

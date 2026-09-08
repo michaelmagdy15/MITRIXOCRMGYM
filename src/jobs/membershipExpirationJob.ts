@@ -55,6 +55,12 @@ export function getEffectiveClientStatus(client: any): 'Active' | 'Expired' | 'F
     });
 
     if (!hasActiveFuturePackage && (normalized === 'active' || !rawStatus)) {
+      // If client has positive session balance and no past expiry, preserve Active
+      const hasDirectCredits = client.sessionsRemaining === 'unlimited' || (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0);
+      const isExpiryValid = !client.membershipExpiry || new Date(client.membershipExpiry).getTime() >= todayMs;
+      if (hasDirectCredits && isExpiryValid) {
+        return 'Active';
+      }
       return 'Expired';
     }
   }
