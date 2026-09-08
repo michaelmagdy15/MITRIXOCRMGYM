@@ -298,6 +298,9 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         setActiveClient({ ...docSnap.data(), id: docSnap.id } as Client);
       }
     }, (err) => {
+      if ((err.code === 'permission-denied' || err.message?.includes('Missing or insufficient permissions')) && !auth.currentUser) {
+        return;
+      }
       console.warn("Could not listen to active client record:", err.code || err.message);
     });
 

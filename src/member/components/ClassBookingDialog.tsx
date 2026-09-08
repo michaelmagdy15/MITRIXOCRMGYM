@@ -40,65 +40,13 @@ export function ClassBookingDialog({
   const [selectedUpsellPkg, setSelectedUpsellPkg] = useState<Package | null>(null);
   const [isRequestingPass, setIsRequestingPass] = useState(false);
   const [passRequestSuccess, setPassRequestSuccess] = useState(false);
-
-  // Reset state when dialog opens with a new class
-  useEffect(() => {
-    if (open && gymClass) {
-      setIsSuccess(false);
-      setErrorMessage(null);
-      setSelectedUpsellPkg(null);
-      setPassRequestSuccess(false);
-
-      // If client needs a package, load available options
-      if (!hasActiveCredits) {
-        loadAvailablePackages();
-      }
-    }
-  }, [open, gymClass?.id, client?.id]);
-
-  const loadAvailablePackages = async () => {
-    setLoadingPackages(true);
-    try {
-      const snap = await getDocs(collection(db, 'packages'));
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Package));
-      
-      // Filter out corporate/group packages
-      const filtered = list.filter(p => {
-        const name = (p.name || '').toLowerCase();
-        return !name.includes('corporate') && !name.includes('company') && p.type !== 'Group';
-      });
-
-      // Prioritize packages matching class branch or session counts (Drop-in, 8, 12, Unlimited)
-      filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
-      setAvailablePackages(filtered.slice(0, 6));
-      if (filtered.length > 0) {
-        setSelectedUpsellPkg(filtered[0] || null);
-      }
-    } catch (err) {
-      console.error("Error loading packages for booking upsell:", err);
-    } finally {
-      setLoadingPackages(false);
-    }
-  };
-
-  if (!gymClass || !client) return null;
-
-  const isBooked = (gymClass.attendees || []).includes(client.id) ||
-    Boolean(client.memberId && (gymClass.attendees || []).includes(client.memberId)) ||
-    Boolean(client.portalUserId && (gymClass.attendees || []).includes(client.portalUserId));
-  const isWaitlisted = (gymClass.waitlist || []).includes(client.id) ||
-    Boolean(client.memberId && (gymClass.waitlist || []).includes(client.memberId)) ||
-    Boolean(client.portalUserId && (gymClass.waitlist || []).includes(client.portalUserId));
-  const isFull = (gymClass.attendees || []).length >= gymClass.capacity;
-  const spotsLeft = Math.max(0, gymClass.capacity - (gymClass.attendees || []).length);
-
-  // ── Credit & Package Verification (Entitlements) ──
   const [hasActiveCredits, setHasActiveCredits] = useState<boolean>(false);
   const [checkingEntitlement, setCheckingEntitlement] = useState(true);
 
+  // ── Credit & Package Verification (Entitlements) ──
   useEffect(() => {
+    if (!open || !client?.id) return;
     const verifyEntitlement = async () => {
-      if (!client?.id) return;
       try {
         // First check client's direct packages / session balance (Strike tenant format)
         const now = Date.now();
@@ -132,7 +80,58 @@ export function ClassBookingDialog({
       }
     };
     verifyEntitlement();
-  }, [client?.id, client?.packages, client?.sessionsRemaining, client?.status]);
+  }, [open, client?.id, client?.packages, client?.sessionsRemaining, client?.status]);
+
+  const loadAvailablePackages = async () => {
+    setLoadingPackages(true);
+    try {
+      const snap = await getDocs(collection(db, 'packages'));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Package));
+      
+      // Filter out corporate/group packages
+      const filtered = list.filter(p => {
+        const name = (p.name || '').toLowerCase();
+        return !name.includes('corporate') && !name.includes('company') && p.type !== 'Group';
+      });
+
+      // Prioritize packages matching class branch or session counts (Drop-in, 8, 12, Unlimited)
+      filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
+      setAvailablePackages(filtered.slice(0, 6));
+      if (filtered.length > 0) {
+        setSelectedUpsellPkg(filtered[0] || null);
+      }
+    } catch (err) {
+      console.error("Error loading packages for booking upsell:", err);
+    } finally {
+      setLoadingPackages(false);
+    }
+  };
+
+  // Reset state when dialog opens with a new class
+  useEffect(() => {
+    if (open && gymClass) {
+      setIsSuccess(false);
+      setErrorMessage(null);
+      setSelectedUpsellPkg(null);
+      setPassRequestSuccess(false);
+
+      // If client needs a package, load available options
+      if (!hasActiveCredits) {
+        loadAvailablePackages();
+      }
+    }
+  }, [open, gymClass?.id, client?.id, hasActiveCredits]);
+
+  if (!gymClass || !client) return null;
+
+  const isBooked = (gymClass.attendees || []).includes(client.id) ||
+    Boolean(client.memberId && (gymClass.attendees || []).includes(client.memberId)) ||
+    Boolean(client.portalUserId && (gymClass.attendees || []).includes(client.portalUserId));
+  const isWaitlisted = (gymClass.waitlist || []).includes(client.id) ||
+    Boolean(client.memberId && (gymClass.waitlist || []).includes(client.memberId)) ||
+    Boolean(client.portalUserId && (gymClass.waitlist || []).includes(client.portalUserId));
+  const isFull = (gymClass.attendees || []).length >= gymClass.capacity;
+  const spotsLeft = Math.max(0, gymClass.capacity - (gymClass.attendees || []).length);
 
   const matchingPackage: { packageName: string; sessionsRemaining?: any } | null = (client.packages || []).find(
     (p: any) => p.status === 'Active' && (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0)
