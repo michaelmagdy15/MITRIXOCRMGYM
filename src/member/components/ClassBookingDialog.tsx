@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { safeFormatDate, safeFormatTime } from '../../utils/dateUtils';
+import { isSessionBranchAllowed, getMemberCategory } from '../../utils/memberCategories';
 
 interface ClassBookingDialogProps {
   open: boolean;
@@ -155,6 +156,19 @@ export function ClassBookingDialog({
   const handleConfirmBooking = async () => {
     setIsSubmitting(true);
     setErrorMessage(null);
+
+    // RBAC: Check branch access (Adults multi-branch, Youth home facility only)
+    const memberCategory = getMemberCategory(client);
+    const hasMultiBranch = Boolean(client?.has_multi_branch_access);
+    const clientHomeBranch = client?.branch || client?.homeBranch || '';
+    const classBranch = gymClass.branch || (gymClass as any).branchId || (gymClass as any).location || '';
+
+    const branchAllowed = isSessionBranchAllowed(classBranch, clientHomeBranch, hasMultiBranch, memberCategory);
+    if (!branchAllowed) {
+      setErrorMessage(`Your membership (${memberCategory}) is registered for ${clientHomeBranch || 'your home facility'}. Bookings outside your home branch are restricted.`);
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       const token = await auth.currentUser?.getIdToken();

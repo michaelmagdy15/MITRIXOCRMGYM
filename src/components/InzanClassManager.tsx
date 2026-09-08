@@ -249,7 +249,7 @@ export const InzanClassManager: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Dumbbell className="h-6 w-6 text-primary" /> Class Management (Inzan)
+            <Dumbbell className="h-6 w-6 text-primary" /> Class Management
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
             Schedule studio classes, manage capacities, and analyze attendance performance.

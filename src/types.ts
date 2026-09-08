@@ -20,6 +20,13 @@ export interface Package {
   sessions: number; // Keep field name for now but logic uses as packages
   expiryDays: number;
   branch: Branch | 'ALL';
+  branch_id?: string;
+  branchId?: string;
+  tier?: string;
+  category?: string;
+  is_all_branches?: boolean;
+  is_active?: boolean;
+  isActive?: boolean;
   type: 'Private' | 'Group' | 'Other';
   imageUrl?: string;
 }
@@ -240,6 +247,11 @@ export interface Client {
   status: ClientStatus;
   assignedTo?: string; // userId
   branch?: Branch;
+  branchId?: string;
+  branch_id?: string;
+  homeBranch?: string;
+  home_branch_id?: string;
+  has_multi_branch_access?: boolean;
   memberId?: string; // Sequential ID for members
   portalUserId?: string; // Link to the user portal record
   linkedClientIds?: string[]; // Array of linked client record IDs (family members)

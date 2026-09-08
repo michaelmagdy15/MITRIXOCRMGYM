@@ -8,7 +8,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 import { startNoShowJob } from './src/jobs/noShowJob.js';
 import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus } from './src/jobs/membershipExpirationJob.js';
-import { isSessionTierAllowed, isSessionBranchAllowed } from './src/utils/memberCategories.js';
+import { isSessionTierAllowed, isSessionBranchAllowed, isPackageMatchingFilter } from './src/utils/memberCategories.js';
 
 declare global {
   namespace Express {
@@ -1298,6 +1298,50 @@ async function startServer() {
     }
   });
 
+  // CRM Dynamic Pricing & Packages Query endpoint
+  // Matches SQL logic:
+  // SELECT * FROM packages 
+  // WHERE tier = :selected_tier 
+  //   AND (branch_id = :selected_branch OR branch_id IS NULL OR is_all_branches = TRUE)
+  //   AND is_active = TRUE;
+  const handleGetPackages = async (req: express.Request, res: express.Response) => {
+    try {
+      const db = await getDbForRequest(req);
+      const { tier, category, branch, branch_id, is_pt } = req.query;
+
+      const snap = await db.collection("packages").get();
+      const allPkgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const selectedTier = (tier || category || '') as string;
+      const selectedBranch = (branch || branch_id || '') as string;
+      const isPtSelected = is_pt === 'true' || is_pt === '1';
+
+      if (!selectedTier && !selectedBranch && !is_pt) {
+        return res.json({ total: allPkgs.length, packages: allPkgs });
+      }
+
+      const filtered = allPkgs.filter((pkg: any) => {
+        return isPackageMatchingFilter(pkg, selectedTier || 'Adults', selectedBranch, isPtSelected);
+      });
+
+      return res.json({
+        total: filtered.length,
+        filter: {
+          tier: selectedTier,
+          branch: selectedBranch,
+          isPt: isPtSelected
+        },
+        packages: filtered
+      });
+    } catch (err) {
+      console.error("[API] Error fetching packages:", err);
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  };
+
+  app.get("/api/packages", handleGetPackages);
+  app.get("/api/v1/packages", handleGetPackages);
+
   // AGENT 3: RBAC & Branch-Level Session Gating Engine
   // Strict tier and branch filtering for session schedule
   app.get("/api/v1/sessions", async (req, res) => {
@@ -1342,8 +1386,8 @@ async function startServer() {
           continue;
         }
 
-        // Strict branch gating
-        if (memberBranch && !isSessionBranchAllowed(sessionBranch, memberBranch)) {
+        // Strict branch gating (Adults have unrestricted multi-branch access)
+        if (memberBranch && !isSessionBranchAllowed(sessionBranch, memberBranch, false, memberCategory)) {
           continue;
         }
 
@@ -1647,11 +1691,12 @@ async function startServer() {
           throw new Error(`Your membership category (${clientCategory}) is not permitted to book this class (${classData?.tier || classData?.name || 'Restricted'}).`);
         }
 
-        // 3. Strict Branch Gating
-        const clientBranch = clientEffective?.branch || clientEffective?.branchId || '';
+        // 3. Strict Branch Gating (RBAC: Adults have unrestricted multi-branch access, Youth restricted to home facility)
+        const clientBranch = clientEffective?.branch || clientEffective?.branchId || clientEffective?.homeBranch || '';
         const classBranch = classData?.branch || classData?.branchId || classData?.location || '';
-        if (!isSessionBranchAllowed(classBranch, clientBranch)) {
-          throw new Error(`Your registered branch (${clientBranch || 'Standard'}) is not permitted to book sessions at ${classBranch || 'this branch'}.`);
+        const hasMultiBranch = Boolean(clientEffective?.has_multi_branch_access || clientEffective?.isMultiBranch);
+        if (!isSessionBranchAllowed(classBranch, clientBranch, hasMultiBranch, clientCategory)) {
+          throw new Error(`Your registered facility (${clientBranch || 'Home Facility'}) is not permitted to book sessions at ${classBranch || 'other branches'}.`);
         }
 
         if (action === 'join') {
@@ -2067,11 +2112,13 @@ async function startServer() {
           throw new Error(`Your membership is currently ${effectiveStatus.toLowerCase()}. Please contact the front desk.`);
         }
 
-        // Branch check if branch is specified on session
+        // Branch check if branch is specified on session (RBAC: Adults have unrestricted multi-branch access)
         if (sessionData.branch) {
-          const clientBranch = client.branch || client.branchId || '';
-          if (!isSessionBranchAllowed(sessionData.branch, clientBranch)) {
-            throw new Error(`Your registered branch (${clientBranch || 'Standard'}) cannot book sessions at ${sessionData.branch}.`);
+          const clientBranch = client.branch || client.branchId || client.homeBranch || '';
+          const clientCategory = client.memberCategory || client.category || 'Adults';
+          const hasMultiBranch = Boolean(client.has_multi_branch_access || client.isMultiBranch);
+          if (!isSessionBranchAllowed(sessionData.branch, clientBranch, hasMultiBranch, clientCategory)) {
+            throw new Error(`Your registered facility (${clientBranch || 'Home Facility'}) cannot book sessions at ${sessionData.branch}.`);
           }
         }
         

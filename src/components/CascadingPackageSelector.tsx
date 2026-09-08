@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Package } from '../types';
-import { MEMBER_CATEGORIES, MemberCategory, normalizeMemberCategory } from '../utils/memberCategories';
+import { MEMBER_CATEGORIES, MemberCategory, normalizeMemberCategory, isPackageMatchingFilter } from '../utils/memberCategories';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -77,48 +77,10 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
     onBranchChange?.(newBranch);
   };
 
-  // Filter packages dynamically based on Step 1, Step 2, and PT toggle
+  // Filter packages dynamically based on Step 1, Step 2, and PT toggle using SQL RBAC parity
   const filteredPackages = useMemo(() => {
     return packages.filter((pkg) => {
-      const nameLower = (pkg.name || '').toLowerCase();
-      const typeLower = (pkg.type || '').toLowerCase();
-      const pkgBranch = (pkg.branch || '').toLowerCase();
-      const selectedBranchLower = branch.toLowerCase();
-
-      // 1. PT / Private Training Filtering
-      const isPtPkg = typeLower === 'private' || nameLower.includes('pt') || nameLower.includes('private');
-      if (isPtSelected) {
-        if (!isPtPkg) return false;
-      } else {
-        if (isPtPkg) return false;
-      }
-
-      // 2. Branch Filtering
-      if (branch !== 'All Branches' && branch !== 'ALL' && pkg.branch && pkg.branch !== 'ALL') {
-        const matchesBranch = pkgBranch === selectedBranchLower || 
-          (selectedBranchLower.includes('envida') && pkgBranch.includes('envida')) ||
-          (selectedBranchLower.includes('main') && pkgBranch.includes('main'));
-        if (!matchesBranch) return false;
-      }
-
-      // 3. Category / Tier Filtering
-      if (category === 'Kids Only') {
-        return nameLower.includes('kid') && !nameLower.includes('pro');
-      }
-      if (category === 'Kids Pro') {
-        return nameLower.includes('kid') && nameLower.includes('pro');
-      }
-      if (category === 'Junior Only') {
-        return nameLower.includes('junior') && !nameLower.includes('advanced') && !nameLower.includes('pro');
-      }
-      if (category === 'Junior Advanced') {
-        return nameLower.includes('junior') && (nameLower.includes('advanced') || nameLower.includes('pro'));
-      }
-      if (category === 'Adults') {
-        return !nameLower.includes('kid') && !nameLower.includes('junior');
-      }
-
-      return true;
+      return isPackageMatchingFilter(pkg, category, branch, isPtSelected);
     });
   }, [packages, category, branch, isPtSelected]);
 

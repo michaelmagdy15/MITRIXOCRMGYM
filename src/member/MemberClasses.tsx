@@ -114,6 +114,19 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   };
 
   const handleSelectTimetableSlot = (slot: any, branchName: string) => {
+    // Check branch access (Adults multi-branch, Youth home facility only)
+    const isBranchAllowed = isSessionBranchAllowed(
+      branchName,
+      client?.branch || client?.homeBranch,
+      Boolean(client?.has_multi_branch_access),
+      memberCategory
+    );
+
+    if (!isBranchAllowed) {
+      alert(`Youth memberships (${memberCategory}) are restricted to their registered facility (${client?.branch || client?.homeBranch || 'Maxim Compound'}).`);
+      return;
+    }
+
     const today = startOfDay(new Date());
     // Find the next upcoming occurrence of this class slot
     const matchingUpcoming = classes.filter(c => {
@@ -124,7 +137,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
         if (classDate < today) return false;
         if (classDate.getDay() !== slot.dayOfWeek) return false;
 
-        const branchMatches = isSessionBranchAllowed(c.branch, branchName);
+        const branchMatches = isSessionBranchAllowed(c.branch, branchName, Boolean(client?.has_multi_branch_access), memberCategory);
         if (!branchMatches) return false;
 
         const sTime = c.startTime || '';
@@ -192,10 +205,20 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
 
         // Category filter
         if (categoryFilter === 'mine') {
-          return isSessionTierAllowed(
+          const isTierMatch = isSessionTierAllowed(
             { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
             memberCategory
           );
+          if (!isTierMatch) return false;
+
+          // RBAC Branch Gating: Youth restricted to home facility, Adults unrestricted
+          const isBranchAllowed = isSessionBranchAllowed(
+            c.branch,
+            client?.branch || client?.homeBranch,
+            Boolean(client?.has_multi_branch_access),
+            memberCategory
+          );
+          if (!isBranchAllowed) return false;
         } else if (categoryFilter === 'Adults') {
           const t = ((c as any).tier || '').toLowerCase();
           const n = (c.name || '').toLowerCase();
@@ -216,7 +239,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
         return true;
       } catch { return false; }
     });
-  }, [classes, selectedDate, branchFilter, categoryFilter, memberCategory]);
+  }, [classes, selectedDate, branchFilter, categoryFilter, memberCategory, client?.branch, client?.homeBranch, client?.has_multi_branch_access]);
 
   // Count classes per date for dot indicators
   const classCountByDate = useMemo(() => {
@@ -233,6 +256,14 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
           memberCategory
         );
         if (!isTierMatch) return;
+
+        const isBranchAllowed = isSessionBranchAllowed(
+          c.branch,
+          client?.branch || client?.homeBranch,
+          Boolean(client?.has_multi_branch_access),
+          memberCategory
+        );
+        if (!isBranchAllowed) return;
       } else if (categoryFilter === 'Adults') {
         const t = ((c as any).tier || '').toLowerCase();
         const n = (c.name || '').toLowerCase();
