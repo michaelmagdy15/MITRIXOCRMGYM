@@ -10,7 +10,7 @@ export const useUserTargets = (currentUser: User | null) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || currentUser.role === 'client') {
       setLoading(false);
       return;
     }

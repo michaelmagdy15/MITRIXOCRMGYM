@@ -144,7 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               userData.role = 'super_admin';
               try { await updateDoc(userDocRef, { role: 'super_admin' }); } catch { /* will be set next admin login */ }
             }
-            if (firebaseUser.email) {
+            if (firebaseUser.email && userData.role !== 'client') {
               try {
                 const staleQ = query(collection(db, 'users'), where('email', '==', firebaseUser.email));
                 const staleSnap = await getDocs(staleQ);
@@ -396,7 +396,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Users listener
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || currentUser.role === 'client') return;
 
     // Do not subscribe to these CRM listeners when running in Platform Super Admin mode
     const isSuperAdminMode = window.location.hostname.startsWith('superadmin.') || 

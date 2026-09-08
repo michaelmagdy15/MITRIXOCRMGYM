@@ -529,6 +529,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+            <input type="text" name="username" value={client?.email || ''} autoComplete="username" className="hidden" readOnly tabIndex={-1} aria-hidden="true" />
             <div className="space-y-1.5">
               <Label htmlFor="currPass" className="text-xs font-bold text-muted-foreground">Current Password</Label>
               <Input
@@ -536,6 +537,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
                 required
                 placeholder="••••••••"
                 className="bg-background"
@@ -549,6 +551,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
                 required
                 placeholder="••••••••"
                 className="bg-background"
@@ -562,6 +565,7 @@ export default function MemberProfile({ client }: { client: Client | null }) {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
                 required
                 placeholder="••••••••"
                 className="bg-background"

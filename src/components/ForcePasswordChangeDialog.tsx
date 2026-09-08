@@ -76,6 +76,7 @@ export function ForcePasswordChangeDialog() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
+              <input type="text" name="username" value={currentUser?.email || ''} autoComplete="username" className="hidden" readOnly tabIndex={-1} aria-hidden="true" />
               <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-700 dark:text-amber-400 flex gap-2">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>

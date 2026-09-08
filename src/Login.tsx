@@ -848,6 +848,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                 </div>
               ) : phoneResetStep === 'otp' ? (
                 <form onSubmit={handleVerifyPhoneOtpAndReset} className="space-y-4 py-1">
+                  <input type="text" name="username" value={phoneResetNumber} autoComplete="username" className="hidden" readOnly tabIndex={-1} aria-hidden="true" />
                   {phoneSmsError && <Alert variant="destructive"><AlertDescription>{phoneSmsError}</AlertDescription></Alert>}
                   
                   <div className="space-y-2">
@@ -873,6 +874,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                       placeholder="Min 6 characters"
                       value={phoneNewPassword}
                       onChange={e => setPhoneNewPassword(e.target.value)}
+                      autoComplete="new-password"
                       required
                     />
                   </div>
@@ -885,6 +887,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                       placeholder="Re-enter new password"
                       value={phoneConfirmPassword}
                       onChange={e => setPhoneConfirmPassword(e.target.value)}
+                      autoComplete="new-password"
                       required
                     />
                   </div>

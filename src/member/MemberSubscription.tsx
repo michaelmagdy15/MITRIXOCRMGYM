@@ -69,7 +69,8 @@ export default function MemberSubscription({ client }: { client: Client | null }
       setRequestsHistory(list);
       setLoading(false);
     }, (err) => {
-      console.error("Error loading requests history:", err);
+      // If index or permission isn't available, gracefully fall back
+      setRequestsHistory([]);
       setLoading(false);
     });
 
