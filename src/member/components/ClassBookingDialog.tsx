@@ -74,9 +74,8 @@ export function ClassBookingDialog({
           return;
         }
 
-        // Fallback to Inzan entitlements collection
         const { checkEntitlement } = await import('../../services/entitlementService');
-        const check = await checkEntitlement(client.id, 'class');
+        const check = await checkEntitlement(client, 'class');
         setHasActiveCredits(check.canBook);
       } catch (err) {
         console.error("Failed to verify entitlement:", err);

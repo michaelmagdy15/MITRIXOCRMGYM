@@ -171,10 +171,10 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     setBookingError(null);
 
     try {
-      const { checkEntitlement, deductSession } = await import('../services/entitlementService');
+      const { checkEntitlement } = await import('../services/entitlementService');
       
       // Enforce entitlement check
-      const entitlementCheck = await checkEntitlement(client.id, 'pt');
+      const entitlementCheck = await checkEntitlement(client, 'pt');
       if (!entitlementCheck.canBook) {
         throw new Error(entitlementCheck.reason || "You do not have a valid entitlement to book this session.");
       }
