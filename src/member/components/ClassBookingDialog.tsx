@@ -12,7 +12,7 @@ import {
   Dumbbell, ShoppingBag, CreditCard, Sparkles, Loader2, ArrowRight, Wallet
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { safeFormatDate, safeFormatTime } from '../../utils/dateUtils';
+import { safeFormatDate, safeFormatTime, safeParseExpiryToEndOfDay } from '../../utils/dateUtils';
 import { isSessionBranchAllowed, getMemberCategory } from '../../utils/memberCategories';
 
 interface ClassBookingDialogProps {
@@ -52,7 +52,7 @@ export function ClassBookingDialog({
         const now = Date.now();
         const hasActiveDirectPkg = (client.packages || []).some(
           (p: any) => (p.status === 'Active' || String(p.status).toLowerCase() === 'active') &&
-            (!p.endDate || new Date(p.endDate).getTime() > now) &&
+            (!p.endDate || (safeParseExpiryToEndOfDay(p.endDate)?.getTime() ?? 0) >= now) &&
             (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0)
         ) || (
           (client.status === 'Active' || String(client.status).toLowerCase() === 'active') &&

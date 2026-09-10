@@ -72,6 +72,25 @@ export function toValidDate(val: any): Date | null {
 }
 
 /**
+ * Safely parses an expiry date value to the end of that day (23:59:59.999).
+ * If the input is a date-only string (e.g. YYYY-MM-DD), it sets the time to 23:59:59.999
+ * so members are not blocked or expired mid-day on their last valid date.
+ */
+export function safeParseExpiryToEndOfDay(val: any): Date | null {
+  const d = toValidDate(val);
+  if (!d) return null;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const eod = new Date(d);
+      eod.setHours(23, 59, 59, 999);
+      return eod;
+    }
+  }
+  return d;
+}
+
+/**
  * Formats a date safely without ever throwing "RangeError: Invalid time value".
  * If date is missing or invalid, returns fallback (default '—').
  */

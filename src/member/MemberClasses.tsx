@@ -206,7 +206,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
         // Category filter
         if (categoryFilter === 'mine') {
           const isTierMatch = isSessionTierAllowed(
-            { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
+            c as any,
             memberCategory
           );
           if (!isTierMatch) return false;
@@ -252,7 +252,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
 
       if (categoryFilter === 'mine') {
         const isTierMatch = isSessionTierAllowed(
-          { tier: (c as any).tier, allowedTiers: (c as any).allowedTiers, name: c.name, category: (c as any).category },
+          c as any,
           memberCategory
         );
         if (!isTierMatch) return;

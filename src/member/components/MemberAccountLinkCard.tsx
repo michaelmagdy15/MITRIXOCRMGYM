@@ -8,6 +8,7 @@ import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../../utils/phoneUti
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PhoneInput } from '../../components/ui/PhoneInput';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -337,12 +338,10 @@ export const MemberAccountLinkCard: React.FC<MemberAccountLinkCardProps> = ({ on
                 <Label htmlFor="new-phone" className="text-xs font-semibold">
                   Mobile Phone Number
                 </Label>
-                <Input
+                <PhoneInput
                   id="new-phone"
-                  placeholder="e.g. 01000680580"
                   value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  className="text-sm font-mono"
+                  onChange={(val) => setNewPhone(val)}
                 />
               </div>
 

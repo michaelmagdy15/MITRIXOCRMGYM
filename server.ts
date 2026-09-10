@@ -7,7 +7,7 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 import { startNoShowJob } from './src/jobs/noShowJob.js';
-import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus, getEffectiveStatus } from './src/jobs/membershipExpirationJob.js';
+import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus, getEffectiveStatus, toEndOfDayMs } from './src/jobs/membershipExpirationJob.js';
 import {
   isSessionTierAllowed,
   isSessionBranchAllowed,
@@ -1965,7 +1965,7 @@ async function startServer() {
             for (const d of entSnap.docs) {
               const entData = d.data();
               if (entData.type !== 'class' && entData.type !== 'all') continue;
-              if (entData.validUntil && new Date(entData.validUntil).getTime() < now) continue;
+              if (entData.validUntil && toEndOfDayMs(entData.validUntil) < now) continue;
               if (entData.sessionsTotal !== 'unlimited' && entData.sessionsUsed >= entData.sessionsTotal) continue;
               
               validEnt = entData;
@@ -2000,7 +2000,7 @@ async function startServer() {
                 const pkg = packages[i];
                 const pkgStatus = (pkg.status || '').toLowerCase();
                 if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
-                if (pkg.endDate && new Date(pkg.endDate).getTime() < now) continue;
+                if (pkg.endDate && toEndOfDayMs(pkg.endDate) < now) continue;
                 if (pkg.sessionsTotal !== 'unlimited' && pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining <= 0) continue;
 
                 if (pkg.sessionsRemaining !== undefined && pkg.sessionsTotal !== 'unlimited') {
@@ -2696,7 +2696,7 @@ async function startServer() {
         for (const d of entSnap.docs) {
           const entData = d.data();
           if (entData.type !== 'pt' && entData.type !== 'all') continue;
-          if (entData.validUntil && new Date(entData.validUntil).getTime() < now) continue;
+          if (entData.validUntil && toEndOfDayMs(entData.validUntil) < now) continue;
           if (entData.sessionsTotal !== 'unlimited' && entData.sessionsUsed >= entData.sessionsTotal) continue;
           
           validEnt = entData;
@@ -2731,7 +2731,7 @@ async function startServer() {
             const pkg = packages[i];
             const pkgStatus = (pkg.status || '').toLowerCase();
             if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
-            if (pkg.endDate && new Date(pkg.endDate).getTime() < now) continue;
+            if (pkg.endDate && toEndOfDayMs(pkg.endDate) < now) continue;
             
             const isPtPkg = pkg.type === 'pt' || pkg.isPT === true || (pkg.name || '').toLowerCase().includes('pt') || (pkg.name || '').toLowerCase().includes('private');
             if (isPtPkg) {

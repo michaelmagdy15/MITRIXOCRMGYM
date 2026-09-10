@@ -37,6 +37,7 @@ import { resolvePaymentCategory } from './utils/paymentCategories';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { InzanMemberShow } from './components/InzanMemberShow';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
+import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
 
 const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => utilsSafeFormatDate(dateStr, formatStr, fallback);
@@ -1668,11 +1669,10 @@ export default function Clients() {
                 </div>
                 <div className="space-y-3">
                   <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.table.phone')}</Label>
-                  <Input 
-                    placeholder="+20 1xx xxxx xxx" 
-                    className="h-14 rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
+                  <PhoneInput 
+                    size="lg"
                     value={newMemberPhone} 
-                    onChange={(e) => setNewMemberPhone(e.target.value)} 
+                    onChange={(val) => setNewMemberPhone(val)} 
                   />
                 </div>
                 <div className="space-y-3">

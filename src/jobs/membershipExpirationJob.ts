@@ -1,6 +1,20 @@
 import { getFirestore } from 'firebase-admin/firestore';
 
 /**
+ * Safely parses any date value to milliseconds, extending date-only strings
+ * (e.g. YYYY-MM-DD) to the end of that day (23:59:59.999).
+ */
+export function toEndOfDayMs(dateVal: any): number {
+  if (!dateVal) return NaN;
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return NaN;
+  if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim())) {
+    return new Date(d).setHours(23, 59, 59, 999);
+  }
+  return d.getTime();
+}
+
+/**
  * Fallback guardrail: Computes the virtual effective status of a client.
  * Guarantees that any client whose membership expiry is in the past
  * is never treated as 'Active' even if the database record has not yet updated.
@@ -21,16 +35,16 @@ export function getEffectiveClientStatus(client: any): 'Active' | 'Expired' | 'F
 
   // Check client-level membershipExpiry
   if (client.membershipExpiry) {
-    const expiryDate = new Date(client.membershipExpiry);
-    if (!isNaN(expiryDate.getTime()) && expiryDate.getTime() < todayMs) {
+    const expiryMs = toEndOfDayMs(client.membershipExpiry);
+    if (!isNaN(expiryMs) && expiryMs < todayMs) {
       return 'Expired';
     }
   }
 
   // Check client-level endDate fallback
   if (client.endDate) {
-    const endDate = new Date(client.endDate);
-    if (!isNaN(endDate.getTime()) && endDate.getTime() < todayMs) {
+    const endMs = toEndOfDayMs(client.endDate);
+    if (!isNaN(endMs) && endMs < todayMs) {
       return 'Expired';
     }
   }
@@ -43,8 +57,8 @@ export function getEffectiveClientStatus(client: any): 'Active' | 'Expired' | 'F
         return false;
       }
       if (pkg.endDate) {
-        const pkgEnd = new Date(pkg.endDate);
-        if (!isNaN(pkgEnd.getTime()) && pkgEnd.getTime() < todayMs) {
+        const pkgEndMs = toEndOfDayMs(pkg.endDate);
+        if (!isNaN(pkgEndMs) && pkgEndMs < todayMs) {
           return false;
         }
       }
@@ -57,7 +71,7 @@ export function getEffectiveClientStatus(client: any): 'Active' | 'Expired' | 'F
     if (!hasActiveFuturePackage && (normalized === 'active' || !rawStatus)) {
       // If client has positive session balance and no past expiry, preserve Active
       const hasDirectCredits = client.sessionsRemaining === 'unlimited' || (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0);
-      const isExpiryValid = !client.membershipExpiry || new Date(client.membershipExpiry).getTime() >= todayMs;
+      const isExpiryValid = !client.membershipExpiry || toEndOfDayMs(client.membershipExpiry) >= todayMs;
       if (hasDirectCredits && isExpiryValid) {
         return 'Active';
       }
@@ -82,8 +96,8 @@ export function getEffectiveStatus(member: any): 'ACTIVE' | 'EXPIRED' | 'HOLD' {
   const now = new Date();
   const validUntilStr = member.validUntil || member.expiryDate || member.expirationDate || member.membershipExpiry || member.endDate;
   if (validUntilStr) {
-    const validUntil = new Date(validUntilStr);
-    if (!isNaN(validUntil.getTime()) && validUntil < now) {
+    const validUntilMs = toEndOfDayMs(validUntilStr);
+    if (!isNaN(validUntilMs) && validUntilMs < now.getTime()) {
       return 'EXPIRED';
     }
   }
@@ -167,8 +181,8 @@ export async function runMembershipExpirationWorker(db: FirebaseFirestore.Firest
       if (Array.isArray(client.packages)) {
         updates.packages = client.packages.map((pkg: any) => {
           if (pkg.endDate) {
-            const pkgEnd = new Date(pkg.endDate);
-            if (!isNaN(pkgEnd.getTime()) && pkgEnd.getTime() < today.getTime()) {
+            const pkgEndMs = toEndOfDayMs(pkg.endDate);
+            if (!isNaN(pkgEndMs) && pkgEndMs < today.getTime()) {
               return { ...pkg, status: 'Expired' };
             }
           }

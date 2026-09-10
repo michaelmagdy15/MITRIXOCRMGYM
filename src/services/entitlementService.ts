@@ -3,7 +3,7 @@ import { collection, doc, setDoc, getDocs, query, where, updateDoc, runTransacti
 import { Entitlement, EntitlementAdjustment, EntitlementStatus } from '../types/entitlement';
 import { Package, SessionType } from '../types';
 import { addAuditLog } from './auditService';
-import { toValidDate, safeAddDays } from '../utils/dateUtils';
+import { toValidDate, safeAddDays, safeParseExpiryToEndOfDay } from '../utils/dateUtils';
 import { getTenantId } from '../firebase';
 
 /**
@@ -57,39 +57,209 @@ export const activateEntitlement = async (entitlementId: string): Promise<void> 
 
 /**
  * Checks if a member has a valid entitlement for a specific service.
+ * Supports both the dedicated 'entitlements' collection and direct client record
+ * packages / session balances (used by Strike Gym).
  */
 export const checkEntitlement = async (
   memberId: string,
   serviceType: 'membership' | 'pt' | 'class' | 'nutrition'
 ): Promise<{ canBook: boolean; reason?: string; entitlement?: Entitlement }> => {
   try {
+    const now = new Date().getTime();
+
+    // 1. Check dedicated entitlements collection
     const q = query(
       collection(db, 'entitlements'),
       where('memberId', '==', memberId),
       where('status', 'in', ['active']),
-      where('type', '==', serviceType) // This logic might need refinement if 'membership' covers 'class' etc.
+      where('type', '==', serviceType)
     );
 
     const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      return { canBook: false, reason: `No active ${serviceType} entitlement found.` };
+    if (!snapshot.empty) {
+      for (const d of snapshot.docs) {
+        const ent = d.data() as Entitlement;
+        
+        if (ent.validUntil) {
+          const entEnd = safeParseExpiryToEndOfDay(ent.validUntil);
+          if (entEnd && entEnd.getTime() < now) {
+            continue;
+          }
+        }
+
+        if (ent.sessionsTotal !== 'unlimited' && ent.sessionsUsed >= ent.sessionsTotal) {
+          continue;
+        }
+
+        // Found a valid entitlement document
+        return { canBook: true, entitlement: ent };
+      }
     }
 
-    // Find the first valid entitlement (not expired, has sessions)
-    const now = new Date().getTime();
-    for (const d of snapshot.docs) {
-      const ent = d.data() as Entitlement;
-      
-      if (ent.validUntil && new Date(ent.validUntil).getTime() < now) {
-        continue;
+    // 2. Fallback for Strike & direct client-level packages or session balances
+    const clientRef = doc(db, 'clients', memberId);
+    const clientSnap = await getDoc(clientRef);
+    if (clientSnap.exists()) {
+      const client = clientSnap.data();
+      const statusLower = (client.status || '').toLowerCase();
+      if (statusLower === 'expired') {
+        return { canBook: false, reason: 'Your membership has expired. Please renew your package.' };
+      }
+      if (statusLower === 'frozen' || statusLower === 'suspended') {
+        return { canBook: false, reason: `Your membership is currently ${statusLower}. Please contact the front desk.` };
       }
 
-      if (ent.sessionsTotal !== 'unlimited' && ent.sessionsUsed >= ent.sessionsTotal) {
-        continue;
+      // Check client-level membership expiry with end-of-day tolerance
+      if (client.membershipExpiry) {
+        const expDate = safeParseExpiryToEndOfDay(client.membershipExpiry);
+        if (expDate && expDate.getTime() < now) {
+          return { canBook: false, reason: 'Your membership has expired. Please renew your package.' };
+        }
       }
 
-      // Found a valid one!
-      return { canBook: true, entitlement: ent };
+      if (serviceType === 'pt') {
+        // Inspect packages array for PT
+        const packages: any[] = Array.isArray(client.packages) ? client.packages : [];
+        for (const pkg of packages) {
+          const pkgStatus = (pkg.status || '').toLowerCase();
+          if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
+          if (pkg.endDate) {
+            const pkgEnd = safeParseExpiryToEndOfDay(pkg.endDate);
+            if (pkgEnd && pkgEnd.getTime() < now) continue;
+          }
+
+          const isPtPkg = pkg.type === 'pt' || pkg.isPT === true || 
+            (pkg.name || '').toLowerCase().includes('pt') || 
+            (pkg.packageName || '').toLowerCase().includes('pt') || 
+            (pkg.name || '').toLowerCase().includes('private') || 
+            (pkg.packageName || '').toLowerCase().includes('private');
+
+          if (isPtPkg) {
+            if (pkg.sessionsTotal !== 'unlimited' && pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining <= 0) continue;
+            return {
+              canBook: true,
+              entitlement: {
+                id: `pkg-${pkg.id || pkg.packageId || 'pt-direct'}`,
+                memberId,
+                productId: pkg.id || pkg.packageId || 'pt-package',
+                productName: pkg.name || pkg.packageName || 'Personal Training',
+                type: 'pt',
+                status: 'active',
+                sessionsTotal: pkg.sessionsTotal ?? 'unlimited',
+                sessionsUsed: pkg.usedSessions ?? 0,
+                validFrom: pkg.startDate || new Date().toISOString(),
+                validUntil: pkg.endDate || client.membershipExpiry,
+                createdAt: new Date().toISOString(),
+                tenantId: getTenantId()
+              }
+            };
+          }
+        }
+
+        const rawPtRemaining = client.ptSessionsRemaining ?? client.sessionsRemaining;
+        const hasPtSessions = typeof rawPtRemaining === 'number' && rawPtRemaining > 0;
+        const isUnlimitedPt = client.membershipType === 'unlimited_pt';
+
+        if (hasPtSessions || isUnlimitedPt) {
+          return {
+            canBook: true,
+            entitlement: {
+              id: `client-pt-${memberId}`,
+              memberId,
+              productId: 'client-pt-balance',
+              productName: 'Personal Training Session',
+              type: 'pt',
+              status: 'active',
+              sessionsTotal: isUnlimitedPt ? 'unlimited' : rawPtRemaining,
+              sessionsUsed: 0,
+              validFrom: new Date().toISOString(),
+              validUntil: client.membershipExpiry,
+              createdAt: new Date().toISOString(),
+              tenantId: getTenantId()
+            }
+          };
+        }
+
+        return { canBook: false, reason: "No active Personal Training package or remaining sessions found." };
+      }
+
+      if (serviceType === 'class') {
+        const packages: any[] = Array.isArray(client.packages) ? client.packages : [];
+        for (const pkg of packages) {
+          const pkgStatus = (pkg.status || '').toLowerCase();
+          if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
+          if (pkg.endDate) {
+            const pkgEnd = safeParseExpiryToEndOfDay(pkg.endDate);
+            if (pkgEnd && pkgEnd.getTime() < now) continue;
+          }
+
+          if (pkg.sessionsTotal !== 'unlimited' && pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining <= 0) continue;
+          return {
+            canBook: true,
+            entitlement: {
+              id: `pkg-${pkg.id || pkg.packageId || 'class-direct'}`,
+              memberId,
+              productId: pkg.id || pkg.packageId || 'class-package',
+              productName: pkg.name || pkg.packageName || 'Class Package',
+              type: 'class',
+              status: 'active',
+              sessionsTotal: pkg.sessionsTotal ?? 'unlimited',
+              sessionsUsed: pkg.usedSessions ?? 0,
+              validFrom: pkg.startDate || new Date().toISOString(),
+              validUntil: pkg.endDate || client.membershipExpiry,
+              createdAt: new Date().toISOString(),
+              tenantId: getTenantId()
+            }
+          };
+        }
+
+        const rawRemaining = client.sessionsRemaining;
+        const hasRemaining = (typeof rawRemaining === 'number' && rawRemaining > 0) || rawRemaining === 'unlimited';
+        const isUnlimited = client.membershipType === 'unlimited' || client.isUnlimited === true;
+
+        if (hasRemaining || isUnlimited) {
+          return {
+            canBook: true,
+            entitlement: {
+              id: `client-class-${memberId}`,
+              memberId,
+              productId: 'client-class-balance',
+              productName: 'Class Booking Pass',
+              type: 'class',
+              status: 'active',
+              sessionsTotal: isUnlimited ? 'unlimited' : rawRemaining,
+              sessionsUsed: 0,
+              validFrom: new Date().toISOString(),
+              validUntil: client.membershipExpiry,
+              createdAt: new Date().toISOString(),
+              tenantId: getTenantId()
+            }
+          };
+        }
+
+        return { canBook: false, reason: "No active class package or remaining sessions found." };
+      }
+
+      // General membership service type
+      if (statusLower === 'active' || statusLower === 'nearly expired') {
+        return {
+          canBook: true,
+          entitlement: {
+            id: `client-mem-${memberId}`,
+            memberId,
+            productId: 'client-membership',
+            productName: client.packageType || 'Membership',
+            type: serviceType,
+            status: 'active',
+            sessionsTotal: 'unlimited',
+            sessionsUsed: 0,
+            validFrom: new Date().toISOString(),
+            validUntil: client.membershipExpiry,
+            createdAt: new Date().toISOString(),
+            tenantId: getTenantId()
+          }
+        };
+      }
     }
 
     return { canBook: false, reason: `No valid ${serviceType} entitlement has remaining sessions or validity.` };

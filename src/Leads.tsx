@@ -26,6 +26,7 @@ import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { WhatsAppDialog } from './components/WhatsAppDialog';
 import { MessageCircle } from 'lucide-react';
 import { downloadFile } from './utils/download';
+import { PhoneInput } from './components/ui/PhoneInput';
 
 export default function Leads() {
   const {
@@ -1260,7 +1261,11 @@ export default function Leads() {
                 </div>
                 <div className="space-y-2">
                   <Label>{t('leads.table.phone')}</Label>
-                  <Input id="phone" placeholder="+20 100..." value={newLeadPhone} onChange={(e) => setNewLeadPhone(e.target.value)} />
+                  <PhoneInput 
+                    id="phone" 
+                    value={newLeadPhone} 
+                    onChange={(val) => setNewLeadPhone(val)} 
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>{t('leads.table.source')}</Label>
