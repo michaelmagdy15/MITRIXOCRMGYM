@@ -507,7 +507,9 @@ export default function Bookings() {
 
       try {
         const { notifyClient } = await import('./services/pushService');
-        const pkgNames = selectedRequest.items.map(item => item.packageName).join(', ');
+        const pkgNames = Array.isArray(selectedRequest.items)
+          ? selectedRequest.items.map(item => item.packageName).join(', ')
+          : (selectedRequest.packageName || 'Package');
         await notifyClient(
           selectedRequest.clientId,
           'Purchase Approved! 🎉',
@@ -1328,13 +1330,19 @@ export default function Bookings() {
                             {req.clientEmail && <p className="text-[10px] text-zinc-500">✉️ {req.clientEmail}</p>}
                           </TableCell>
                           <TableCell className="space-y-1">
-                            {req.items.map((item, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5">
-                                <Badge variant="outline" className="text-[9px] py-0 border-zinc-700 text-zinc-400 font-bold">x{item.quantity}</Badge>
-                                <span className="text-xs font-semibold text-foreground uppercase">{item.packageName}</span>
-                                <span className="text-[10px] text-muted-foreground font-medium">({item.sessions} sessions)</span>
+                            {Array.isArray(req.items) && req.items.length > 0 ? (
+                              req.items.map((item, idx) => (
+                                <div key={idx} className="flex items-center gap-1.5">
+                                  <Badge variant="outline" className="text-[9px] py-0 border-zinc-700 text-zinc-400 font-bold">x{item.quantity}</Badge>
+                                  <span className="text-xs font-semibold text-foreground uppercase">{item.packageName}</span>
+                                  {item.sessions && <span className="text-[10px] text-muted-foreground font-medium">({item.sessions} sessions)</span>}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-semibold text-foreground uppercase">{req.packageName || req.type || 'Custom Request'}</span>
                               </div>
-                            ))}
+                            )}
                           </TableCell>
                           <TableCell className="font-black text-xs text-primary">
                             {req.totalPrice.toLocaleString()} EGP
@@ -1546,12 +1554,19 @@ export default function Bookings() {
 
             <div className="bg-muted/40 p-3 rounded-xl border border-border/50 space-y-1">
               <p className="text-[10px] font-bold text-muted-foreground uppercase">Packages to Activate</p>
-              {selectedRequest?.items.map((item, idx) => (
-                <div key={idx} className="flex justify-between text-xs font-semibold">
-                  <span className="uppercase text-foreground">{item.packageName} x{item.quantity}</span>
-                  <span className="text-primary">{(item.price * item.quantity).toLocaleString()} EGP</span>
+              {Array.isArray(selectedRequest?.items) && selectedRequest.items.length > 0 ? (
+                selectedRequest.items.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-xs font-semibold">
+                    <span className="uppercase text-foreground">{item.packageName} x{item.quantity}</span>
+                    <span className="text-primary">{(item.price * item.quantity).toLocaleString()} EGP</span>
+                  </div>
+                ))
+              ) : (
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="uppercase text-foreground">{selectedRequest?.packageName || 'Selected Package'}</span>
+                  <span className="text-primary">{(selectedRequest?.totalPrice || 0).toLocaleString()} EGP</span>
                 </div>
-              ))}
+              )}
             </div>
           </div>
 

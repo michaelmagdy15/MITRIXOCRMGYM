@@ -234,6 +234,14 @@ export function ClassBookingDialog({
         packageId: selectedUpsellPkg.id,
         packageName: selectedUpsellPkg.name,
         packagePrice: selectedUpsellPkg.price,
+        totalPrice: selectedUpsellPkg.price,
+        items: [{
+          packageId: selectedUpsellPkg.id,
+          packageName: selectedUpsellPkg.name,
+          price: selectedUpsellPkg.price,
+          quantity: 1,
+          sessions: selectedUpsellPkg.sessions || 1
+        }],
         type: 'package_booking_request',
         status: 'Pending',
         createdAt: new Date().toISOString()

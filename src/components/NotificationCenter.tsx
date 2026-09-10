@@ -198,13 +198,18 @@ export function NotificationCenter() {
 
     // 5. Pending booking requests
     pendingBookings.forEach(booking => {
+      const itemsList = Array.isArray(booking.items)
+        ? booking.items.map((i: any) => i.packageName || i.name).filter(Boolean).join(', ')
+        : (booking.packageName || booking.type || 'Package Request');
+      const priceText = typeof booking.totalPrice === 'number' ? ` (${booking.totalPrice} EGP)` : '';
+
       generated.push({
         id: `booking_req_${booking.id}`,
         type: 'booking_request',
         title: 'New Booking Request',
-        description: `${booking.clientName} requested: ${booking.items.map((i: any) => i.packageName).join(', ')} (${booking.totalPrice} EGP)`,
+        description: `${booking.clientName || 'Client'} requested: ${itemsList}${priceText}`,
         date: booking.createdAt ? parseISO(booking.createdAt) : today,
-        recordName: booking.clientName,
+        recordName: booking.clientName || 'Client',
         recordId: booking.id
       });
     });
