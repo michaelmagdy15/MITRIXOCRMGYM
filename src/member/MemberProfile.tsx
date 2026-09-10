@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { db, storage, auth, getTenantId } from '../firebase';
 import { doc, updateDoc, collection, query, where, getDocs, addDoc, writeBatch } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Flame, Trophy, Camera, Loader2 } from 'lucide-react';
+import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Calendar, Flame, Trophy, Camera, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -60,7 +60,7 @@ async function compressImage(file: File): Promise<Blob> {
   });
 }
 
-export default function MemberProfile({ client }: { client: Client | null }) {
+export default function MemberProfile({ client, onNavigate }: { client: Client | null; onNavigate?: (tab: string) => void }) {
   const { currentUser, changeMyPassword } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
@@ -382,6 +382,32 @@ export default function MemberProfile({ client }: { client: Client | null }) {
             <p className="text-[9px] text-muted-foreground font-bold">Branch</p>
           </div>
         </div>
+
+        {/* Active Package Banner with Quick Book Button */}
+        {client?.status === 'Active' && (client?.packageType || (client?.packages && client.packages.length > 0)) && (
+          <div className="mt-4 pt-3.5 border-t border-border/30 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Active Package</p>
+              <p className="text-sm font-bold text-foreground truncate">{client.packageType || client.packages?.[0]?.packageName || 'Active Plan'}</p>
+              <p className="text-[11px] text-primary font-semibold">
+                {typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0 
+                  ? `${client.sessionsRemaining} session${client.sessionsRemaining === 1 ? '' : 's'} remaining` 
+                  : client.sessionsRemaining === 'unlimited' 
+                  ? 'Unlimited access' 
+                  : 'Active membership'}
+              </p>
+            </div>
+            {onNavigate && (
+              <Button
+                size="sm"
+                className="h-8 text-xs font-bold gap-1.5 shadow-sm shrink-0"
+                onClick={() => onNavigate('booking-pt')}
+              >
+                <Calendar className="h-3.5 w-3.5" /> Book Session
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <div>

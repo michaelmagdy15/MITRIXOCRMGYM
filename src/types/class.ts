@@ -23,19 +23,37 @@ export interface ClassSchedule {
   tier?: string;
   allowed_tiers?: string[];
   allowedTiers?: string[];
+  date?: string;
+  time?: string;
 }
 
-export type BookingStatus = 'booked' | 'waitlisted' | 'cancelled' | 'no-show' | 'attended';
+export type BookingStatus = 'booked' | 'waitlisted' | 'waitlist' | 'cancelled' | 'no-show' | 'attended';
 
 export interface ClassBooking {
   id: string;
   classId: string;
+  scheduleId?: string;
+  className?: string;
+  classDate?: string;
+  classTime?: string;
+  classStartTime?: string;
+  classEndTime?: string;
+  branch?: string;
+  coachName?: string;
+  clientId?: string;
   memberId: string;
   memberName: string;
+  memberPhone?: string;
   status: BookingStatus;
   bookedAt: string; // ISO string
+  cancelledAt?: string;
+  attendedAt?: string;
+  checkedInAt?: string;
+  promotedAt?: string;
   paymentStatus?: 'pending' | 'completed' | 'refunded';
   transactionId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type CancellationRequestStatus = 'pending' | 'approved' | 'rejected';

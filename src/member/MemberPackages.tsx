@@ -10,7 +10,11 @@ import { Calendar, CheckCircle2, AlertTriangle, PlayCircle, PauseCircle, Package
 import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 
-export default function MemberPackages({ client, onSwitchToStore }: { client: Client | null, onSwitchToStore?: () => void }) {
+export default function MemberPackages({ client, onSwitchToStore, onBookSession }: { 
+  client: Client | null; 
+  onSwitchToStore?: () => void;
+  onBookSession?: (pkg?: any) => void;
+}) {
   if (!client) return null;
 
   const [pendingRequests, setPendingRequests] = React.useState<any[]>([]);
@@ -140,7 +144,16 @@ export default function MemberPackages({ client, onSwitchToStore }: { client: Cl
           </div>
 
           {pkg.status === 'Active' && !pkg.isOnHold && (
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-2">
+              {onBookSession && (remaining > 0 || isUnlimited) && (
+                <Button 
+                  size="sm" 
+                  className="h-7 text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 gap-1 font-bold shadow-xs cursor-pointer"
+                  onClick={() => onBookSession(pkg)}
+                >
+                  <Calendar className="h-3 w-3" /> Book Session
+                </Button>
+              )}
               <Button 
                 variant="outline" 
                 size="sm" 

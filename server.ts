@@ -2001,6 +2001,15 @@ async function startServer() {
                 const pkgStatus = (pkg.status || '').toLowerCase();
                 if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
                 if (pkg.endDate && toEndOfDayMs(pkg.endDate) < now) continue;
+
+                // Private Training (PT) packages are for 1-on-1 sessions only, not group classes!
+                const isPtPkg = pkg.type === 'pt' || pkg.isPT === true || 
+                  (pkg.name || '').toLowerCase().includes('pt') || 
+                  (pkg.packageName || '').toLowerCase().includes('pt') || 
+                  (pkg.name || '').toLowerCase().includes('private') || 
+                  (pkg.packageName || '').toLowerCase().includes('private');
+                if (isPtPkg) continue;
+
                 if (pkg.sessionsTotal !== 'unlimited' && pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining <= 0) continue;
 
                 if (pkg.sessionsRemaining !== undefined && pkg.sessionsTotal !== 'unlimited') {
@@ -2012,10 +2021,20 @@ async function startServer() {
               }
 
               const rawRemaining = clientEffective?.sessionsRemaining;
-              const hasRemaining = typeof rawRemaining === 'number' && rawRemaining > 0;
+              const hasPtOnly = packages.length > 0 && packages.every(p => 
+                p.type === 'pt' || p.isPT === true || 
+                (p.name || '').toLowerCase().includes('pt') || 
+                (p.packageName || '').toLowerCase().includes('pt') ||
+                (p.name || '').toLowerCase().includes('private') || 
+                (p.packageName || '').toLowerCase().includes('private')
+              );
+              const hasRemaining = !hasPtOnly && typeof rawRemaining === 'number' && rawRemaining > 0;
               const isUnlimited = clientEffective?.membershipType === 'unlimited' || clientEffective?.isUnlimited === true;
 
               if (!packageDeducted && !hasRemaining && !isUnlimited) {
+                if (hasPtOnly) {
+                  throw new Error("You have an active Private Training (PT) package. PT sessions cannot be used for group classes.");
+                }
                 throw new Error("No active package or remaining sessions found for this member.");
               }
 
@@ -2082,14 +2101,22 @@ async function startServer() {
 
             attendees.push(canonicalClientId);
 
-            // Dual-write into classBookings for analytics and background triggers
+            // Dual-write into classBookings for analytics, CRM roster, and background triggers
             const bookingDocRef = db.collection("classBookings").doc(`${classId}_${canonicalClientId}`);
             transaction.set(bookingDocRef, {
               classId,
               scheduleId: classId,
+              className: classData?.name || 'Workout Class',
+              classDate: classData?.date || (classData?.startTime ? classData.startTime.substring(0, 10) : ''),
+              classTime: classData?.time || '',
+              classStartTime: classData?.startTime || '',
+              classEndTime: classData?.endTime || '',
+              branch: classData?.branch || '',
+              coachName: classData?.coachName || classData?.instructorName || '',
               clientId: canonicalClientId,
               memberId: memberIdStr,
               memberName: clientData?.name || 'Member',
+              memberPhone: clientData?.phone || '',
               status: 'booked',
               bookedAt: new Date().toISOString(),
               createdAt: new Date().toISOString(),
@@ -2104,9 +2131,17 @@ async function startServer() {
             transaction.set(bookingDocRef, {
               classId,
               scheduleId: classId,
+              className: classData?.name || 'Workout Class',
+              classDate: classData?.date || (classData?.startTime ? classData.startTime.substring(0, 10) : ''),
+              classTime: classData?.time || '',
+              classStartTime: classData?.startTime || '',
+              classEndTime: classData?.endTime || '',
+              branch: classData?.branch || '',
+              coachName: classData?.coachName || classData?.instructorName || '',
               clientId: canonicalClientId,
               memberId: memberIdStr,
               memberName: clientData?.name || 'Member',
+              memberPhone: clientData?.phone || '',
               status: 'waitlist',
               bookedAt: new Date().toISOString(),
               createdAt: new Date().toISOString(),
@@ -2604,6 +2639,62 @@ async function startServer() {
     }
   });
 
+  // Fetch active coaches for member booking (both coaches collection and users with role='coach')
+  app.get("/api/member/coaches", async (req, res) => {
+    try {
+      const db = await getDbForRequest(req);
+      const coachesMap = new Map<string, any>();
+
+      // 1. Check coaches collection
+      try {
+        const coachesSnap = await db.collection("coaches").get();
+        coachesSnap.forEach(d => {
+          const data = d.data();
+          if (data.active !== false && data.status !== 'inactive') {
+            coachesMap.set(d.id, {
+              id: d.id,
+              name: data.name || 'Coach',
+              specialty: data.specialty || 'Personal Trainer',
+              branch: data.branch || '',
+              avatar: data.avatar || data.photoUrl || ''
+            });
+          }
+        });
+      } catch (e) {
+        console.warn("[API /api/member/coaches] Warning reading coaches collection:", e);
+      }
+
+      // 2. Check users collection for coaches/trainers
+      try {
+        const usersSnap = await db.collection("users")
+          .where("role", "in", ["coach", "trainer"])
+          .get();
+        usersSnap.forEach(d => {
+          const data = d.data();
+          if (data.status !== 'inactive' && data.active !== false) {
+            const existing = Array.from(coachesMap.values()).find(c => c.name.toLowerCase() === (data.name || '').toLowerCase());
+            if (!existing) {
+              coachesMap.set(d.id, {
+                id: d.id,
+                name: data.name || 'Coach',
+                specialty: data.specialty || 'Personal Trainer',
+                branch: data.branch || '',
+                avatar: data.avatar || data.photoUrl || ''
+              });
+            }
+          }
+        });
+      } catch (e) {
+        console.warn("[API /api/member/coaches] Warning reading users collection:", e);
+      }
+
+      return res.json(Array.from(coachesMap.values()));
+    } catch (err: any) {
+      console.error("[API /api/member/coaches] Error:", err);
+      return res.status(500).json({ error: "Failed to fetch coaches" });
+    }
+  });
+
   // Server-authoritative endpoint for PT/Session booking
   app.post("/api/sessions/book", requireAuth, async (req, res) => {
     try {
@@ -2640,7 +2731,7 @@ async function startServer() {
           thursday:  { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
           friday:    { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
           saturday:  { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } },
-          sunday:    { enabled: false, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } }
+          sunday:    { enabled: true, startTime: '09:00', endTime: '21:00', capacities: { '1-on-1': 1, Partner: 2, 'Small Group': 5, Class: 15, Nutrition: 1 } }
         };
 
         const coachSchedule = (coachDoc.exists && coachDoc.data()?.days) ? coachDoc.data()?.days : defaultDays;
@@ -2733,7 +2824,11 @@ async function startServer() {
             if (pkgStatus === 'expired' || pkgStatus === 'inactive' || pkgStatus === 'cancelled') continue;
             if (pkg.endDate && toEndOfDayMs(pkg.endDate) < now) continue;
             
-            const isPtPkg = pkg.type === 'pt' || pkg.isPT === true || (pkg.name || '').toLowerCase().includes('pt') || (pkg.name || '').toLowerCase().includes('private');
+            const isPtPkg = pkg.type === 'pt' || pkg.isPT === true || 
+              (pkg.name || '').toLowerCase().includes('pt') || 
+              (pkg.packageName || '').toLowerCase().includes('pt') || 
+              (pkg.name || '').toLowerCase().includes('private') || 
+              (pkg.packageName || '').toLowerCase().includes('private');
             if (isPtPkg) {
               if (pkg.sessionsTotal !== 'unlimited' && pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining <= 0) continue;
               if (pkg.sessionsRemaining !== undefined && pkg.sessionsTotal !== 'unlimited') {
@@ -2754,9 +2849,14 @@ async function startServer() {
           }
 
           const newPtRemaining = typeof rawPtRemaining === 'number' ? Math.max(0, rawPtRemaining - 1) : rawPtRemaining;
+          const newSessionsRemaining = typeof client.sessionsRemaining === 'number' ? Math.max(0, client.sessionsRemaining - 1) : client.sessionsRemaining;
+          const newUsedSessions = (client.usedSessions || 0) + 1;
+
           transaction.update(clientRef, {
             packages,
             ptSessionsRemaining: newPtRemaining,
+            sessionsRemaining: newSessionsRemaining,
+            usedSessions: newUsedSessions,
             updatedAt: new Date().toISOString()
           });
         }

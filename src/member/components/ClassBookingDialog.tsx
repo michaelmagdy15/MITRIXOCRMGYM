@@ -51,12 +51,22 @@ export function ClassBookingDialog({
         // First check client's direct packages / session balance (Strike tenant format)
         const now = Date.now();
         const hasActiveDirectPkg = (client.packages || []).some(
-          (p: any) => (p.status === 'Active' || String(p.status).toLowerCase() === 'active') &&
-            (!p.endDate || (safeParseExpiryToEndOfDay(p.endDate)?.getTime() ?? 0) >= now) &&
-            (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0)
+          (p: any) => {
+            const isPt = p.type === 'pt' || p.isPT === true || 
+              (p.name || '').toLowerCase().includes('pt') || 
+              (p.packageName || '').toLowerCase().includes('pt') || 
+              (p.name || '').toLowerCase().includes('private') || 
+              (p.packageName || '').toLowerCase().includes('private');
+            if (isPt) return false;
+
+            return (p.status === 'Active' || String(p.status).toLowerCase() === 'active') &&
+              (!p.endDate || (safeParseExpiryToEndOfDay(p.endDate)?.getTime() ?? 0) >= now) &&
+              (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0);
+          }
         ) || (
           (client.status === 'Active' || String(client.status).toLowerCase() === 'active') &&
-          (client.sessionsRemaining === 'unlimited' || Number(client.sessionsRemaining) > 0)
+          (client.sessionsRemaining === 'unlimited' || Number(client.sessionsRemaining) > 0) &&
+          !(client.packages && client.packages.length > 0 && client.packages.every((p: any) => (p.name || '').toLowerCase().includes('pt') || (p.packageName || '').toLowerCase().includes('pt')))
         );
 
         if (hasActiveDirectPkg) {

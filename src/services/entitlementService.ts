@@ -193,6 +193,14 @@ export const checkEntitlement = async (
             if (pkgEnd && pkgEnd.getTime() < now) continue;
           }
 
+          // Exclude PT packages from group class bookings!
+          const isPtPkg = pkg.type === 'pt' || pkg.isPT === true || 
+            (pkg.name || '').toLowerCase().includes('pt') || 
+            (pkg.packageName || '').toLowerCase().includes('pt') || 
+            (pkg.name || '').toLowerCase().includes('private') || 
+            (pkg.packageName || '').toLowerCase().includes('private');
+          if (isPtPkg) continue;
+
           if (pkg.sessionsTotal !== 'unlimited' && pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining <= 0) continue;
           return {
             canBook: true,
@@ -216,6 +224,22 @@ export const checkEntitlement = async (
         const rawRemaining = client.sessionsRemaining;
         const hasRemaining = (typeof rawRemaining === 'number' && rawRemaining > 0) || rawRemaining === 'unlimited';
         const isUnlimited = client.membershipType === 'unlimited' || client.isUnlimited === true;
+
+        // If client only has PT package, explicitly inform them
+        const hasPtPackages = packages.some(p => 
+          p.type === 'pt' || p.isPT === true || 
+          (p.name || '').toLowerCase().includes('pt') || 
+          (p.packageName || '').toLowerCase().includes('pt') ||
+          (p.name || '').toLowerCase().includes('private') || 
+          (p.packageName || '').toLowerCase().includes('private')
+        );
+
+        if (!hasRemaining && !isUnlimited && hasPtPackages) {
+          return { 
+            canBook: false, 
+            reason: "You have a Private Training (PT) package. To join group classes, please purchase a class package or membership." 
+          };
+        }
 
         if (hasRemaining || isUnlimited) {
           return {

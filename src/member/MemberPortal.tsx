@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins, AlertCircle, Activity } from 'lucide-react';
+import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins, AlertCircle, Activity, Dumbbell } from 'lucide-react';
 import { auth, db, getTenantId } from '../firebase';
 import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
 import { Client } from '../types';
@@ -104,8 +104,37 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
-  // Booking and Profile Sub-tabs state (default to group classes schedule)
+  // Booking and Profile Sub-tabs state (default to group classes schedule, or PT if member has PT package)
   const [bookingSubTab, setBookingSubTab] = useState<'pt' | 'group'>('group');
+
+  useEffect(() => {
+    if (activeClient) {
+      const packages: any[] = Array.isArray(activeClient.packages) ? activeClient.packages : [];
+      const hasActivePt = packages.some(p => {
+        const pStatus = (p.status || '').toLowerCase();
+        if (pStatus === 'expired' || pStatus === 'inactive' || pStatus === 'cancelled') return false;
+        return p.type === 'pt' || p.isPT === true || 
+          (p.name || '').toLowerCase().includes('pt') || 
+          (p.packageName || '').toLowerCase().includes('pt') ||
+          (p.name || '').toLowerCase().includes('private') || 
+          (p.packageName || '').toLowerCase().includes('private');
+      });
+      const hasActiveClass = packages.some(p => {
+        const pStatus = (p.status || '').toLowerCase();
+        if (pStatus === 'expired' || pStatus === 'inactive' || pStatus === 'cancelled') return false;
+        const isPt = p.type === 'pt' || p.isPT === true || 
+          (p.name || '').toLowerCase().includes('pt') || 
+          (p.packageName || '').toLowerCase().includes('pt') ||
+          (p.name || '').toLowerCase().includes('private') || 
+          (p.packageName || '').toLowerCase().includes('private');
+        return !isPt;
+      });
+
+      if (hasActivePt && !hasActiveClass) {
+        setBookingSubTab('pt');
+      }
+    }
+  }, [activeClient]);
   
   const profileSubTabsList = useMemo(() => {
     const list = [
@@ -136,10 +165,24 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     }
   }, [profileSubTabsList, profileSubTab]);
 
-  // Navigation handler for quick shortcuts from MemberHome
+  // Navigation handler for quick shortcuts from MemberHome and MemberProfile
   const handleNavigate = (target: string) => {
-    if (target === 'booking') setActiveTab('booking');
-    else if (target === 'profile') setActiveTab('profile');
+    if (target === 'booking') {
+      setActiveTab('booking');
+      const packages: any[] = Array.isArray(activeClient?.packages) ? activeClient!.packages : [];
+      const pkgType = (activeClient?.packageType || '').toLowerCase();
+      const hasPt = pkgType.includes('pt') || pkgType.includes('private') || 
+        packages.some(p => (p.packageName || '').toLowerCase().includes('pt') || p.type === 'pt' || (p.name || '').toLowerCase().includes('pt'));
+      if (hasPt) {
+        setBookingSubTab('pt');
+      }
+    } else if (target === 'booking-pt') {
+      setActiveTab('booking');
+      setBookingSubTab('pt');
+    } else if (target === 'booking-group') {
+      setActiveTab('booking');
+      setBookingSubTab('group');
+    } else if (target === 'profile') setActiveTab('profile');
     else if (target === 'profile-progress') {
       if (features.pointsSystem !== false) {
         setActiveTab('profile');
@@ -528,23 +571,37 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         
         {activeTab === 'booking' && (
           <div className="space-y-4">
-            {features.ptPackages !== false && !isStrike && (
+            {features.ptPackages !== false && (
               <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border border-border/60 gap-1">
                 <button 
-                  onClick={() => setBookingSubTab('pt')} 
-                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${bookingSubTab === 'pt' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setBookingSubTab('group')} 
+                  className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    bookingSubTab === 'group' 
+                      ? 'bg-background text-foreground shadow-xs' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
                 >
-                  PT Sessions
+                  <Dumbbell className="h-3.5 w-3.5" />
+                  Group Classes
                 </button>
                 <button 
-                  onClick={() => setBookingSubTab('group')} 
-                  className={`py-1.5 text-xs font-semibold rounded-lg transition-colors ${bookingSubTab === 'group' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => setBookingSubTab('pt')} 
+                  className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                    bookingSubTab === 'pt' 
+                      ? 'bg-background text-foreground shadow-xs' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
                 >
-                  Group Classes
+                  <User className="h-3.5 w-3.5" />
+                  1-on-1 PT Sessions
                 </button>
               </div>
             )}
-            {isStrike || features.ptPackages === false || bookingSubTab === 'group' ? <MemberClasses client={activeClient} onSwitchToStore={onSwitchToStore} /> : <MemberSessions client={activeClient} onSwitchToStore={onSwitchToStore} />}
+            {bookingSubTab === 'pt' && features.ptPackages !== false ? (
+              <MemberSessions client={activeClient} onSwitchToStore={onSwitchToStore} />
+            ) : (
+              <MemberClasses client={activeClient} onSwitchToStore={onSwitchToStore} />
+            )}
           </div>
         )}
 
@@ -568,7 +625,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
               ))}
             </div>
 
-            {profileSubTab === 'settings' && <MemberProfile client={activeClient} />}
+            {profileSubTab === 'settings' && <MemberProfile client={activeClient} onNavigate={handleNavigate} />}
             {profileSubTab === 'progress' && (
               <div className="space-y-6">
                 <MemberProgress client={activeClient} />
@@ -577,7 +634,19 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             )}
             {profileSubTab === 'membership' && (
               <div className="space-y-6 animate-in fade-in">
-                <MemberPackages client={activeClient} onSwitchToStore={onSwitchToStore} />
+                <MemberPackages 
+                  client={activeClient} 
+                  onSwitchToStore={onSwitchToStore} 
+                  onBookSession={(pkg) => {
+                    const isPt = pkg?.type === 'pt' || 
+                      (pkg?.name || '').toLowerCase().includes('pt') || 
+                      (pkg?.packageName || '').toLowerCase().includes('pt') ||
+                      (pkg?.name || '').toLowerCase().includes('private') || 
+                      (pkg?.packageName || '').toLowerCase().includes('private');
+                    setBookingSubTab(isPt ? 'pt' : 'group');
+                    setActiveTab('booking');
+                  }}
+                />
                 <MemberSubscription client={activeClient} />
               </div>
             )}

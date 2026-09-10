@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Client, User, SessionType, Session } from '../types';
 import { auth, db, getTenantId } from '../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, getDocs } from 'firebase/firestore';
 import { useSessions } from '../hooks/useSessions';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { format, parseISO, addDays, isAfter } from 'date-fns';
@@ -88,19 +88,32 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       setLoading(false);
     });
 
-    // 2. Fetch active coaches (server endpoint — the users collection is
-    //    not readable by members client-side)
+    // 2. Fetch active coaches (server endpoint + direct Firestore fallback)
     const loadCoaches = async () => {
       try {
         const res = await fetch('/api/member/coaches');
-        if (!res.ok) {
-          console.error("Error fetching coaches list:", res.status);
-          return;
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length > 0) {
+            setCoaches(list);
+            return;
+          }
         }
-        const list = await res.json();
-        setCoaches(list);
       } catch (err) {
-        console.error("Error fetching coaches list:", err);
+        console.warn("API /api/member/coaches fetch error, trying direct fallback:", err);
+      }
+
+      // Direct fallback from coaches collection
+      try {
+        const snap = await getDocs(collection(db, 'coaches'));
+        const list = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as any))
+          .filter(c => c.active !== false && c.status !== 'inactive');
+        if (list.length > 0) {
+          setCoaches(list);
+        }
+      } catch (e) {
+        console.error("Direct coaches fallback failed:", e);
       }
     };
     loadCoaches();
@@ -190,7 +203,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
         endTime,
         status: 'Scheduled',
         notes: bookingMessage.trim(),
-        branch: client.branch
+        branch: client.branch || 'Main Studio'
       });
 
       setBookingSuccess(true);
@@ -339,15 +352,23 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       </div>
 
       {/* Session Balance */}
-      {client.packages && client.packages.some(p => p.status === 'Active' && p.sessionsRemaining !== undefined) && (
+      {((client.packages && client.packages.some(p => p.status === 'Active' && p.sessionsRemaining !== undefined)) || (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) || (typeof client.ptSessionsRemaining === 'number' && client.ptSessionsRemaining > 0)) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {client.packages.filter(p => p.status === 'Active' && p.sessionsRemaining !== undefined).map(pkg => (
-            <div key={pkg.id} className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase">{pkg.packageName}</span>
-              <span className="text-2xl font-black text-primary my-1">{pkg.sessionsRemaining}</span>
+          {client.packages && client.packages.some(p => p.status === 'Active' && p.sessionsRemaining !== undefined) ? (
+            client.packages.filter(p => p.status === 'Active' && p.sessionsRemaining !== undefined).map(pkg => (
+              <div key={pkg.id} className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase">{pkg.packageName}</span>
+                <span className="text-2xl font-black text-primary my-1">{pkg.sessionsRemaining}</span>
+                <span className="text-[9px] text-muted-foreground">Sessions Remaining</span>
+              </div>
+            ))
+          ) : (
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">{client.packageType || 'Personal Training'}</span>
+              <span className="text-2xl font-black text-primary my-1">{client.ptSessionsRemaining ?? client.sessionsRemaining}</span>
               <span className="text-[9px] text-muted-foreground">Sessions Remaining</span>
             </div>
-          ))}
+          )}
         </div>
       )}
 
