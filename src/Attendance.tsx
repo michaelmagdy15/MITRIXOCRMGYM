@@ -8,15 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan, XCircle, Printer, Check, Calendar, AlertTriangle } from 'lucide-react';
+import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan, XCircle, Printer, Check, Calendar, AlertTriangle, Clock } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
-import { db } from './firebase';
+import { db, getTenantId } from './firebase';
 import { collection, query, onSnapshot } from 'firebase/firestore';
+import { ShiftHandoverDialog } from './components/ShiftHandoverDialog';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
-  const { currentUser, users, setActiveTab, setActiveClientId, branches, ptPackageRecords, branding } = useAppContext();
+  const { currentUser, users, setActiveTab, setActiveClientId, branches, ptPackageRecords, branding, features } = useAppContext();
+  const isInzan = getTenantId() === 'inzanathletics' || features?.shiftHandover === true || features?.commercialGymWorkspaces === true;
+  const [isShiftHandoverOpen, setIsShiftHandoverOpen] = useState(false);
   const { clients } = useClients(currentUser);
   const { attendances, recordAttendance } = useAttendance(currentUser, clients);
   const { t, language, isRtl } = useLanguage();
@@ -477,25 +480,39 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           <p className="text-muted-foreground">{t('attendance.subtitle')}</p>
         </div>
         
-        <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-lg border">
-          <MapPin className="h-4 w-4 text-muted-foreground mx-2" />
-          <select 
-            className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer pe-8"
-            value={selectedBranch}
-            onChange={(e) => {
-              const branch = e.target.value as Branch;
-              setSelectedBranch(branch);
-              if (isKiosk) {
-                localStorage.setItem('kioskBranch', branch);
-              }
-            }}
-          >
-            {branches.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
+        <div className="flex items-center gap-2">
+          {isInzan && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsShiftHandoverOpen(true)}
+              className="gap-1.5 font-medium border-primary/30 hover:bg-primary/5"
+            >
+              <Clock className="w-4 h-4 text-primary" />
+              Shift Handover
+            </Button>
+          )}
+
+          <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-lg border">
+            <MapPin className="h-4 w-4 text-muted-foreground mx-2" />
+            <select 
+              className="bg-transparent border-none text-sm font-medium focus:ring-0 cursor-pointer pe-8"
+              value={selectedBranch}
+              onChange={(e) => {
+                const branch = e.target.value as Branch;
+                setSelectedBranch(branch);
+                if (isKiosk) {
+                  localStorage.setItem('kioskBranch', branch);
+                }
+              }}
+            >
+              {branches.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -926,6 +943,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           <div>{branding.companyName || 'STRIKE'} GYM CRM • Confidential</div>
         </div>
       </div>
+
+      <ShiftHandoverDialog
+        open={isShiftHandoverOpen}
+        onOpenChange={setIsShiftHandoverOpen}
+        currentUser={currentUser}
+        selectedBranch={selectedBranch}
+      />
     </div>
   );
 }

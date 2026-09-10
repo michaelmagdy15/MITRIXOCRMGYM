@@ -75,6 +75,20 @@ exports.onBookingCancelled = (0, firestore_1.onDocumentUpdated)({
                         attendees.splice(idx, 1);
                     }
                 }
+                // 2-Hour Cutoff check from INZAN PRD
+                const startTimeStr = scheduleData.startTime || scheduleData.date;
+                if (startTimeStr) {
+                    const classStartMs = new Date(startTimeStr).getTime();
+                    const twoHoursMs = 2 * 60 * 60 * 1000;
+                    if (!isNaN(classStartMs) && (classStartMs - Date.now()) < twoHoursMs) {
+                        logger.info(`[waitlist] Class ${scheduleId} starts in less than 2 hours. Automated waitlist promotion halted.`);
+                        transaction.update(scheduleRef, {
+                            attendees,
+                            updatedAt: new Date().toISOString()
+                        });
+                        return;
+                    }
+                }
                 // Check if there is capacity to promote someone
                 // If attendees are already >= capacity (e.g. server already promoted someone), do not promote another
                 if (attendees.length >= capacity) {

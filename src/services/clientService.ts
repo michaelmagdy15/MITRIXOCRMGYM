@@ -74,8 +74,11 @@ export const updateClient = async (id: ClientId, updates: Partial<Client>, curre
 };
 
 export const deleteClient = async (id: ClientId, clientName?: string): Promise<void> => {
-  await deleteDoc(doc(db, 'clients', id));
-  await addAuditLog('DELETE', 'CLIENT', id, `Deleted client/lead: ${clientName || id}`);
+  await updateDoc(doc(db, 'clients', id), {
+    isDeleted: true,
+    deletedAt: new Date().toISOString()
+  });
+  await addAuditLog('DELETE', 'CLIENT', id, `Soft-deleted client/lead: ${clientName || id}`);
 };
 
 export const addComment = async (clientId: ClientId, text: string, author: string): Promise<void> => {

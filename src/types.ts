@@ -73,6 +73,13 @@ export interface PasswordResetRequest {
 }
 
 export type SessionType = '1-on-1' | 'Partner' | 'Small Group' | 'Class' | 'Nutrition';
+export const PT_CAPACITY_LIMITS: Record<SessionType, number> = {
+  '1-on-1': 1,
+  'Partner': 2,
+  'Small Group': 5,
+  'Class': 30,
+  'Nutrition': 1
+};
 export type SessionStatus = 'Scheduled' | 'Completed' | 'No Show' | 'Rescheduled' | 'Cancelled';
 
 export interface CoachSchedule {
@@ -135,6 +142,10 @@ export interface Assessment {
   createdAt: string;
   updatedAt: string;
   tenantId?: string;
+  assignedCoachId?: string | null;
+  assignedCoachName?: string;
+  assignedBy?: string;
+  assignedAt?: string;
 }
 
 export interface ImportBatch {
@@ -179,8 +190,10 @@ export interface User {
 export interface PTPackageRecord {
   id: string;
   clientId: string;
+  clientIds?: string[];
   date: string; // ISO string
-  status: 'Scheduled' | 'Attended' | 'No Show' | 'Cancelled';
+  status: 'Scheduled' | 'Attended' | 'No Show' | 'Cancelled' | 'Rescheduled';
+  sessionType?: SessionType;
   notes?: string;
   trainerId?: string; // userId
   branch?: Branch;
@@ -203,16 +216,42 @@ export interface InteractionLog {
   author: string;
 }
 
+export interface AuditDiff {
+  field: string;
+  oldValue: any;
+  newValue: any;
+}
+
 export interface AuditLog {
   id: string;
   userId: string;
   userName?: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE';
-  entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION' | 'PAYOUT';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'APPROVE' | 'REJECT' | 'OVERRIDE';
+  entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION' | 'PAYOUT' | 'ASSESSMENT' | 'SHIFT_HANDOVER';
   entityId: string;
   details: string;
+  diff?: AuditDiff[];
+  reason?: string;
   timestamp: string;
   branch?: Branch;
+}
+
+export interface ShiftHandover {
+  id: string;
+  shiftDate: string; // YYYY-MM-DD
+  shiftType: 'Morning' | 'Evening' | 'Night';
+  branch: Branch;
+  outgoingStaffId: string;
+  outgoingStaffName: string;
+  incomingStaffId?: string;
+  incomingStaffName?: string;
+  cashInDrawer: number;
+  cashCollected: number;
+  unresolvedIssues?: string;
+  lostAndFoundCount?: number;
+  status: 'Pending Acknowledgment' | 'Acknowledged';
+  createdAt: string;
+  acknowledgedAt?: string;
 }
 
 export interface Payment {
@@ -344,6 +383,9 @@ export interface Client {
   staffAssignments?: Record<string, { staffId: string; staffName: string }>;
   legacyNotes?: string;
   legacyMemberId?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface ClientDocument {
@@ -529,6 +571,8 @@ export interface FeatureFlags {
   commercialGymWorkspaces?: boolean;
   salesPipelineStages?: '5-stage' | '7-stage';
   twoPersonApproval?: boolean;
+  shiftHandover?: boolean;
+  fitnessAssessmentQueue?: boolean;
 }
 
 export interface CallCenterLog {

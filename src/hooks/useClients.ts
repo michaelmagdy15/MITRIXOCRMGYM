@@ -139,11 +139,13 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       }
     });
 
-    return combined.map(c => ({
-      ...c,
-      comments: [],
-      interactions: [],
-    })) as Client[];
+    return combined
+      .filter(c => !c.isDeleted)
+      .map(c => ({
+        ...c,
+        comments: [],
+        interactions: [],
+      })) as Client[];
   }, [membersList, expiredMembersList, leadsList, searchResults]);
 
   const baseClients = clients;

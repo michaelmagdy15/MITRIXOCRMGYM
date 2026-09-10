@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, doc, query } from 'firebase/firestore';
 import { db } from '../firebase';
-import { PTPackageRecord, Client, User } from '../types';
+import { PTPackageRecord, Client, User, PT_CAPACITY_LIMITS } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
 import { addAuditLog } from '../services/auditService';
@@ -13,14 +13,13 @@ export const usePTSessions = (currentUser: User | null, clients: Client[]) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentUser) return;
-    // Members can't list all sessions — skip the global listener
-    if (effectiveRole === 'client' || effectiveRole === 'coach') {
+    if (!currentUser) {
       setLoading(false);
       return;
     }
+    const q = query(collection(db, 'sessions'));
     const unsub = onSnapshot(
-      collection(db, 'sessions'),
+      q,
       (snapshot) => {
         setPTPackageRecords(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as PTPackageRecord)));
         setLoading(false);
@@ -35,6 +34,12 @@ export const usePTSessions = (currentUser: User | null, clients: Client[]) => {
 
   const addPTPackageRecord = async (session: Omit<PTPackageRecord, 'id'>) => {
     try {
+      if (session.sessionType && session.clientIds && session.clientIds.length > 0) {
+        const maxAllowed = PT_CAPACITY_LIMITS[session.sessionType as keyof typeof PT_CAPACITY_LIMITS] || 1;
+        if (session.clientIds.length > maxAllowed) {
+          throw new Error(`Capacity exceeded: ${session.sessionType} allows at most ${maxAllowed} member(s).`);
+        }
+      }
       const docRef = await addDoc(collection(db, 'sessions'), cleanData(session));
       const clientName = clients.find(c => c.id === session.clientId)?.name || session.clientId;
       await addAuditLog('CREATE', 'PACKAGE_RECORD', docRef.id, `Scheduled package for ${clientName}`);
@@ -51,7 +56,8 @@ export const usePTSessions = (currentUser: User | null, clients: Client[]) => {
         const clientName = clients.find(c => c.id === record.clientId)?.name || record.clientId;
         await addAuditLog('UPDATE', 'PACKAGE_RECORD', id, `Updated package status to ${updates.status} for ${clientName}`);
 
-        if (updates.status === 'Attended') {
+        // PRD Rule: Completed (Attended) and No Show both deduct 1 session balance
+        if (updates.status === 'Attended' || updates.status === 'No Show') {
           const client = clients.find(c => c.id === record.clientId);
           if (client && typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
             const packagesCopy = client.packages ? [...client.packages] : [];

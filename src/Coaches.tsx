@@ -15,18 +15,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
-import { db, auth } from './firebase';
+import { db, auth, getTenantId } from './firebase';
 import { format, parseISO } from 'date-fns';
 import PayoutCalculator from './components/PayoutCalculator';
+import { FitnessAssessmentQueue } from './components/FitnessAssessmentQueue';
 
 export default function Coaches() {
-  const { currentUser, canAccessSettings, ptPackageRecords, clients, payments, users } = useAppContext();
+  const { currentUser, canAccessSettings, ptPackageRecords, clients, payments, users, features } = useAppContext();
+  const isInzan = getTenantId() === 'inzanathletics' || features?.fitnessAssessmentQueue === true || features?.commercialGymWorkspaces === true || currentUser?.department === 'Fitness';
   const { coaches, addCoach, updateCoach, deleteCoach, createPortalAccountForCoach } = useCoaches();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [coachToDelete, setCoachToDelete] = useState<string | null>(null);
   const [editingCoach, setEditingCoach] = useState<Coach | null>(null);
+  const [activeCoachTab, setActiveCoachTab] = useState<'coaches' | 'assessments'>('coaches');
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -287,8 +290,25 @@ export default function Coaches() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold tracking-tight">Coach Management</h2>
+      {isInzan && (
+        <Tabs value={activeCoachTab} onValueChange={(v: any) => setActiveCoachTab(v)} className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="coaches" className="flex items-center gap-2">
+              <Users className="w-4 h-4" /> Trainers & Coaches
+            </TabsTrigger>
+            <TabsTrigger value="assessments" className="flex items-center gap-2">
+              <Briefcase className="w-4 h-4" /> Assessment Triage Queue
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
+
+      {isInzan && activeCoachTab === 'assessments' ? (
+        <FitnessAssessmentQueue currentUser={currentUser} coaches={coaches} />
+      ) : (
+        <>
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold tracking-tight">Coach Management</h2>
         <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if (!open) resetForm(); }}>
           <DialogTrigger render={<Button />}>
             <Plus className="mr-2 h-4 w-4" /> Add Coach
@@ -458,6 +478,8 @@ export default function Coaches() {
           </Table>
         </CardContent>
       </Card>
+      </>
+      )}
 
       {/* Edit Coach Modal */}
       <Dialog open={isEditOpen} onOpenChange={(open) => { setIsEditOpen(open); if (!open) resetForm(); }}>
