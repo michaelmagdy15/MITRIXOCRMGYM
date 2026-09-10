@@ -19,6 +19,10 @@ export interface ClassSchedule {
   noShows?: string[];
   noShowsProcessed?: boolean;
   branch?: string;
+  branch_id?: string;
+  tier?: string;
+  allowed_tiers?: string[];
+  allowedTiers?: string[];
 }
 
 export type BookingStatus = 'booked' | 'waitlisted' | 'cancelled' | 'no-show' | 'attended';

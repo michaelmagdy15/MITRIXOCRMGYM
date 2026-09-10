@@ -21,6 +21,7 @@ import { db, auth, createFirebaseUser, getMemberEmail, getTenantId } from '../fi
 import { Client, CRMComment, InteractionLog, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
+import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 import { addAuditLog } from '../services/auditService';
 import { useAuth } from '../contexts/AuthContext';
 const FEMALE_NAMES = new Set([
@@ -254,10 +255,31 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       try {
         let resultsMap = new Map();
 
-        // Query by phone exact match
-        const qPhone = query(collection(db, 'clients'), where('phone', '==', term));
-        const phoneSnap = await getDocs(qPhone);
-        if (active) phoneSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        // Query by phone exact match & phone variants (handles numbers with or without leading zero)
+        const phoneVariants = getEgyptPhoneVariants(term);
+        const normSearchPhone = normalizeEgyptPhone(term);
+
+        if (phoneVariants.length > 0) {
+          try {
+            const qPhone = query(
+              collection(db, 'clients'),
+              where('phone', 'in', phoneVariants.slice(0, 10))
+            );
+            const phoneSnap = await getDocs(qPhone);
+            if (active) phoneSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          } catch {}
+        }
+
+        if (normSearchPhone) {
+          try {
+            const qNormPhone = query(
+              collection(db, 'clients'),
+              where('normalized_phone', '==', normSearchPhone)
+            );
+            const normSnap = await getDocs(qNormPhone);
+            if (active) normSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          } catch {}
+        }
 
         // Query by memberId exact match
         const qMemberId = query(collection(db, 'clients'), where('memberId', '==', term));
@@ -385,21 +407,31 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       }
       
-      // Normalize phone suffix (last 10 digits)
-      const newPhoneNorm = clientData.phone ? clientData.phone.replace(/\D/g, '').slice(-10) : '';
+      // Normalize Egyptian phone number
+      const normPhone = clientData.phone ? normalizeEgyptPhone(clientData.phone) : '';
+      if (normPhone) {
+        (clientData as any).normalized_phone = normPhone;
+      }
 
-      // Find siblings sharing the same normalized phone suffix
-      const siblings = (newPhoneNorm && newPhoneNorm.length >= 10)
-        ? baseClients.filter(c => c.phone && c.phone.replace(/\D/g, '').slice(-10) === newPhoneNorm)
+      // Find siblings sharing the same normalized phone
+      const siblings = normPhone
+        ? baseClients.filter(c => {
+            if (!c.phone) return false;
+            return (c as any).normalized_phone === normPhone || normalizeEgyptPhone(c.phone) === normPhone;
+          })
         : [];
 
       // Auto-set linkedAccount if siblings exist
       if (siblings.length > 0) {
         clientData.linkedAccount = true;
       } else {
-        const isDuplicate = !clientData.linkedAccount && baseClients.some(c => c.phone === clientData.phone);
-        if (isDuplicate) {
-          throw new Error(`A client with phone number ${clientData.phone} already exists.`);
+        const isExactDuplicate = !clientData.linkedAccount && baseClients.some(c => 
+          c.name?.trim().toLowerCase() === clientData.name?.trim().toLowerCase() && 
+          normPhone && 
+          ((c as any).normalized_phone === normPhone || normalizeEgyptPhone(c.phone) === normPhone)
+        );
+        if (isExactDuplicate) {
+          throw new Error(`A client with the name ${clientData.name} and phone number ${clientData.phone} already exists.`);
         }
       }
 
@@ -431,7 +463,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       };
 
       const batch = writeBatch(db);
-      batch.set(docRef, finalData);
+      batch.set(docRef, finalData, { merge: true });
 
       // Link siblings bidirectionally and sync sales rep
       for (const sibling of siblings) {
@@ -679,10 +711,13 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
       // Link siblings and update their sales rep if phone number or salesRep is changed
       const phoneToUse = updateData.phone || existing?.phone || '';
-      const phoneNorm = phoneToUse ? phoneToUse.replace(/\D/g, '').slice(-10) : '';
+      const normPhone = phoneToUse ? normalizeEgyptPhone(phoneToUse) : '';
+      if (normPhone) {
+        (updateData as any).normalized_phone = normPhone;
+      }
       
-      const siblings = (phoneNorm && phoneNorm.length >= 10)
-        ? baseClients.filter(c => c.id !== id && c.phone && c.phone.replace(/\D/g, '').slice(-10) === phoneNorm)
+      const siblings = normPhone
+        ? baseClients.filter(c => c.id !== id && c.phone && ((c as any).normalized_phone === normPhone || normalizeEgyptPhone(c.phone) === normPhone))
         : [];
 
       if (siblings.length > 0) {

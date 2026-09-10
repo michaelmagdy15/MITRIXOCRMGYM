@@ -302,11 +302,11 @@ export const onPaymentUpdated = onDocumentUpdated("payments/{paymentId}", async 
 
 /**
  * Daily Cron: Move expired members to 'Expired' status.
- * Runs every day at 1:00 PM (13:00) Cairo time.
+ * Runs every day at 00:01 (12:01 AM) Cairo time.
  */
 export const checkExpiredMemberships = onSchedule(
   {
-    schedule: "0 13 * * *",
+    schedule: "1 0 * * *",
     timeZone: "Africa/Cairo",
   },
   async (event) => {

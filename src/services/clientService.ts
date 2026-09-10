@@ -8,9 +8,10 @@ import {
   runTransaction, 
   writeBatch 
 } from 'firebase/firestore';
-import { db, auth, getTenantId } from '../firebase';
-import { Client, ClientId, UserId, SessionId } from '../types';
+import { db } from '../firebase';
+import { Client, ClientId, SessionId } from '../types';
 import { cleanData } from '../utils';
+import { normalizeEgyptPhone } from '../utils/phoneUtils';
 import { addAuditLog } from './auditService';
 
 export const generateMemberId = async (): Promise<string> => {
@@ -41,11 +42,15 @@ export const addClient = async (client: Client): Promise<ClientId> => {
     (clientData as any).memberId = await generateMemberId();
   }
 
+  if (clientData.phone) {
+    (clientData as any).normalized_phone = normalizeEgyptPhone(clientData.phone);
+  }
+
   const docRef = doc(collection(db, 'clients'));
   const clientId = docRef.id as ClientId;
   const finalData = { ...cleanData(clientData), id: clientId };
   
-  await setDoc(docRef, finalData);
+  await setDoc(docRef, finalData, { merge: true });
 
   await addAuditLog(
     'CREATE', 
@@ -58,6 +63,10 @@ export const addClient = async (client: Client): Promise<ClientId> => {
 
 export const updateClient = async (id: ClientId, updates: Partial<Client>, currentName?: string): Promise<void> => {
   const { comments: _, ...updateData } = updates;
+
+  if (updateData.phone) {
+    (updateData as any).normalized_phone = normalizeEgyptPhone(updateData.phone);
+  }
   
   await updateDoc(doc(db, 'clients', id), cleanData(updateData));
 
@@ -119,11 +128,15 @@ export const bulkAddClients = async (newClients: Client[]) => {
       if (clientData.status !== 'Lead' && !('memberId' in clientData)) {
         (clientData as any).memberId = (nextMemberId++).toString();
       }
+
+      if (clientData.phone) {
+        (clientData as any).normalized_phone = normalizeEgyptPhone(clientData.phone);
+      }
       
       const docRef = doc(collection(db, 'clients'));
       const clientId = docRef.id as ClientId;
       
-      batch.set(docRef, { ...cleanData(clientData), id: clientId });
+      batch.set(docRef, { ...cleanData(clientData), id: clientId }, { merge: true });
       operationCount++;
       
       if (operationCount === 450) {

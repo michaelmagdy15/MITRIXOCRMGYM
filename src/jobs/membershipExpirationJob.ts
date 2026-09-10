@@ -69,6 +69,39 @@ export function getEffectiveClientStatus(client: any): 'Active' | 'Expired' | 'F
 }
 
 /**
+ * Dynamic Membership Status Calculator
+ * Returns 'ACTIVE' | 'EXPIRED' | 'HOLD'
+ */
+export function getEffectiveStatus(member: any): 'ACTIVE' | 'EXPIRED' | 'HOLD' {
+  if (!member) return 'EXPIRED';
+  const rawStatus = (member.status || '').toString().trim().toUpperCase();
+  if (rawStatus === 'HOLD' || rawStatus === 'FROZEN') {
+    return 'HOLD';
+  }
+
+  const now = new Date();
+  const validUntilStr = member.validUntil || member.expiryDate || member.expirationDate || member.membershipExpiry || member.endDate;
+  if (validUntilStr) {
+    const validUntil = new Date(validUntilStr);
+    if (!isNaN(validUntil.getTime()) && validUntil < now) {
+      return 'EXPIRED';
+    }
+  }
+
+  const sessionsLeft = member.sessionsLeft !== undefined ? Number(member.sessionsLeft) : member.sessionsRemaining !== undefined && member.sessionsRemaining !== 'unlimited' ? Number(member.sessionsRemaining) : undefined;
+  const isUnlimited = member.isUnlimited === true || member.packageType?.toLowerCase?.().includes('unlimited') || member.sessionsRemaining === 'unlimited';
+  if (!isUnlimited && sessionsLeft !== undefined && !isNaN(sessionsLeft) && sessionsLeft <= 0) {
+    return 'EXPIRED';
+  }
+
+  if (rawStatus === 'EXPIRED' || rawStatus === 'INACTIVE') {
+    return 'EXPIRED';
+  }
+
+  return 'ACTIVE';
+}
+
+/**
  * Idempotent worker that scans a Firestore tenant database for expired memberships,
  * transitions their status to 'Expired', updates package statuses, invalidates future bookings,
  * and records an immutable audit log entry in 'membership_status_changes'.

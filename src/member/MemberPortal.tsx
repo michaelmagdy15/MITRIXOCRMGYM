@@ -9,6 +9,7 @@ import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users
 import { auth, db, getTenantId } from '../firebase';
 import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
 import { Client } from '../types';
+import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 
 import MemberHome from './MemberHome';
 import MemberSessions from './MemberSessions';
@@ -212,6 +213,23 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         // Option C: Match by Phone Number
         const userPhone = currentUser?.phone || '';
         if (userPhone) {
+          const normPhone = normalizeEgyptPhone(userPhone);
+          if (normPhone) {
+            try {
+              const normQ = query(collection(db, 'clients'), where('normalized_phone', '==', normPhone));
+              const normSnap = await getDocs(normQ);
+              if (!normSnap.empty && normSnap.docs[0] && active) {
+                const docSnap = normSnap.docs[0];
+                const pClient = { ...docSnap.data(), id: docSnap.id } as Client;
+                setPrimaryClient(pClient);
+                setActiveClient(pClient);
+                setSelectedClientId(prev => prev || pClient.id);
+                setLoading(false);
+                return;
+              }
+            } catch {}
+          }
+
           const cleanPhone = userPhone.replace(/\D/g, '').slice(-9);
           if (cleanPhone) {
             // Try exact Firestore where query first (cheap, indexed)
@@ -353,20 +371,40 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         } catch {}
       }
 
-      // C. Load siblings sharing the same phone
+      // C. Load siblings sharing the same phone (using normalized phone & variants)
       if (parentPhone) {
         try {
-          const qPhone = query(
-            collection(db, 'clients'),
-            where('phone', '==', parentPhone)
-          );
-          const snap = await getDocs(qPhone);
-          snap.docs.forEach(d => {
-            if (d.id !== primaryClient.id) {
-              siblingsMap.set(d.id, { ...d.data(), id: d.id } as Client);
-            }
-          });
-        } catch {}
+          const norm = normalizeEgyptPhone(parentPhone);
+          const variants = getEgyptPhoneVariants(parentPhone);
+
+          if (norm) {
+            const qNorm = query(
+              collection(db, 'clients'),
+              where('normalized_phone', '==', norm)
+            );
+            const snapNorm = await getDocs(qNorm);
+            snapNorm.docs.forEach(d => {
+              if (d.id !== primaryClient.id) {
+                siblingsMap.set(d.id, { ...d.data(), id: d.id } as Client);
+              }
+            });
+          }
+
+          if (variants.length > 0) {
+            const qPhone = query(
+              collection(db, 'clients'),
+              where('phone', 'in', variants.slice(0, 10))
+            );
+            const snap = await getDocs(qPhone);
+            snap.docs.forEach(d => {
+              if (d.id !== primaryClient.id) {
+                siblingsMap.set(d.id, { ...d.data(), id: d.id } as Client);
+              }
+            });
+          }
+        } catch (phoneErr) {
+          console.warn("Could not query siblings by phone variants:", phoneErr);
+        }
       }
 
       setLinkedClients(Array.from(siblingsMap.values()));
@@ -473,6 +511,11 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         {activeTab === 'home' && (
           <MemberHome 
             client={activeClient} 
+            linkedClients={linkedClients}
+            onSelectClient={(c) => {
+              setActiveClient(c);
+              setSelectedClientId(c.id);
+            }}
             onSwitchToStore={onSwitchToStore} 
             onNavigate={handleNavigate} 
             onClientLinked={(linked) => {

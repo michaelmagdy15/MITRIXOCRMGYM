@@ -285,49 +285,126 @@ exports.onPaymentUpdated = (0, firestore_1.onDocumentUpdated)("payments/{payment
 });
 /**
  * Daily Cron: Move expired members to 'Expired' status.
- * Runs every day at 1:00 PM (13:00) Cairo time.
+ * Runs every day at 00:01 (12:01 AM) Cairo time.
  */
 exports.checkExpiredMemberships = (0, scheduler_1.onSchedule)({
-    schedule: "0 13 * * *",
+    schedule: "1 0 * * *",
     timeZone: "Africa/Cairo",
 }, async (event) => {
     logger.info("[checkExpiredMemberships] Starting daily expiry scan...");
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     try {
-        const clientsSnap = await db
-            .collection("clients")
-            .where("status", "==", "Active")
-            .get();
+        const todayIso = today.toISOString();
+        // Support 'Active', 'ACTIVE', 'active'
+        const snaps = await Promise.all([
+            db.collection("clients").where("status", "==", "Active").get(),
+            db.collection("clients").where("status", "==", "ACTIVE").get(),
+            db.collection("clients").where("status", "==", "active").get()
+        ]);
+        const seenIds = new Set();
+        const clientDocs = [];
+        for (const snap of snaps) {
+            for (const doc of snap.docs) {
+                if (!seenIds.has(doc.id)) {
+                    seenIds.add(doc.id);
+                    clientDocs.push(doc);
+                }
+            }
+        }
         let expiredCount = 0;
         let batch = db.batch();
         let writeCount = 0;
-        for (const doc of clientsSnap.docs) {
+        for (const doc of clientDocs) {
             const client = doc.data();
+            let isExpired = false;
             if (client.membershipExpiry) {
                 const expiryDate = new Date(client.membershipExpiry);
                 if (expiryDate < today) {
-                    const updates = { status: "Expired" };
-                    // Also expire packages that have ended
-                    if (client.packages && Array.isArray(client.packages)) {
-                        updates.packages = client.packages.map((pkg) => {
-                            if (pkg.status === "Active" && pkg.endDate) {
-                                const pkgEnd = new Date(pkg.endDate);
-                                if (pkgEnd < today) {
-                                    return { ...pkg, status: "Expired" };
+                    isExpired = true;
+                }
+            }
+            else if (client.packages && Array.isArray(client.packages) && client.packages.length > 0) {
+                const hasActiveFuture = client.packages.some((pkg) => {
+                    if (pkg.endDate) {
+                        return new Date(pkg.endDate) >= today;
+                    }
+                    return pkg.status === 'Active' || pkg.status === 'active';
+                });
+                if (!hasActiveFuture) {
+                    isExpired = true;
+                }
+            }
+            if (isExpired) {
+                const previousStatus = client.status || "Active";
+                const updates = {
+                    status: "Expired",
+                    statusUpdatedAt: todayIso,
+                    updatedAt: todayIso
+                };
+                // Also expire packages that have ended
+                if (client.packages && Array.isArray(client.packages)) {
+                    updates.packages = client.packages.map((pkg) => {
+                        if (pkg.endDate) {
+                            const pkgEnd = new Date(pkg.endDate);
+                            if (pkgEnd < today) {
+                                return { ...pkg, status: "Expired" };
+                            }
+                        }
+                        return pkg;
+                    });
+                }
+                batch.update(doc.ref, updates);
+                expiredCount++;
+                writeCount++;
+                // Audit log in membership_status_changes
+                const logRef = db.collection("membership_status_changes").doc();
+                batch.set(logRef, {
+                    clientId: doc.id,
+                    memberId: client.memberId || "",
+                    clientName: client.name || "",
+                    previousStatus,
+                    newStatus: "Expired",
+                    reason: "cloud_function_daily_expiry_scan",
+                    expiryDate: client.membershipExpiry || client.endDate || "",
+                    changedAt: todayIso,
+                    system: true
+                });
+                writeCount++;
+                // Invalidate future bookings for expired member
+                try {
+                    const futureBookings = await db.collection("classBookings")
+                        .where("clientId", "==", doc.id)
+                        .where("status", "==", "booked")
+                        .get();
+                    for (const bDoc of futureBookings.docs) {
+                        const bData = bDoc.data();
+                        const scheduleId = bData.scheduleId || bData.classId;
+                        if (scheduleId) {
+                            const schedDoc = await db.collection("classSchedules").doc(scheduleId).get();
+                            if (schedDoc.exists) {
+                                const sData = schedDoc.data();
+                                const sDateTime = sData.date ? new Date(`${sData.date}T${sData.startTime || "00:00"}`) : null;
+                                if (sDateTime && sDateTime >= today) {
+                                    batch.update(bDoc.ref, {
+                                        status: "cancelled_membership_expired",
+                                        cancelledAt: todayIso
+                                    });
+                                    const remainingAttendees = (sData.attendees || []).filter((id) => id !== doc.id && id !== client.memberId);
+                                    batch.update(schedDoc.ref, { attendees: remainingAttendees });
+                                    writeCount += 2;
                                 }
                             }
-                            return pkg;
-                        });
+                        }
                     }
-                    batch.update(doc.ref, updates);
-                    expiredCount++;
-                    writeCount++;
-                    if (writeCount === 400) {
-                        await batch.commit();
-                        batch = db.batch();
-                        writeCount = 0;
-                    }
+                }
+                catch (bErr) {
+                    logger.warn(`Failed to cancel future bookings for client ${doc.id}:`, bErr);
+                }
+                if (writeCount >= 400) {
+                    await batch.commit();
+                    batch = db.batch();
+                    writeCount = 0;
                 }
             }
         }

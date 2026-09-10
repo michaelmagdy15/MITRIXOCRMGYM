@@ -110,8 +110,10 @@ interface Announcement {
   createdBy: string;
 }
 
-export default function MemberHome({ client, onSwitchToStore, onNavigate, onClientLinked }: { 
+export default function MemberHome({ client, linkedClients, onSelectClient, onSwitchToStore, onNavigate, onClientLinked }: { 
   client: Client | null; 
+  linkedClients?: Client[];
+  onSelectClient?: (client: Client) => void;
   onSwitchToStore?: () => void;
   onNavigate?: (tab: string) => void;
   onClientLinked?: (newClient: Client) => void;
@@ -361,6 +363,45 @@ export default function MemberHome({ client, onSwitchToStore, onNavigate, onClie
           {client.status || 'Active'}
         </Badge>
       </div>
+
+      {/* ─── Family Athlete Profile Switcher ─── */}
+      {linkedClients && linkedClients.length > 0 && (
+        <Card className="border border-primary/25 bg-primary/5 rounded-2xl shadow-xs overflow-hidden">
+          <CardContent className="p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" />
+                <span className="text-xs font-bold text-foreground">Family Athletes</span>
+              </div>
+              <Badge variant="outline" className="text-[10px] bg-background">
+                {linkedClients.length + 1} Profiles
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {[client, ...linkedClients].filter(Boolean).map((member) => {
+                const isCurrent = member!.id === client.id;
+                return (
+                  <button
+                    key={member!.id}
+                    onClick={() => onSelectClient && onSelectClient(member!)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all border ${
+                      isCurrent
+                        ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                        : 'bg-background text-foreground border-border/80 hover:border-primary/40'
+                    }`}
+                  >
+                    <User className="h-3 w-3" />
+                    <span>{member!.name}</span>
+                    {member!.memberId && (
+                      <span className="text-[10px] opacity-75">#{member!.memberId}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Expired Status Warning Banner ─── */}
       {client.status === 'Expired' && (

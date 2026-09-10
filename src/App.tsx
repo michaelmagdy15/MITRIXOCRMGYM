@@ -33,7 +33,7 @@ import Debtors from './Debtors';
 import UnconfirmedMemberships from './UnconfirmedMemberships';
 import Bookings from './Bookings';
 import NutritionModule from './NutritionModule';
-import { InzanClassManager } from './components/InzanClassManager';
+import { ClassManager } from './components/ClassManager';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -1149,7 +1149,7 @@ function AppContent() {
 
             {features.classBookingSystem === true && (
               <TabsContent value="class-manager" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-                <InzanClassManager />
+                <ClassManager />
               </TabsContent>
             )}
 

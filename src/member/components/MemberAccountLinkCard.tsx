@@ -4,6 +4,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { db, getTenantId } from '../../firebase';
 import { collection, getDocs, doc, updateDoc, setDoc, addDoc } from 'firebase/firestore';
 import { Client } from '../../types';
+import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../../utils/phoneUtils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,16 +56,21 @@ export const MemberAccountLinkCard: React.FC<MemberAccountLinkCardProps> = ({ on
     try {
       const snap = await getDocs(collection(db, 'clients'));
       const cleanSearchDigits = term.replace(/\D/g, '').slice(-9);
+      const normalizedSearchPhone = normalizeEgyptPhone(term);
+      const searchPhoneVariants = getEgyptPhoneVariants(term);
 
       const match = snap.docs.find(d => {
         const data = d.data();
         const memberId = (data.memberId || d.id || '').toLowerCase();
-        const clientPhone = (data.phone || '').replace(/\D/g, '').slice(-9);
+        const docPhone = (data.phone || '').toString();
+        const docNormPhone = data.normalized_phone || normalizeEgyptPhone(docPhone);
         const clientEmail = (data.email || '').toLowerCase();
         const nationalId = (data.nationalId || '').toLowerCase();
 
         if (memberId === term || memberId === `mem-${term}`) return true;
-        if (cleanSearchDigits && clientPhone && clientPhone === cleanSearchDigits) return true;
+        if (normalizedSearchPhone && docNormPhone && docNormPhone === normalizedSearchPhone) return true;
+        if (searchPhoneVariants.includes(docPhone)) return true;
+        if (cleanSearchDigits && docPhone.replace(/\D/g, '').slice(-9) === cleanSearchDigits) return true;
         if (clientEmail && clientEmail === term) return true;
         if (nationalId && nationalId === term) return true;
         return false;

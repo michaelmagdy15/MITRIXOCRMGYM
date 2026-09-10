@@ -7,7 +7,7 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
 import { startNoShowJob } from './src/jobs/noShowJob.js';
-import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus } from './src/jobs/membershipExpirationJob.js';
+import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus, getEffectiveStatus } from './src/jobs/membershipExpirationJob.js';
 import {
   isSessionTierAllowed,
   isSessionBranchAllowed,
@@ -15,11 +15,13 @@ import {
   toCanonicalTier,
   toCanonicalBranchId,
   validateBookingRules,
+  getSessionAllowedTiers,
   ALLOWED_ADULT_BRANCHES,
   ALLOWED_YOUTH_HOME_BRANCHES,
   CanonicalTier,
   CanonicalBranchId
 } from './src/utils/memberCategories.js';
+import { normalizeEgyptPhone, getEgyptPhoneVariants } from './src/utils/phoneUtils.js';
 
 declare global {
   namespace Express {
@@ -428,7 +430,11 @@ async function startServer() {
       const now = Date.now();
       const cached = clientsCache.get(cacheKey);
       if (cached && now - cached.timestamp < DATA_CACHE_TTL_MS) {
-        return res.json({ clients: cached.clients, cached: true });
+        const freshStatusClients = cached.clients.map((c: any) => ({
+          ...c,
+          status: getEffectiveClientStatus(c)
+        }));
+        return res.json({ clients: freshStatusClients, cached: true });
       }
 
       // Check if there is an in-flight promise for this database
@@ -443,7 +449,9 @@ async function startServer() {
             // Exclude large subcollections to keep memory consumption minimal
             delete data.comments;
             delete data.interactions;
-            return { ...data, id: doc.id } as any;
+            const clientObj = { ...data, id: doc.id } as any;
+            clientObj.status = getEffectiveClientStatus(clientObj);
+            return clientObj;
           });
         })();
         clientsFetchPromises.set(cacheKey, fetchPromise);
@@ -1897,6 +1905,7 @@ async function startServer() {
       const memberIdStr = clientData?.memberId || canonicalClientId;
 
       await db.runTransaction(async (transaction) => {
+        // === 1. ALL READS FIRST ===
         const classDoc = await transaction.get(classRef);
         if (!classDoc.exists) {
           throw new Error("Class not found");
@@ -1905,6 +1914,17 @@ async function startServer() {
         const currentClientDoc = clientDoc.exists ? await transaction.get(clientRef) : null;
         const currentClientData = currentClientDoc?.exists ? currentClientDoc.data() : null;
 
+        // Points wallet read upfront
+        const walletRef = db.collection("pointsWallets").doc(memberIdStr);
+        const walletDoc = await transaction.get(walletRef);
+
+        // Entitlements read upfront (used for both join deductions and leave refunds)
+        const entQuery = db.collection("entitlements")
+          .where("clientId", "==", canonicalClientId)
+          .where("status", "==", "active");
+        const entSnap = await transaction.get(entQuery);
+
+        // === 2. LOGIC & GUARDS (NO READS, NO WRITES) ===
         const classData = classDoc.data();
         let attendees: string[] = classData?.attendees ? [...classData.attendees] : [];
         let waitlist: string[] = classData?.waitlist ? [...classData.waitlist] : [];
@@ -1930,19 +1950,14 @@ async function startServer() {
           throw new Error(validation.error);
         }
 
+        // === 3. ALL WRITES LAST (NO READS ALLOWED) ===
         if (action === 'join') {
           if (isAlreadyAttendee || isAlreadyWaitlisted) {
             throw new Error("Already booked or waitlisted");
           }
 
           if (attendees.length < capacity) {
-            // -- ENTITLEMENT ENGINE INTEGRATION --
             // Find a valid class entitlement and deduct from it
-            const entQuery = db.collection("entitlements")
-              .where("clientId", "==", canonicalClientId)
-              .where("status", "==", "active");
-            
-            const entSnap = await transaction.get(entQuery);
             let validEnt: any = null;
             let validEntRef: any = null;
             
@@ -2030,9 +2045,7 @@ async function startServer() {
                   updatedAt: new Date().toISOString()
                 });
 
-                // Update points wallet if present
-                const walletRef = db.collection("pointsWallets").doc(memberIdStr);
-                const walletDoc = await transaction.get(walletRef);
+                // Update points wallet using already-read walletDoc
                 if (walletDoc.exists) {
                   const wData = walletDoc.data()!;
                   const newBalance = (wData.balance || 0) + 10;
@@ -2114,12 +2127,7 @@ async function startServer() {
             }, { merge: true });
 
             // Refund 1 credit to member
-            // -- ENTITLEMENT REFUND INTEGRATION --
-            const entQuery = db.collection("entitlements")
-              .where("clientId", "==", canonicalClientId)
-              .where("status", "==", "active");
-            
-            const entSnap = await transaction.get(entQuery);
+            // Use already read entSnap (NO READ AFTER WRITE)
             let entToRefund: any = null;
             let entToRefundRef: any = null;
             
@@ -2225,6 +2233,328 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Classes Book] Error:", err);
       return res.status(500).json({ error: err.message || "Failed to process booking" });
+    }
+  });
+
+  // ===============================================================
+  // AGENT 3 & FIX 1: Strict Two-Phase Booking Interceptor (POST /api/v1/bookings)
+  // Enforces:
+  // 1. ALL reads executed before ANY writes.
+  // 2. session.allowed_tiers inclusion check against member.tier.
+  // 3. Home branch isolation for Youth vs Multi-facility for Adults.
+  // ===============================================================
+  app.post('/api/v1/bookings', requireAuth, async (req: any, res: any) => {
+    try {
+      const { sessionId, session_id, memberId, member_id } = req.body;
+      const targetSessionId = sessionId || session_id;
+      const targetMemberId = memberId || member_id;
+
+      if (!targetSessionId || !targetMemberId) {
+        return res.status(400).json({ error: 'sessionId and memberId are required' });
+      }
+
+      const db = await getDbForRequest(req);
+      const sessionRef = db.collection('classSchedules').doc(targetSessionId);
+      let memberRef = db.collection('clients').doc(targetMemberId);
+
+      const bookingResult = await db.runTransaction(async (transaction) => {
+        // --- PHASE 1: ALL READS FIRST ---
+        let memberDoc = await transaction.get(memberRef);
+        if (!memberDoc.exists) {
+          const querySnap = await db.collection('clients').where('memberId', '==', targetMemberId).limit(1).get();
+          if (!querySnap.empty) {
+            memberRef = querySnap.docs[0]!.ref;
+            memberDoc = await transaction.get(memberRef);
+          }
+        }
+        if (!memberDoc.exists) {
+          throw new Error('Member not found');
+        }
+
+        let sessionDoc = await transaction.get(sessionRef);
+        let activeSessionRef = sessionRef;
+        if (!sessionDoc.exists) {
+          const fallbackRef = db.collection('classes').doc(targetSessionId);
+          sessionDoc = await transaction.get(fallbackRef);
+          if (sessionDoc.exists) {
+            activeSessionRef = fallbackRef;
+          }
+        }
+        if (!sessionDoc.exists) {
+          throw new Error('Session not found');
+        }
+
+        // --- PHASE 2: LOGIC & GUARDS (NO READS, NO WRITES) ---
+        const member = memberDoc.data()!;
+        const session = sessionDoc.data()!;
+
+        // 1. Dynamic Membership Expiration Status
+        const effectiveStatus = getEffectiveStatus(member);
+        if (effectiveStatus === 'EXPIRED') {
+          throw new Error('Your membership has expired. Please renew your package to book sessions.');
+        }
+        if (effectiveStatus === 'HOLD') {
+          throw new Error('Your membership is currently on hold.');
+        }
+
+        // 2. Strict Matrix Validation (Branch Isolation & Tier Array Check)
+        const validation = validateBookingRules(member, session);
+        if (!validation.allowed) {
+          throw new Error(validation.error);
+        }
+
+        const attendees: string[] = Array.isArray(session.attendees) ? [...session.attendees] : [];
+        const capacity = Number(session.capacity) || 15;
+        if (attendees.includes(memberDoc.id) || attendees.includes(member.memberId)) {
+          throw new Error('Already booked this session');
+        }
+        if (attendees.length >= capacity) {
+          throw new Error('Session is fully booked');
+        }
+
+        // 3. Package & Credit Verification
+        let hasCredits = member.sessionsRemaining === 'unlimited' || member.isUnlimited === true;
+        let newRemaining = member.sessionsRemaining;
+        const packages: any[] = Array.isArray(member.packages) ? [...member.packages] : [];
+
+        if (!hasCredits) {
+          for (const pkg of packages) {
+            if ((pkg.status || '').toLowerCase() === 'expired') continue;
+            if (pkg.sessionsRemaining !== undefined && pkg.sessionsRemaining > 0) {
+              pkg.sessionsRemaining -= 1;
+              pkg.usedSessions = (pkg.usedSessions || 0) + 1;
+              newRemaining = pkg.sessionsRemaining;
+              hasCredits = true;
+              break;
+            }
+          }
+        }
+
+        if (!hasCredits && typeof member.sessionsRemaining === 'number' && member.sessionsRemaining > 0) {
+          newRemaining = member.sessionsRemaining - 1;
+          hasCredits = true;
+        }
+
+        if (!hasCredits) {
+          throw new Error('No active sessions or credits remaining');
+        }
+
+        // --- PHASE 3: ALL WRITES LAST (NO READS ALLOWED) ---
+        attendees.push(memberDoc.id);
+        transaction.update(activeSessionRef, {
+          attendees,
+          updatedAt: new Date().toISOString()
+        });
+
+        transaction.update(memberRef, {
+          packages,
+          sessionsRemaining: newRemaining !== undefined ? newRemaining : member.sessionsRemaining,
+          usedSessions: (member.usedSessions || 0) + 1,
+          updatedAt: new Date().toISOString()
+        });
+
+        const bookingId = `${targetSessionId}_${memberDoc.id}`;
+        const bookingRef = db.collection('classBookings').doc(bookingId);
+        transaction.set(bookingRef, {
+          id: bookingId,
+          classId: targetSessionId,
+          scheduleId: targetSessionId,
+          memberId: memberDoc.id,
+          memberName: member.name || 'Member',
+          status: 'booked',
+          bookedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        return { success: true, bookingId };
+      });
+
+      return res.json(bookingResult);
+    } catch (err: any) {
+      console.error('[API /api/v1/bookings] Error:', err);
+      const isForbidden = err.message?.includes('reserved for tiers') || err.message?.includes('other facilities') || err.message?.includes('expired');
+      return res.status(isForbidden ? 403 : 400).json({
+        error: err.message || 'Booking failed'
+      });
+    }
+  });
+
+  // ===============================================================
+  // AGENT 3 & DECOUPLING: Schedule Filter Endpoint (GET /api/v1/sessions)
+  // Returns sessions matching member's tier (via allowed_tiers) and branch rules
+  // ===============================================================
+  app.get('/api/v1/sessions', requireAuth, async (req: any, res: any) => {
+    try {
+      const db = await getDbForRequest(req);
+      const memberId = (req.query.memberId || req.query.member_id) as string;
+
+      let sessionsSnap = await db.collection('classSchedules').get();
+      if (sessionsSnap.empty) {
+        sessionsSnap = await db.collection('classes').get();
+      }
+
+      let allSessions = sessionsSnap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          allowed_tiers: getSessionAllowedTiers(data)
+        };
+      });
+
+      if (memberId) {
+        let memberDoc = await db.collection('clients').doc(memberId).get();
+        if (!memberDoc.exists) {
+          const snap = await db.collection('clients').where('memberId', '==', memberId).limit(1).get();
+          if (!snap.empty) {
+            memberDoc = snap.docs[0]!;
+          }
+        }
+
+        if (memberDoc.exists) {
+          const member = memberDoc.data()!;
+          const memberTier = toCanonicalTier(member.tier || member.memberCategory || member.category);
+          const memberBranch = toCanonicalBranchId(member.home_branch_id || member.branch_id || member.branch);
+          const isAdult = memberTier === 'ADULT' || member.category?.toUpperCase() === 'ADULT';
+
+          allSessions = allSessions.filter(session => {
+            const sessionBranch = toCanonicalBranchId((session as any).branch_id || (session as any).branch || (session as any).location);
+            const branchMatches = isAdult
+              ? ALLOWED_ADULT_BRANCHES.includes(sessionBranch as any)
+              : sessionBranch === memberBranch;
+
+            const allowedTiers: CanonicalTier[] = session.allowed_tiers;
+            const tierMatches = allowedTiers.includes(memberTier);
+
+            return branchMatches && tierMatches;
+          });
+        }
+      }
+
+      return res.json({ sessions: allSessions });
+    } catch (err: any) {
+      console.error('[API /api/v1/sessions] Error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to fetch sessions' });
+    }
+  });
+
+  // ===============================================================
+  // AGENT 2: Multi-Child / Shared Phone Profile Switcher (POST /api/member/resolve-email)
+  // Enables 1-to-many parent-to-student profiles without session overwrites
+  // ===============================================================
+  app.post('/api/member/resolve-email', async (req: any, res: any) => {
+    try {
+      const rawInput = (req.body.phone || req.body.memberId || req.body.identifier || '').toString().trim();
+      const selectedMemberId = req.body.selectedMemberId;
+      if (!rawInput) {
+        return res.status(400).json({ error: 'Phone number or Member ID is required' });
+      }
+
+      const db = await getDbForRequest(req);
+      const normalizedPhone = normalizeEgyptPhone(rawInput);
+      const variants = getEgyptPhoneVariants(rawInput);
+      const cleanInput9 = normalizedPhone ? normalizedPhone.slice(-9) : rawInput.replace(/\D/g, '').slice(-9);
+
+      const snap = await db.collection('clients').get();
+
+      const matchingClients: any[] = [];
+      for (const doc of snap.docs) {
+        const data = doc.data();
+        const docPhone = (data.phone || '').toString();
+        const docNormPhone = data.normalized_phone || normalizeEgyptPhone(docPhone);
+        const docMemberId = (data.memberId || '').toString();
+
+        const isMatch = (Boolean(normalizedPhone) && Boolean(docNormPhone) && docNormPhone === normalizedPhone) ||
+                        variants.includes(docPhone) ||
+                        (Boolean(cleanInput9) && docPhone.replace(/\D/g, '').slice(-9) === cleanInput9) ||
+                        docMemberId === rawInput ||
+                        doc.id === rawInput;
+
+        if (isMatch) {
+          matchingClients.push({
+            id: doc.id,
+            memberId: data.memberId || doc.id,
+            name: data.name || 'Member',
+            tier: toCanonicalTier(data.tier || data.memberCategory || data.category),
+            branch: data.branch || data.homeBranch || 'Maxim Compound',
+            status: getEffectiveStatus(data),
+            email: data.email || `${data.memberId || doc.id}@strike.gym`
+          });
+        }
+      }
+
+      if (matchingClients.length === 0) {
+        return res.status(404).json({ error: 'No member profile found for this phone number' });
+      }
+
+      // If multiple children share phone and no specific member was selected, return SELECT_PROFILE
+      if (matchingClients.length > 1 && !selectedMemberId) {
+        return res.json({
+          requiresProfileSelection: true,
+          action: "SELECT_PROFILE",
+          accounts: matchingClients.map(c => ({
+            memberId: c.memberId,
+            name: c.name,
+            tier: c.tier,
+            branch: c.branch,
+            status: c.status
+          })),
+          profiles: matchingClients
+        });
+      }
+
+      const targetClient = selectedMemberId
+        ? (matchingClients.find(c => c.memberId === selectedMemberId || c.id === selectedMemberId) || matchingClients[0])
+        : matchingClients[0];
+
+      return res.json({
+        success: true,
+        email: targetClient.email,
+        client: targetClient
+      });
+    } catch (err: any) {
+      console.error('[API /api/member/resolve-email] Error:', err);
+      return res.status(500).json({ error: err.message || 'Resolve email failed' });
+    }
+  });
+
+  // ===============================================================
+  // AGENT 2: Profile Switch Endpoint (POST /api/auth/switch-profile)
+  // ===============================================================
+  app.post('/api/auth/switch-profile', requireAuth, async (req: any, res: any) => {
+    try {
+      const { targetMemberId } = req.body;
+      if (!targetMemberId) {
+        return res.status(400).json({ error: 'targetMemberId is required' });
+      }
+
+      const db = await getDbForRequest(req);
+      let targetDoc = await db.collection('clients').doc(targetMemberId).get();
+      if (!targetDoc.exists) {
+        const snap = await db.collection('clients').where('memberId', '==', targetMemberId).limit(1).get();
+        if (!snap.empty) {
+          targetDoc = snap.docs[0]!;
+        }
+      }
+
+      if (!targetDoc.exists) {
+        return res.status(404).json({ error: 'Target profile not found' });
+      }
+
+      const targetData = targetDoc.data()!;
+      return res.json({
+        success: true,
+        active_member_id: targetData.memberId || targetDoc.id,
+        client: {
+          id: targetDoc.id,
+          ...targetData,
+          status: getEffectiveStatus(targetData)
+        }
+      });
+    } catch (err: any) {
+      console.error('[API /api/auth/switch-profile] Error:', err);
+      return res.status(500).json({ error: err.message || 'Switch profile failed' });
     }
   });
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Client } from '../types';
+import { normalizeEgyptPhone } from '../utils/phoneUtils';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -254,8 +255,13 @@ export default function MemberProfile({ client }: { client: Client | null }) {
       const targetClientData = targetDoc.data();
       const targetClientId = targetDoc.id;
 
-      // 3. Verify phone match
-      if (targetClientData.phone !== linkPhone.trim()) {
+      // 3. Verify phone match (handles numbers with or without leading zero)
+      const targetPhoneNorm = targetClientData.normalized_phone || normalizeEgyptPhone(targetClientData.phone);
+      const inputPhoneNorm = normalizeEgyptPhone(linkPhone);
+      const isPhoneMatch = targetClientData.phone === linkPhone.trim() ||
+        (Boolean(targetPhoneNorm) && Boolean(inputPhoneNorm) && targetPhoneNorm === inputPhoneNorm);
+
+      if (!isPhoneMatch) {
         throw new Error("Phone number does not match the record for this Member ID.");
       }
 
