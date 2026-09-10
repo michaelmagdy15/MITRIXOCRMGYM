@@ -66,6 +66,11 @@ export const approveRequest = async (
     throw new Error(`Request is already ${request.status}`);
   }
 
+  // Anti-self-approval rule (Enforce Two-Person Maker-Checker rule from PRD)
+  if (request.requesterId && request.requesterId === approverId) {
+    throw new Error('Maker cannot approve their own request. A secondary manager or General Manager must countersign.');
+  }
+
   // 1. Execute specific logic based on type
   await executeApprovalSideEffects(request);
 

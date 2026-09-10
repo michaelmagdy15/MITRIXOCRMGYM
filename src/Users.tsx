@@ -10,15 +10,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { UserRole, User } from './types';
-import { Shield, User as UserIcon, Plus, Trash2, Edit, BarChart, Clock, KeyRound, Loader2, CheckCircle2, RotateCcw, Search } from 'lucide-react';
+import { UserRole, User, InzanDepartment, InzanJobTitle } from './types';
+import { Shield, User as UserIcon, Plus, Trash2, Edit, BarChart, Clock, KeyRound, Loader2, CheckCircle2, RotateCcw, Search, Building2 } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { safeFormatDistanceToNow } from './utils/dateUtils';
 import { UserPerformanceDialog } from './components/UserPerformanceDialog';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { auth, db } from './firebase';
+import { auth, db, getTenantId } from './firebase';
 import { collection, getDocs } from 'firebase/firestore';
+
+import { INZAN_DEPARTMENTS, INZAN_JOB_TITLES } from './utils/inzanOrg';
 
 export default function Users() {
   const { users, currentUser, updateUser, inviteUser, deleteUser, activatePendingUser, passwordResetRequests, approvePasswordResetRequest, denyPasswordResetRequest } = useAuth();
@@ -45,6 +47,11 @@ export default function Users() {
   const [editPhone, setEditPhone] = useState('');
   const [editClientRecordId, setEditClientRecordId] = useState('');
   const [editStatus, setEditStatus] = useState<'working' | 'nonworking'>('working');
+  const [editDepartment, setEditDepartment] = useState<string>('');
+  const [editJobTitle, setEditJobTitle] = useState<string>('');
+  const [editTrainerType, setEditTrainerType] = useState<string>('Full-Time');
+
+  const isInzan = getTenantId() === 'inzanathletics';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
@@ -79,6 +86,9 @@ export default function Users() {
     setEditPhone(user.phone || '');
     setEditClientRecordId(user.clientRecordId || '');
     setEditStatus(user.status || 'working');
+    setEditDepartment(user.department || '');
+    setEditJobTitle(user.jobTitle || '');
+    setEditTrainerType(user.trainerType || 'Full-Time');
   };
 
   const handleUpdateUserDetails = () => {
@@ -98,6 +108,13 @@ export default function Users() {
         updates.can_view_global_dashboard = editCanViewGlobalDashboard;
         updates.can_access_settings_and_history = editCanAccessSettings;
         updates.status = editStatus;
+        if (isInzan) {
+          updates.department = (editDepartment as InzanDepartment) || undefined;
+          updates.jobTitle = (editJobTitle as InzanJobTitle) || undefined;
+          if (editDepartment === 'Fitness') {
+            updates.trainerType = (editTrainerType as 'Full-Time' | 'Part-Time') || undefined;
+          }
+        }
       }
 
       updateUser(editingUser.id, updates);
@@ -321,6 +338,7 @@ export default function Users() {
                     <TableHead>Branch</TableHead>
                     <TableHead>Last Seen</TableHead>
                     <TableHead>Current Role</TableHead>
+                    {isInzan && <TableHead>Department & Title</TableHead>}
                     <TableHead>Change Role</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -364,6 +382,19 @@ export default function Users() {
                         {safeFormatDistanceToNow(user.lastSeen, { addSuffix: true }, 'Never')}
                       </TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>
+                      {isInzan && (
+                        <TableCell>
+                          {user.department ? (
+                            <div className="flex flex-col gap-0.5">
+                              <Badge variant="secondary" className="w-fit text-[11px] font-semibold">{user.department}</Badge>
+                              {user.jobTitle && <span className="text-[10px] text-muted-foreground font-medium">{user.jobTitle}</span>}
+                              {user.trainerType && <span className="text-[9px] text-primary font-mono">{user.trainerType}</span>}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {canChangeRoles ? (
                           <Select 
@@ -747,6 +778,69 @@ export default function Users() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {isInzan && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <Building2 className="w-4 h-4 text-primary" />
+                      INZAN Organizational Structure
+                    </Label>
+
+                    <div className="space-y-2">
+                      <Label>Department</Label>
+                      <Select 
+                        value={editDepartment} 
+                        onValueChange={(val: any) => {
+                          setEditDepartment(val || '');
+                          setEditJobTitle('');
+                        }}
+                      >
+                        <SelectTrigger className="h-11 rounded-xl">
+                          <SelectValue placeholder="Select Department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None / Unassigned</SelectItem>
+                          {INZAN_DEPARTMENTS.map(dept => (
+                            <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {editDepartment && (
+                      <div className="space-y-2">
+                        <Label>Job Title / Position</Label>
+                        <Select value={editJobTitle} onValueChange={(val: any) => setEditJobTitle(val || '')}>
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="Select Job Title" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None / Unassigned</SelectItem>
+                            {(INZAN_JOB_TITLES[editDepartment as InzanDepartment] || []).map(title => (
+                              <SelectItem key={title} value={title}>{title}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {editDepartment === 'Fitness' && (
+                      <div className="space-y-2">
+                        <Label>Trainer Contract Type</Label>
+                        <Select value={editTrainerType} onValueChange={(val: any) => setEditTrainerType(val || 'Full-Time')}>
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="Select Contract Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
+                            <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-4 pt-4 border-t">
                   <Label className="text-base">Granular Permissions</Label>
                   <div className="flex items-center space-x-2">

@@ -1,6 +1,7 @@
 import { QRCodeSVG } from 'qrcode.react';
 import React, { useState, useDeferredValue, useRef, useEffect } from 'react';
 import { useAppContext } from './context';
+import { getTenantId } from './firebase';
 import { useLanguage } from './contexts/LanguageContext';
 import { ASSIGNABLE_ROLES } from './constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,9 +38,11 @@ export default function Leads() {
     fetchClientDetails,
     clients, addClient, updateClient, deleteMultipleClients, deleteClient, addComment, addInteraction,
     prefilledLeadData, setPrefilledLeadData,
-    branches
+    branches,
+    features
   } = useAppContext();
   const { t } = useLanguage();
+  const isInzan = getTenantId() === 'inzanathletics' || features?.salesPipelineStages === '7-stage';
 
   // Debounce timers for lead name/phone edits
   const debounceTimers = useRef<{ [key: string]: any }>({});
@@ -492,7 +495,7 @@ export default function Leads() {
   };
 
   const handleStageChange = (lead: Client, newStage: LeadStage) => {
-    if (newStage === 'Converted') {
+    if (newStage === 'Converted' || newStage === 'Won') {
       setLeadToConvert(lead);
       setIsConvertDialogOpen(true);
     } else {
@@ -511,7 +514,7 @@ export default function Leads() {
   const confirmConversion = () => {
     if (leadToConvert) {
       updateClient(leadToConvert.id, { 
-        stage: 'Converted', 
+        stage: isInzan ? 'Won' : 'Converted', 
         status: 'Active',
         startDate: new Date().toISOString()
       });
@@ -888,9 +891,12 @@ export default function Leads() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="New">New</SelectItem>
-                                      <SelectItem value="Trial">Int. & Trial</SelectItem>
+                                      {isInzan && <SelectItem value="Contacted">Contacted</SelectItem>}
+                                      {isInzan && <SelectItem value="Qualified">Qualified</SelectItem>}
+                                      <SelectItem value="Trial">{isInzan ? 'Trial / Visit' : 'Int. & Trial'}</SelectItem>
+                                      {isInzan && <SelectItem value="Proposal">Proposal</SelectItem>}
                                       <SelectItem value="Follow Up">Follow Up</SelectItem>
-                                      <SelectItem value="Converted">Converted</SelectItem>
+                                      <SelectItem value={isInzan ? 'Won' : 'Converted'}>{isInzan ? 'Won (Convert to Member)' : 'Converted'}</SelectItem>
                                       <SelectItem value="Lost">Lost</SelectItem>
                                     </SelectContent>
                                   </Select>
@@ -1401,10 +1407,13 @@ export default function Leads() {
               <SelectContent>
                 <SelectItem value="All">All Stages</SelectItem>
                 <SelectItem value="New">New</SelectItem>
+                {isInzan && <SelectItem value="Contacted">Contacted</SelectItem>}
+                {isInzan && <SelectItem value="Qualified">Qualified</SelectItem>}
+                <SelectItem value="Trial">{isInzan ? 'Trial / Visit' : 'Trial'}</SelectItem>
+                {isInzan && <SelectItem value="Proposal">Proposal</SelectItem>}
                 <SelectItem value="Follow Up">Follow Up</SelectItem>
-                <SelectItem value="Trial">Trial</SelectItem>
-                <SelectItem value="Interested">Interested</SelectItem>
-                <SelectItem value="Not Interested">Not Interested</SelectItem>
+                <SelectItem value={isInzan ? 'Won' : 'Converted'}>{isInzan ? 'Won' : 'Converted'}</SelectItem>
+                <SelectItem value="Lost">Lost</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1649,7 +1658,10 @@ export default function Leads() {
                   <Select defaultValue={selectedLead.stage} onValueChange={v => updateClient(selectedLead.id, { stage: v as LeadStage })}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {(['New','Follow Up','Trial','Interested','Not Interested'] as LeadStage[]).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                      {(isInzan 
+                        ? ['New', 'Contacted', 'Qualified', 'Trial', 'Proposal', 'Follow Up', 'Won', 'Lost'] 
+                        : ['New', 'Follow Up', 'Trial', 'Converted', 'Lost']
+                      ).map(s => <SelectItem key={s} value={s}>{s === 'Won' ? 'Won (Member)' : s}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <Label className="text-xs">Interest</Label>

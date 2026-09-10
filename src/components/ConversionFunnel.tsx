@@ -36,7 +36,7 @@ const ConversionFunnel: React.FC<ConversionFunnelProps> = ({ selectedRepId, sele
     const counts = STAGES.reduce((acc, current) => {
       acc[current.stage] = filteredLeads.filter(l => l.stage === current.stage).length;
       return acc;
-    }, {} as Record<LeadStage, number>);
+    }, {} as Record<string, number>);
 
     // For a traditional funnel, we assume people move through stages.
     // However, since we only have current stage, we'll just show the breakdown.
@@ -50,20 +50,22 @@ const ConversionFunnel: React.FC<ConversionFunnelProps> = ({ selectedRepId, sele
     // FollowUp = FollowUp + Converted
     // Converted = Converted
     
-    const progressiveCounts = {
-      'New': counts['New'] + counts['Trial'] + counts['Follow Up'] + counts['Converted'],
-      'Trial': counts['Trial'] + counts['Follow Up'] + counts['Converted'],
-      'Follow Up': counts['Follow Up'] + counts['Converted'],
-      'Converted': counts['Converted'],
-      'Lost': counts['Lost']
+    const progressiveCounts: Record<string, number> = {
+      'New': (counts['New'] || 0) + (counts['Trial'] || 0) + (counts['Follow Up'] || 0) + (counts['Converted'] || 0),
+      'Trial': (counts['Trial'] || 0) + (counts['Follow Up'] || 0) + (counts['Converted'] || 0),
+      'Follow Up': (counts['Follow Up'] || 0) + (counts['Converted'] || 0),
+      'Converted': counts['Converted'] || 0,
+      'Lost': counts['Lost'] || 0
     };
 
+    const newCount = progressiveCounts['New'] || 0;
+
     return STAGES.map((s, i) => {
-      const count = progressiveCounts[s.stage];
+      const count = progressiveCounts[s.stage] || 0;
       const prevStage = i > 0 ? STAGES[i - 1]?.stage : undefined;
-      const prevCount = prevStage ? progressiveCounts[prevStage] : null;
+      const prevCount = prevStage ? (progressiveCounts[prevStage] || 0) : null;
       const dropOff = prevCount && prevCount > 0 ? ((prevCount - count) / prevCount) * 100 : 0;
-      const conversionRate = progressiveCounts['New'] > 0 ? (count / progressiveCounts['New']) * 100 : 0;
+      const conversionRate = newCount > 0 ? (count / newCount) * 100 : 0;
 
       return {
         ...s,

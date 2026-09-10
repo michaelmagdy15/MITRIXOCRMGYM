@@ -2214,8 +2214,13 @@ async function startServer() {
               });
             }
 
-            // Waitlist FIFO Promotion
-            if (waitlist.length > 0) {
+            // Waitlist FIFO Promotion (Enforce 2-hour cutoff rule from PRD: automatic promotion stops 2 hours before class)
+            const classStartTimeStr = classData?.startTime || (classData?.date ? `${classData.date}T${classData?.time || '00:00'}` : null);
+            const classStartTimeMs = classStartTimeStr ? new Date(classStartTimeStr).getTime() : 0;
+            const twoHoursMs = 2 * 60 * 60 * 1000;
+            const isWithinTwoHours = classStartTimeMs > 0 && (classStartTimeMs - Date.now() < twoHoursMs);
+
+            if (waitlist.length > 0 && !isWithinTwoHours) {
               const promotedId = waitlist.shift();
               if (promotedId) {
                 attendees.push(promotedId);

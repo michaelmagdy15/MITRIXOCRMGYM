@@ -39,7 +39,7 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       if (!client) throw new Error('Client not found');
 
       if (client.status === 'Expired') {
-        throw new Error(`${client.name}'s membership is expired. They must head to the STRIKE branch to renew.`);
+        throw new Error(`${client.name}'s membership is expired. Please renew membership at the front desk.`);
       }
 
       const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
@@ -95,27 +95,33 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       const docRef = doc(collection(db, 'attendance'));
       await setDoc(docRef, attendanceData);
 
+      // Crucial: Only deduct from package/balance if this check-in is NOT fulfilling
+      // a pre-booked class or PT session that was already deducted at reservation time!
+      const hasPreBookedDeductedSession = (ptSessionsCount + groupClassesCount) > 0;
+
       const packagesCopy = client.packages ? [...client.packages] : [];
       const activePkgIdx = packagesCopy.findIndex(p => p.status === 'Active');
       const updateData: any = {};
       
-      if (activePkgIdx !== -1) {
-        const activePkg = packagesCopy[activePkgIdx];
-        if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
-          packagesCopy[activePkgIdx] = {
-            ...activePkg,
-            sessionsRemaining: activePkg.sessionsRemaining - 1
-          } as any;
-          updateData.packages = packagesCopy;
+      if (!hasPreBookedDeductedSession) {
+        if (activePkgIdx !== -1) {
+          const activePkg = packagesCopy[activePkgIdx];
+          if (activePkg && typeof activePkg.sessionsRemaining === 'number' && activePkg.sessionsRemaining > 0) {
+            packagesCopy[activePkgIdx] = {
+              ...activePkg,
+              sessionsRemaining: activePkg.sessionsRemaining - 1
+            } as any;
+            updateData.packages = packagesCopy;
+          }
         }
-      }
-      
-      if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
-        updateData.sessionsRemaining = client.sessionsRemaining - 1;
-      }
+        
+        if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+          updateData.sessionsRemaining = client.sessionsRemaining - 1;
+        }
 
-      if (Object.keys(updateData).length > 0) {
-        await updateDoc(doc(db, 'clients', clientId), updateData);
+        if (Object.keys(updateData).length > 0) {
+          await updateDoc(doc(db, 'clients', clientId), updateData);
+        }
       }
       await addAuditLog('CREATE', 'ATTENDANCE', clientId, `Attendance: ${client.name} at ${branch}`, currentUser?.name);
     } catch (error) {

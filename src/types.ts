@@ -2,9 +2,20 @@ export type ClientStatus = 'Lead' | 'Active' | 'Nearly Expired' | 'Expired' | 'H
 export type LeadInterest = 'Interested' | 'Not Interested' | 'Pending';
 export type LeadCategory = 'Out of area zone' | 'Social class' | 'Price' | 'No answer' | 'Ladies only' | 'Morning session' | 'Other' | 'None';
 export type LeadSource = 'Call in' | 'Walk-in' | 'Word Of Mouth' | 'Instagram' | 'ADS' | 'Facebook' | 'Website' | 'Google' | 'WhatsApp' | 'TikTok' | 'Other';
-export type LeadStage = 'New' | 'Trial' | 'Follow Up' | 'Converted' | 'Lost';
+export type LeadStage = 'New' | 'Contacted' | 'Qualified' | 'Trial' | 'Trial/Visit' | 'Proposal' | 'Won' | 'Converted' | 'Lost' | 'Follow Up';
 export type PackageType = 'Private' | 'Group';
 export type UserRole = 'manager' | 'rep' | 'admin' | 'super_admin' | 'crm_admin' | 'coach' | 'client';
+
+// INZAN Athletics Commercial Gym Departmental Taxonomy
+export type InzanDepartment = 'Executive' | 'Operations' | 'Marketing' | 'Experience' | 'Fitness' | 'Finance' | 'Sales';
+export type InzanJobTitle = 
+  | 'General Manager'
+  | 'Operations Manager' | 'Floor Manager I' | 'Floor Manager II' | 'Maintenance' | 'Male Housekeeping' | 'Female Housekeeping' | 'Housekeeping'
+  | 'Marketing Manager' | 'Content Creator' | 'Graphic Designer'
+  | 'Experience Manager' | 'Front Desk'
+  | 'Fitness Manager' | 'Nutritionist' | 'Zone Head' | 'Full-Time Trainer' | 'Part-Time Trainer'
+  | 'Financial Manager' | 'Accountant'
+  | 'Sales Manager' | 'Assistant Sales Manager' | 'Client Relationship Manager';
 export type InteractionType = 'Call' | 'WhatsApp' | 'Email' | 'Visit';
 export type InteractionOutcome = 'Interested' | 'Not Answered' | 'Scheduled Trial' | 'Rejected' | 'Other';
 import { PaymentCategory } from './utils/paymentCategories';
@@ -158,6 +169,11 @@ export interface User {
   photoURL?: string;           // avatar image URL
   dismissedNotifications?: string[];
   status?: 'working' | 'nonworking';
+  // INZAN Athletics Org Fields
+  department?: InzanDepartment;
+  jobTitle?: InzanJobTitle | string;
+  trainerType?: 'Full-Time' | 'Part-Time';
+  reportsTo?: string; // userId of supervisor/manager
 }
 
 export interface PTPackageRecord {
@@ -509,6 +525,10 @@ export interface FeatureFlags {
   customMemberProfile?: boolean;
   classBookingSystem?: boolean;
   nutrition?: boolean;
+  // Commercial Gym & Department Isolation Flags
+  commercialGymWorkspaces?: boolean;
+  salesPipelineStages?: '5-stage' | '7-stage';
+  twoPersonApproval?: boolean;
 }
 
 export interface CallCenterLog {
