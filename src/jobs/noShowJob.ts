@@ -17,14 +17,18 @@ export function startNoShowJob() {
           const oneHourMs = 60 * 60 * 1000;
           const twentyFourHoursMs = 24 * 60 * 60 * 1000;
 
-          // Find classes that ended more than 1 hour ago, but less than 24 hours ago
-          // and haven't been processed yet.
+          // Cost Optimization: Only inspect classes from the last 48 hours (using default single-field date index)
+          const todayStr = new Date().toISOString().split('T')[0];
+          const twoDaysAgoStr = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString().split('T')[0];
+
           const classesSnap = await db.collection('classSchedules')
-            .where('noShowsProcessed', '==', false)
+            .where('date', '>=', twoDaysAgoStr)
+            .where('date', '<=', todayStr)
             .get();
 
           for (const classDoc of classesSnap.docs) {
             const classData = classDoc.data();
+            if (classData.noShowsProcessed === true) continue;
             if (!classData.endTime) continue;
 
             const endTimeMs = new Date(classData.endTime).getTime();

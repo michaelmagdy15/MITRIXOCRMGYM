@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Client } from '../types';
 import { auth, db } from '../firebase';
-import { collection, query, onSnapshot, getDocs, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,16 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     let unsub: (() => void) | undefined;
 
     const init = async () => {
-      const q = collection(db, 'classSchedules');
+      // Cost Optimization: Query strictly within the active 21-day window instead of full historical collection
+      const minDateStr = format(addDays(new Date(), -7), 'yyyy-MM-dd');
+      const maxDateStr = format(addDays(new Date(), 14), 'yyyy-MM-dd');
+
+      const q = query(
+        collection(db, 'classSchedules'),
+        where('date', '>=', minDateStr),
+        where('date', '<=', maxDateStr)
+      );
+
       unsub = onSnapshot(q, (snapshot) => {
         const list = snapshot.docs.map(doc => ({
           id: doc.id,

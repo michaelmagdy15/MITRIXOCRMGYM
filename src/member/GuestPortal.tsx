@@ -13,7 +13,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Calendar, MapPin, Clock, Bell, LogIn, LogOut, ShieldAlert, Dumbbell, Map, MessageSquare, ChevronRight, X, Tag, RefreshCcw, ArrowUpRight, Info, ShoppingCart, Building2, Star, Gift, Megaphone, UserPlus, Users, User, LayoutDashboard, Sun, Moon, Sparkles, Search, Filter, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { Client, Package, StorefrontConfig } from '../types';
 import { getTenantId, db } from '../firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-fns';
 
 export function getPackageImage(packageName: string, sessions: number): string {
@@ -233,7 +233,16 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const dateRange = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i - 7));
 
   useEffect(() => {
-    const q = collection(db, 'classSchedules');
+    // Cost Optimization: Query strictly within the active 21-day window
+    const minDateStr = format(addDays(new Date(), -7), 'yyyy-MM-dd');
+    const maxDateStr = format(addDays(new Date(), 14), 'yyyy-MM-dd');
+
+    const q = query(
+      collection(db, 'classSchedules'),
+      where('date', '>=', minDateStr),
+      where('date', '<=', maxDateStr)
+    );
+
     const unsub = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(doc => {
         const data = doc.data();

@@ -12,6 +12,7 @@ import {
   setDoc, 
   arrayUnion, 
   arrayRemove,
+  limit,
   runTransaction 
 } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -74,6 +75,8 @@ interface BookingRequest {
   instapayRef?: string;
   status: 'Pending' | 'Approved' | 'Rejected';
   createdAt: string;
+  packageName?: string;
+  type?: string;
 }
 
 interface PTSessionRecord {
@@ -117,9 +120,9 @@ export default function Bookings() {
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [cancelFeedback, setCancelFeedback] = useState<string | null>(null);
 
-  // Real-time listener for classBookings
+  // Real-time listener for classBookings (capped to 150 newest bookings to protect read quota)
   useEffect(() => {
-    const q = collection(db, 'classBookings');
+    const q = query(collection(db, 'classBookings'), limit(150));
     const unsub = onSnapshot(q, (snap) => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() })) as ClassBooking[];
       // Sort newest bookings first
@@ -147,9 +150,9 @@ export default function Bookings() {
   const [ptStatusFilter, setPtStatusFilter] = useState<'all' | 'Scheduled' | 'Attended' | 'Cancelled' | 'No Show'>('all');
   const [ptDateFilter, setPtDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'week' | 'upcoming'>('all');
 
-  // Real-time listener for PT sessions
+  // Real-time listener for PT sessions (capped to 150 items to protect read quota)
   useEffect(() => {
-    const q = collection(db, 'sessions');
+    const q = query(collection(db, 'sessions'), limit(150));
     const unsub = onSnapshot(q, (snap) => {
       const list = snap.docs.map(d => {
         const data = d.data();
@@ -214,9 +217,9 @@ export default function Bookings() {
   const [rejectReason, setRejectReason] = useState('');
   const [processingReject, setProcessingReject] = useState(false);
 
-  // Fetch booking requests in real-time
+  // Fetch booking requests in real-time (capped to 100 newest items)
   useEffect(() => {
-    const q = collection(db, 'booking_requests');
+    const q = query(collection(db, 'booking_requests'), limit(100));
     const unsub = onSnapshot(q, (snap) => {
       const list = snap.docs.map(d => ({ id: d.id, ...d.data() })) as BookingRequest[];
       list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));

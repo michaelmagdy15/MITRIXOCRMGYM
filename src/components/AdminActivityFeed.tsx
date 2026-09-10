@@ -29,8 +29,8 @@ export default function AdminActivityFeed() {
       const items: ActivityItem[] = [];
       const cutoff = subDays(new Date(), 7);
 
-      // 1. Recent payments
-      const paymentsSnap = await getDocs(collection(db, 'payments'));
+      // 1. Recent payments (capped to 50 items to prevent scanning full collection)
+      const paymentsSnap = await getDocs(query(collection(db, 'payments'), limit(50)));
       paymentsSnap.docs.forEach(d => {
         const p = d.data();
         if (p.date && isAfter(parseISO(p.date), cutoff)) {
@@ -44,8 +44,8 @@ export default function AdminActivityFeed() {
         }
       });
 
-      // 2. Recent attendance
-      const attendanceSnap = await getDocs(collection(db, 'attendance'));
+      // 2. Recent attendance (capped to 50 items)
+      const attendanceSnap = await getDocs(query(collection(db, 'attendance'), limit(50)));
       attendanceSnap.docs.forEach(d => {
         const a = d.data();
         if (a.date && isAfter(parseISO(a.date), cutoff)) {
@@ -59,9 +59,9 @@ export default function AdminActivityFeed() {
         }
       });
 
-      // 3. Recent point transactions
+      // 3. Recent point transactions (capped to 50 items)
       try {
-        const txSnap = await getDocs(collection(db, 'pointTransactions'));
+        const txSnap = await getDocs(query(collection(db, 'pointTransactions'), limit(50)));
         txSnap.docs.forEach(d => {
           const t = d.data();
           if (t.createdAt && isAfter(parseISO(t.createdAt), cutoff)) {
@@ -76,9 +76,9 @@ export default function AdminActivityFeed() {
         });
       } catch {}
 
-      // 4. Recent body records
+      // 4. Recent body records (capped to 50 items)
       try {
-        const bodySnap = await getDocs(collection(db, 'bodyRecords'));
+        const bodySnap = await getDocs(query(collection(db, 'bodyRecords'), limit(50)));
         bodySnap.docs.forEach(d => {
           const b = d.data();
           if (b.date && isAfter(parseISO(b.date), cutoff)) {

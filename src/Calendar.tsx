@@ -12,7 +12,7 @@ import { useLanguage } from './contexts/LanguageContext';
 import { useSettings } from './contexts/SettingsContext';
 import { db, auth, getTenantId } from './firebase';
 import StrikeWeeklyScheduleView from './components/StrikeWeeklyScheduleView';
-import { collection, onSnapshot, setDoc, doc, deleteDoc, writeBatch, getDocs, query, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, setDoc, doc, deleteDoc, writeBatch, getDocs, query, where, updateDoc } from 'firebase/firestore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
   format, 
@@ -130,9 +130,19 @@ export default function CalendarView() {
     }
   }, [features]);
 
-  // Real-time listener for class schedules across admin, coach, and member mobile apps
+  // Real-time listener for class schedules scoped to visible window (prev month to next month)
   useEffect(() => {
-    const q = collection(db, 'classSchedules');
+    const minDate = startOfMonth(subMonths(currentDate, 1));
+    const maxDate = endOfMonth(addMonths(currentDate, 1));
+    const minDateStr = format(minDate, 'yyyy-MM-dd');
+    const maxDateStr = format(maxDate, 'yyyy-MM-dd');
+
+    const q = query(
+      collection(db, 'classSchedules'),
+      where('date', '>=', minDateStr),
+      where('date', '<=', maxDateStr)
+    );
+
     const unsub = onSnapshot(q, (snap) => {
       const events = snap.docs.map(d => {
         const data = d.data();
@@ -163,11 +173,11 @@ export default function CalendarView() {
       });
       setGymClasses(events);
     }, (err) => {
-      console.error("Error listening to class schedules in Calendar:", err);
+      console.error("Error loading class schedules:", err);
     });
 
     return () => unsub();
-  }, []);
+  }, [currentDate]);
 
   // Live Sessions State (from Firestore sessions collection)
   const [liveSessions, setLiveSessions] = useState<any[]>([]);

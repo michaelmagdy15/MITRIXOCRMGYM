@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, doc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ClassSchedule } from '../types/class';
 
@@ -8,9 +8,12 @@ export function useClasses() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // IMPORTANT: Tenant isolation is handled by getDbForRequest or equivalent in rules/context
-    // For now, we query the root 'classSchedules' collection which will live in the tenant's specific db.
-    const q = query(collection(db, 'classSchedules'));
+    // Cost Optimization: Query classes from the last 30 days and upcoming, preventing loading all historical archives
+    const thirtyDaysAgoStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const q = query(
+      collection(db, 'classSchedules'),
+      where('date', '>=', thirtyDaysAgoStr)
+    );
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const classesData = snapshot.docs.map(doc => ({

@@ -41,15 +41,18 @@ export default function CoachHome({ onNavigate }: { onNavigate: (tab: CoachTab) 
         );
         const totalClients = clientsSnap.size;
 
-        // Sessions (attendance records)
-        const attendanceSnap = await getDocs(collection(db, 'attendance'));
-        const allSessions = attendanceSnap.docs
-          .map(d => d.data())
-          .filter((a: any) => a.coach === coachName || a.coachName === coachName);
-
         const now = new Date();
         const weekStart = startOfWeek(now, { weekStartsOn: 1 });
         const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+        const weekStartIso = weekStart.toISOString();
+
+        // Cost Optimization: Scope attendance query to current week instead of full history
+        const attendanceSnap = await getDocs(
+          query(collection(db, 'attendance'), where('date', '>=', weekStartIso))
+        );
+        const allSessions = attendanceSnap.docs
+          .map(d => d.data())
+          .filter((a: any) => !coachName || a.coach === coachName || a.coachName === coachName);
 
         const sessionsThisWeek = allSessions.filter((a: any) => {
           try {
