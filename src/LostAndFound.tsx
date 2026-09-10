@@ -451,9 +451,9 @@ export default function LostAndFound() {
 
       {/* ════════════════ ADD ITEM DIALOG ════════════════ */}
       <Dialog open={addOpen} onOpenChange={(open) => { if (!open) { setAddOpen(false); setNewItem({ ...defaultNewItem }); } else { setAddOpen(true); } }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
-            <DialogTitle>Add Lost &amp; Found Item</DialogTitle>
+            <DialogTitle className="text-xl md:text-2xl font-bold">Add Lost &amp; Found Item</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -517,9 +517,9 @@ export default function LostAndFound() {
 
       {/* ════════════════ VIEW DETAIL DIALOG ════════════════ */}
       <Dialog open={!!viewItem} onOpenChange={(open) => { if (!open) setViewItem(null); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
-            <DialogTitle>Item Details</DialogTitle>
+            <DialogTitle className="text-xl md:text-2xl font-bold">Item Details</DialogTitle>
           </DialogHeader>
           {viewItem && (
             <div className="space-y-3 text-sm">
@@ -559,9 +559,9 @@ export default function LostAndFound() {
 
       {/* ════════════════ CLAIM DIALOG ════════════════ */}
       <Dialog open={!!claimItem} onOpenChange={(open) => { if (!open) { setClaimItem(null); setClaimantName(''); } }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="w-[95vw] sm:max-w-md md:max-w-lg rounded-2xl p-6">
           <DialogHeader>
-            <DialogTitle>Claim Item</DialogTitle>
+            <DialogTitle className="text-xl font-bold">Claim Item</DialogTitle>
           </DialogHeader>
           {claimItem && (
             <div className="space-y-4">

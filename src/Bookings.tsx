@@ -1403,7 +1403,7 @@ export default function Bookings() {
 
       {/* ─── CANCEL CLASS BOOKING CONFIRMATION DIALOG ─── */}
       <Dialog open={isCancelConfirmOpen} onOpenChange={setIsCancelConfirmOpen}>
-        <DialogContent className="max-w-md bg-card border">
+        <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl rounded-2xl p-6 bg-card border">
           <DialogHeader>
             <DialogTitle className="text-base font-black uppercase tracking-tight text-rose-500 flex items-center gap-2">
               <AlertCircle className="h-5 w-5" /> Cancel Class Booking
@@ -1465,7 +1465,7 @@ export default function Bookings() {
 
       {/* ─── ACCEPT STOREFRONT BOOKING DIALOG ─── */}
       <Dialog open={isAcceptOpen} onOpenChange={setIsAcceptOpen}>
-        <DialogContent className="max-w-md bg-card border">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8 bg-card border">
           <DialogHeader>
             <DialogTitle className="text-base font-black uppercase tracking-tight flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-emerald-500" /> Accept Booking & Profile Setup
@@ -1595,7 +1595,7 @@ export default function Bookings() {
 
       {/* ─── DECLINE STOREFRONT BOOKING DIALOG ─── */}
       <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
-        <DialogContent className="max-w-sm bg-card border">
+        <DialogContent className="w-[95vw] sm:max-w-md md:max-w-lg rounded-2xl p-6 bg-card border">
           <DialogHeader>
             <DialogTitle className="text-base font-black uppercase tracking-tight">Decline Booking Request</DialogTitle>
             <DialogDescription className="text-xs">Specify a reason for declining this storefront purchase request.</DialogDescription>

@@ -512,9 +512,9 @@ export default function ImportData({ type }: ImportDataProps) {
           </Button>
         }
       />
-      <DialogContent className="max-w-xl">
+      <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
         <DialogHeader>
-          <DialogTitle>Import {type}s from CSV / Google Sheets</DialogTitle>
+          <DialogTitle className="text-xl md:text-2xl font-bold">Import {type}s from CSV / Google Sheets</DialogTitle>
         </DialogHeader>
 
         {step === 'upload' && (

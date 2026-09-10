@@ -495,9 +495,9 @@ export default function Complaints() {
 
       {/* ════════════════ NEW COMPLAINT DIALOG ════════════════ */}
       <Dialog open={addOpen} onOpenChange={(open) => { if (!open) { setAddOpen(false); setNewComplaint({ ...defaultNewComplaint }); } else { setAddOpen(true); } }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
-            <DialogTitle>New Complaint / Suggestion</DialogTitle>
+            <DialogTitle className="text-xl md:text-2xl font-bold">New Complaint / Suggestion</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -591,9 +591,9 @@ export default function Complaints() {
 
       {/* ════════════════ DETAIL / UPDATE DIALOG ════════════════ */}
       <Dialog open={!!detailComplaint} onOpenChange={(open) => { if (!open) setDetailComplaint(null); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
-            <DialogTitle>Complaint Details</DialogTitle>
+            <DialogTitle className="text-xl md:text-2xl font-bold">Complaint Details</DialogTitle>
           </DialogHeader>
           {detailComplaint && (
             <div className="space-y-4">

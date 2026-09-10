@@ -247,9 +247,9 @@ export default function Users() {
                 <DialogTrigger render={<Button />}>
                   <Plus className="mr-2 h-4 w-4" /> Invite User
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
                   <DialogHeader>
-                    <DialogTitle>Invite New User</DialogTitle>
+                    <DialogTitle className="text-xl md:text-2xl font-bold">Invite New User</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
@@ -665,7 +665,7 @@ export default function Users() {
       </Tabs>
 
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle>{editingUser?.role === 'client' ? 'Edit Member Portal Credentials' : editingUser?.role === 'coach' ? 'Edit Coach Portal Credentials' : 'Edit User Profile'}</DialogTitle>
           </DialogHeader>

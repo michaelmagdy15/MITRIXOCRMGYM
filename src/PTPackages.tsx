@@ -289,7 +289,7 @@ export default function PTPackages() {
 
       {/* Schedule Dialog */}
       <Dialog open={isNewPackageOpen} onOpenChange={setIsNewPackageOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle>Log Package Usage</DialogTitle>
           </DialogHeader>

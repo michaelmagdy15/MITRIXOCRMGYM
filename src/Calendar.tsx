@@ -759,7 +759,7 @@ export default function CalendarView() {
 
       {/* Booking Modal Dialog */}
       <Dialog open={isBookModalOpen} onOpenChange={setIsBookModalOpen}>
-        <DialogContent className="max-w-md bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6 md:p-8">
           <DialogHeader className="pb-2 text-left">
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <CalendarIcon className="h-5 w-5 text-primary" />
@@ -1034,7 +1034,7 @@ export default function CalendarView() {
           const client = clients.find(c => c.id === selectedRecord.clientId);
           const trainer = users.find(u => u.id === selectedRecord.trainerId);
           return (
-            <DialogContent className="max-w-md bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6">
+            <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6 md:p-8">
               <DialogHeader className="pb-3 border-b text-left">
                 <DialogTitle className="text-lg font-bold flex items-center justify-between">
                   <span>{language === 'ar' ? 'تفاصيل الحصة التدريبية' : 'Session Details'}</span>
@@ -1142,7 +1142,7 @@ export default function CalendarView() {
       <Dialog open={selectedClass !== null} onOpenChange={(open) => !open && setSelectedClass(null)}>
         {selectedClass && (() => {
           return (
-            <DialogContent className="max-w-md bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6">
+            <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6 md:p-8">
               <DialogHeader className="pb-3 border-b text-left">
                 <DialogTitle className="text-lg font-bold flex items-center justify-between">
                   <span>{language === 'ar' ? 'تفاصيل الحصة الجماعية' : 'Group Class Details'}</span>

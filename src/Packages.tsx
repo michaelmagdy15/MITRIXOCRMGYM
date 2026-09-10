@@ -154,9 +154,9 @@ export default function Packages() {
           <DialogTrigger render={<Button />}>
             <Plus className="mr-2 h-4 w-4" /> Add Package
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
             <DialogHeader>
-              <DialogTitle>Add New Package</DialogTitle>
+              <DialogTitle className="text-xl md:text-2xl font-bold">Add New Package</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -317,9 +317,9 @@ export default function Packages() {
       </Card>
 
       <Dialog open={isEditOpen} onOpenChange={(open) => { setIsEditOpen(open); if (!open) resetForm(); }}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
-            <DialogTitle>Edit Package</DialogTitle>
+            <DialogTitle className="text-xl md:text-2xl font-bold">Edit Package</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">

@@ -290,7 +290,7 @@ export default function PrivateSessions() {
 
       {/* Schedule Dialog */}
       <Dialog open={isNewSessionOpen} onOpenChange={setIsNewSessionOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle>Schedule New Session</DialogTitle>
           </DialogHeader>

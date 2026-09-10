@@ -1250,9 +1250,9 @@ export default function Leads() {
             <DialogTrigger render={<Button size="sm" />}>
               <Plus className="mr-2 h-4 w-4" /> {t('leads.add_lead')}
             </DialogTrigger>
-            <DialogContent className="w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
               <DialogHeader>
-                <DialogTitle>{t('leads.add_lead')}</DialogTitle>
+                <DialogTitle className="text-xl md:text-2xl font-bold">{t('leads.add_lead')}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -1590,7 +1590,7 @@ export default function Leads() {
       </Tabs>
 
       <Dialog open={isConvertDialogOpen} onOpenChange={setIsConvertDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] sm:max-w-md md:max-w-lg rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle>Convert Lead to Client?</DialogTitle>
           </DialogHeader>

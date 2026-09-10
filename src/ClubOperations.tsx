@@ -646,7 +646,7 @@ export default function ClubOperations() {
 
       {/* Approve Locker Request Dialog */}
       <Dialog open={approvingRequest !== null} onOpenChange={open => { if (!open) setApprovingRequest(null); }}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="w-[95vw] sm:max-w-md md:max-w-lg rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle>Assign Smart Locker</DialogTitle>
             <DialogDescription>
@@ -699,7 +699,7 @@ export default function ClubOperations() {
 
       {/* Edit Locker PIN Dialog */}
       <Dialog open={editingLockerPin !== null} onOpenChange={open => { if (!open) setEditingLockerPin(null); }}>
-        <DialogContent className="sm:max-w-[350px]">
+        <DialogContent className="w-[95vw] sm:max-w-md rounded-2xl p-6">
           <DialogHeader>
             <DialogTitle>Edit Locker PIN</DialogTitle>
             <DialogDescription>

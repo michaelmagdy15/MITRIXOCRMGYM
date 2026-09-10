@@ -850,9 +850,9 @@ export default function Dashboard() {
                         </Button>
                       }
                     />
-                    <DialogContent>
+                    <DialogContent className="w-[95vw] sm:max-w-md md:max-w-lg rounded-2xl p-6">
                       <DialogHeader>
-                        <DialogTitle>{t('dashboard.update_sales_target')}</DialogTitle>
+                        <DialogTitle className="text-xl font-bold">{t('dashboard.update_sales_target')}</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
                         <div className="space-y-2">

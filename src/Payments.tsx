@@ -1650,9 +1650,9 @@ export default function Payments() {
                               <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.upgrade_package')} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20" />}>
                                 <TrendingUp className="h-4 w-4" />
                               </DialogTrigger>
-                              <DialogContent className="max-w-md">
+                              <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
                                 <DialogHeader>
-                                  <DialogTitle>{t('payments.upgrade.title')}</DialogTitle>
+                                  <DialogTitle className="text-xl font-bold">{t('payments.upgrade.title')}</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-4">
                                   <p className="text-sm text-muted-foreground">
@@ -1902,7 +1902,7 @@ export default function Payments() {
                                 <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.hold_payment')} className="text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20" />}>
                                   <Pause className="h-4 w-4" />
                                 </DialogTrigger>
-                                <DialogContent className="max-w-md">
+                                <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl rounded-2xl p-6">
                                   <DialogHeader>
                                     <DialogTitle>{t('payments.hold_dialog.title')}</DialogTitle>
                                   </DialogHeader>
@@ -1961,7 +1961,7 @@ export default function Payments() {
                                 <DialogTrigger render={<Button variant="ghost" size="sm" title="Request Refund" className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20" />}>
                                   <RotateCcw className="h-4 w-4" />
                                 </DialogTrigger>
-                                <DialogContent className="max-w-md">
+                                <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl rounded-2xl p-6">
                                   <DialogHeader>
                                     <DialogTitle>Request Refund</DialogTitle>
                                   </DialogHeader>

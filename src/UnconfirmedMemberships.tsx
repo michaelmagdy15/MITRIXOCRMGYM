@@ -378,7 +378,7 @@ export default function UnconfirmedMemberships() {
 
       {/* Confirmation Modal */}
       <Dialog open={actionItem !== null} onOpenChange={(open) => !open && setActionItem(null)}>
-        <DialogContent className="sm:max-w-[425px] rounded-2xl p-6" dir={isRtl ? 'rtl' : 'ltr'}>
+        <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8" dir={isRtl ? 'rtl' : 'ltr'}>
           <DialogHeader>
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               {actionType === 'confirm' ? (

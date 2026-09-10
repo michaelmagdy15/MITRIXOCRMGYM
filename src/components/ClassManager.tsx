@@ -893,7 +893,7 @@ export const ClassManager: React.FC = () => {
 
       {/* ─── ATTENDEE ROSTER DIALOG ─── */}
       <Dialog open={isRosterOpen} onOpenChange={setIsRosterOpen}>
-        <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader className="border-b pb-3">
             <div className="flex items-start justify-between">
               <div>
@@ -1141,7 +1141,7 @@ export const ClassManager: React.FC = () => {
 
       {/* Create / Edit Class Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle className="text-base font-black uppercase tracking-tight">
               {editingClass ? 'Edit Class Schedule' : 'Create New Class Schedule'}

@@ -122,7 +122,7 @@ export default function Tasks() {
               {t('tasks.add_task')}
             </Button>
           } />
-          <DialogContent>
+          <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
             <DialogHeader>
               <DialogTitle>{t('tasks.add_task')}</DialogTitle>
             </DialogHeader>
@@ -279,7 +279,7 @@ export default function Tasks() {
       </div>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle>{editingTask && isAssigneeOnly(editingTask) ? t('tasks.update_task_status') : t('tasks.edit_task')}</DialogTitle>
           </DialogHeader>
