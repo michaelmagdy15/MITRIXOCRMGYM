@@ -101,6 +101,37 @@
   - In [`src/contexts/SettingsContext.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/contexts/SettingsContext.tsx), [`src/App.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/App.tsx), and [`src/Login.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Login.tsx), sanitized `companyName` and `logoUrl`: if `companyName` contains "mitrixo" or is empty, it immediately resolves to `'STRIKE'`, and `logoUrl` defaults to `/strikelogo_white.png` / `/strikelogo.png` rather than raw text fallback.
   - Cleaned remaining user-facing instances in `MemberLocker.tsx`, `MemberInvites.tsx`, `ForcePasswordChangeDialog.tsx`, `QRCodePage.tsx`, `HelpPage.tsx`, and `GuestPortal.tsx`.
 
+#### Part 9: iOS Native Shell Splash Screen & Dynamic Admin Splash Screen Manager
+- **User Requirements**:
+  1. Replace the native "spinning red thing" on iOS app launch with the full-screen branded splash screen.
+  2. Fix the 0.5-second flash so the splash screen stays for an intentional duration (2.0s minimum) and transitions smoothly into the app.
+  3. Give gym admins the ability to change the splash screen for each gym (STRIKE and Inzan) at any time through the CRM dashboard admin page.
+- **Root Causes**:
+  - In `mobile/App.js`, `{isLoading && (<View style={styles.loadingContainer}>...<ActivityIndicator />...</View>)}` showed a native activity indicator on a black background while the React Native WebView was loading the server URL.
+  - Once the WebView completed initial navigation, the web splash screen appeared but `src/App.tsx` called `window.__dismissMobileSplash()` after just 150ms once auth ready fired, making the splash screen flash away in 0.5s.
+  - No settings interface existed for gym owners to customize the mobile splash wallpaper, logo, or tagline.
+- **Fixes Applied**:
+  - **Native Mobile App (`mobile/App.js` & `mobile/app.json`)**:
+    - Replaced the generic loading indicator overlay with `NativeSplashScreen`: renders the portrait wallpaper (`strike_slide_outdoor.png`), dark radial vignette overlay, luminous centered logo (`strikelogo_white.png` or `inzanlogo.png`), animated progress pill bar (using `Animated.loop` translation), and tagline text (`STRIKE BOXING CLUB` or `APP_NAME`).
+    - Copied high-resolution assets into `mobile/assets/` (`strike_slide_outdoor.png`, `strikelogo_white.png`, `inzanlogo.png`) and updated `splash-icon.png` in `mobile/app.json`.
+    - Native launch and web loading are now visually 100% identical and seamless, with zero red spinner.
+  - **2.0-Second Minimum Display Timing (`index.html`)**:
+    - Initialized `window.__splashStartTime = Date.now()` on script execution.
+    - Updated `window.__dismissMobileSplash(force)` to enforce `minDuration = 2000ms`, calculating `remaining = Math.max(0, 2000 - (Date.now() - window.__splashStartTime))`.
+    - Applied smooth 550ms ease-out transition (`opacity: 0 !important; transform: scale(1.05) !important;`).
+  - **Data Model & Settings Context (`src/types.ts` & `src/contexts/SettingsContext.tsx`)**:
+    - Extended `BrandingSettings` with `splashScreenUrl?: string;`, `splashScreenLogoUrl?: string;`, `splashScreenTagline?: string;`.
+    - Configured tenant defaults in `TENANT_BRANDING_DEFAULTS` for both STRIKE and Inzan.
+    - Added synchronous `localStorage` caching (`cached_branding_${tenantId}`) and live DOM synchronization in `applyBrandingData` and `updateBranding`.
+    - In `index.html`, added cold-boot reading of cached splash branding so custom wallpapers, logos, and taglines render instantly before React loads.
+  - **Dynamic CRM Admin Management Page (`src/Settings.tsx`)**:
+    - Added dedicated **"Mobile App Splash Screen"** card under the Branding tab with:
+      - Wallpaper upload (Firebase Storage at `branding/splash-bg-${timestamp}.${ext}`) with status feedback + URL input + preset quick-selectors (Strike Outdoor, Strike Arena, Strike Kids, Pure Dark) + Clear Image button.
+      - Splash Logo upload (Firebase Storage) + URL input + quick buttons ("Use Main Brand Logo", "Strike White Logo", "Inzan Logo").
+      - Splash Tagline input field.
+      - **Live Interactive iPhone Device Mockup**: Styled phone chassis with Dynamic Island, Home Indicator, background wallpaper preview, vignette overlay, luminous logo, animated progress bar, and tagline reflecting edits in real time.
+      - Save button persisting directly to tenant's Firestore `settings/branding` document.
+
 ### Verification Status
 - **`npm run lint` (`tsc --noEmit`)**: ✓ 0 errors.
 - **`npm run build` (`vite build && esbuild server.ts`)**: ✓ 0 errors (dist bundle, PWA manifest with `STRIKE`, and `dist-server/server.cjs` compiled clean).

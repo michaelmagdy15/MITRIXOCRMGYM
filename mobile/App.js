@@ -9,6 +9,9 @@ import {
   BackHandler,
   Platform,
   ActivityIndicator,
+  Image,
+  ImageBackground,
+  Animated,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import NetInfo from '@react-native-community/netinfo';
@@ -525,17 +528,97 @@ function MainApp() {
           </View>
         )}
 
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            <View style={styles.loadingCard}>
-              <Text style={styles.loadingAppTitle}>{APP_NAME}</Text>
-              <ActivityIndicator size="small" color="#FFFFFF" style={{ marginTop: 14 }} />
-            </View>
-          </View>
-        )}
+        {isLoading && <NativeSplashScreen appName={APP_NAME} />}
         {renderOfflineBanner()}
       </View>
     </SafeAreaView>
+  );
+}
+
+// ─── Native Splash Screen Component ─────────────────────────────
+// Replaces the generic red spinner on iOS/Android start with the
+// full-screen branded splash screen matching the web CRM design.
+function NativeSplashScreen({ appName }) {
+  const isStrike = !appName || (appName || '').toUpperCase().includes('STRIKE');
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loopAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(slideAnim, {
+          toValue: 1,
+          duration: 1600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loopAnimation.start();
+    return () => loopAnimation.stop();
+  }, [slideAnim]);
+
+  const translateX = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-60, 140],
+  });
+
+  const bgSource = isStrike 
+    ? require('./assets/strike_slide_outdoor.png') 
+    : null;
+  const logoSource = isStrike 
+    ? require('./assets/strikelogo_white.png') 
+    : require('./assets/inzanlogo.png');
+
+  const content = (
+    <View style={styles.splashOverlay}>
+      <View style={styles.splashCenter}>
+        <View style={styles.splashGlow} />
+        <Image
+          source={logoSource}
+          style={styles.splashLogo}
+          resizeMode="contain"
+        />
+      </View>
+
+      <View style={styles.splashFooter}>
+        <View style={styles.splashBarTrack}>
+          <Animated.View
+            style={[
+              styles.splashBarFill,
+              {
+                transform: [{ translateX }],
+              },
+            ]}
+          />
+        </View>
+        <Text style={styles.splashTagline}>
+          {isStrike ? 'STRIKE BOXING CLUB' : (appName || 'INZAN ATHLETICS')}
+        </Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={StyleSheet.absoluteFillObject}>
+      <StatusBar style="light" backgroundColor="#050507" />
+      {bgSource ? (
+        <ImageBackground
+          source={bgSource}
+          style={StyleSheet.absoluteFillObject}
+          resizeMode="cover"
+        >
+          {content}
+        </ImageBackground>
+      ) : (
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#050507' }]}>
+          {content}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -699,5 +782,61 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  splashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(5, 5, 7, 0.72)',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 70 : 40,
+    paddingBottom: Platform.OS === 'ios' ? 50 : 36,
+    paddingHorizontal: 24,
+  },
+  splashCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    width: '100%',
+  },
+  splashGlow: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(225, 29, 72, 0.28)',
+  },
+  splashLogo: {
+    width: 210,
+    height: 90,
+    maxWidth: '75%',
+  },
+  splashFooter: {
+    alignItems: 'center',
+    gap: 14,
+    width: '100%',
+  },
+  splashBarTrack: {
+    width: 130,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderRadius: 999,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  splashBarFill: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 50,
+    backgroundColor: '#E11D48',
+    borderRadius: 999,
+  },
+  splashTagline: {
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 4,
+    textTransform: 'uppercase',
   },
 });

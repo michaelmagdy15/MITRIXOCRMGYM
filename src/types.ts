@@ -479,6 +479,9 @@ export interface BrandingSettings {
   currencyCode?: string;
   currencySymbol?: string;
   brandAccentColor?: string;  // NEW: gym brand accent hex e.g. "#dc2626"
+  splashScreenUrl?: string;       // Custom wallpaper URL for mobile splash screen
+  splashScreenLogoUrl?: string;   // Custom splash logo URL
+  splashScreenTagline?: string;   // Custom subtitle / tagline for splash screen
 }
 
 export type UserId = string;

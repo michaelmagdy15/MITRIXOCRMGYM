@@ -12,6 +12,9 @@ export const TENANT_BRANDING_DEFAULTS: Record<'inzanathletics' | 'strike', Brand
     currencyCode: 'EGP',
     currencySymbol: 'LE',
     brandAccentColor: '#1a1a1a',
+    splashScreenUrl: '',
+    splashScreenLogoUrl: '/inzanlogo.png',
+    splashScreenTagline: 'INZAN ATHLETICS',
   },
   strike: {
     companyName: 'STRIKE',
@@ -19,6 +22,9 @@ export const TENANT_BRANDING_DEFAULTS: Record<'inzanathletics' | 'strike', Brand
     currencyCode: 'EGP',
     currencySymbol: 'LE',
     brandAccentColor: '#1a1a1a',
+    splashScreenUrl: '/strike_slide_outdoor.png',
+    splashScreenLogoUrl: '/strikelogo_white.png',
+    splashScreenTagline: 'STRIKE BOXING CLUB',
   },
 };
 
@@ -172,12 +178,38 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       ...data,
       companyName: effectiveName,
       logoUrl: effectiveLogo,
+      splashScreenUrl: data.splashScreenUrl !== undefined ? data.splashScreenUrl : tenantDefault.splashScreenUrl,
+      splashScreenLogoUrl: data.splashScreenLogoUrl || tenantDefault.splashScreenLogoUrl,
+      splashScreenTagline: data.splashScreenTagline || tenantDefault.splashScreenTagline,
     };
 
     setBranding(mergedData);
     if (effectiveName) {
       document.title = effectiveName;
     }
+
+    // Cache branding in localStorage for instant cold start
+    try {
+      const tid = (typeof window !== 'undefined' ? getTenantId() : 'default').toLowerCase();
+      localStorage.setItem('cached_branding_' + tid, JSON.stringify(mergedData));
+    } catch (_) {}
+
+    // Live update splash screen elements if still in DOM
+    try {
+      const splashBg = document.querySelector('.mobile-splash-bg') as HTMLElement;
+      if (splashBg && mergedData.splashScreenUrl) {
+        splashBg.style.backgroundImage = `url('${mergedData.splashScreenUrl}')`;
+      }
+      const splashLogo = document.getElementById('mobile-splash-logo') as HTMLImageElement;
+      if (splashLogo && (mergedData.splashScreenLogoUrl || mergedData.logoUrl)) {
+        splashLogo.src = mergedData.splashScreenLogoUrl || mergedData.logoUrl;
+      }
+      const splashTitle = document.getElementById('mobile-splash-title');
+      if (splashTitle && (mergedData.splashScreenTagline || mergedData.companyName)) {
+        splashTitle.textContent = mergedData.splashScreenTagline || mergedData.companyName;
+      }
+    } catch (_) {}
+
     setIsBrandingLoaded(true);
   }, []);
 
@@ -237,7 +269,14 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
 
   const updateBranding = useCallback(async (updates: Partial<BrandingSettings>) => {
     await updateSetting('branding', updates);
-    setBranding(prev => ({ ...prev, ...updates }));
+    setBranding(prev => {
+      const updated = { ...prev, ...updates };
+      try {
+        const tid = (typeof window !== 'undefined' ? getTenantId() : 'default').toLowerCase();
+        localStorage.setItem('cached_branding_' + tid, JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
     if (updates.brandAccentColor !== undefined) {
       applyBrandAccent(updates.brandAccentColor);
     }

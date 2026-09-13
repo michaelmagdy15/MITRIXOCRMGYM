@@ -232,23 +232,47 @@
     <script type="text/javascript">
       // Check if iPhone or Android or mobile screen width
       (function() {
+        window.__splashStartTime = Date.now();
         var isMobileDevice = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike/i.test(navigator.userAgent) || (window.innerWidth < 768);
         var splashEl = document.getElementById('mobile-native-splash');
 
         if (isMobileDevice && splashEl) {
           splashEl.style.display = 'flex';
 
-          // Tenant check for Inzan
           try {
             var params = new URLSearchParams(window.location.search);
             var t = (params.get('tenant') || '').toLowerCase();
             var host = window.location.hostname.toLowerCase();
-            var isInzan = t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1;
+            var cfgTenant = (window.__FIREBASE_CONFIG__ && window.__FIREBASE_CONFIG__.tenantId) ? window.__FIREBASE_CONFIG__.tenantId.toLowerCase() : '';
+            var isInzan = t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1 || cfgTenant.indexOf('inzan') !== -1;
+            var tenantKey = isInzan ? 'inzanathletics' : 'strike';
+
+            var logo = document.getElementById('mobile-splash-logo');
+            var title = document.getElementById('mobile-splash-title');
+            var bgEl = document.querySelector('.mobile-splash-bg');
+
             if (isInzan) {
-              var logo = document.getElementById('mobile-splash-logo');
               if (logo) logo.src = '/inzanlogo.png';
-              var title = document.getElementById('mobile-splash-title');
               if (title) title.textContent = 'INZAN ATHLETICS';
+            }
+
+            // Read cached custom splash branding for this tenant
+            var cached = null;
+            try {
+              var raw = localStorage.getItem('cached_branding_' + tenantKey);
+              if (raw) cached = JSON.parse(raw);
+            } catch(_) {}
+
+            if (cached) {
+              if (cached.splashScreenUrl && bgEl) {
+                bgEl.style.backgroundImage = "url('" + cached.splashScreenUrl + "')";
+              }
+              if (cached.splashScreenLogoUrl && logo) {
+                logo.src = cached.splashScreenLogoUrl;
+              }
+              if (cached.splashScreenTagline && title) {
+                title.textContent = cached.splashScreenTagline;
+              }
             }
           } catch(e) {}
         } else if (splashEl) {
@@ -256,21 +280,30 @@
         }
 
         // Global dismiss handler invoked by React once auth and initial render are ready
-        window.__dismissMobileSplash = function() {
+        // Enforces a minimum 2.0s display duration so the splash never flashes away in 0.5s!
+        window.__dismissMobileSplash = function(force) {
           var el = document.getElementById('mobile-native-splash');
           if (!el || el.classList.contains('mobile-splash-dismissing')) return;
-          el.classList.add('mobile-splash-dismissing');
+          
+          var elapsed = Date.now() - (window.__splashStartTime || 0);
+          var minDuration = force ? 0 : 2000;
+          var remaining = Math.max(0, minDuration - elapsed);
+
           setTimeout(function() {
-            if (el && el.parentNode) {
-              el.parentNode.removeChild(el);
-            }
-          }, 520);
+            if (!el || el.classList.contains('mobile-splash-dismissing')) return;
+            el.classList.add('mobile-splash-dismissing');
+            setTimeout(function() {
+              if (el && el.parentNode) {
+                el.parentNode.removeChild(el);
+              }
+            }, 550);
+          }, remaining);
         };
 
-        // Safety fallback: auto-dismiss after 6s in case network is slow so user is never blocked
+        // Safety fallback: auto-dismiss after 6.5s in case network is slow so user is never blocked
         setTimeout(function() {
           if (window.__dismissMobileSplash) window.__dismissMobileSplash();
-        }, 6000);
+        }, 6500);
       })();
     </script>
 
