@@ -8,18 +8,109 @@
 
 **MitrixoGYM** — a multi-tenant Firebase CRM platform for fitness gyms and fitness studios. Mission: comprehensive member management, staff management, payments, packages, attendance tracking, and guest management for multiple gym brands under a single platform.
 
-**Current state:** v1.1 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics). Complete PT & Class booking system with FIFO waitlist promotion, dual-write calendar synchronization, unified payment/package mirroring with seamless renewals & upgrades, and platform-wide safe date handling eliminating all `RangeError: Invalid time value` crashes. Full isolation verified: Strike `(default)` database (1,025 clients, 738 payments) and Inzan Athletics (`db-inzanathletics`) remain strictly isolated.
+**Current state:** v1.2 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics). Native mobile full-screen wallpaper splash loader for iPhones and Androids; complete elimination of legacy "mitrixogymcrm" branding from loading states, meta tags, and PWA manifests; resolved group class attendees & orphan references; fixed drop sessions localization and payments table client name resolution; fixed hidden "Hold" members and universal CRM search; eliminated repeating client records in payments; enforced non-destructive `{ merge: true }` writes across all collections; staff emergency override; member quick start onboarding guide. Strict tenant isolation maintained: Strike `(default)` and Inzan Athletics (`db-inzanathletics`) pristine.
 
-**Active session (2026-09-06):**
-- Inzan PT & Classes System fully verified and audited against PRD; dual-write booking sync, server-side capacity/waitlist promotion, and coach portal integration complete.
-- Test accounts provisioned in `db-inzanathletics`: Test Member (`testmember@inzan.local` / `Inzan1234!`, MEM-2001) and Test Coach (`testcoach@inzan.local` / `InzanCoach123!`).
-- Unified Transaction Service & Payment Mirroring: adding packages or walk-in enrollments directly records financial entries in `payments` collection; renewals archive previous active cycles without duplicate errors.
-- Platform-wide zero "Invalid Time Value" hardening via `src/utils/dateUtils.ts` across 15+ core components.
-- Multi-tenant isolation verified: live database health check confirms Strike data is 100% untouched and pristine.
+**Active session (2026-09-13):**
+- **Mobile-Native Splash Loader**: Created full-screen wallpaper splash for iPhones and Androids only (`/strike_slide_outdoor.png` background + ambient vignette + centered white Strike logo + progress bar pill + "STRIKE BOXING CLUB" tagline) with zero white flash or web app stutter; smooth dismissal on auth ready.
+- **Brand Purification**: Completely eliminated "mitrixogymcrm" text from `index.html` meta tags (`apple-mobile-web-app-title`, `application-name`), PWA manifest (`vite.config.ts`), `SettingsContext.tsx`, `App.tsx`, `Login.tsx`, and member UI components.
+- **Relational Integrity & Orphan Resolution**: Fixed class attendees rendering "Unknown Client" via `resolveAttendee(attendee, clients)` with clickable profile links; coach client loading unblocked in `useClients.ts`.
+- **Drop Sessions & Payments Table Resolution**: Fixed `payments.table.unknown_client` raw localization code; supported `isGuest` / `clientId: 'WALK-IN-GUEST'` in `transactionService.ts`.
+- **"Hold" Members & Search Visibility**: Added `"all"` default tab in `Clients.tsx` showing Active, Hold, and Expiring Soon members; search now queries all members regardless of active tab.
+- **Non-Destructive Writes**: Enforced `{ merge: true }` across all Firestore write paths.
+- **Payments Repeating Records**: Fixed Menna GAD repeating bug in `Payments.tsx` with strict indexed maps and guarded fallbacks.
+- **Staff Emergency Override & Member Onboarding**: Added front desk emergency admission to `ClassManager.tsx` and 3-step Quick Guide card to `MemberHome.tsx`.
 
 ---
 
-## 8. Live Session Log — 2026-09-06 (most recent)
+## 8. Live Session Log — 2026-09-13 (most recent)
+
+### Comprehensive Scope & Detailed Breakdown
+
+#### Part 1: Group Class Attendees & Orphan Resolution
+- **Symptom**: The class attendee list for Adult Boxing & Conditioning showed "Unknown Client" with an unclickable record.
+- **Root Causes**:
+  1. `src/hooks/useClients.ts` returned an empty client array `[]` whenever `effectiveRole === 'coach'`, leaving all class attendees unresolvable for coaches.
+  2. Member lookups in attendee rosters were rigid (`c.id === attendeeId || c.memberId === attendeeId`), failing when an attendee ID was stored as a `portalUserId`, normalized phone number, or object.
+  3. Attendee records were rendered as plain static text with no navigation link.
+- **Fixes Applied**:
+  - **New Utility** [`src/utils/attendeeUtils.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/utils/attendeeUtils.ts): `resolveAttendee(attendee, clients)` normalizes attendee lookups across Firestore document ID, `#memberId`, `portalUserId`, and phone number.
+  - **Class Manager Roster** [`src/components/ClassManager.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/components/ClassManager.tsx):
+    - Attendee names now render as interactive buttons navigating directly to member profile (`setActiveTab('clients'); setActiveClientId(client.id)`).
+    - If a member record genuinely no longer exists, click is disabled and a tooltip `Profile no longer found (ID: ${rawId})` is displayed along with an `Orphaned` badge.
+    - Updated waitlist entries with the same normalized resolution and clickable navigation.
+  - **Calendar View** [`src/Calendar.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Calendar.tsx): Session Details Modal and Class Details Modal updated to use `resolveAttendee` with direct profile navigation.
+  - **Coach Portal** [`src/coach/CoachClassPortal.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/coach/CoachClassPortal.tsx): Indexed `clientMap` by `doc.id`, `memberId`, `portalUserId`, and stripped phone digits so coaches see attendees correctly on class rosters.
+  - **Bookings Table** [`src/Bookings.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Bookings.tsx): Unified `bookingRequests` and `booking_requests` snapshot listeners; attendee names made clickable.
+
+#### Part 2: Drop Sessions & Payments Table Name Resolution
+- **Symptom**: Drop-in sessions (450 LE) rendered the raw localization code string `payments.table.unknown_client`.
+- **Root Causes**:
+  1. Missing localization key: `payments.table.unknown_client` was missing from `en.json` and `ar.json`.
+  2. Payments table strictly required `clients.find(c => c.id === payment.clientId)?.name`, ignoring `payment.clientName`, `payment.client_name`, or `payment.guestName`.
+- **Fixes Applied**:
+  - **Localization** [`src/locales/en.json`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/locales/en.json) & [`src/locales/ar.json`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/locales/ar.json): Added `"unknown_client": "Walk-in Guest"` / `"ضيف / زائر"`, `"walk_in_tag": "Guest"` / `"زائر"`, and `"record_as_guest": "Record as Walk-in / Drop Session Guest"`.
+  - **Types** [`src/types.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/types.ts): Extended `Payment` interface with `clientName?: string;`, `guestName?: string;`, `memberId?: string;`.
+  - **Transaction Service** [`src/services/transactionService.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/services/transactionService.ts): Added support for `isGuest: true` or `clientId: 'WALK-IN-GUEST'` without failing with "Client document not found", persisting `clientName`, `client_name`, and `guestName` directly onto the payment document.
+  - **Payments Table** [`src/Payments.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Payments.tsx): Fallback cascade resolves `payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || client?.name || t('payments.table.unknown_client')`. Guest records display with a `<Badge variant="outline">Guest</Badge>` tag.
+
+#### Part 3: Vanishing CRM Records & "Hold" Clients Filter Fix
+- **Symptom**: 5 members on Hold (`Doaa Mostafa (#451)`, `Hady islam (#477)`, `ali (#384)`, `Ziad (#233)`, `Hamsa (#210)`) were hidden from the CRM list and search bar.
+- **Root Causes**:
+  1. Default tab in `Clients.tsx` was `'active'` (`[...activeMembers, ...nearlyExpired]`), excluding members on Hold unless staff manually switched tabs.
+  2. Search bar in `Clients.tsx` only filtered the currently active tab's subset, so searching for on-hold members returned 0 results.
+  3. Case-sensitive status comparisons (`c.status === 'Active'`) missed variations.
+- **Fixes Applied**:
+  - In [`src/Clients.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Clients.tsx), introduced default tab `"all"` displaying All Current members (`Active`, `Hold`, and `Nearly Expired`) with distinct status badges.
+  - Case-insensitive status matching (`(c.status || '').toLowerCase().trim()`).
+  - Search input (`deferredSearchTerm`) searches across **all** `members`, ensuring on-hold, frozen, and expired members are always discoverable.
+  - In [`src/hooks/useClients.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/hooks/useClients.ts), expanded Firestore listener query to include all status variations (`['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active', 'HOLD', 'ACTIVE', 'Frozen', 'frozen']`) and removed the coach role block.
+
+#### Part 4: Enforce Non-Destructive Updates Across All Collections
+- **Audit & Fixes**:
+  - Applied `{ merge: true }` to `batch.set(docRef, finalClient, { merge: true })` in [`src/hooks/useClients.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/hooks/useClients.ts#L572) to eliminate the risk of destructive member overwrites during batch imports or registrations.
+  - Applied `{ merge: true }` to `setDoc(docRef, cleanData(paymentData), { merge: true })` in [`src/hooks/usePayments.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/hooks/usePayments.ts#L64).
+  - Applied `{ merge: true }` to all `setDoc` operations in [`src/services/sharedServices.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/services/sharedServices.ts) and [`src/contexts/AuthContext.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/contexts/AuthContext.tsx).
+
+#### Part 5: Staff Emergency Override & Member Quick Guide
+- Added Staff Emergency Override to [`src/components/ClassManager.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/components/ClassManager.tsx): Front desk staff can admit members at the door even if their session count is 0, logging an override audit log.
+- Added 3-step Quick Guide card to [`src/member/MemberHome.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/MemberHome.tsx) for newly registered members (How to check in via QR, book group classes, and view active sessions).
+
+#### Part 6: Fix "Menna GAD" Repeating in Payments Table
+- **Symptom**: Client name "Menna GAD" was repeatedly displaying across unrelated payment records in the Payments view.
+- **Root Cause**: In [`src/Payments.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Payments.tsx), client lookups relied on unindexed or loosely-matched client searches; when `payment.clientId` was missing or unindexed, a fallback or stale closure in the client mapping logic reused the last matched client.
+- **Fix Applied**: Built strict indexed maps for clients (`idMap`, `memberIdMap`, `phoneMap`) and guarded against undefined `clientId` lookups; payments without explicit client records fall back cleanly to `payment.clientName`, `payment.guestName`, or `Walk-in Guest` rather than repeating another member's name.
+
+#### Part 7: Mobile-Native Full-Screen Wallpaper Splash Screen (iPhones & Androids Only)
+- **User Requirement**: Create a full-screen loading animation for mobile (iPhones and Androids only) featuring a wallpaper background and centered app logo to eliminate the "web app" feel.
+- **Implementation**:
+  - In [`index.html`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/index.html), placed `#mobile-native-splash` directly inside `<body>` before `<div id="root"></div>` so it renders on frame 1 with 0ms delay before JavaScript parses.
+  - **Wallpaper Background**: Uses high-res portrait Strike gym wallpaper (`/strike_slide_outdoor.png`) with an 8-second drift animation and dark radial vignette overlay.
+  - **Centered Logo**: Displays pure white STRIKE logo (`/strikelogo_white.png`) with ambient crimson glow (`rgba(225, 29, 72, 0.32)`), subtle breathing animation, and drop shadow.
+  - **Progress Bar & Tagline**: Slim glowing loading track with animated fill and "STRIKE BOXING CLUB" subtitle.
+  - **Mobile-Only Guard**: Activated strictly for mobile devices (`/iPhone|iPad|iPod|Android|webOS.../i.test(navigator.userAgent) || window.innerWidth < 768`). Desktop screens set `display: none;` instantly so desktop CRM loading remains unaffected.
+  - **Smooth Dismissal**: Added `window.__dismissMobileSplash()` with a 500ms opacity & scale-up ease transition, called when `isAuthReady` is true in [`src/App.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/App.tsx), [`src/Login.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Login.tsx), [`src/member/MemberPortal.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/MemberPortal.tsx), and [`src/member/GuestPortal.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/GuestPortal.tsx), plus a 6-second safety fallback.
+
+#### Part 8: Complete Elimination of "mitrixogymcrm" Text on Load
+- **Root Causes Identified**:
+  - `index.html` lines 11 & 13 had `<meta name="apple-mobile-web-app-title" content="mitrixogymcrm" />` and `<meta name="application-name" content="mitrixogymcrm" />`.
+  - `vite.config.ts` PWA manifest had `name: 'mitrixogymcrm CRM'` and `short_name: 'mitrixogymcrm'`, causing iOS & Android PWA launchers to show "mitrixogymcrm" while loading.
+  - In `SettingsContext.tsx`, `App.tsx`, and `Login.tsx`, the preloader displayed `{companyName}` in raw text if `logoUrl` was unresolved; if `branding.companyName` contained "mitrixogymcrm" or before settings loaded, it rendered large "MITRIXOGYMCRM" text.
+- **Fixes Applied**:
+  - In [`index.html`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/index.html), updated meta tags to `<meta name="apple-mobile-web-app-title" content="STRIKE" />`, `<meta name="application-name" content="STRIKE" />`, and default `<title>Strike Boxing Club</title>`.
+  - In [`vite.config.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/vite.config.ts), updated PWA manifest to `name: 'Strike Boxing Club'` and `short_name: 'STRIKE'`.
+  - In [`src/contexts/SettingsContext.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/contexts/SettingsContext.tsx), [`src/App.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/App.tsx), and [`src/Login.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Login.tsx), sanitized `companyName` and `logoUrl`: if `companyName` contains "mitrixo" or is empty, it immediately resolves to `'STRIKE'`, and `logoUrl` defaults to `/strikelogo_white.png` / `/strikelogo.png` rather than raw text fallback.
+  - Cleaned remaining user-facing instances in `MemberLocker.tsx`, `MemberInvites.tsx`, `ForcePasswordChangeDialog.tsx`, `QRCodePage.tsx`, `HelpPage.tsx`, and `GuestPortal.tsx`.
+
+### Verification Status
+- **`npm run lint` (`tsc --noEmit`)**: ✓ 0 errors.
+- **`npm run build` (`vite build && esbuild server.ts`)**: ✓ 0 errors (dist bundle, PWA manifest with `STRIKE`, and `dist-server/server.cjs` compiled clean).
+- **Browser Subagent Visual Verification**:
+  - **Mobile (iPhone 390×844)**: Verified that the full-screen wallpaper splash with centered glowing Strike logo displays seamlessly without white flash or "web app" stutter, and dismisses smoothly into the portal. Zero occurrences of `mitrixogymcrm`.
+  - **Desktop (1280×800)**: Verified desktop CRM loads cleanly without mobile splash overlay.
+
+---
+
+## 9. Live Session Log — 2026-09-06
 
 ### Fixed & Built this session
 1. **Inzan PT & Classes System Complete Audit & Implementation:**
@@ -69,7 +160,7 @@
 
 ---
 
-## 9. Live Session Log — 2026-08-23
+## 10. Live Session Log — 2026-08-23
 
 ### Fixed & Built this session
 1. **Automated Phone Auth & SMS OTP Password Reset:**
@@ -93,7 +184,7 @@
 
 ---
 
-## 10. Live Session Log — 2026-08-21
+## 11. Live Session Log — 2026-08-21
 
 ### Fixed this session
 1. **PT Edge Cases & Session Management** — Completed full lifecycle for PT Sessions.
@@ -112,7 +203,7 @@
 
 ---
 
-## 11. Live Session Log — 2026-08-19
+## 12. Live Session Log — 2026-08-19
 
 ### Fixed this session (commit `028301b` — 9 files, 1019 insertions, 607 deletions)
 1. **Member login "missing or insufficient permissions"** — root cause: `703db01` restricted `users` reads while `loginWithMemberId`/`loginWithCoachId` queried `users` pre-auth. All pre-auth lookups moved to server endpoints (admin SDK bypasses rules):
@@ -147,7 +238,7 @@
 
 ---
 
-## 12. Live Session Log — 2026-08-18
+## 13. Live Session Log — 2026-08-18
 
 ### Fixed this session
 1. **Branding settings not loading** — GET /api/settings was returning empty object without fetching from Firestore, causing all tenants to show "mitrixogymcrm" and logos not persisting. Fixed to properly fetch branding, features, storefront, branches, commission, and sales-target from tenant's Firestore.
