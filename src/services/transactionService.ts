@@ -1,4 +1,4 @@
-import { runTransaction, doc, collection, query, where, getDocs } from 'firebase/firestore';
+import { runTransaction, doc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
@@ -58,11 +58,53 @@ export interface PaymentTransactionParams {
   isMemberOnHold?: boolean;
   isUpgradePayment?: boolean; // True when payment is from Members tab upgrade (not manual Payments entry)
   isRenewal?: boolean; // True when payment is renewing an existing package
+  isGuest?: boolean; // True when payment is for a drop-in / walk-in guest without a member profile
   systemPackage?: Package; // The matched package configuration, if any
   previousPackageName?: string;
 }
 
 export const processPaymentTransaction = async (params: PaymentTransactionParams): Promise<void> => {
+  const isGuestClient = params.isGuest || !params.clientId || params.clientId === 'WALK-IN-GUEST' || params.clientId === 'GUEST' || params.clientId === 'GUEST-LEAD';
+
+  if (isGuestClient) {
+    const paymentRef = doc(collection(db, 'payments'));
+    const actualAmountPaid = params.amount_paid !== undefined ? params.amount_paid : params.amount;
+    const clientNameVal = params.clientName || 'Walk-in Guest';
+    const paymentData: Partial<Payment> = {
+      id: paymentRef.id,
+      clientId: params.clientId || 'WALK-IN-GUEST',
+      client_name: clientNameVal,
+      clientName: clientNameVal,
+      guestName: clientNameVal,
+      amount: params.amount,
+      amount_paid: actualAmountPaid,
+      method: params.method,
+      date: safeIsoDate(params.paymentDate, true),
+      instapayRef: params.instapayRef,
+      packageType: params.packageType,
+      package_category_type: params.packageCategory,
+      coachName: params.coachName,
+      notes: params.notes,
+      receiptSerial: params.receiptSerial || undefined,
+      recordedBy: params.recordedBy,
+      salesName: params.salesName,
+      sales_rep_id: params.sales_rep_id,
+      branch: params.clientBranch || '',
+      discountType: params.discountType,
+      discountValue: params.discountValue,
+      discountedAmount: params.discountedAmount,
+      isUpgradePayment: false,
+      isOnHold: params.isMemberOnHold || false,
+      holdReason: params.isMemberOnHold ? (params.notes || 'Placed on hold at payment checkout') : undefined,
+      holdDate: params.isMemberOnHold ? new Date().toISOString() : undefined,
+      heldBy: params.isMemberOnHold ? params.recordedBy : undefined,
+      created_at: new Date().toISOString(),
+      deleted_at: null
+    };
+    await setDoc(paymentRef, cleanData(paymentData), { merge: true });
+    return;
+  }
+
   const clientRef = doc(db, 'clients', params.clientId);
 
   // 1. Fetch payments candidates for transfer before transaction (queries not allowed inside runTransaction gets)
@@ -159,6 +201,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       id: paymentRef.id,
       clientId: params.clientId,
       client_name: params.clientName,
+      clientName: params.clientName,
       amount: params.amount,
       amount_paid: actualAmountPaid,
       method: params.method,

@@ -258,6 +258,9 @@ export interface Payment {
   id: string;
   clientId: string;
   client_name: string;
+  clientName?: string;
+  guestName?: string;
+  memberId?: string;
   amount: number;
   amount_paid: number;
   date: string; // ISO string

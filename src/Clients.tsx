@@ -159,7 +159,7 @@ export default function Clients() {
 
     updateClient(activeClient.id, updates);
   };
-  const [activeTab, setActiveTab] = useState('active');
+  const [activeTab, setActiveTab] = useState('all');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [isBulkPackageDialogOpen, setIsBulkPackageDialogOpen] = useState(false);
   const [bulkSelectedPackageName, setBulkSelectedPackageName] = useState('');
@@ -1041,12 +1041,23 @@ export default function Clients() {
   const now = new Date();
 
   // context.clients is already visibleClients (rep-filtered via isClientAssignedToRep).
-  const members = clients.filter(c => c.status !== 'Lead');
+  const members = clients.filter(c => (c.status || '').toLowerCase().trim() !== 'lead');
   
-  const activeMembers = members.filter(c => c.status === 'Active');
-  const nearlyExpired = members.filter(c => c.status === 'Nearly Expired');
-  const expired = members.filter(c => c.status === 'Expired');
-  const onHold = members.filter(c => c.status === 'Hold');
+  const isStatusActive = (s?: string) => (s || '').toLowerCase().trim() === 'active';
+  const isStatusNearlyExpired = (s?: string) => {
+    const v = (s || '').toLowerCase().trim();
+    return v === 'nearly expired' || v === 'nearly_expired';
+  };
+  const isStatusHold = (s?: string) => {
+    const v = (s || '').toLowerCase().trim();
+    return v === 'hold' || v === 'frozen' || v === 'freeze' || v === 'suspended';
+  };
+  const isStatusExpired = (s?: string) => (s || '').toLowerCase().trim() === 'expired';
+
+  const activeMembers = members.filter(c => isStatusActive(c.status));
+  const nearlyExpired = members.filter(c => isStatusNearlyExpired(c.status));
+  const expired = members.filter(c => isStatusExpired(c.status));
+  const onHold = members.filter(c => isStatusHold(c.status));
 
   const maleCount = members.filter(c => c.gender === 'Male').length;
   const femaleCount = members.filter(c => c.gender === 'Female').length;
@@ -1067,11 +1078,17 @@ export default function Clients() {
   // (e.g. typing in inputs elsewhere on the page).
   const filteredMembers = React.useMemo(() => {
     let base = [];
-    switch (deferredActiveTab) {
-      case 'active': base = [...activeMembers, ...nearlyExpired]; break;
-      case 'hold': base = onHold; break;
-      case 'expired': base = expired; break;
-      default: base = [...activeMembers, ...nearlyExpired]; break;
+    if (deferredSearchTerm) {
+      // When searching, search across all members so staff never miss an on-hold, active, or expired member
+      base = members;
+    } else {
+      switch (deferredActiveTab) {
+        case 'all': base = [...activeMembers, ...onHold, ...nearlyExpired]; break;
+        case 'active': base = [...activeMembers, ...nearlyExpired]; break;
+        case 'hold': base = onHold; break;
+        case 'expired': base = expired; break;
+        default: base = [...activeMembers, ...onHold, ...nearlyExpired]; break;
+      }
     }
 
     let filtered = base;
@@ -1372,13 +1389,12 @@ export default function Clients() {
 
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Active': return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" /> Active</Badge>;
-      case 'Nearly Expired': return <Badge className="bg-amber-500"><AlertTriangle className="w-3 h-3 mr-1" /> Expiring Soon</Badge>;
-      case 'Expired': return <Badge variant="destructive">Expired</Badge>;
-      case 'Hold': return <Badge className="bg-blue-500 text-white border-blue-500">Hold</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
-    }
+    const s = (status || '').toLowerCase().trim();
+    if (s === 'active') return <Badge className="bg-green-500"><CheckCircle className="w-3 h-3 mr-1" /> Active</Badge>;
+    if (s === 'nearly expired' || s === 'nearly_expired') return <Badge className="bg-amber-500"><AlertTriangle className="w-3 h-3 mr-1" /> Expiring Soon</Badge>;
+    if (s === 'expired') return <Badge variant="destructive">Expired</Badge>;
+    if (s === 'hold' || s === 'frozen' || s === 'freeze' || s === 'suspended') return <Badge className="bg-blue-500 text-white border-blue-500">Hold</Badge>;
+    return <Badge variant="outline">{status}</Badge>;
   };
 
   const renderClientTable = (clientList: Client[]) => (
@@ -1898,7 +1914,7 @@ export default function Clients() {
         </div>
       </div>
 
-      <Tabs defaultValue="active" onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex flex-col md:flex-row items-end gap-4 mb-6 bg-card p-4 rounded-xl border shadow-sm">
           <div className="flex-1 w-full space-y-1.5">
             <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('members.search_placeholder')}</Label>
@@ -2026,10 +2042,21 @@ export default function Clients() {
 
         <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
           <TabsList className="flex w-max sm:w-full bg-muted/50 rounded-lg p-1 justify-start sm:justify-center">
-            <TabsTrigger value="active" className="px-4 text-xs sm:text-sm">{t('members.tabs.active')} ({activeMembers.length + nearlyExpired.length})</TabsTrigger>
-            <TabsTrigger value="hold" className="px-4 text-xs sm:text-sm">{t('members.tabs.hold')} ({onHold.length})</TabsTrigger>
-            <TabsTrigger value="expired" className="px-4 text-xs sm:text-sm">{t('members.tabs.expired')} ({expired.length})</TabsTrigger>
-            <TabsTrigger value="renewal" className="px-4 text-xs sm:text-sm bg-blue-500/10 text-blue-700 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">{t('members.tabs.renewal_pipeline')}</TabsTrigger>
+            <TabsTrigger value="all" className="px-4 text-xs sm:text-sm">
+              All Current ({activeMembers.length + nearlyExpired.length + onHold.length})
+            </TabsTrigger>
+            <TabsTrigger value="active" className="px-4 text-xs sm:text-sm">
+              {t('members.tabs.active')} ({activeMembers.length + nearlyExpired.length})
+            </TabsTrigger>
+            <TabsTrigger value="hold" className="px-4 text-xs sm:text-sm">
+              {t('members.tabs.hold')} ({onHold.length})
+            </TabsTrigger>
+            <TabsTrigger value="expired" className="px-4 text-xs sm:text-sm">
+              {t('members.tabs.expired')} ({expired.length})
+            </TabsTrigger>
+            <TabsTrigger value="renewal" className="px-4 text-xs sm:text-sm bg-blue-500/10 text-blue-700 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">
+              {t('members.tabs.renewal_pipeline')}
+            </TabsTrigger>
           </TabsList>
         </div>
 

@@ -155,7 +155,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   // 1. Active Members Snapshot Listener (Active, Hold, Nearly Expired)
   useEffect(() => {
     if (!currentUser) return;
-    if (effectiveRole === 'client' || effectiveRole === 'coach') {
+    if (effectiveRole === 'client') {
       setLoading(false);
       return;
     }
@@ -163,7 +163,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
     const q = query(
       collection(db, 'clients'), 
-      where('status', 'in', ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active'])
+      where('status', 'in', ['Active', 'Hold', 'Nearly Expired', 'nearly expired', 'hold', 'active', 'HOLD', 'ACTIVE', 'Frozen', 'frozen'])
     );
     const unsubClients = onSnapshot(
       q,
@@ -569,7 +569,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
             portalUserId: ''
           };
 
-          batch.set(docRef, finalClient);
+          batch.set(docRef, finalClient, { merge: true });
           operationCount++;
 
           if (operationCount === 500) {

@@ -55,13 +55,27 @@ export default function CoachClassPortal() {
   useEffect(() => {
     // Pre-fetch all clients to map memberId -> Name
     const fetchClients = async () => {
-      const q = query(collection(db, 'clients'), where('status', '!=', 'Lead'));
-      const snap = await getDocs(q);
-      const map: Record<string, Client> = {};
-      snap.docs.forEach(doc => {
-        map[doc.id] = { ...doc.data(), id: doc.id } as Client;
-      });
-      setClientMap(map);
+      try {
+        const q = query(collection(db, 'clients'), where('status', '!=', 'Lead'));
+        const snap = await getDocs(q);
+        const map: Record<string, Client> = {};
+        snap.docs.forEach(doc => {
+          const c = { ...doc.data(), id: doc.id } as Client;
+          map[doc.id] = c;
+          if (c.memberId) {
+            map[c.memberId] = c;
+            map[`#${c.memberId}`] = c;
+          }
+          if (c.portalUserId) map[c.portalUserId] = c;
+          if (c.phone) {
+            map[c.phone.replace(/\D/g, '')] = c;
+            map[c.phone.replace(/\D/g, '').slice(-10)] = c;
+          }
+        });
+        setClientMap(map);
+      } catch (err) {
+        console.error('Error pre-fetching clients for coach portal:', err);
+      }
     };
     fetchClients();
   }, []);
@@ -175,8 +189,10 @@ function ClassRosterView({ classData, clientMap, onBack }: { classData: ClassSch
   const allMembers = [...attendees.map(id => ({ id, status: 'booked' })), ...waitlist.map(id => ({ id, status: 'waitlist' }))];
 
   const filteredMembers = allMembers.filter(m => {
-    const clientName = clientMap[m.id]?.name?.toLowerCase() || '';
-    return clientName.includes(searchTerm.toLowerCase());
+    const client = clientMap[m.id] || Object.values(clientMap).find(c => c.id === m.id || c.memberId === m.id);
+    const clientName = client?.name?.toLowerCase() || '';
+    const phone = client?.phone || '';
+    return clientName.includes(searchTerm.toLowerCase()) || phone.includes(searchTerm);
   });
 
   return (
@@ -214,7 +230,7 @@ function ClassRosterView({ classData, clientMap, onBack }: { classData: ClassSch
           <p className="text-sm text-muted-foreground italic">No members found.</p>
         ) : (
           filteredMembers.map(member => {
-            const client = clientMap[member.id];
+            const client = clientMap[member.id] || Object.values(clientMap).find(c => c.id === member.id || c.memberId === member.id);
             const isCheckedIn = checkedIn.includes(member.id);
             const isNoShow = noShows.includes(member.id);
             const isWaitlisted = member.status === 'waitlist';

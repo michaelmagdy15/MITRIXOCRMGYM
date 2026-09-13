@@ -50,6 +50,7 @@ import { processPaymentTransaction } from './services/transactionService';
 import { Package, Branch } from './types';
 import { ClassBooking, BookingStatus } from './types/class';
 import { PaymentCategory, resolvePaymentCategory } from './utils/paymentCategories';
+import { resolveAttendee } from './utils/attendeeUtils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 
@@ -99,7 +100,7 @@ interface PTSessionRecord {
 }
 
 export default function Bookings() {
-  const { currentUser, users, packages, branches, clients } = useAppContext();
+  const { currentUser, users, packages, branches, clients, setActiveTab, setActiveClientId } = useAppContext();
 
   // Active Hub Tab: 'classes' | 'pt' | 'store'
   const [hubTab, setHubTab] = useState<'classes' | 'pt' | 'store'>('classes');
@@ -897,10 +898,12 @@ export default function Bookings() {
                     <TableBody>
                       {filteredClassBookings.map(b => {
                         const isProcessing = processingBookingId === b.id;
-                        const clientInfo = clients.find(c => c.id === b.clientId || c.memberId === b.memberId);
-                        const displayName = b.memberName || clientInfo?.name || 'Member';
-                        const displayPhone = b.memberPhone || clientInfo?.phone || '';
-                        const displayId = b.memberId || clientInfo?.memberId || '';
+                        const { client: clientInfo, displayName, displayPhone, displayId, rawId, isOrphaned } = resolveAttendee({
+                          memberId: b.memberId,
+                          clientId: b.clientId,
+                          name: b.memberName,
+                          phone: b.memberPhone
+                        }, clients);
 
                         return (
                           <TableRow key={b.id} className="hover:bg-muted/30 transition-colors">
@@ -911,12 +914,31 @@ export default function Bookings() {
                                   {displayName.substring(0, 1).toUpperCase()}
                                 </div>
                                 <div>
-                                  <p className="font-extrabold text-xs text-foreground flex items-center gap-1.5">
-                                    {displayName}
-                                    {displayId && (
-                                      <span className="text-[10px] font-mono text-muted-foreground font-medium">#{displayId}</span>
-                                    )}
-                                  </p>
+                                  {clientInfo ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setActiveTab('clients');
+                                        setActiveClientId(clientInfo.id);
+                                      }}
+                                      className="font-extrabold text-xs text-foreground flex items-center gap-1.5 hover:text-primary transition-colors text-left group"
+                                      title="View member profile in CRM"
+                                    >
+                                      <span className="underline decoration-dotted group-hover:decoration-solid">{displayName}</span>
+                                      {displayId && (
+                                        <span className="text-[10px] font-mono text-muted-foreground font-medium">#{displayId.replace(/^#/, '')}</span>
+                                      )}
+                                    </button>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5" title={`Profile no longer found (ID: ${rawId})`}>
+                                      <span className="font-extrabold text-xs text-muted-foreground line-through opacity-70">
+                                        {displayName}
+                                      </span>
+                                      <Badge variant="outline" className="border-amber-500/40 text-amber-500 bg-amber-500/10 text-[9px] px-1 py-0 h-4">
+                                        Orphaned
+                                      </Badge>
+                                    </div>
+                                  )}
                                   {displayPhone && (
                                     <a 
                                       href={`tel:${displayPhone}`} 

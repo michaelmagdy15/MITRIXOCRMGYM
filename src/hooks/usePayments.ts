@@ -61,7 +61,7 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
       const docRef = doc(collection(db, 'payments'));
       const docId = docRef.id;
 
-      await setDoc(docRef, cleanData(paymentData));
+      await setDoc(docRef, cleanData(paymentData), { merge: true });
       await addAuditLog('CREATE', 'PAYMENT', docId, `Recorded payment of ${payment.amount} LE for ${clientName}`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'payments');

@@ -936,7 +936,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       referralCode: `REF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       createdAt: new Date().toISOString()
     };
-    await setDoc(clientRef, newClient);
+    await setDoc(clientRef, newClient, { merge: true });
 
     // 4. Create User record
     const newUser: User = {
@@ -947,7 +947,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clientRecordId: newMemberId,
       clientDocId: clientRef.id,
     };
-    await setDoc(doc(db, 'users', uid), newUser);
+    await setDoc(doc(db, 'users', uid), newUser, { merge: true });
 
     // Auto-login happens automatically by Firebase onAuthStateChanged
     return clientRef.id;

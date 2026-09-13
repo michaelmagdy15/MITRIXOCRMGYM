@@ -43,6 +43,7 @@ import { useAppContext } from '../context';
 import { format, addWeeks, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 import { safeFormatDate, safeFormatTime, toValidDate } from '../utils/dateUtils';
 import { getSessionAllowedTiers, toCanonicalTier, CanonicalTier } from '../utils/memberCategories';
+import { resolveAttendee } from '../utils/attendeeUtils';
 
 export const TIER_OPTIONS: { id: CanonicalTier; label: string }[] = [
   { id: 'KIDS', label: 'Kids Standard' },
@@ -71,7 +72,7 @@ export const ClassManager: React.FC = () => {
   const { classes, loading, addClass, updateClass, deleteClass } = useClasses();
   const { currentUser } = useAuth();
   const { branches, branding } = useSettings();
-  const { clients } = useAppContext();
+  const { clients, setActiveTab, setActiveClientId } = useAppContext();
   const [coaches, setCoaches] = useState<User[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassSchedule | null>(null);
@@ -1001,14 +1002,14 @@ export const ClassManager: React.FC = () => {
                     {rosterClass.attendees
                       .filter(attendeeId => {
                         if (!rosterSearch.trim()) return true;
-                        const client = clients.find(c => c.id === attendeeId || c.memberId === attendeeId);
+                        const { displayName, displayPhone, displayId } = resolveAttendee(attendeeId, clients);
                         const q = rosterSearch.toLowerCase();
-                        return (client?.name || '').toLowerCase().includes(q) ||
-                               (client?.phone || '').includes(q) ||
-                               (client?.memberId || '').toLowerCase().includes(q);
+                        return displayName.toLowerCase().includes(q) ||
+                               displayPhone.includes(q) ||
+                               displayId.toLowerCase().includes(q);
                       })
                       .map(attendeeId => {
-                        const client = clients.find(c => c.id === attendeeId || c.memberId === attendeeId);
+                        const { client, displayName, displayPhone, displayId, rawId, isOrphaned } = resolveAttendee(attendeeId, clients);
                         const isCheckedIn = rosterClass.checkedIn?.includes(attendeeId);
                         const isNoShow = rosterClass.noShows?.includes(attendeeId);
                         const isBusy = actionLoadingId === attendeeId;
@@ -1018,20 +1019,46 @@ export const ClassManager: React.FC = () => {
                             {/* Member Details */}
                             <div className="flex items-center gap-3">
                               <div className="h-8 w-8 rounded-full bg-primary/10 text-primary font-black text-xs flex items-center justify-center shrink-0">
-                                {(client?.name || 'M').substring(0, 1).toUpperCase()}
+                                {displayName.substring(0, 1).toUpperCase()}
                               </div>
                               <div>
-                                <p className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                                  {client?.name || 'Unknown Client'}
-                                  {client?.memberId && (
-                                    <span className="text-[10px] font-mono text-muted-foreground font-medium">
-                                      #{client.memberId}
+                                {client ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsRosterOpen(false);
+                                      setActiveTab('clients');
+                                      setActiveClientId(client.id);
+                                    }}
+                                    className="font-bold text-xs text-foreground flex items-center gap-1.5 hover:text-primary transition-colors text-left group"
+                                    title="View member profile in CRM"
+                                  >
+                                    <span className="underline decoration-dotted group-hover:decoration-solid">{displayName}</span>
+                                    {displayId && (
+                                      <span className="text-[10px] font-mono text-muted-foreground font-medium">
+                                        {displayId}
+                                      </span>
+                                    )}
+                                  </button>
+                                ) : (
+                                  <div 
+                                    className="flex items-center gap-1.5 cursor-not-allowed"
+                                    title={`Profile no longer found (ID: ${rawId})`}
+                                  >
+                                    <span className="font-bold text-xs text-muted-foreground line-through opacity-70">
+                                      {displayName}
                                     </span>
-                                  )}
-                                </p>
-                                {client?.phone && (
-                                  <a href={`tel:${client.phone}`} className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
-                                    <Phone className="h-3 w-3" /> {client.phone}
+                                    <Badge variant="outline" className="border-amber-500/40 text-amber-500 bg-amber-500/10 text-[9px] px-1 py-0 h-4">
+                                      Orphaned
+                                    </Badge>
+                                    <span className="text-[10px] font-mono text-muted-foreground/60">
+                                      ({rawId.length > 8 ? rawId.substring(0, 8) + '...' : rawId})
+                                    </span>
+                                  </div>
+                                )}
+                                {displayPhone && (
+                                  <a href={`tel:${displayPhone}`} className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1">
+                                    <Phone className="h-3 w-3" /> {displayPhone}
                                   </a>
                                 )}
                               </div>
@@ -1101,7 +1128,7 @@ export const ClassManager: React.FC = () => {
                   </p>
                   <div className="divide-y border rounded-xl overflow-hidden bg-card">
                     {rosterClass.waitlist.map((waitlistId, idx) => {
-                      const client = clients.find(c => c.id === waitlistId || c.memberId === waitlistId);
+                      const { client, displayName, displayPhone, rawId, isOrphaned } = resolveAttendee(waitlistId, clients);
                       const isBusy = actionLoadingId === waitlistId;
 
                       return (
@@ -1109,8 +1136,25 @@ export const ClassManager: React.FC = () => {
                           <div className="flex items-center gap-3">
                             <span className="text-xs font-mono font-bold text-amber-600">#{idx + 1}</span>
                             <div>
-                              <p className="font-bold text-xs text-foreground">{client?.name || 'Waitlisted Member'}</p>
-                              {client?.phone && <p className="text-[11px] text-muted-foreground">{client.phone}</p>}
+                              {client ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIsRosterOpen(false);
+                                    setActiveTab('clients');
+                                    setActiveClientId(client.id);
+                                  }}
+                                  className="font-bold text-xs text-foreground hover:text-primary underline decoration-dotted text-left"
+                                  title="View member profile in CRM"
+                                >
+                                  {displayName}
+                                </button>
+                              ) : (
+                                <p className="font-bold text-xs text-muted-foreground" title={`Profile no longer found (ID: ${rawId})`}>
+                                  {displayName} <span className="text-[10px] font-mono text-amber-600">(Orphaned)</span>
+                                </p>
+                              )}
+                              {displayPhone && <p className="text-[11px] text-muted-foreground">{displayPhone}</p>}
                             </div>
                           </div>
 

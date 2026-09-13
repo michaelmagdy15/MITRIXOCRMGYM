@@ -245,6 +245,7 @@
   "payments": {
     "title": "Payments",
     "record_payment": "Record Payment",
+    "record_as_guest": "Record as Walk-in / Drop Session Guest",
     "available_packages": "Available Packages",
     "no_payments": "No payments recorded yet",
     "price": "Price",
@@ -294,7 +295,9 @@
       "branch": "Branch",
       "method": "Method",
       "package": "Package",
-      "actions": "Actions"
+      "actions": "Actions",
+      "unknown_client": "Walk-in Guest",
+      "walk_in_tag": "Guest"
     },
     "coach_earnings": {
       "title": "PT Coach Earnings",

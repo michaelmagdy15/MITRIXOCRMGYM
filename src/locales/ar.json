@@ -245,6 +245,7 @@
   "payments": {
     "title": "المدفوعات",
     "record_payment": "تسجيل دفعة",
+    "record_as_guest": "تسجيل كضيف / حصة فردية (Drop-in)",
     "available_packages": "الباقات المتاحة",
     "no_payments": "لا توجد مدفوعات مسجلة بعد",
     "price": "السعر",
@@ -294,7 +295,9 @@
       "branch": "الفرع",
       "method": "الطريقة",
       "package": "الباقة",
-      "actions": "الإجراءات"
+      "actions": "الإجراءات",
+      "unknown_client": "ضيف / زائر",
+      "walk_in_tag": "زائر"
     },
     "coach_earnings": {
       "title": "أرباح مدربي PT",

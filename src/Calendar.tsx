@@ -14,6 +14,7 @@ import { db, auth, getTenantId } from './firebase';
 import StrikeWeeklyScheduleView from './components/StrikeWeeklyScheduleView';
 import { collection, onSnapshot, setDoc, doc, deleteDoc, writeBatch, getDocs, query, where, updateDoc } from 'firebase/firestore';
 import { Checkbox } from '@/components/ui/checkbox';
+import { resolveAttendee } from './utils/attendeeUtils';
 import { 
   format, 
   isSameDay, 
@@ -79,7 +80,9 @@ export default function CalendarView() {
     updatePTPackageRecord,
     branches,
     coaches,
-    features
+    features,
+    setActiveTab,
+    setActiveClientId
   } = useAppContext();
 
   const { t, language, isRtl } = useLanguage();
@@ -1031,7 +1034,11 @@ export default function CalendarView() {
       {/* Booking Details / Edit Status Modal Dialog */}
       <Dialog open={selectedRecord !== null} onOpenChange={(open) => !open && setSelectedRecord(null)}>
         {selectedRecord && (() => {
-          const client = clients.find(c => c.id === selectedRecord.clientId);
+          const { client, displayName, displayPhone, rawId, isOrphaned } = resolveAttendee({
+            clientId: selectedRecord.clientId,
+            name: (selectedRecord as any).clientName,
+            phone: (selectedRecord as any).clientPhone
+          }, clients);
           const trainer = users.find(u => u.id === selectedRecord.trainerId);
           return (
             <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6 md:p-8">
@@ -1049,8 +1056,30 @@ export default function CalendarView() {
                   <UserIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                   <div>
                     <p className="text-xs font-bold text-muted-foreground uppercase">{language === 'ar' ? 'الأعضاء' : 'Member'}</p>
-                    <p className="font-bold text-foreground text-base">{client?.name || 'Unknown Client'}</p>
-                    <p className="text-[10px] text-muted-foreground">{client?.phone}</p>
+                    {client ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRecord(null);
+                          setActiveTab('clients');
+                          setActiveClientId(client.id);
+                        }}
+                        className="font-bold text-foreground text-base hover:text-primary transition-colors underline decoration-dotted text-left block"
+                        title="View member profile in CRM"
+                      >
+                        {displayName}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2" title={`Profile no longer found (ID: ${rawId})`}>
+                        <span className="font-bold text-muted-foreground text-base line-through opacity-70">
+                          {displayName}
+                        </span>
+                        <Badge variant="outline" className="border-amber-500/40 text-amber-500 bg-amber-500/10 text-[9px] px-1 py-0 h-4">
+                          Orphaned
+                        </Badge>
+                      </div>
+                    )}
+                    {displayPhone && <p className="text-[10px] text-muted-foreground">{displayPhone}</p>}
                   </div>
                 </div>
 
@@ -1208,11 +1237,33 @@ export default function CalendarView() {
                       </p>
                     ) : (
                       selectedClass.attendees.map(clientId => {
-                        const client = clients.find(c => c.id === clientId);
+                        const { client, displayName, displayPhone, rawId, isOrphaned } = resolveAttendee(clientId, clients);
                         return (
-                          <div key={clientId} className="p-2 flex justify-between items-center text-xs">
-                            <span className="font-semibold text-foreground">{client?.name || 'Unknown Client'}</span>
-                            <span className="text-muted-foreground text-[10px]">{client?.phone || ''}</span>
+                          <div key={typeof clientId === 'string' ? clientId : rawId} className="p-2 flex justify-between items-center text-xs">
+                            {client ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedClass(null);
+                                  setActiveTab('clients');
+                                  setActiveClientId(client.id);
+                                }}
+                                className="font-semibold text-foreground hover:text-primary transition-colors underline decoration-dotted text-left"
+                                title="View member profile in CRM"
+                              >
+                                {displayName}
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5" title={`Profile no longer found (ID: ${rawId})`}>
+                                <span className="font-semibold text-muted-foreground line-through opacity-70">
+                                  {displayName}
+                                </span>
+                                <Badge variant="outline" className="border-amber-500/40 text-amber-500 bg-amber-500/10 text-[9px] px-1 py-0 h-4">
+                                  Orphaned
+                                </Badge>
+                              </div>
+                            )}
+                            <span className="text-muted-foreground text-[10px]">{displayPhone}</span>
                           </div>
                         );
                       })

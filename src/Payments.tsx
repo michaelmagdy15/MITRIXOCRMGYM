@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { SALES_NAME_MAPPING, toCanonical } from './constants';
@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO, addDays } from 'date-fns';
 import { safeFormatDate, safeAddDays, toValidDate, safeIsoDate } from './utils/dateUtils';
-import { Payment } from './types';
+import { Payment, Client } from './types';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
@@ -69,6 +69,8 @@ export default function Payments() {
   const [newClientGender, setNewClientGender] = useState<'Male' | 'Female' | 'Other' | 'Prefer not to say'>('Male');
   const [newClientCategory, setNewClientCategory] = useState<'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults'>('Adults');
   const [pendingNewPhone, setPendingNewPhone] = useState<string | null>(null);
+  const [isWalkInGuest, setIsWalkInGuest] = useState(false);
+  const [guestClientName, setGuestClientName] = useState('');
 
   useEffect(() => {
     if (!pendingNewPhone) return;
@@ -289,10 +291,26 @@ export default function Payments() {
 
   const handleAddPayment = async () => {
     const finalPackageType = packageType === 'Custom' ? customPackage : packageType;
+    const isGuest = clientId === 'WALK-IN-GUEST' || isWalkInGuest;
+    const resolvedGuestName = (guestClientName || clientSearch).trim();
 
-    if (!clientId || !amount || !finalPackageType) {
+    if (!isGuest && !clientId && !resolvedGuestName) {
       setAlertTitle('Missing Information');
-      setAlertDescription('Please select a client, enter an amount, and select a package type.');
+      setAlertDescription('Please select a client or enter a walk-in guest name.');
+      setAlertOpen(true);
+      return;
+    }
+
+    if (isGuest && !resolvedGuestName) {
+      setAlertTitle('Missing Information');
+      setAlertDescription('Please enter the client or guest name for this payment.');
+      setAlertOpen(true);
+      return;
+    }
+
+    if (!amount || !finalPackageType) {
+      setAlertTitle('Missing Information');
+      setAlertDescription('Please enter an amount and select a package type.');
       setAlertOpen(true);
       return;
     }
@@ -358,23 +376,25 @@ export default function Payments() {
     const salesRepId = salesRepUser ? salesRepUser.id : undefined;
 
     try {
-      const selectedClient = clients.find(c => c.id === clientId);
+      const selectedClient = !isGuest ? clients.find(c => c.id === clientId) : null;
+      const effectiveClientName = isGuest ? resolvedGuestName : (selectedClient?.name || resolvedGuestName);
 
       // Check for existing active packages with same type -> seamlessly process as Renewal cycle
       const existingActivePackage = (selectedClient?.packages || []).find(
         p => p.status === 'Active' && p.packageName === finalPackageType
       );
-      const isRenewalPayment = !!existingActivePackage;
+      const isRenewalPayment = !isGuest && !!existingActivePackage;
 
       const pkg = packages.find(p => p.name === packageType);
       const clientBranch = newClientBranch || selectedClient?.branch || '';
 
       await processPaymentTransaction({
-        clientId,
-        clientName: selectedClient?.name || '',
+        clientId: isGuest ? 'WALK-IN-GUEST' : clientId,
+        clientName: effectiveClientName,
         clientBranch,
-        clientStatus: selectedClient?.status,
+        clientStatus: isGuest ? 'Active' : selectedClient?.status,
         clientPackages: selectedClient?.packages,
+        isGuest,
         amount: finalAmount,
         method,
         instapayRef: method === 'Instapay' ? instapayRef : undefined,
@@ -408,6 +428,8 @@ export default function Payments() {
 
       setIsNewPaymentOpen(false);
       setIsCreatingNew(false);
+      setIsWalkInGuest(false);
+      setGuestClientName('');
       // Reset form
       setClientId('');
       setClientSearch('');
@@ -749,14 +771,76 @@ export default function Payments() {
   const deferredSortConfig = React.useDeferredValue(sortConfig);
   const deferredFilterShowOnlyHeld = React.useDeferredValue(filterShowOnlyHeld);
 
-  const filteredPayments = React.useMemo(() => {
-    const clientMap = new Map();
-    for (const client of clients) {
-      clientMap.set(client.id, client);
+  const { clientById, clientByMemberId, clientByPortalUserId, clientByPhone } = React.useMemo(() => {
+    const byId = new Map<string, Client>();
+    const byMemberId = new Map<string, Client>();
+    const byPortalUserId = new Map<string, Client>();
+    const byPhone = new Map<string, Client>();
+
+    for (const c of clients) {
+      if (c.id) {
+        byId.set(c.id, c);
+      }
+      if (c.memberId) {
+        const clean = String(c.memberId).replace(/^#/, '').trim().toLowerCase();
+        if (clean) byMemberId.set(clean, c);
+      }
+      if (c.portalUserId) {
+        byPortalUserId.set(c.portalUserId, c);
+      }
+      if (c.phone) {
+        const digits = c.phone.replace(/\D/g, '').slice(-10);
+        if (digits.length >= 8) byPhone.set(digits, c);
+      }
     }
 
+    return { clientById: byId, clientByMemberId: byMemberId, clientByPortalUserId: byPortalUserId, clientByPhone: byPhone };
+  }, [clients]);
+
+  const resolvePaymentClient = useCallback((payment: any): Client | undefined => {
+    if (!payment) return undefined;
+    if (payment.clientId === 'WALK-IN-GUEST' || payment.isGuest) return undefined;
+
+    // 1. Direct match by document ID
+    if (payment.clientId && typeof payment.clientId === 'string' && payment.clientId.trim()) {
+      const byId = clientById.get(payment.clientId.trim());
+      if (byId) return byId;
+    }
+
+    // 2. Match payment.memberId (or member_id) if explicitly provided
+    const pMemberId = payment.memberId || payment.member_id;
+    if (pMemberId) {
+      const cleanMemberId = String(pMemberId).replace(/^#/, '').trim().toLowerCase();
+      if (cleanMemberId) {
+        const byMember = clientByMemberId.get(cleanMemberId);
+        if (byMember) return byMember;
+        const byId = clientById.get(cleanMemberId);
+        if (byId) return byId;
+      }
+    }
+
+    // 3. Fallback: payment.clientId might be a memberId, portalUserId, or phone
+    if (payment.clientId && typeof payment.clientId === 'string' && payment.clientId.trim()) {
+      const cleanId = payment.clientId.replace(/^#/, '').trim().toLowerCase();
+      if (cleanId) {
+        const byMember = clientByMemberId.get(cleanId);
+        if (byMember) return byMember;
+        const byPortal = clientByPortalUserId.get(payment.clientId.trim());
+        if (byPortal) return byPortal;
+        const rawDigits = payment.clientId.replace(/\D/g, '').slice(-10);
+        if (rawDigits.length >= 8) {
+          const byPhone = clientByPhone.get(rawDigits);
+          if (byPhone) return byPhone;
+        }
+      }
+    }
+
+    return undefined;
+  }, [clientById, clientByMemberId, clientByPortalUserId, clientByPhone]);
+
+  const filteredPayments = React.useMemo(() => {
     let result = payments.filter(payment => {
-      const client = clientMap.get(payment.clientId);
+      const client = resolvePaymentClient(payment);
 
       // Sales reps only see payments attributed to them.
       // If sales_rep_id is set it is authoritative; otherwise fall back to client-based visibility
@@ -764,15 +848,16 @@ export default function Payments() {
       if (isRep && currentUser) {
         const ownPayment = payment.sales_rep_id
           ? payment.sales_rep_id === currentUser.id
-          : clientMap.has(payment.clientId);
+          : (client ? (client.assignedTo === currentUser.name || client.salesName === currentUser.name) : clientById.has(payment.clientId));
         if (!ownPayment) return false;
       }
 
       // Search filter
       if (deferredSearchTerm) {
         const term = deferredSearchTerm.toLowerCase();
-        const matchesName = client?.name?.toLowerCase().includes(term);
-        const matchesId = client?.memberId?.toString().includes(term);
+        const clientName = client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '';
+        const matchesName = clientName.toLowerCase().includes(term);
+        const matchesId = client?.memberId?.toString().includes(term) || ((payment as any).memberId?.toString().includes(term));
         const matchesPhone = client?.phone?.includes(term);
         const matchesAmount = payment.amount.toString().includes(term);
         const matchesRef = payment.instapayRef?.toLowerCase().includes(term);
@@ -991,6 +1076,24 @@ export default function Payments() {
                               <UserPlus className="h-4 w-4 text-primary shrink-0" />
                               <span className="text-sm font-semibold text-primary">{t('members.add_member')} — {t('common.create_and_select')}</span>
                             </button>
+                            {clientSearch.trim().length > 0 && (
+                              <button
+                                type="button"
+                                className="w-full text-left px-5 py-3 hover:bg-emerald-500/10 transition-colors flex items-center gap-3 border-b border-white/10"
+                                onMouseDown={() => {
+                                  setClientId('WALK-IN-GUEST');
+                                  setGuestClientName(clientSearch.trim());
+                                  setIsWalkInGuest(true);
+                                  setClientSearch(clientSearch.trim());
+                                  setClientDropdownOpen(false);
+                                }}
+                              >
+                                <User className="h-4 w-4 text-emerald-500 shrink-0" />
+                                <span className="text-sm font-semibold text-emerald-500">
+                                  {(t('payments.record_as_guest') || 'Record as Walk-in / Drop Session Guest')}: "{clientSearch.trim()}"
+                                </span>
+                              </button>
+                            )}
                             <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
                               {clients
                                 .filter(c => {
@@ -1515,7 +1618,15 @@ export default function Payments() {
               <TableBody>
                 {paginatedPayments.length > 0 ? (
                   paginatedPayments.map(payment => {
-                    const client = clients.find(c => c.id === payment.clientId);
+                    const client = resolvePaymentClient(payment);
+                    const isGuestPayment = (payment as any).isGuest || payment.clientId === 'WALK-IN-GUEST' || !!(payment.guestName || (payment as any).guest_name);
+                    const clientDisplayName = 
+                      client?.name || 
+                      payment.clientName || 
+                      payment.client_name || 
+                      payment.guestName || 
+                      (payment as any).guest_name || 
+                      (t('payments.table.unknown_client') || 'Walk-in Guest');
                     const recordedByUser = users.find(u => u.id === payment.recordedBy);
                     // Fallback: use stored name, then sales_rep user, then default to Unknown
                     const salesRepUser = !recordedByUser ? users.find(u => u.id === payment.sales_rep_id) : null;
@@ -1562,7 +1673,14 @@ export default function Payments() {
                                   {client.name}
                                 </button>
                               ) : (
-                                <span>{t('payments.table.unknown_client')}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold text-xs sm:text-sm text-foreground">{clientDisplayName}</span>
+                                  {isGuestPayment && (
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-border/60 font-medium">
+                                      {t('payments.table.walk_in_tag') || 'Guest'}
+                                    </Badge>
+                                  )}
+                                </div>
                               )}
                               {payment.isOnHold && (
                                 <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px]" title={payment.holdReason || t('payments.hold')}>
@@ -1736,8 +1854,8 @@ export default function Payments() {
                                   setEditMethod(payment.method);
                                   setEditSalesName(payment.salesName || '');
                                   setEditCoachName(payment.coachName || '');
-                                  setEditClientName(client?.name || '');
-                                  setEditClientPhone(client?.phone || client?.memberId || '');
+                                  setEditClientName(client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '');
+                                  setEditClientPhone(client?.phone || (client?.memberId ? String(client.memberId) : ''));
                                   setEditPaymentDate(payment.date ? payment.date.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'));
                                 } else {
                                   setEditingPaymentId(null);
@@ -1748,7 +1866,7 @@ export default function Payments() {
                                 </DialogTrigger>
                                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                                   <DialogHeader>
-                                    <DialogTitle>{t('payments.edit.title')} - {client?.name}</DialogTitle>
+                                    <DialogTitle>{t('payments.edit.title')} - {client?.name || clientDisplayName}</DialogTitle>
                                   </DialogHeader>
                                   <div className="grid grid-cols-2 gap-4">
                                     <div>
