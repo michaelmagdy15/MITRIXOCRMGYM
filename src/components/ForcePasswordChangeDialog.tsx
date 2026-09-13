@@ -70,7 +70,7 @@ export function ForcePasswordChangeDialog() {
               <div>
                 <p className="font-semibold text-lg">Password updated!</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Your account is now secure. Welcome to mitrixogymcrm.
+                  Your account is now secure. Welcome to Strike.
                 </p>
               </div>
             </div>

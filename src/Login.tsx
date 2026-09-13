@@ -309,9 +309,21 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
     }
   };
 
+  React.useEffect(() => {
+    if (!isAuthReady) return;
+    const timer = setTimeout(() => {
+      (window as any).__dismissMobileSplash?.();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isAuthReady]);
+
   if (!isAuthReady) {
-    const companyName = branding?.companyName || 'CRM';
-    const logoUrl = branding?.logoUrl;
+    const rawName = (branding?.companyName || '').trim();
+    const isStrike = !rawName || rawName.toLowerCase().includes('strike') || getTenantId().toLowerCase().includes('strike') || getTenantId() === 'default';
+    const companyName = (!rawName || rawName.toLowerCase().includes('mitrixo')) ? (isStrike ? 'STRIKE' : 'CRM') : rawName;
+    const logoUrl = (branding?.logoUrl && !branding.logoUrl.includes('mitrixogymcrmlogo.png') && !branding.logoUrl.includes('mitrixo'))
+      ? branding.logoUrl
+      : (isStrike ? '/strikelogo.png' : '/inzanlogo.png');
 
     return (
       <div className="min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans">

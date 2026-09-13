@@ -162,9 +162,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   const applyBrandingData = useCallback((data: BrandingSettings) => {
     const tenantDefault = getInitialBranding();
     const rawName = (data.companyName || '').trim();
-    const effectiveName = (!rawName || rawName.toLowerCase() === 'mitrixogymcrm') ? tenantDefault.companyName : rawName;
+    const effectiveName = (!rawName || rawName.toLowerCase().includes('mitrixo')) ? tenantDefault.companyName : rawName;
     const rawLogo = (data.logoUrl || '').trim();
-    const effectiveLogo = (!rawLogo || rawLogo.includes('mitrixogymcrmlogo.png')) ? tenantDefault.logoUrl : rawLogo;
+    const effectiveLogo = (!rawLogo || rawLogo.includes('mitrixogymcrmlogo.png') || rawLogo.includes('mitrixo')) ? tenantDefault.logoUrl : rawLogo;
     const mergedData: BrandingSettings = {
       currencyCode: 'EGP',
       currencySymbol: 'LE',
@@ -337,8 +337,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       );
     }
 
-    const companyName = branding?.companyName || 'CRM';
-    const logoUrl = branding?.logoUrl;
+    const rawName = (branding?.companyName || '').trim();
+    const isStrike = !rawName || rawName.toLowerCase().includes('strike') || getTenantId().toLowerCase().includes('strike') || getTenantId() === 'default';
+    const companyName = (!rawName || rawName.toLowerCase().includes('mitrixo')) ? (isStrike ? 'STRIKE' : 'CRM') : rawName;
+    const logoUrl = (branding?.logoUrl && !branding.logoUrl.includes('mitrixogymcrmlogo.png') && !branding.logoUrl.includes('mitrixo'))
+      ? branding.logoUrl
+      : (isStrike ? '/strikelogo.png' : '/inzanlogo.png');
 
     return (
       <div className={`min-h-screen bg-[#070709] flex flex-col items-center justify-center relative overflow-hidden font-sans ${isExiting ? 'preloader-exit' : ''}`}>

@@ -8,9 +8,9 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="mitrixogymcrm" />
+    <meta name="apple-mobile-web-app-title" content="STRIKE" />
     <meta name="theme-color" content="#000000" />
-    <meta name="application-name" content="mitrixogymcrm" />
+    <meta name="application-name" content="STRIKE" />
 
     <!-- iOS home-screen icon (proper square with padding) -->
     <link rel="apple-touch-icon" href="/pwa-icon.png" />
@@ -23,8 +23,148 @@
     <link id="favicon-16" rel="icon" type="image/png" sizes="16x16" href="/favicon.png" />
     <link id="favicon-shortcut" rel="shortcut icon" href="/favicon.png" />
 
-    <title>CRM</title>
+    <title>Strike Boxing Club</title>
     <!-- FIREBASE_CONFIG_PLACEHOLDER -->
+
+    <style id="mobile-splash-styles">
+      /* Mobile Native Full-Screen Splash (iPhones & Androids Only) */
+      #mobile-native-splash {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        z-index: 9999999;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #050507;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+        transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .mobile-splash-bg {
+        position: absolute;
+        inset: 0;
+        background-image: url('/strike_slide_outdoor.png');
+        background-position: center center;
+        background-size: cover;
+        background-repeat: no-repeat;
+        transform: scale(1.04);
+        filter: brightness(0.65) contrast(1.1);
+        animation: splashBgDrift 10s ease-out forwards;
+      }
+      .mobile-splash-overlay {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(circle at center, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.72) 68%, rgba(0,0,0,0.92) 100%),
+                    linear-gradient(to bottom, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.85) 100%);
+      }
+      .mobile-splash-content {
+        position: relative;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        height: 100%;
+        width: 100%;
+        padding: calc(env(safe-area-inset-top, 40px) + 20px) 24px calc(env(safe-area-inset-bottom, 24px) + 32px);
+        box-sizing: border-box;
+      }
+      .mobile-splash-logo-wrap {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        width: 100%;
+        max-width: 320px;
+      }
+      .mobile-splash-glow {
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        background: radial-gradient(circle, rgba(225, 29, 72, 0.32) 0%, rgba(225, 29, 72, 0.08) 50%, transparent 70%);
+        border-radius: 50%;
+        filter: blur(28px);
+        animation: splashGlowPulse 2.4s ease-in-out infinite alternate;
+      }
+      .mobile-splash-logo {
+        position: relative;
+        width: 195px;
+        max-width: 72vw;
+        height: auto;
+        max-height: 140px;
+        object-fit: contain;
+        filter: drop-shadow(0 12px 28px rgba(0,0,0,0.85)) drop-shadow(0 0 16px rgba(255,255,255,0.18));
+        animation: splashLogoFloat 2.4s ease-in-out infinite alternate;
+      }
+      .mobile-splash-footer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+      }
+      .mobile-splash-bar-track {
+        width: 130px;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.14);
+        border-radius: 9999px;
+        overflow: hidden;
+        position: relative;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+      }
+      .mobile-splash-bar-fill {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 40%;
+        background: linear-gradient(90deg, transparent, #e11d48, #ffffff, #e11d48, transparent);
+        border-radius: 9999px;
+        animation: splashBarFill 1.6s ease-in-out infinite;
+        box-shadow: 0 0 10px #e11d48;
+      }
+      .mobile-splash-tagline {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 10.5px;
+        font-weight: 800;
+        letter-spacing: 0.38em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.55);
+        margin-left: 0.38em;
+      }
+      @keyframes splashBgDrift {
+        0% { transform: scale(1.0); }
+        100% { transform: scale(1.08); }
+      }
+      @keyframes splashLogoFloat {
+        0% { transform: translateY(0) scale(1); }
+        100% { transform: translateY(-4px) scale(1.02); }
+      }
+      @keyframes splashGlowPulse {
+        0% { opacity: 0.45; transform: scale(0.9); }
+        100% { opacity: 1; transform: scale(1.2); }
+      }
+      @keyframes splashBarFill {
+        0% { left: -45%; width: 35%; }
+        50% { left: 35%; width: 50%; }
+        100% { left: 110%; width: 35%; }
+      }
+      .mobile-splash-dismissing {
+        opacity: 0 !important;
+        transform: scale(1.04) !important;
+        pointer-events: none !important;
+      }
+    </style>
+
     <script type="text/javascript">
       // Immediately resolve tenant title and favicon before React mounts
       (function() {
@@ -40,6 +180,11 @@
           
           document.title = companyName;
           
+          var metaApple = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (metaApple) metaApple.setAttribute('content', companyName);
+          var metaApp = document.querySelector('meta[name="application-name"]');
+          if (metaApp) metaApp.setAttribute('content', companyName);
+
           var f32 = document.getElementById('favicon-32');
           if (f32) f32.href = faviconPath;
           var f16 = document.getElementById('favicon-16');
@@ -66,6 +211,69 @@
     </script>
   </head>
   <body>
+    <!-- Mobile Native Splash Screen (iPhones & Androids Only) -->
+    <div id="mobile-native-splash">
+      <div class="mobile-splash-bg"></div>
+      <div class="mobile-splash-overlay"></div>
+      <div class="mobile-splash-content">
+        <div class="mobile-splash-logo-wrap">
+          <div class="mobile-splash-glow"></div>
+          <img id="mobile-splash-logo" src="/strikelogo_white.png" alt="Strike Logo" class="mobile-splash-logo" />
+        </div>
+        <div class="mobile-splash-footer">
+          <div class="mobile-splash-bar-track">
+            <div class="mobile-splash-bar-fill"></div>
+          </div>
+          <div class="mobile-splash-tagline" id="mobile-splash-title">STRIKE BOXING CLUB</div>
+        </div>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      // Check if iPhone or Android or mobile screen width
+      (function() {
+        var isMobileDevice = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike/i.test(navigator.userAgent) || (window.innerWidth < 768);
+        var splashEl = document.getElementById('mobile-native-splash');
+
+        if (isMobileDevice && splashEl) {
+          splashEl.style.display = 'flex';
+
+          // Tenant check for Inzan
+          try {
+            var params = new URLSearchParams(window.location.search);
+            var t = (params.get('tenant') || '').toLowerCase();
+            var host = window.location.hostname.toLowerCase();
+            var isInzan = t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1;
+            if (isInzan) {
+              var logo = document.getElementById('mobile-splash-logo');
+              if (logo) logo.src = '/inzanlogo.png';
+              var title = document.getElementById('mobile-splash-title');
+              if (title) title.textContent = 'INZAN ATHLETICS';
+            }
+          } catch(e) {}
+        } else if (splashEl) {
+          splashEl.style.display = 'none';
+        }
+
+        // Global dismiss handler invoked by React once auth and initial render are ready
+        window.__dismissMobileSplash = function() {
+          var el = document.getElementById('mobile-native-splash');
+          if (!el || el.classList.contains('mobile-splash-dismissing')) return;
+          el.classList.add('mobile-splash-dismissing');
+          setTimeout(function() {
+            if (el && el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
+          }, 520);
+        };
+
+        // Safety fallback: auto-dismiss after 6s in case network is slow so user is never blocked
+        setTimeout(function() {
+          if (window.__dismissMobileSplash) window.__dismissMobileSplash();
+        }, 6000);
+      })();
+    </script>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

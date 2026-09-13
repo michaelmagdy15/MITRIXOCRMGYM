@@ -133,7 +133,7 @@ export default function MemberLocker({ client }: { client: Client | null }) {
             <CardContent className="p-6 space-y-6">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-zinc-400">MITRIXOGYMCRM BOXING CLUB</p>
+                  <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-zinc-400">STRIKE BOXING CLUB</p>
                   <p className="text-xs font-mono text-primary mt-0.5">SMART LOCKER ACCESS</p>
                 </div>
                 <Badge className="px-2.5 py-0.5 text-[10px] font-semibold border bg-emerald-500/10 text-emerald-400 border-emerald-500/20" variant="outline">

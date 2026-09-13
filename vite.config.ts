@@ -16,11 +16,11 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['pwa-icon.png', 'favicon.png', 'mitrixogymcrmlogo.png'],
+        includeAssets: ['pwa-icon.png', 'favicon.png', 'strikelogo.png'],
         manifest: {
-          name: 'mitrixogymcrm CRM',
-          short_name: 'mitrixogymcrm',
-          description: 'mitrixogymcrm — Member & Staff Portal',
+          name: 'Strike Boxing Club',
+          short_name: 'STRIKE',
+          description: 'Strike Boxing Club — Member & Staff Portal',
           theme_color: '#000000',
           background_color: '#000000',
           display: 'standalone',

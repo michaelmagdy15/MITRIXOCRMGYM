@@ -151,7 +151,7 @@ export function QRCodePage() {
                   'Scan QR code with Camera app',
                   'Safari opens the app URL',
                   'A guide appears: tap Share → "Add to Home Screen"',
-                  'Tap Add — mitrixogymcrm is on their home screen!',
+                  'Tap Add — Strike is on their home screen!',
                 ]}
               />
             </CardContent>

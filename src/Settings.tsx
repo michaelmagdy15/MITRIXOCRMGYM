@@ -101,7 +101,7 @@ export default function Settings() {
   const [backupImportResult, setBackupImportResult] = React.useState<string | null>(null);
 
   const [testSmsPhone, setTestSmsPhone] = useState('+201000680580');
-  const [testSmsMessage, setTestSmsMessage] = useState('Test SMS from mitrixogymcrm');
+  const [testSmsMessage, setTestSmsMessage] = useState('Test SMS from STRIKE');
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [smsStatus, setSmsStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 

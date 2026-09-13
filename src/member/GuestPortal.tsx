@@ -180,6 +180,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
     }
   }, [enabledTabs, activeTab]);
 
+  useEffect(() => {
+    (window as any).__dismissMobileSplash?.();
+  }, []);
+
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   
   // Slide index state for slideshow
@@ -829,7 +833,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   <div className="absolute inset-0 bg-gradient-to-tr from-black/95 via-black/40 to-transparent z-10" />
                   <img 
                     src={getSlideImage(activeSlides[slideIndex]?.id, activeSlides[slideIndex]?.imageUrl, slideIndex)} 
-                    alt="mitrixogymcrm Sessions" 
+                    alt="Training Sessions" 
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 ease-out scale-105"
                   />
                   

@@ -98,6 +98,10 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     }
   }, [initialTab]);
 
+  useEffect(() => {
+    (window as any).__dismissMobileSplash?.();
+  }, []);
+
   const [primaryClient, setPrimaryClient] = useState<Client | null>(null);
   const [activeClient, setActiveClient] = useState<Client | null>(null);
   const [linkedClients, setLinkedClients] = useState<Client[]>([]);

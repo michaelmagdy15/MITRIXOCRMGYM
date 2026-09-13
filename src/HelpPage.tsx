@@ -13,7 +13,7 @@ export default function HelpPage() {
       {/* Thin header bar */}
       <div className="flex items-center justify-between px-4 h-11 bg-card border-b shrink-0">
         <span className="text-sm font-semibold text-muted-foreground tracking-wide">
-          Help Guide — mitrixogymcrm CRM v2.1
+          Help Guide — Strike Boxing CRM v2.1
         </span>
         <Button
           variant="ghost"

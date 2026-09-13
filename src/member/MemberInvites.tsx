@@ -130,7 +130,7 @@ export default function MemberInvites({ client }: { client: Client | null }) {
           <UserPlus className="h-5 w-5 text-primary" /> Send Guest Invite
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Invite friends or family members for a free trial training session at mitrixogymcrm.
+          Invite friends or family members for a free trial training session at Strike Boxing Club.
         </p>
       </div>
 
