@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Save, UserCircle2, Building2, Users, Package, AlertTriangle, ShieldAlert, Trash2, Dumbbell, Lock, Download, Upload, MessageSquare, Send, KeyRound, Eye, EyeOff, CheckCircle2, Megaphone, Coins, Activity, Smartphone, Image as ImageIcon, Sparkles, RotateCcw } from 'lucide-react';
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import UsersManagement from './Users';
 import Packages from './Packages';
@@ -55,6 +56,7 @@ export default function Settings() {
   const [isSavingPin, setIsSavingPin] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   const [selectedAccent, setSelectedAccent] = React.useState(branding.brandAccentColor ?? '#1a1a1a');
+  const [isPreviewingSplash, setIsPreviewingSplash] = useState(false);
 
   // Payout Rates State
   const [payoutRates, setPayoutRates] = useState(defaultPayoutRates || {
@@ -332,6 +334,27 @@ export default function Settings() {
         splashScreenLogoUrl,
         splashScreenTagline,
       });
+      toast.success('Branding & splash settings saved successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to save settings: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveSplashScreen = async () => {
+    setIsSaving(true);
+    try {
+      await updateBranding({
+        splashScreenUrl,
+        splashScreenLogoUrl,
+        splashScreenTagline,
+      });
+      toast.success('Mobile splash screen configuration saved successfully!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to save splash screen: ' + (err?.message || 'Unknown error'));
     } finally {
       setIsSaving(false);
     }
@@ -986,14 +1009,34 @@ export default function Settings() {
                         </p>
                       </div>
 
-                      <Button
-                        className="w-full bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 cursor-pointer shadow-sm transition-all"
-                        onClick={handleSave}
-                        disabled={isSaving}
-                      >
-                        <Save className="mr-2 h-4 w-4" />
-                        {isSaving ? 'Saving Splash Screen...' : 'Save Splash Screen'}
-                      </Button>
+                      <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                        <Button
+                          className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 cursor-pointer shadow-sm transition-all"
+                          onClick={handleSaveSplashScreen}
+                          disabled={isSaving}
+                        >
+                          <Save className="mr-2 h-4 w-4" />
+                          {isSaving ? 'Saving Splash Screen...' : 'Save Splash Screen'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="font-semibold py-2.5 cursor-pointer border-rose-500/40 text-rose-500 hover:bg-rose-500/10 transition-all shrink-0"
+                          onClick={() => setIsPreviewingSplash(true)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Test Fullscreen
+                        </Button>
+                      </div>
+
+                      <div className="bg-muted/40 rounded-lg p-3 border border-border text-xs text-muted-foreground space-y-1">
+                        <p className="font-semibold text-foreground flex items-center gap-1.5">
+                          📱 Mobile-First Native Launch
+                        </p>
+                        <p>
+                          This splash screen launches automatically for gym members & coaches on <strong>iOS iPhones</strong>, <strong>Android devices</strong>, and mobile browsers (&lt;768px). Desktop browser reload skips it by design to keep dashboard workflows instant. Click <strong>&quot;Test Fullscreen&quot;</strong> above to preview it on your PC anytime!
+                        </p>
+                      </div>
                     </div>
 
                     {/* Live Mobile Device Mockup Preview (Right 5 cols) */}
@@ -1726,6 +1769,67 @@ export default function Settings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Fullscreen Splash Screen Simulator ── */}
+      {isPreviewingSplash && (
+        <div
+          className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-between p-6 sm:p-10 overflow-hidden select-none animate-in fade-in duration-300"
+          onClick={() => setIsPreviewingSplash(false)}
+        >
+          {/* Background Wallpaper */}
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center transition-all duration-700"
+            style={{
+              backgroundImage: splashScreenUrl ? `url('${splashScreenUrl}')` : undefined,
+              backgroundColor: '#050507',
+              filter: 'brightness(0.65) contrast(1.1)',
+            }}
+          />
+          {/* Dark Radial Overlay */}
+          <div className="absolute inset-0 z-10 bg-radial from-black/20 via-black/60 to-black/90 pointer-events-none" />
+
+          {/* Top Bar with Banner & Close Button */}
+          <div className="relative z-30 w-full flex justify-between items-center max-w-xl mx-auto pt-2">
+            <span className="text-xs font-semibold px-3 py-1.5 bg-white/10 rounded-full text-white/90 backdrop-blur-md border border-white/15">
+              Live Native Splash Simulator (Tap anywhere to exit)
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPreviewingSplash(false);
+              }}
+              className="text-xs font-bold px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-full transition-all border border-white/20 cursor-pointer shadow-lg"
+            >
+              Close ✕
+            </button>
+          </div>
+
+          {/* Centered Logo & Pulse Glow */}
+          <div className="relative z-20 flex-1 flex flex-col items-center justify-center">
+            <div className="relative flex items-center justify-center">
+              <div className="absolute w-64 h-64 rounded-full bg-rose-600/30 blur-3xl animate-pulse pointer-events-none" />
+              <img
+                src={splashScreenLogoUrl || logoUrl || '/strikelogo_white.png'}
+                alt="Splash Logo"
+                className="relative max-w-[280px] sm:max-w-[340px] max-h-[140px] object-contain drop-shadow-[0_16px_36px_rgba(0,0,0,0.9)] animate-[bounce_3s_infinite]"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/strikelogo_white.png';
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Bottom Progress Bar Track & Tagline */}
+          <div className="relative z-20 flex flex-col items-center gap-3.5 pb-6 max-w-sm w-full mx-auto">
+            <div className="w-36 h-1.5 bg-white/20 rounded-full overflow-hidden relative shadow-inner">
+              <div className="absolute top-0 bottom-0 left-0 w-16 bg-gradient-to-r from-rose-500 via-white to-rose-500 rounded-full animate-[pulse_1.5s_ease-in-out_infinite]" />
+            </div>
+            <span className="text-xs font-extrabold tracking-[0.4em] uppercase text-white/85 text-center">
+              {splashScreenTagline || companyName || 'STRIKE BOXING CLUB'}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
