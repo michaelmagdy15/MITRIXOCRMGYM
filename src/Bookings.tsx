@@ -66,6 +66,7 @@ interface BookingItem {
 
 interface BookingRequest {
   id: string;
+  _collection?: string;
   clientName: string;
   clientPhone: string;
   clientEmail: string;
@@ -218,20 +219,44 @@ export default function Bookings() {
   const [rejectReason, setRejectReason] = useState('');
   const [processingReject, setProcessingReject] = useState(false);
 
-  // Fetch booking requests in real-time (capped to 100 newest items)
+  // Fetch booking requests in real-time from both collections to ensure no request is ever missed
   useEffect(() => {
-    const q = query(collection(db, 'booking_requests'), limit(100));
-    const unsub = onSnapshot(q, (snap) => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() })) as BookingRequest[];
+    let requestsA: BookingRequest[] = [];
+    let requestsB: BookingRequest[] = [];
+
+    const mergeAndSet = () => {
+      const mergedMap = new Map<string, BookingRequest>();
+      for (const r of requestsB) mergedMap.set(r.id, r);
+      for (const r of requestsA) mergedMap.set(r.id, r);
+
+      const list = Array.from(mergedMap.values());
       list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
       setRequests(list);
       setLoadingStore(false);
+    };
+
+    const qA = query(collection(db, 'bookingRequests'), limit(100));
+    const unsubA = onSnapshot(qA, (snap) => {
+      requestsA = snap.docs.map(d => ({ id: d.id, _collection: 'bookingRequests', ...d.data() } as BookingRequest));
+      mergeAndSet();
     }, (err) => {
-      console.error("Error loading booking requests:", err);
-      setLoadingStore(false);
+      console.warn("Error loading bookingRequests:", err);
+      mergeAndSet();
     });
 
-    return () => unsub();
+    const qB = query(collection(db, 'booking_requests'), limit(100));
+    const unsubB = onSnapshot(qB, (snap) => {
+      requestsB = snap.docs.map(d => ({ id: d.id, _collection: 'booking_requests', ...d.data() } as BookingRequest));
+      mergeAndSet();
+    }, (err) => {
+      console.warn("Error loading booking_requests:", err);
+      mergeAndSet();
+    });
+
+    return () => {
+      unsubA();
+      unsubB();
+    };
   }, []);
 
   // Pre-fill accept dialog when selected
@@ -495,8 +520,14 @@ export default function Bookings() {
         });
       }
 
-      // 3. Mark the booking request as Approved
-      await updateDoc(doc(db, 'booking_requests', selectedRequest.id), { status: 'Approved' });
+      // 3. Mark the booking request as Approved in both collections for full sync
+      const targetCol = selectedRequest._collection || 'bookingRequests';
+      await updateDoc(doc(db, targetCol, selectedRequest.id), { status: 'Approved' }).catch(() => {});
+      if (targetCol === 'bookingRequests') {
+        await updateDoc(doc(db, 'booking_requests', selectedRequest.id), { status: 'Approved' }).catch(() => {});
+      } else {
+        await updateDoc(doc(db, 'bookingRequests', selectedRequest.id), { status: 'Approved' }).catch(() => {});
+      }
 
       // 4. Create an automatic Follow Up task
       await setDoc(doc(db, 'tasks', crypto.randomUUID()), {
@@ -538,7 +569,26 @@ export default function Bookings() {
     setProcessingReject(true);
 
     try {
-      await updateDoc(doc(db, 'booking_requests', rejectingRequest.id), { status: 'Rejected' });
+      // Mark the booking request as Rejected in both collections
+      const targetCol = rejectingRequest._collection || 'bookingRequests';
+      await updateDoc(doc(db, targetCol, rejectingRequest.id), { 
+        status: 'Rejected',
+        rejectionReason: rejectReason || 'Declined by staff',
+        rejectedAt: new Date().toISOString()
+      }).catch(() => {});
+      if (targetCol === 'bookingRequests') {
+        await updateDoc(doc(db, 'booking_requests', rejectingRequest.id), { 
+          status: 'Rejected',
+          rejectionReason: rejectReason || 'Declined by staff',
+          rejectedAt: new Date().toISOString()
+        }).catch(() => {});
+      } else {
+        await updateDoc(doc(db, 'bookingRequests', rejectingRequest.id), { 
+          status: 'Rejected',
+          rejectionReason: rejectReason || 'Declined by staff',
+          rejectedAt: new Date().toISOString()
+        }).catch(() => {});
+      }
 
       if (salesRepId) {
         await setDoc(doc(db, 'tasks', crypto.randomUUID()), {
@@ -744,10 +794,10 @@ export default function Bookings() {
             }`}
           >
             <ShoppingBag className="h-3.5 w-3.5" />
-            Store Orders
+            Member Requests & Store
             {pendingRequestsCount > 0 && (
               <Badge className="px-1.5 py-0 text-[10px] h-4 bg-rose-500 text-white font-bold animate-pulse">
-                {pendingRequestsCount}
+                {pendingRequestsCount} Pending
               </Badge>
             )}
           </button>

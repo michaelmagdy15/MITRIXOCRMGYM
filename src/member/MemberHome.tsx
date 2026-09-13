@@ -416,6 +416,70 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
         </div>
       )}
 
+      {/* ─── New Member Quick Start / How to Book Guide ─── */}
+      {(Number(client.sessionsRemaining || 0) <= 0 || totalCheckIns === 0) && (
+        <Card className="border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-background rounded-3xl shadow-md overflow-hidden">
+          <CardContent className="p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-black">
+                  🥊
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-foreground uppercase tracking-tight">How to Book in 3 Steps</h3>
+                  <p className="text-[10px] text-muted-foreground">New to Strike? Follow this quick guide:</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30 font-bold">
+                Quick Guide
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+              <div className="bg-background/80 p-2.5 rounded-xl border border-border/50 space-y-1">
+                <div className="font-bold text-primary flex items-center gap-1.5">
+                  <span className="h-4 w-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px]">1</span>
+                  <span>Activate Plan</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Visit the front desk or pay cash/Instapay to activate your boxing credits.
+                </p>
+              </div>
+
+              <div className="bg-background/80 p-2.5 rounded-xl border border-border/50 space-y-1">
+                <div className="font-bold text-primary flex items-center gap-1.5">
+                  <span className="h-4 w-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px]">2</span>
+                  <span>Book Class</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Go to <strong>Bookings</strong>, pick your branch (Maxim / Mivida / Impact) and reserve your spot.
+                </p>
+              </div>
+
+              <div className="bg-background/80 p-2.5 rounded-xl border border-border/50 space-y-1">
+                <div className="font-bold text-primary flex items-center gap-1.5">
+                  <span className="h-4 w-4 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px]">3</span>
+                  <span>Scan & Train</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Show your QR Pass at reception for instant check-in.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                className="w-full h-9 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => onNavigate?.('booking')}
+              >
+                <Calendar className="h-3.5 w-3.5 mr-1.5" /> View Class Schedule & Book
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ─── Streak & Stats Badges ─── */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex items-center gap-1.5 bg-card border border-border/60 text-foreground px-3 py-1 rounded-full text-xs font-semibold shadow-xs">

@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useClasses } from '../hooks/useClasses';
 import { ClassAnalytics } from './ClassAnalytics';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, getDocs, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { User, Client } from '../types';
 import { ClassSchedule } from '../types/class';
@@ -484,11 +484,33 @@ export const ClassManager: React.FC = () => {
       }
 
       if (!resOk && errorMsg) {
-        alert(errorMsg);
-        return;
-      }
-
-      if (!resOk) {
+        const shouldOverride = window.confirm(
+          `Staff Override Alert:\n${errorMsg}\n\nDo you want to admit this member anyway under Staff / Drop-in Override?\n(This ensures the member can train immediately without waiting).`
+        );
+        if (shouldOverride) {
+          const classRef = doc(db, 'classSchedules', rosterClass.id);
+          await updateDoc(classRef, {
+            attendees: arrayUnion(selectedMemberToAdd)
+          });
+          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${selectedMemberToAdd}`);
+          await setDoc(bookingDocRef, {
+            classId: rosterClass.id,
+            className: rosterClass.name,
+            classDate: rosterClass.date || (rosterClass.startTime ? rosterClass.startTime.substring(0, 10) : ''),
+            classTime: rosterClass.time || (rosterClass.startTime ? rosterClass.startTime.substring(11, 16) : ''),
+            classStartTime: rosterClass.startTime || '',
+            clientId: selectedMemberToAdd,
+            memberName: clients.find(c => c.id === selectedMemberToAdd)?.name || 'Member',
+            memberPhone: clients.find(c => c.id === selectedMemberToAdd)?.phone || '',
+            status: 'booked',
+            staffOverride: true,
+            admittedBy: 'Staff Override',
+            bookedAt: new Date().toISOString()
+          }, { merge: true });
+        } else {
+          return;
+        }
+      } else if (!resOk) {
         // Fallback: direct union
         const classRef = doc(db, 'classSchedules', rosterClass.id);
         await updateDoc(classRef, {
