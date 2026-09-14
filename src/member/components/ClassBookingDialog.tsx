@@ -3,6 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { auth, db, getTenantId } from '../../firebase';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { Client, Package } from '../../types';
@@ -42,6 +44,7 @@ export function ClassBookingDialog({
   const [passRequestSuccess, setPassRequestSuccess] = useState(false);
   const [hasActiveCredits, setHasActiveCredits] = useState<boolean>(false);
   const [checkingEntitlement, setCheckingEntitlement] = useState(true);
+  const [hasAcceptedBookingPolicy, setHasAcceptedBookingPolicy] = useState(false);
 
   // ── Credit & Package Verification (Entitlements) ──
   useEffect(() => {
@@ -123,6 +126,7 @@ export function ClassBookingDialog({
       setErrorMessage(null);
       setSelectedUpsellPkg(null);
       setPassRequestSuccess(false);
+      setHasAcceptedBookingPolicy(false);
 
       // If client needs a package, load available options
       if (!hasActiveCredits) {
@@ -162,6 +166,11 @@ export function ClassBookingDialog({
   };
 
   const handleConfirmBooking = async () => {
+    if (!hasAcceptedBookingPolicy) {
+      setErrorMessage('Please accept the class booking terms before continuing.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -194,6 +203,8 @@ export function ClassBookingDialog({
           action,
           clientId: client.id,
           tenantId,
+          bookingPolicyAccepted: true,
+          bookingPolicyVersion: '2026-09-14',
         })
       });
 
@@ -220,6 +231,10 @@ export function ClassBookingDialog({
 
   const handleRequestFrontDeskPass = async () => {
     if (!selectedUpsellPkg) return;
+    if (!hasAcceptedBookingPolicy) {
+      setErrorMessage('Please accept the class booking terms before requesting a class pass.');
+      return;
+    }
     setIsRequestingPass(true);
     try {
       await addDoc(collection(db, 'bookingRequests'), {
@@ -243,6 +258,8 @@ export function ClassBookingDialog({
           sessions: selectedUpsellPkg.sessions || 1
         }],
         type: 'package_booking_request',
+        classBookingPolicyAcceptedAt: new Date().toISOString(),
+        classBookingPolicyVersion: '2026-09-14',
         status: 'Pending',
         createdAt: new Date().toISOString()
       });
@@ -346,6 +363,20 @@ export function ClassBookingDialog({
                     Class Full (Waitlist Open)
                   </Badge>
                 )}
+              </div>
+            </div>
+
+            <div className="border border-amber-500/30 bg-amber-500/5 rounded-xl p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="class-booking-policy"
+                  checked={hasAcceptedBookingPolicy}
+                  onCheckedChange={(checked) => setHasAcceptedBookingPolicy(checked === true)}
+                  className="mt-0.5"
+                />
+                <Label htmlFor="class-booking-policy" className="text-[11px] leading-relaxed cursor-pointer text-foreground">
+                  I accept the class booking terms: cancel at least 2 hours before class for a credit refund. Late cancellations and no-shows keep the used credit; no-shows are recorded on my membership.
+                </Label>
               </div>
             </div>
 

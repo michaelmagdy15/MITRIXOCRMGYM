@@ -424,6 +424,13 @@ function buildSystemNotification(payload: {
   };
 }
 
+const CLASS_BOOKING_POLICY_VERSION = '2026-09-14';
+const CLASS_CANCELLATION_CUTOFF_MS = 2 * 60 * 60 * 1000;
+
+function isStaffRole(role: unknown): boolean {
+  return ['manager', 'admin', 'rep', 'coach', 'super_admin', 'crm_admin'].includes(String(role || '').toLowerCase());
+}
+
 async function startServer() {
   const app = express();
   app.set('trust proxy', 1);
@@ -1894,12 +1901,14 @@ async function startServer() {
   // Handles capacity checks, waitlist promotion, package session deduction, points award, and prevents double-booking
   app.post("/api/classes/book", requireAuth, async (req, res) => {
     try {
-      const { classId, action, clientId } = req.body;
+      const { classId, action, clientId, bookingPolicyAccepted, bookingPolicyVersion } = req.body;
       if (!classId || !action || !clientId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
       const db = await getDbForRequest(req);
+      const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+      const requesterIsStaff = isStaffRole(requesterDoc.data()?.role);
       const classRef = db.collection("classSchedules").doc(classId);
 
       // Resolve client document
@@ -1971,6 +1980,10 @@ async function startServer() {
 
         // === 3. ALL WRITES LAST (NO READS ALLOWED) ===
         if (action === 'join') {
+          if (!requesterIsStaff && (bookingPolicyAccepted !== true || bookingPolicyVersion !== CLASS_BOOKING_POLICY_VERSION)) {
+            throw new Error('You must accept the class booking terms before booking.');
+          }
+
           if (isAlreadyAttendee || isAlreadyWaitlisted) {
             throw new Error("Already booked or waitlisted");
           }
@@ -2137,6 +2150,8 @@ async function startServer() {
               memberName: clientData?.name || 'Member',
               memberPhone: clientData?.phone || '',
               status: 'booked',
+              policyAcceptedAt: requesterIsStaff ? null : new Date().toISOString(),
+              policyVersion: requesterIsStaff ? null : CLASS_BOOKING_POLICY_VERSION,
               bookedAt: new Date().toISOString(),
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
@@ -2180,6 +2195,8 @@ async function startServer() {
               memberName: clientData?.name || 'Member',
               memberPhone: clientData?.phone || '',
               status: 'waitlist',
+              policyAcceptedAt: requesterIsStaff ? null : new Date().toISOString(),
+              policyVersion: requesterIsStaff ? null : CLASS_BOOKING_POLICY_VERSION,
               bookedAt: new Date().toISOString(),
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
@@ -2207,16 +2224,20 @@ async function startServer() {
           const attendeeIndex = attendees.findIndex(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
           if (attendeeIndex > -1) {
             attendees.splice(attendeeIndex, 1);
+            const classStartTimeStr = classData?.startTime || (classData?.date ? `${classData.date}T${classData?.time || '00:00'}` : null);
+            const classStartTimeMs = classStartTimeStr ? new Date(classStartTimeStr).getTime() : 0;
+            const isLateCancellation = classStartTimeMs > 0 && classStartTimeMs - Date.now() < CLASS_CANCELLATION_CUTOFF_MS;
 
             // Mark cancelled in classBookings
             const bookingDocRef = db.collection("classBookings").doc(`${classId}_${canonicalClientId}`);
             transaction.set(bookingDocRef, {
               status: 'cancelled',
               cancelledAt: new Date().toISOString(),
+              cancellationRefunded: !isLateCancellation,
               updatedAt: new Date().toISOString()
             }, { merge: true });
 
-            // Refund 1 credit to member
+            // Refund credits only when the member cancels before the policy cutoff.
             // Use already read entSnap (NO READ AFTER WRITE)
             let entToRefund: any = null;
             let entToRefundRef: any = null;
@@ -2232,7 +2253,7 @@ async function startServer() {
               }
             }
 
-            if (entToRefund && entToRefund.sessionsTotal !== 'unlimited') {
+            if (!isLateCancellation && entToRefund && entToRefund.sessionsTotal !== 'unlimited') {
               transaction.update(entToRefundRef, {
                 sessionsUsed: Math.max(0, entToRefund.sessionsUsed - 1)
               });
@@ -2247,7 +2268,7 @@ async function startServer() {
                 performedBy: clientId,
                 createdAt: new Date().toISOString()
               });
-            } else if (!entToRefund && currentClientDoc?.exists) {
+            } else if (!isLateCancellation && !entToRefund && currentClientDoc?.exists) {
               // Strike tenant fallback refund for embedded package or sessionsRemaining
               const packages: any[] = Array.isArray(clientEffective?.packages) ? [...clientEffective.packages] : [];
               for (let i = 0; i < packages.length; i++) {
@@ -2270,10 +2291,7 @@ async function startServer() {
             }
 
             // Waitlist FIFO Promotion (Enforce 2-hour cutoff rule from PRD: automatic promotion stops 2 hours before class)
-            const classStartTimeStr = classData?.startTime || (classData?.date ? `${classData.date}T${classData?.time || '00:00'}` : null);
-            const classStartTimeMs = classStartTimeStr ? new Date(classStartTimeStr).getTime() : 0;
-            const twoHoursMs = 2 * 60 * 60 * 1000;
-            const isWithinTwoHours = classStartTimeMs > 0 && (classStartTimeMs - Date.now() < twoHoursMs);
+            const isWithinTwoHours = classStartTimeMs > 0 && (classStartTimeMs - Date.now() < CLASS_CANCELLATION_CUTOFF_MS);
 
             if (waitlist.length > 0 && !isWithinTwoHours) {
               const promotedId = waitlist.shift();

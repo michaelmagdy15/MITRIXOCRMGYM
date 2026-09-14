@@ -47,6 +47,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
   const [paymentMethod, setPaymentMethod] = useState<'Instapay' | 'Cash'>('Cash');
   const [instapayRef, setInstapayRef] = useState('');
   const [clientDocId, setClientDocId] = useState<string | null>(null);
+  const [hasAcceptedClassPolicy, setHasAcceptedClassPolicy] = useState(false);
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -139,6 +140,12 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
   };
 
   const handlePurchaseSubmit = async () => {
+    const containsGroupClassPackage = items.some(item => item.pkg.type === 'Group');
+    if (containsGroupClassPackage && !hasAcceptedClassPolicy) {
+      setError('Please accept the class booking terms before submitting this request.');
+      return;
+    }
+
     if (paymentMethod === 'Instapay' && instapayRef && instapayRef.length !== 12) {
       setError('Please provide a valid 12-digit Instapay reference number.');
       return;
@@ -162,6 +169,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
         `\n\nTotal Price: ${totalPrice.toLocaleString()} EGP` +
         `\nPayment Method: ${paymentMethod}` + 
         (paymentMethod === 'Instapay' ? `\nInstapay Ref: ${instapayRef}` : '');
+      const containsGroupClassPackage = items.some(item => item.pkg.type === 'Group');
 
       // Create a pending purchase task directly in Firestore (bypass context hook to avoid member permission issues)
       await addDoc(collection(db, 'tasks'), {
@@ -195,6 +203,10 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
         totalPrice,
         paymentMethod,
         instapayRef: paymentMethod === 'Instapay' ? instapayRef : '',
+        ...(containsGroupClassPackage ? {
+          classBookingPolicyAcceptedAt: new Date().toISOString(),
+          classBookingPolicyVersion: '2026-09-14'
+        } : {}),
         status: 'Pending',
         createdAt: new Date().toISOString()
       });
@@ -288,6 +300,7 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
       setPhone('');
       setEmail('');
       setInstapayRef('');
+      setHasAcceptedClassPolicy(false);
       setError('');
     }, 300);
   };
@@ -472,9 +485,25 @@ export default function Checkout({ open, onOpenChange }: { open: boolean, onOpen
               </div>
             )}
 
+            {items.some(item => item.pkg.type === 'Group') && (
+              <div className="border border-amber-500/30 bg-amber-500/5 rounded-xl p-3">
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="checkout-class-booking-policy"
+                    checked={hasAcceptedClassPolicy}
+                    onCheckedChange={(checked) => setHasAcceptedClassPolicy(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <Label htmlFor="checkout-class-booking-policy" className="text-xs leading-relaxed cursor-pointer">
+                    I accept the class booking terms: cancellation is refundable only up to 2 hours before class. Late cancellations and no-shows use the class credit, and no-shows are recorded on my membership.
+                  </Label>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4">
               <Button type="button" variant="outline" className="w-1/3" onClick={() => setStep('details')}>Back</Button>
-              <Button className="w-2/3 bg-gradient-to-r from-primary to-strike-green hover:from-primary/95 hover:to-strike-green/95 font-bold" onClick={handlePurchaseSubmit} disabled={isLoading}>
+              <Button className="w-2/3 bg-gradient-to-r from-primary to-strike-green hover:from-primary/95 hover:to-strike-green/95 font-bold" onClick={handlePurchaseSubmit} disabled={isLoading || (items.some(item => item.pkg.type === 'Group') && !hasAcceptedClassPolicy)}>
                 {isLoading ? 'Processing...' : 'Confirm Request'}
               </Button>
             </div>

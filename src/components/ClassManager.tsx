@@ -283,6 +283,11 @@ export const ClassManager: React.FC = () => {
       return;
     }
 
+    if (endTime <= startTime) {
+      setFormError("End time must be later than start time.");
+      return;
+    }
+
     setIsSaving(true);
     setFormError(null);
 
@@ -301,6 +306,8 @@ export const ClassManager: React.FC = () => {
           instructorName,
           capacity: Number(capacity) || 15,
           price: Number(price) || 0,
+          date,
+          time: startTime,
           startTime: startIso,
           endTime: endIso,
           branch,
@@ -325,6 +332,8 @@ export const ClassManager: React.FC = () => {
             instructorName,
             capacity: Number(capacity) || 15,
             price: Number(price) || 0,
+            date: dateString,
+            time: startTime,
             startTime: sIso,
             endTime: eIso,
             status: 'active',

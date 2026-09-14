@@ -52,6 +52,9 @@ export interface ClassBooking {
   promotedAt?: string;
   paymentStatus?: 'pending' | 'completed' | 'refunded';
   transactionId?: string;
+  policyAcceptedAt?: string;
+  policyVersion?: string;
+  cancellationRefunded?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -35,8 +35,13 @@ export function useClasses() {
     try {
       const newClassRef = doc(collection(db, 'classSchedules'));
       const now = new Date().toISOString();
+      const scheduleDate = classData.date || classData.startTime.slice(0, 10);
+      const scheduleTime = classData.time || classData.startTime.slice(11, 16);
       await setDoc(newClassRef, {
         ...classData,
+        // All schedule consumers query by this value; keep it in sync with startTime.
+        date: scheduleDate,
+        time: scheduleTime,
         noShowsProcessed: false,
         createdAt: now,
         updatedAt: now
