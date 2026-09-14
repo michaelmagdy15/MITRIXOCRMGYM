@@ -53,6 +53,36 @@ interface MemberPortalProps {
   initialTab?: string;
 }
 
+const getClientTierBadge = (client?: Client | null): string => {
+  if (!client) return 'Adult';
+  const packages: any[] = Array.isArray(client.packages) ? client.packages : [];
+  const activePackage = packages.find((pkg) => {
+    const status = String(pkg?.status || '').toLowerCase();
+    return status !== 'expired' && status !== 'inactive' && status !== 'cancelled';
+  }) || packages[0];
+  const raw = [
+    activePackage?.tier,
+    activePackage?.category,
+    activePackage?.type,
+    activePackage?.name,
+    activePackage?.packageName,
+    client.packageType,
+    (client as any).memberCategory,
+    (client as any).category
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (raw.includes('kids pro') || raw.includes('kid pro')) return 'Kids Pro';
+  if (raw.includes('junior')) return 'Juniors';
+  if (raw.includes('kid')) return 'Kids';
+  return 'Adult';
+};
+
+const formatSwitcherLabel = (client: Client, primaryClient?: Client | null): string => {
+  const memberId = client.memberId ? ` #${client.memberId}` : '';
+  const you = primaryClient && client.id === primaryClient.id ? ' (You)' : '';
+  return `${client.name}${memberId} - ${getClientTierBadge(client)}${you}`;
+};
+
 export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchToStore, initialTab }: MemberPortalProps = {}) {
   const { currentUser, logout } = useAuth();
   const { branding, features } = useSettings();
@@ -171,6 +201,12 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   // Navigation handler for quick shortcuts from MemberHome and MemberProfile
   const handleNavigate = (target: string) => {
+    const isPendingOnboarding = String(activeClient?.status || '').toUpperCase() === 'PENDING_ONBOARDING';
+    if (isPendingOnboarding && target.startsWith('booking')) {
+      setActiveTab('home');
+      return;
+    }
+
     if (target === 'booking') {
       setActiveTab('booking');
       const packages: any[] = Array.isArray(activeClient?.packages) ? activeClient!.packages : [];
@@ -460,6 +496,17 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     loadSiblings().catch(err => console.warn("Could not load family siblings:", err));
   }, [primaryClient?.id, primaryClient?.phone, primaryClient?.linkedClientIds, (primaryClient as any)?.parentId]);
 
+  const isPendingOnboarding = String(activeClient?.status || primaryClient?.status || '').toUpperCase() === 'PENDING_ONBOARDING';
+  const visibleNavItems = isPendingOnboarding
+    ? filteredNavItems.filter(item => item.tab !== 'booking')
+    : filteredNavItems;
+
+  useEffect(() => {
+    if (isPendingOnboarding && activeTab === 'booking') {
+      setActiveTab('home');
+    }
+  }, [isPendingOnboarding, activeTab]);
+
   if (isGuest) {
     return <GuestPortal onSwitchToCRM={onSwitchToCRM || (() => {})} />;
   }
@@ -509,23 +556,30 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
           {primaryClient && linkedClients.filter(c => c.id !== primaryClient.id).length > 0 && (
             <div className="flex items-center gap-1.5">
               <Users className="h-4 w-4 text-muted-foreground shrink-0" />
-              <Select value={selectedClientId} onValueChange={(val) => setSelectedClientId(val || '')}>
+              <Select
+                value={selectedClientId}
+                onValueChange={(val) => {
+                  const next = [primaryClient, ...linkedClients].find(c => c?.id === val);
+                  if (next) setActiveClient(next);
+                  setSelectedClientId(val || '');
+                }}
+              >
                 <SelectTrigger className="h-8 text-[11px] font-semibold bg-background border-border max-w-[140px] truncate px-2.5">
                   <span className="truncate">
                     {activeClient 
-                      ? `${activeClient.name}${activeClient.memberId ? ` #${activeClient.memberId}` : ''}${activeClient.id === primaryClient.id ? ' (You)' : ''}`
-                      : `${primaryClient.name} (You)`}
+                      ? formatSwitcherLabel(activeClient, primaryClient)
+                      : formatSwitcherLabel(primaryClient, primaryClient)}
                   </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={primaryClient.id}>
-                    {primaryClient.name}{primaryClient.memberId ? ` #${primaryClient.memberId}` : ''} (You)
+                    {formatSwitcherLabel(primaryClient, primaryClient)}
                   </SelectItem>
                   {linkedClients
                     .filter(c => c.id !== primaryClient.id)
                     .map(c => (
                       <SelectItem key={c.id} value={c.id}>
-                        {c.name}{c.memberId ? ` #${c.memberId}` : ''}
+                        {formatSwitcherLabel(c, primaryClient)}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -663,8 +717,38 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-background/90 border-t border-border/60 z-50 backdrop-blur-xl pb-safe">
+        {primaryClient && linkedClients.filter(c => c.id !== primaryClient.id).length > 0 && (
+          <div className="max-w-md mx-auto px-3 pt-2">
+            <Select
+              value={selectedClientId}
+              onValueChange={(val) => {
+                const next = [primaryClient, ...linkedClients].find(c => c?.id === val);
+                if (next) setActiveClient(next);
+                setSelectedClientId(val || '');
+              }}
+            >
+              <SelectTrigger className="h-9 w-full bg-card border-border text-xs font-semibold">
+                <Users className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Switch family profile" />
+              </SelectTrigger>
+              <SelectContent>
+                {[primaryClient, ...linkedClients].filter(Boolean).map(c => (
+                  <SelectItem key={c!.id} value={c!.id}>
+                    {formatSwitcherLabel(c!, primaryClient)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {isPendingOnboarding && (
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 rounded-xl text-xs font-semibold shadow-sm">
+            Your account is pending activation. Visit the front desk to complete registration.
+          </div>
+        )}
         <div className="flex justify-around items-stretch max-w-md mx-auto h-16">
-          {filteredNavItems.map(({ tab, label, icon }) => {
+          {visibleNavItems.map(({ tab, label, icon }) => {
             const isActive = activeTab === tab;
             return (
               <button

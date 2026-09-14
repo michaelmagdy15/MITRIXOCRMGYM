@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useClasses } from '../hooks/useClasses';
 import { ClassAnalytics } from './ClassAnalytics';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, getDocs, doc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, setDoc, arrayUnion, arrayRemove, query, where } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { User, Client } from '../types';
 import { ClassSchedule } from '../types/class';
@@ -41,9 +41,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAppContext } from '../context';
 import { format, addWeeks, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
-import { safeFormatDate, safeFormatTime, toValidDate } from '../utils/dateUtils';
+import { safeFormatDate, safeFormatTime, safeFormatDistanceToNow, toValidDate } from '../utils/dateUtils';
 import { getSessionAllowedTiers, toCanonicalTier, CanonicalTier } from '../utils/memberCategories';
 import { resolveAttendee } from '../utils/attendeeUtils';
+import { toast } from 'sonner';
 
 export const TIER_OPTIONS: { id: CanonicalTier; label: string }[] = [
   { id: 'KIDS', label: 'Kids Standard' },
@@ -113,6 +114,8 @@ export const ClassManager: React.FC = () => {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [selectedMemberToAdd, setSelectedMemberToAdd] = useState<string>('');
+  const [memberSearchTerm, setMemberSearchTerm] = useState('');
+  const [cancelledBookings, setCancelledBookings] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchCoaches = async () => {
@@ -142,6 +145,43 @@ export const ClassManager: React.FC = () => {
     }
   }, [classes]);
 
+  useEffect(() => {
+    if (!isRosterOpen || !rosterClass?.id) {
+      setCancelledBookings([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadCancelledBookings = async () => {
+      try {
+        const q = query(
+          collection(db, 'classBookings'),
+          where('classId', '==', rosterClass.id),
+          where('status', '==', 'cancelled')
+        );
+        const snap = await getDocs(q);
+        if (!cancelled) {
+          const rows = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a: any, b: any) => {
+              const aTime = toValidDate(a.cancelledAt)?.getTime() || 0;
+              const bTime = toValidDate(b.cancelledAt)?.getTime() || 0;
+              return bTime - aTime;
+            });
+          setCancelledBookings(rows);
+        }
+      } catch (err) {
+        console.error('[ClassManager] Error loading cancelled bookings:', err);
+        toast.error('Could not load cancelled bookings for this roster.');
+      }
+    };
+
+    loadCancelledBookings();
+    return () => {
+      cancelled = true;
+    };
+  }, [isRosterOpen, rosterClass?.id]);
+
   // Dynamic Categories from Base + Loaded Classes
   const dynamicCategories = useMemo(() => {
     const catSet = new Set<string>(BASE_CATEGORIES);
@@ -150,6 +190,23 @@ export const ClassManager: React.FC = () => {
     });
     return Array.from(catSet);
   }, [classes]);
+
+  const manualMemberOptions = useMemo(() => {
+    const enrolled = new Set([...(rosterClass?.attendees || []), ...(rosterClass?.waitlist || [])].map(String));
+    const q = memberSearchTerm.trim().toLowerCase();
+    const source = clients.filter(c => !enrolled.has(c.id) && (!c.memberId || !enrolled.has(String(c.memberId))));
+    if (!q) return source.slice(0, 50);
+
+    return source.filter(c => {
+      const haystack = [
+        c.name,
+        c.phone,
+        c.memberId,
+        (c as any).normalized_phone
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    }).slice(0, 50);
+  }, [clients, rosterClass?.attendees, rosterClass?.waitlist, memberSearchTerm]);
 
   const openCreateDialog = () => {
     setEditingClass(null);
@@ -451,14 +508,16 @@ export const ClassManager: React.FC = () => {
     }
   };
 
-  const handleManualAddMember = async () => {
-    if (!rosterClass || !selectedMemberToAdd) return;
-    setActionLoadingId('manual-add');
+  const handleManualAddMember = async (clientIdOverride?: string) => {
+    const memberIdToAdd = clientIdOverride || selectedMemberToAdd;
+    if (!rosterClass || !memberIdToAdd) return;
+    setActionLoadingId(clientIdOverride ? `reenroll-${memberIdToAdd}` : 'manual-add');
 
     try {
       const token = await auth.currentUser?.getIdToken();
       let resOk = false;
       let errorMsg = '';
+      const selectedClient = clients.find(c => c.id === memberIdToAdd || c.memberId === memberIdToAdd);
 
       try {
         const res = await fetch('/api/classes/book', {
@@ -470,10 +529,10 @@ export const ClassManager: React.FC = () => {
           body: JSON.stringify({
             classId: rosterClass.id,
             action: 'join',
-            clientId: selectedMemberToAdd
+            clientId: memberIdToAdd
           })
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
           resOk = true;
         } else {
@@ -490,18 +549,18 @@ export const ClassManager: React.FC = () => {
         if (shouldOverride) {
           const classRef = doc(db, 'classSchedules', rosterClass.id);
           await updateDoc(classRef, {
-            attendees: arrayUnion(selectedMemberToAdd)
+            attendees: arrayUnion(memberIdToAdd)
           });
-          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${selectedMemberToAdd}`);
+          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${memberIdToAdd}`);
           await setDoc(bookingDocRef, {
             classId: rosterClass.id,
             className: rosterClass.name,
             classDate: rosterClass.date || (rosterClass.startTime ? rosterClass.startTime.substring(0, 10) : ''),
             classTime: rosterClass.time || (rosterClass.startTime ? rosterClass.startTime.substring(11, 16) : ''),
             classStartTime: rosterClass.startTime || '',
-            clientId: selectedMemberToAdd,
-            memberName: clients.find(c => c.id === selectedMemberToAdd)?.name || 'Member',
-            memberPhone: clients.find(c => c.id === selectedMemberToAdd)?.phone || '',
+            clientId: memberIdToAdd,
+            memberName: selectedClient?.name || 'Member',
+            memberPhone: selectedClient?.phone || '',
             status: 'booked',
             staffOverride: true,
             admittedBy: 'Staff Override',
@@ -514,15 +573,18 @@ export const ClassManager: React.FC = () => {
         // Fallback: direct union
         const classRef = doc(db, 'classSchedules', rosterClass.id);
         await updateDoc(classRef, {
-          attendees: arrayUnion(selectedMemberToAdd)
+          attendees: arrayUnion(memberIdToAdd)
         });
       }
 
       setIsAddMemberOpen(false);
       setSelectedMemberToAdd('');
+      setMemberSearchTerm('');
+      setCancelledBookings(prev => prev.filter(b => (b.clientId || b.memberId) !== memberIdToAdd));
+      toast.success(`${selectedClient?.name || 'Member'} enrolled successfully.`);
     } catch (err: any) {
       console.error("Error adding member to class:", err);
-      alert(err?.message || "Failed to add member.");
+      toast.error(err?.message || "Failed to add member.");
     } finally {
       setActionLoadingId(null);
     }
@@ -971,7 +1033,50 @@ export const ClassManager: React.FC = () => {
               {isAddMemberOpen && (
                 <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 space-y-2 animate-in fade-in-50 duration-200">
                   <Label className="text-xs font-bold uppercase text-primary">Manually Add Member to Class</Label>
-                  <div className="flex gap-2">
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        value={memberSearchTerm}
+                        onChange={(e) => setMemberSearchTerm(e.target.value)}
+                        placeholder="Type name, phone, or member ID..."
+                        className="h-9 pl-8 text-xs bg-background"
+                      />
+                    </div>
+                    <div className="max-h-52 overflow-y-auto rounded-xl border bg-background divide-y">
+                      {manualMemberOptions.length === 0 ? (
+                        <div className="p-3 text-xs text-muted-foreground text-center">
+                          {memberSearchTerm.trim() ? 'No matching members found.' : 'Type to search the member database.'}
+                        </div>
+                      ) : (
+                        manualMemberOptions.map(c => {
+                          const isSelected = selectedMemberToAdd === c.id;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => setSelectedMemberToAdd(c.id)}
+                              className={`w-full p-2.5 text-left flex items-center justify-between gap-3 hover:bg-muted/50 transition-colors ${
+                                isSelected ? 'bg-primary/10' : ''
+                              }`}
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-xs font-bold text-foreground truncate">
+                                  {c.name} {c.memberId ? `(#${c.memberId})` : ''}
+                                </span>
+                                <span className="block text-[11px] text-muted-foreground truncate">{c.phone || 'No phone'}</span>
+                              </span>
+                              {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Showing up to 50 results. Narrow the search for large member lists.
+                    </p>
+                    <div className="flex justify-end">
+                    {/* Legacy unfiltered Select removed.
                     <Select value={selectedMemberToAdd} onValueChange={(val) => { if (val) setSelectedMemberToAdd(val); }}>
                       <SelectTrigger className="h-9 text-xs bg-background flex-1">
                         <SelectValue placeholder="Select member from database..." />
@@ -984,14 +1089,16 @@ export const ClassManager: React.FC = () => {
                         ))}
                       </SelectContent>
                     </Select>
+                    */}
                     <Button
                       size="sm"
                       disabled={!selectedMemberToAdd || actionLoadingId === 'manual-add'}
-                      onClick={handleManualAddMember}
+                      onClick={() => handleManualAddMember()}
                       className="h-9 text-xs font-bold"
                     >
                       {actionLoadingId === 'manual-add' ? 'Adding...' : 'Enroll'}
                     </Button>
+                  </div>
                   </div>
                 </div>
               )}
@@ -1187,6 +1294,61 @@ export const ClassManager: React.FC = () => {
                             className="h-7 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white"
                           >
                             Promote to Class
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {cancelledBookings.length > 0 && (
+                <div className="space-y-2 pt-2 border-t">
+                  <p className="text-xs font-bold uppercase text-rose-600 tracking-wider">
+                    Cancelled ({cancelledBookings.length})
+                  </p>
+                  <div className="divide-y border rounded-xl overflow-hidden bg-card">
+                    {cancelledBookings.map((booking) => {
+                      const clientId = booking.clientId || booking.memberId || '';
+                      const { client, displayName, displayPhone } = resolveAttendee({
+                        clientId,
+                        memberId: booking.memberId,
+                        memberName: booking.memberName,
+                        clientName: booking.clientName,
+                        phone: booking.memberPhone || booking.phone
+                      }, clients);
+                      const reEnrollId = client?.id || clientId;
+                      const isBusy = actionLoadingId === `reenroll-${reEnrollId}`;
+
+                      return (
+                        <div key={booking.id} className="p-3 flex items-center justify-between gap-2 hover:bg-muted/30">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-xs text-foreground truncate">{displayName}</p>
+                              <Badge variant="outline" className="border-rose-500/40 text-rose-600 bg-rose-500/10 text-[9px] px-1.5 py-0 h-5">
+                                Cancelled
+                              </Badge>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-muted-foreground">
+                              {displayPhone && (
+                                <a href={`tel:${displayPhone}`} className="hover:text-primary transition-colors flex items-center gap-1">
+                                  <Phone className="h-3 w-3" /> {displayPhone}
+                                </a>
+                              )}
+                              <span>
+                                {safeFormatDistanceToNow(booking.cancelledAt, { addSuffix: true }, 'Recently')}
+                              </span>
+                            </div>
+                          </div>
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!reEnrollId || isBusy}
+                            onClick={() => handleManualAddMember(reEnrollId)}
+                            className="h-7 text-xs font-bold border-rose-500/30 text-rose-600 hover:bg-rose-600 hover:text-white"
+                          >
+                            {isBusy ? 'Re-enrolling...' : 'Re-enroll'}
                           </Button>
                         </div>
                       );

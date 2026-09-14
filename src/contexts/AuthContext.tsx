@@ -41,6 +41,7 @@ interface AuthContextType {
   createClientAccount: (clientId: string, memberId: string, clientName: string, phone?: string) => Promise<{ uid: string }>;
   submitSignUpRequest: (name: string, email: string, role: UserRole, message?: string) => Promise<void>;
   registerFreeUser: (email: string, password: string, profileData: any) => Promise<string>;
+  activateFromPending: (clientId: string, updates?: Partial<Client>) => Promise<void>;
   approveSignUpRequest: (id: string, pending: PendingAccount) => Promise<void>;
   denySignUpRequest: (id: string) => Promise<void>;
   submitPasswordResetRequest: (email: string, name?: string) => Promise<void>;
@@ -920,7 +921,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: clientRef.id,
       name: profileData.name,
       phone: profileData.phone || '',
-      status: 'Lead',
+      status: 'PENDING_ONBOARDING',
       stage: 'New',
       memberId: newMemberId,
       portalUserId: uid,
@@ -934,6 +935,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       fitnessTarget: profileData.fitnessTarget || 'Improve Lifestyle',
       dateOfBirth: profileData.age || '', // Storing age here for now
       referralCode: `REF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      registeredAt: new Date().toISOString(),
       createdAt: new Date().toISOString()
     };
     await setDoc(clientRef, newClient, { merge: true });
@@ -951,6 +953,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Auto-login happens automatically by Firebase onAuthStateChanged
     return clientRef.id;
+  };
+
+  const activateFromPending = async (clientId: string, updates: Partial<Client> = {}) => {
+    if (!clientId) throw new Error('Missing client id.');
+    await updateDoc(doc(db, 'clients', clientId), {
+      ...updates,
+      status: 'Active',
+      activatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    await addDoc(collection(db, 'auditLogs'), {
+      action: 'UPDATE',
+      entityType: 'CLIENT',
+      entityId: clientId,
+      details: 'Activated pending onboarding member',
+      timestamp: new Date().toISOString(),
+      userId: currentUser?.id || 'system',
+      userName: currentUser?.name || currentUser?.email || 'System',
+    });
   };
 
   const memoizedCurrentUser = useMemo(() => {
@@ -980,6 +1001,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     activatePendingUser,
     submitSignUpRequest,
     registerFreeUser,
+    activateFromPending,
     approveSignUpRequest,
     denySignUpRequest,
     submitPasswordResetRequest,

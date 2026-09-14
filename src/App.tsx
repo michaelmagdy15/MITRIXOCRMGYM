@@ -56,6 +56,7 @@ import CommandPalette from './components/CommandPalette';
 import OnboardingWizard from './OnboardingWizard';
 import AdminHub from './AdminHub';
 import AdminRequests from './admin/AdminRequests';
+import PendingApprovals from './PendingApprovals';
 import SuperAdminHub from './SuperAdminHub';
 import AdvancedReports from './AdvancedReports';
 import CallCenter from './CallCenter';
@@ -631,6 +632,12 @@ function AppContent() {
       show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
     },
     {
+      id: 'pending-approvals',
+      label: 'Pending Approvals',
+      icon: Clock,
+      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+    },
+    {
       id: 'class-manager',
       label: 'Class Manager',
       icon: Target,
@@ -1158,6 +1165,10 @@ function AppContent() {
 
             <TabsContent value="requests" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <AdminRequests />
+            </TabsContent>
+
+            <TabsContent value="pending-approvals" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <PendingApprovals />
             </TabsContent>
 
             {features.classBookingSystem === true && (

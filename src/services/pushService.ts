@@ -43,6 +43,7 @@ export async function saveExpoPushToken(userId: string, token: string, clientRec
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
       expoPushToken: token,
+      fcmToken: token,
       lastTokenUpdate: new Date().toISOString()
     });
     console.log('[Push Service] Token saved to user profile:', token);
@@ -51,7 +52,8 @@ export async function saveExpoPushToken(userId: string, token: string, clientRec
     if (clientRecordId) {
       const clientRef = doc(db, 'clients', clientRecordId);
       await updateDoc(clientRef, {
-        expoPushToken: token
+        expoPushToken: token,
+        fcmToken: token
       });
       console.log('[Push Service] Token saved to client profile:', token);
     }

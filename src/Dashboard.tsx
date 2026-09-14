@@ -54,6 +54,7 @@ import { Target, Users, CalendarDays, AlertTriangle, Gift, Settings, ChevronLeft
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import OnlineUsers from './components/OnlineUsers';
 import { Textarea } from '@/components/ui/textarea';
+import TodayClassesWidget from './components/dashboard/TodayClassesWidget';
 
 function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], renderItem: (item: any) => React.ReactNode, itemsPerPage?: number }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -1092,6 +1093,8 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      <TodayClassesWidget />
 
       {/* Branch Attendance Heatmap */}
       {attendanceHeatmap.length > 0 && (

@@ -454,3 +454,6 @@ export const checkExpiredMemberships = onSchedule(
 // -------------------------------------------------------------
 export { onBookingCancelled } from "./classes/waitlist";
 export { processNoShows } from "./classes/noShowJob";
+export { onBookingCreated, onBookingStatusChange } from "./notifications/bookingNotifications";
+export { sendClassReminders } from "./notifications/classReminder";
+export { onClientStatusChangeNotification } from "./notifications/statusChangeNotification";

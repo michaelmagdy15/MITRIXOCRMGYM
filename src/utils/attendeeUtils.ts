@@ -29,8 +29,12 @@ export function resolveAttendee(attendee: any, clients: Client[]): ResolvedAtten
     ? attendee 
     : (attendee.memberId || attendee.clientId || attendee.id || attendee.userId || '');
   
-  const attendeeObjName = typeof attendee === 'object' ? (attendee.name || attendee.clientName) : '';
-  const attendeeObjPhone = typeof attendee === 'object' ? attendee.phone : '';
+  const attendeeObjName = typeof attendee === 'object'
+    ? (attendee.name || attendee.memberName || attendee.clientName || attendee.guestName)
+    : '';
+  const attendeeObjPhone = typeof attendee === 'object'
+    ? (attendee.phone || attendee.memberPhone || attendee.clientPhone)
+    : '';
 
   // 1. Direct match by document id
   let client = clients.find(c => c.id === rawId);

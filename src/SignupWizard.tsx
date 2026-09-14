@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Clock } from 'lucide-react';
 import { useAuth } from './contexts/AuthContext';
 import { useSettings } from './contexts/SettingsContext';
 
@@ -18,6 +18,7 @@ export default function SignupWizard({ onBack }: SignupWizardProps) {
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isPendingSuccess, setIsPendingSuccess] = useState(false);
 
   // Form State
   const [name, setName] = useState('');
@@ -39,12 +40,36 @@ export default function SignupWizard({ onBack }: SignupWizardProps) {
         name,
         phone,
       });
-      // Registration successful! Firebase auth state will change and App.tsx will navigate away
+      setIsPendingSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Failed to register account.');
       setIsLoading(false);
     }
   };
+
+  if (isPendingSuccess) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <Card className="w-full max-w-md shadow-2xl overflow-hidden relative animate-in fade-in slide-in-from-bottom-6 duration-300">
+          <div className="absolute top-0 left-0 h-1 bg-amber-500 w-full" />
+          <CardContent className="p-8 text-center space-y-5">
+            <div className="mx-auto h-14 w-14 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center">
+              <Clock className="h-7 w-7" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight">Account Pending Activation</h1>
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                Your account was created. Visit the front desk to complete registration and activate your member pass.
+              </p>
+            </div>
+            <Button className="w-full h-11 rounded-xl font-bold" onClick={onBack}>
+              Back to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">

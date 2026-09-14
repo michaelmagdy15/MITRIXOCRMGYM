@@ -91,6 +91,30 @@ function calculateStreak(records: { date: string }[]): { current: number; best: 
   return { current, best };
 }
 
+const getClientTierBadge = (client?: Client | null): string => {
+  if (!client) return 'Adult';
+  const packages: any[] = Array.isArray(client.packages) ? client.packages : [];
+  const activePackage = packages.find((pkg) => {
+    const status = String(pkg?.status || '').toLowerCase();
+    return status !== 'expired' && status !== 'inactive' && status !== 'cancelled';
+  }) || packages[0];
+  const raw = [
+    activePackage?.tier,
+    activePackage?.category,
+    activePackage?.type,
+    activePackage?.name,
+    activePackage?.packageName,
+    client.packageType,
+    (client as any).memberCategory,
+    (client as any).category
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (raw.includes('kids pro') || raw.includes('kid pro')) return 'Kids Pro';
+  if (raw.includes('junior')) return 'Juniors';
+  if (raw.includes('kid')) return 'Kids';
+  return 'Adult';
+};
+
 interface QuickShortcut {
   icon: React.ReactNode;
   label: string;
@@ -326,6 +350,41 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
   }
 
   const memberQrValue = client.memberId || client.id;
+  const normalizedStatus = String(client.status || '').toUpperCase();
+  const isPendingOnboarding = normalizedStatus === 'PENDING_ONBOARDING';
+
+  if (isPendingOnboarding) {
+    return (
+      <div className="space-y-5 animate-in fade-in duration-200">
+        <Card className="border border-amber-500/30 bg-amber-500/10 rounded-3xl shadow-sm overflow-hidden">
+          <CardContent className="p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-amber-500/15 text-amber-600 flex items-center justify-center shrink-0">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Pending Activation</p>
+                <h2 className="text-xl font-black text-foreground mt-1 truncate">{client.name}</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed mt-2">
+                  Your account is pending activation. Visit the front desk to complete registration and activate your pass.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-3">
+                <p className="text-[10px] uppercase font-bold text-muted-foreground">Member ID</p>
+                <p className="font-mono text-lg font-black text-foreground">{client.memberId ? `#${client.memberId}` : 'Pending'}</p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-3">
+                <p className="text-[10px] uppercase font-bold text-muted-foreground">Status</p>
+                <p className="font-black text-amber-600">Pending</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
@@ -392,6 +451,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
                   >
                     <User className="h-3 w-3" />
                     <span>{member!.name}</span>
+                    <span className="text-[10px] opacity-80">{getClientTierBadge(member)}</span>
                     {member!.memberId && (
                       <span className="text-[10px] opacity-75">#{member!.memberId}</span>
                     )}
@@ -562,17 +622,24 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
         {/* Subtle accent border */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
         
-        {/* Top Header: Brand & Member ID */}
-        <div className="flex justify-between items-center pb-3 border-b border-zinc-800/80">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-            <span className="text-[11px] font-bold tracking-widest uppercase text-zinc-300">
-              {branding?.companyName || 'STRIKE'}
+        {/* Top Header: Member Name & Prominent ID */}
+        <div className="pb-3 border-b border-zinc-800/80">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                <span className="text-[11px] font-bold tracking-widest uppercase text-zinc-300">
+                  {branding?.companyName || 'STRIKE'}
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-white tracking-tight truncate leading-snug">
+                {client.name}
+              </h3>
+            </div>
+            <span className="font-mono text-2xl font-black text-white leading-none shrink-0 tracking-normal">
+              {client.memberId ? `#${client.memberId}` : 'MEMBER'}
             </span>
           </div>
-          <span className="font-mono text-[11px] font-semibold text-zinc-300 bg-zinc-800/80 px-2 py-0.5 rounded-md border border-zinc-700/60">
-            {client.memberId ? `#${client.memberId}` : 'MEMBER'}
-          </span>
         </div>
 
         {/* Card Body: Member Info + QR Code */}
@@ -581,9 +648,9 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
           <div className="flex-1 min-w-0 space-y-2.5">
             <div>
               <p className="text-[9px] font-semibold text-zinc-400 uppercase tracking-wider">Member Pass</p>
-              <h3 className="text-lg font-bold text-white tracking-tight truncate leading-snug">
-                {client.name}
-              </h3>
+              <p className="text-sm font-bold text-white tracking-tight truncate leading-snug">
+                {getClientTierBadge(client)} Membership
+              </p>
             </div>
 
             <div className="space-y-1 text-xs">
@@ -631,7 +698,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
                         fgColor="#09090b"
                       />
                     </div>
-                    <p className="font-mono text-xs font-semibold text-muted-foreground bg-muted py-1 px-3 rounded-lg inline-block">
+                    <p className="font-mono text-lg font-black text-foreground bg-muted py-1 px-3 rounded-lg inline-block">
                       {client.memberId ? `#${client.memberId}` : client.name}
                     </p>
                   </div>

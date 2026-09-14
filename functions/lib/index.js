@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.processNoShows = exports.onBookingCancelled = exports.checkExpiredMemberships = exports.onPaymentUpdated = exports.onClientAssigned = exports.onLeadCreated = exports.metaWebhook = exports.upgradeMemberPackage = exports.forcePasswordReset = void 0;
+exports.onClientStatusChangeNotification = exports.sendClassReminders = exports.onBookingStatusChange = exports.onBookingCreated = exports.processNoShows = exports.onBookingCancelled = exports.checkExpiredMemberships = exports.onPaymentUpdated = exports.onClientAssigned = exports.onLeadCreated = exports.metaWebhook = exports.upgradeMemberPackage = exports.forcePasswordReset = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -424,4 +424,11 @@ var waitlist_1 = require("./classes/waitlist");
 Object.defineProperty(exports, "onBookingCancelled", { enumerable: true, get: function () { return waitlist_1.onBookingCancelled; } });
 var noShowJob_1 = require("./classes/noShowJob");
 Object.defineProperty(exports, "processNoShows", { enumerable: true, get: function () { return noShowJob_1.processNoShows; } });
+var bookingNotifications_1 = require("./notifications/bookingNotifications");
+Object.defineProperty(exports, "onBookingCreated", { enumerable: true, get: function () { return bookingNotifications_1.onBookingCreated; } });
+Object.defineProperty(exports, "onBookingStatusChange", { enumerable: true, get: function () { return bookingNotifications_1.onBookingStatusChange; } });
+var classReminder_1 = require("./notifications/classReminder");
+Object.defineProperty(exports, "sendClassReminders", { enumerable: true, get: function () { return classReminder_1.sendClassReminders; } });
+var statusChangeNotification_1 = require("./notifications/statusChangeNotification");
+Object.defineProperty(exports, "onClientStatusChangeNotification", { enumerable: true, get: function () { return statusChangeNotification_1.onClientStatusChangeNotification; } });
 //# sourceMappingURL=index.js.map
