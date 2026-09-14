@@ -37,6 +37,7 @@ exports.writeMemberNotification = writeMemberNotification;
 exports.getClientPushToken = getClientPushToken;
 exports.sendExpoPush = sendExpoPush;
 const logger = __importStar(require("firebase-functions/logger"));
+const MEMBER_ALERTS_CHANNEL_ID = "member-alerts";
 async function writeMemberNotification(db, clientId, payload) {
     if (!clientId)
         return;
@@ -82,6 +83,9 @@ async function sendExpoPush(token, title, body, data) {
                 title,
                 body,
                 sound: "default",
+                priority: "high",
+                channelId: MEMBER_ALERTS_CHANNEL_ID,
+                interruptionLevel: "active",
                 data: data || {},
             }),
         });

@@ -33,6 +33,22 @@ function getTenantBrandedName(): string {
   }
 }
 
+const MEMBER_ALERTS_CHANNEL_ID = 'member-alerts';
+
+function withAudibleDefaults(message: Record<string, any>) {
+  return {
+    priority: 'high',
+    sound: 'default',
+    channelId: MEMBER_ALERTS_CHANNEL_ID,
+    ...message,
+    data: {
+      ...(message.data || {}),
+      channelId: message.channelId || MEMBER_ALERTS_CHANNEL_ID,
+      sound: message.sound || 'default',
+    },
+  };
+}
+
 /**
  * Saves the Expo Push Token to the user's account and client record in Firestore.
  */
@@ -83,14 +99,13 @@ export async function sendPushNotification(expoPushToken: string, title: string,
         ...authHeaders,
       },
       body: JSON.stringify({
-        messages: [{
+        messages: [withAudibleDefaults({
           to: expoPushToken,
-          sound: 'default',
           title: finalTitle,
           body,
           data,
           categoryId: data?.categoryId || undefined
-        }]
+        })]
       }),
     });
     const resData = await response.json();
@@ -120,9 +135,8 @@ export async function notifyAdmins(title: string, body: string, data?: any) {
       return;
     }
 
-    const messages = tokens.map(token => ({
+    const messages = tokens.map(token => withAudibleDefaults({
       to: token,
-      sound: 'default',
       title,
       body,
       data,
@@ -208,9 +222,8 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
     let successCount = 0;
     const authHeaders = await getAuthHeader();
     for (const chunk of chunks) {
-      const messages = chunk.map(token => ({
+      const messages = chunk.map(token => withAudibleDefaults({
         to: token,
-        sound: 'default',
         title,
         body,
         data,

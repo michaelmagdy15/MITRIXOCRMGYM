@@ -354,6 +354,13 @@ service cloud.firestore {
                       request.resource.data.portalUserId == request.auth.uid
                     );
       allow delete: if isTenantAdmin();
+
+      match /notifications/{notificationId} {
+        allow read: if isTenantStaff() || isOwnClientRecord(clientId);
+        allow create: if isTenantStaff();
+        allow update: if isTenantStaff() || isOwnClientRecord(clientId);
+        allow delete: if isTenantStaff();
+      }
     }
 
     match /packages/{packageId} {
@@ -505,6 +512,17 @@ service cloud.firestore {
         isAuthenticated() && resource.data.recipientUid == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
       );
+      allow delete: if isTenantStaff();
+    }
+
+    match /systemNotifications/{notificationId} {
+      allow read, update: if isTenantStaff();
+      allow create, delete: if false;
+    }
+
+    match /memberPresence/{clientId} {
+      allow read: if isTenantStaff();
+      allow create, update: if isOwnClientRecord(clientId) && request.resource.data.clientId == clientId;
       allow delete: if isTenantStaff();
     }
 

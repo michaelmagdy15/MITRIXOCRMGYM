@@ -103,6 +103,13 @@ service cloud.firestore {
       allow create: if isStaff();
       allow update: if isStaff() || isOwner(clientId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid);
       allow delete: if isManager();
+
+      match /notifications/{notificationId} {
+        allow read: if isStaff() || ownsClientProfile(clientId);
+        allow create: if isStaff();
+        allow update: if isStaff() || ownsClientProfile(clientId);
+        allow delete: if isStaff();
+      }
     }
     
     // PAYMENTS (Financial Transactions)
@@ -226,6 +233,19 @@ service cloud.firestore {
     match /lostFoundItems/{itemId} {
       allow read: if isStaff();
       allow write: if isStaff();
+    }
+
+    // STAFF SYSTEM NOTIFICATIONS
+    match /systemNotifications/{notificationId} {
+      allow read, update: if isStaff();
+      allow create, delete: if false;
+    }
+
+    // MEMBER APP PRESENCE
+    match /memberPresence/{clientId} {
+      allow read: if isStaff();
+      allow create, update: if ownsClientProfile(clientId) && request.resource.data.clientId == clientId;
+      allow delete: if isStaff();
     }
 
     // Default deny for anything else

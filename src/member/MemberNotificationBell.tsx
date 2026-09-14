@@ -1,19 +1,33 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, doc, updateDoc, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Bell, X, Check, Megaphone, Gift, AlertTriangle, Calendar, Sparkles, Info } from 'lucide-react';
+import { AlertTriangle, Bell, Calendar, Check, Gift, Info, Megaphone, Sparkles, X } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+
+type MemberNotificationType =
+  | 'announcement'
+  | 'expiry_warning'
+  | 'session_reminder'
+  | 'birthday'
+  | 'system'
+  | 'promo'
+  | 'BOOKING_CONFIRMED'
+  | 'BOOKING_CANCELLED'
+  | 'BOOKING_NO_SHOW'
+  | 'CLASS_REMINDER'
+  | 'STATUS_CHANGED';
 
 interface MemberNotification {
   id: string;
-  type: 'announcement' | 'expiry_warning' | 'session_reminder' | 'birthday' | 'system' | 'promo';
+  type: MemberNotificationType;
   title: string;
   body: string;
   read: boolean;
   createdAt: string;
   data?: Record<string, any>;
+  source: 'client-subcollection' | 'top-level' | 'announcement';
 }
 
 const typeIcons: Record<string, React.ReactNode> = {
@@ -22,40 +36,79 @@ const typeIcons: Record<string, React.ReactNode> = {
   session_reminder: <Calendar className="h-4 w-4 text-emerald-500" />,
   birthday: <Gift className="h-4 w-4 text-pink-500" />,
   promo: <Sparkles className="h-4 w-4 text-strike-green" />,
+  BOOKING_CONFIRMED: <Calendar className="h-4 w-4 text-emerald-500" />,
+  BOOKING_CANCELLED: <AlertTriangle className="h-4 w-4 text-muted-foreground" />,
+  BOOKING_NO_SHOW: <AlertTriangle className="h-4 w-4 text-muted-foreground" />,
+  CLASS_REMINDER: <Calendar className="h-4 w-4 text-emerald-500" />,
+  STATUS_CHANGED: <Info className="h-4 w-4 text-zinc-500" />,
   system: <Info className="h-4 w-4 text-zinc-500" />,
 };
 
 interface MemberNotificationBellProps {
   clientId?: string;
+  onNavigate?: (target: string) => void;
 }
 
-export default function MemberNotificationBell({ clientId }: MemberNotificationBellProps) {
+export default function MemberNotificationBell({ clientId, onNavigate }: MemberNotificationBellProps) {
   const { currentUser } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<MemberNotification[]>([]);
+  const [clientNotifications, setClientNotifications] = useState<MemberNotification[]>([]);
+  const [topLevelNotifications, setTopLevelNotifications] = useState<MemberNotification[]>([]);
+  const [announcementNotifications, setAnnouncementNotifications] = useState<MemberNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const uid = currentUser?.id;
 
-  // Generate client-side notifications from data
   useEffect(() => {
-    if (!uid) return;
+    if (!clientId) {
+      setClientNotifications([]);
+      return;
+    }
 
-    const loadNotifications = async () => {
-      setLoading(true);
-      const generated: MemberNotification[] = [];
+    setLoading(true);
+    const q = query(
+      collection(db, 'clients', clientId, 'notifications'),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
 
-      // 1. Pull from Firestore `notifications` collection (if it exists)
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setClientNotifications(snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          type: data.type || 'system',
+          title: data.title || 'Notification',
+          body: data.body || '',
+          read: data.read || false,
+          createdAt: data.createdAt || new Date().toISOString(),
+          data: data.data,
+          source: 'client-subcollection',
+        } as MemberNotification;
+      }));
+      setLoading(false);
+    }, (err) => {
+      console.error('[Member Notifications] Error loading client notifications:', err);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [clientId]);
+
+  useEffect(() => {
+    if (!uid) {
+      setTopLevelNotifications([]);
+      return;
+    }
+
+    const loadTopLevel = async () => {
       try {
-        const q = query(
-          collection(db, 'notifications'),
-          where('recipientUid', '==', uid)
-        );
+        const q = query(collection(db, 'notifications'), where('recipientUid', '==', uid));
         const snap = await getDocs(q);
-        snap.docs.forEach(d => {
+        setTopLevelNotifications(snap.docs.map((d) => {
           const data = d.data();
-          generated.push({
+          return {
             id: d.id,
             type: data.type || 'system',
             title: data.title || 'Notification',
@@ -63,48 +116,53 @@ export default function MemberNotificationBell({ clientId }: MemberNotificationB
             read: data.read || false,
             createdAt: data.createdAt || new Date().toISOString(),
             data: data.data,
-          });
-        });
-      } catch {
-        // notifications collection may not exist yet — fine
+            source: 'top-level',
+          } as MemberNotification;
+        }));
+      } catch (err) {
+        console.warn('[Member Notifications] Could not load legacy notifications:', err);
       }
+    };
 
-      // 2. Pull active announcements as notifications
+    loadTopLevel();
+  }, [uid]);
+
+  useEffect(() => {
+    const loadAnnouncements = async () => {
       try {
         const now = new Date();
         const announcementsSnap = await getDocs(collection(db, 'announcements'));
-        announcementsSnap.docs.forEach(d => {
+        const rows: MemberNotification[] = [];
+        announcementsSnap.docs.forEach((d) => {
           const data = d.data();
           try {
             if (!data.startDate || !data.endDate) return;
             const start = parseISO(data.startDate);
             const end = parseISO(data.endDate);
             if (now >= start && now <= end) {
-              generated.push({
+              rows.push({
                 id: `ann_${d.id}`,
                 type: 'announcement',
                 title: data.title || 'Announcement',
                 body: data.body || '',
                 read: false,
                 createdAt: data.startDate,
+                source: 'announcement',
               });
             }
-          } catch { /* skip */ }
+          } catch {
+            // Ignore malformed announcement dates.
+          }
         });
-      } catch {
-        // announcements may not exist
+        setAnnouncementNotifications(rows);
+      } catch (err) {
+        console.warn('[Member Notifications] Could not load announcements:', err);
       }
-
-      // Sort newest first
-      generated.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setNotifications(generated);
-      setLoading(false);
     };
 
-    loadNotifications();
-  }, [uid]);
+    loadAnnouncements();
+  }, []);
 
-  // Close on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -115,24 +173,64 @@ export default function MemberNotificationBell({ clientId }: MemberNotificationB
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const notifications = useMemo(() => {
+    return [...clientNotifications, ...topLevelNotifications, ...announcementNotifications]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [clientNotifications, topLevelNotifications, announcementNotifications]);
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const markAsRead = async (id: string) => {
-    // Only mark Firestore-sourced notifications (not announcement-derived ones)
-    if (!id.startsWith('ann_')) {
-      try {
-        await updateDoc(doc(db, 'notifications', id), { read: true });
-      } catch { /* ignore */ }
+  const markAsRead = async (notification: MemberNotification) => {
+    if (notification.read) return;
+    try {
+      if (notification.source === 'client-subcollection' && clientId) {
+        await updateDoc(doc(db, 'clients', clientId, 'notifications', notification.id), { read: true });
+      } else if (notification.source === 'top-level') {
+        await updateDoc(doc(db, 'notifications', notification.id), { read: true });
+      }
+    } catch (err) {
+      console.error('[Member Notifications] Failed to mark notification read:', err);
     }
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
 
   const markAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    // Batch update Firestore ones
-    notifications.filter(n => !n.read && !n.id.startsWith('ann_')).forEach(n => {
-      updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {});
+    notifications.filter(n => !n.read).forEach((n) => {
+      markAsRead(n);
     });
+  };
+
+  const getNotificationTarget = (notification: MemberNotification) => {
+    const target = String(notification.data?.target || notification.data?.screen || notification.data?.tab || '').toLowerCase();
+    const url = String(notification.data?.url || notification.data?.deeplink || '').toLowerCase();
+    const type = notification.type;
+
+    if (target.includes('membership') || url.includes('membership') || type === 'expiry_warning') return 'profile-membership';
+    if (target.includes('profile') || url.includes('profile') || type === 'STATUS_CHANGED') return 'profile';
+    if (target.includes('attendance') || url.includes('attendance')) return 'profile-attendance';
+    if (target.includes('pt') || target.includes('session') || url.includes('session')) return 'booking-pt';
+    if (
+      target.includes('booking') ||
+      target.includes('class') ||
+      url.includes('booking') ||
+      url.includes('class') ||
+      type === 'BOOKING_CONFIRMED' ||
+      type === 'BOOKING_CANCELLED' ||
+      type === 'BOOKING_NO_SHOW' ||
+      type === 'CLASS_REMINDER' ||
+      type === 'session_reminder'
+    ) {
+      return 'booking-group';
+    }
+    return null;
+  };
+
+  const handleNotificationClick = (notification: MemberNotification) => {
+    markAsRead(notification);
+    const target = getNotificationTarget(notification);
+    if (target && onNavigate) {
+      onNavigate(target);
+      setIsOpen(false);
+    }
   };
 
   const formatTime = (dateStr: string) => {
@@ -162,7 +260,6 @@ export default function MemberNotificationBell({ clientId }: MemberNotificationB
 
       {isOpen && (
         <div className="fixed top-[70px] left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:w-80 md:mt-2 rounded-xl border bg-card shadow-2xl z-[60] overflow-hidden animate-in fade-in-0 zoom-in-95">
-          {/* Header */}
           <div className="flex items-center justify-between p-4 border-b bg-muted/30">
             <h3 className="font-bold text-sm">Notifications</h3>
             <div className="flex items-center gap-2">
@@ -180,7 +277,6 @@ export default function MemberNotificationBell({ clientId }: MemberNotificationB
             </div>
           </div>
 
-          {/* Notification List */}
           <div className="max-h-[400px] overflow-y-auto no-scrollbar">
             {loading ? (
               <div className="flex justify-center py-8">
@@ -196,11 +292,11 @@ export default function MemberNotificationBell({ clientId }: MemberNotificationB
               <div className="divide-y divide-border">
                 {notifications.map(n => (
                   <div
-                    key={n.id}
+                    key={`${n.source}-${n.id}`}
                     className={`flex gap-3 p-3 transition-colors cursor-pointer ${
                       n.read ? 'opacity-60' : 'bg-primary/5 hover:bg-primary/10'
                     }`}
-                    onClick={() => markAsRead(n.id)}
+                    onClick={() => handleNotificationClick(n)}
                   >
                     <div className="mt-0.5 rounded-full bg-background p-1.5 shadow-sm border shrink-0">
                       {typeIcons[n.type] || typeIcons.system}

@@ -89,6 +89,7 @@ function AppContent() {
   const [showPortalOverride, setShowPortalOverride] = React.useState<'crm' | 'member' | null>(null);
   const [clientViewMode, setClientViewMode] = React.useState<'portal' | 'store'>('portal');
   const [memberPortalInitialTab, setMemberPortalInitialTab] = React.useState<string>('home');
+  const [notificationTabCounts, setNotificationTabCounts] = React.useState<Record<string, number>>({});
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
 
@@ -108,6 +109,16 @@ function AppContent() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  React.useEffect(() => {
+    const handleNotificationTabCounts = (event: Event) => {
+      const detail = (event as CustomEvent<Record<string, number>>).detail || {};
+      setNotificationTabCounts(detail);
+    };
+
+    window.addEventListener('crm:notification-tab-counts', handleNotificationTabCounts);
+    return () => window.removeEventListener('crm:notification-tab-counts', handleNotificationTabCounts);
   }, []);
 
   const isStrike = React.useMemo(() => {
@@ -793,6 +804,7 @@ function AppContent() {
             {visibleNavItems.map(item => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
+              const notificationCount = notificationTabCounts[item.id] || 0;
               return (
                 <button
                   key={item.id}
@@ -805,6 +817,15 @@ function AppContent() {
                   title={isSidebarCollapsed ? item.label : undefined}
                 >
                   <Icon className="h-5 w-5 flex-shrink-0" />
+                  {notificationCount > 0 && (
+                    <span className={`absolute flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground ring-2 ring-card ${
+                      isSidebarCollapsed
+                        ? 'right-2 top-1.5 h-3.5 min-w-3.5 px-0.5'
+                        : 'right-2 top-2 h-4 min-w-4 px-1'
+                    }`}>
+                      {notificationCount > 9 ? '9+' : notificationCount}
+                    </span>
+                  )}
                   <span className={`text-sm font-medium transition-all duration-300 overflow-hidden whitespace-nowrap ${
                     isSidebarCollapsed 
                       ? 'opacity-0 max-w-0 ms-0 pointer-events-none' 
@@ -917,6 +938,7 @@ function AppContent() {
             {visibleNavItems.map(item => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
+              const notificationCount = notificationTabCounts[item.id] || 0;
               return (
                 <button
                   key={item.id}
@@ -931,7 +953,12 @@ function AppContent() {
                   }`}
                 >
                   <Icon className="h-5 w-5 flex-shrink-0" />
-                  <span className="text-sm truncate">{item.label}</span>
+                  <span className="text-sm truncate flex-1">{item.label}</span>
+                  {notificationCount > 0 && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
+                      {notificationCount > 9 ? '9+' : notificationCount}
+                    </span>
+                  )}
                 </button>
               );
             })}

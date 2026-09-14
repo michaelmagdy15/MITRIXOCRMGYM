@@ -31,6 +31,7 @@ const PRODUCTION_URL =
   Constants?.expoConfig?.extra?.PRODUCTION_URL || 'https://strike-egy.com/';
 const APP_NAME =
   Constants?.expoConfig?.extra?.APP_NAME || 'STRIKE';
+const MEMBER_ALERTS_CHANNEL_ID = 'member-alerts';
 
 // Runtime validation: if PRODUCTION_URL is missing or not an https URL, show a
 // fatal config error instead of loading the wrong tenant's data.
@@ -636,11 +637,22 @@ async function registerForPushNotificationsAsync() {
   let token;
 
   if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync(MEMBER_ALERTS_CHANNEL_ID, {
+      name: 'Member alerts',
+      importance: Notifications.AndroidImportance.MAX,
+      sound: 'default',
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F7C',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
+
     await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
       importance: Notifications.AndroidImportance.MAX,
+      sound: 'default',
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#FF231F7C',
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
   }
 

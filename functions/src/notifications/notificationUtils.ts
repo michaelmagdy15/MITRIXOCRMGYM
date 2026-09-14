@@ -8,6 +8,8 @@ export type MemberNotificationType =
   | "CLASS_REMINDER"
   | "STATUS_CHANGED";
 
+const MEMBER_ALERTS_CHANNEL_ID = "member-alerts";
+
 export async function writeMemberNotification(
   db: admin.firestore.Firestore,
   clientId: string,
@@ -74,6 +76,9 @@ export async function sendExpoPush(
         title,
         body,
         sound: "default",
+        priority: "high",
+        channelId: MEMBER_ALERTS_CHANNEL_ID,
+        interruptionLevel: "active",
         data: data || {},
       }),
     });
@@ -88,4 +93,3 @@ export async function sendExpoPush(
     logger.error("[notifications] Failed to dispatch push", error);
   }
 }
-

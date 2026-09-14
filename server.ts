@@ -406,6 +406,24 @@ async function getDbForRequest(req: express.Request) {
   return getFirestore();
 }
 
+function buildSystemNotification(payload: {
+  type: string;
+  title: string;
+  body: string;
+  severity?: 'info' | 'success' | 'warning' | 'critical';
+  data?: Record<string, any>;
+}) {
+  const now = new Date().toISOString();
+  return {
+    audience: 'staff',
+    readBy: [],
+    createdAt: now,
+    updatedAt: now,
+    severity: payload.severity || 'info',
+    ...payload
+  };
+}
+
 async function startServer() {
   const app = express();
   app.set('trust proxy', 1);
@@ -2123,6 +2141,24 @@ async function startServer() {
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             });
+
+            const notificationRef = db.collection("systemNotifications").doc();
+            transaction.set(notificationRef, buildSystemNotification({
+              type: 'class_booking_created',
+              title: 'New class booking',
+              body: `${clientData?.name || 'Member'} booked ${classData?.name || 'Workout Class'}${classData?.time ? ` at ${classData.time}` : ''}.`,
+              severity: 'success',
+              data: {
+                classId,
+                bookingId: bookingDocRef.id,
+                clientId: canonicalClientId,
+                memberId: memberIdStr,
+                className: classData?.name || 'Workout Class',
+                memberName: clientData?.name || 'Member',
+                branch: classData?.branch || '',
+                status: 'booked'
+              }
+            }));
           } else {
             // Class full, add to waitlist
             waitlist.push(canonicalClientId);
@@ -2148,6 +2184,24 @@ async function startServer() {
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             });
+
+            const notificationRef = db.collection("systemNotifications").doc();
+            transaction.set(notificationRef, buildSystemNotification({
+              type: 'class_waitlist_joined',
+              title: 'Member joined waitlist',
+              body: `${clientData?.name || 'Member'} joined the waitlist for ${classData?.name || 'Workout Class'}.`,
+              severity: 'warning',
+              data: {
+                classId,
+                bookingId: bookingDocRef.id,
+                clientId: canonicalClientId,
+                memberId: memberIdStr,
+                className: classData?.name || 'Workout Class',
+                memberName: clientData?.name || 'Member',
+                branch: classData?.branch || '',
+                status: 'waitlist'
+              }
+            }));
           }
         } else if (action === 'leave') {
           const attendeeIndex = attendees.findIndex(id => id === canonicalClientId || id === clientId || (clientData?.memberId && id === clientData.memberId));
@@ -3123,7 +3177,18 @@ async function startServer() {
       }
 
       // Expo accepts either a single message object or an array; normalize to array.
-      const payload = JSON.stringify(messages);
+      const payload = JSON.stringify(messages.map((message: any) => ({
+        priority: "high",
+        sound: "default",
+        channelId: "member-alerts",
+        interruptionLevel: "active",
+        ...message,
+        data: {
+          ...(message.data || {}),
+          channelId: message.channelId || "member-alerts",
+          sound: message.sound || "default",
+        },
+      })));
 
       const response = await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",

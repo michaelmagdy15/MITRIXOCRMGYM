@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins, AlertCircle, Activity, Dumbbell } from 'lucide-react';
 import { auth, db, getTenantId } from '../firebase';
-import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot, setDoc } from 'firebase/firestore';
 import { Client } from '../types';
 import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 
@@ -496,6 +496,52 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     loadSiblings().catch(err => console.warn("Could not load family siblings:", err));
   }, [primaryClient?.id, primaryClient?.phone, primaryClient?.linkedClientIds, (primaryClient as any)?.parentId]);
 
+  // Member app presence heartbeat for admin live-member visibility.
+  useEffect(() => {
+    if (!activeClient?.id || !currentUser?.id) return;
+
+    const presenceRef = doc(db, 'memberPresence', activeClient.id);
+    const writePresence = async (online: boolean = true) => {
+      try {
+        const now = new Date().toISOString();
+        await setDoc(presenceRef, {
+          clientId: activeClient.id,
+          userId: currentUser.id,
+          memberName: activeClient.name || currentUser.name || 'Member',
+          memberId: activeClient.memberId || '',
+          phone: activeClient.phone || currentUser.phone || '',
+          status: activeClient.status || '',
+          online,
+          appSurface: 'member_portal',
+          userAgent: navigator.userAgent,
+          lastSeen: now,
+          updatedAt: now,
+        }, { merge: true });
+      } catch (err) {
+        console.warn('[MemberPresence] Failed to update member presence:', err);
+      }
+    };
+
+    writePresence(true);
+    const interval = window.setInterval(() => writePresence(true), 60_000);
+    const handleVisibility = () => {
+      writePresence(document.visibilityState === 'visible');
+    };
+    const handleBeforeUnload = () => {
+      writePresence(false);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      writePresence(false);
+    };
+  }, [activeClient?.id, activeClient?.name, activeClient?.memberId, activeClient?.phone, activeClient?.status, currentUser?.id]);
+
   const isPendingOnboarding = String(activeClient?.status || primaryClient?.status || '').toUpperCase() === 'PENDING_ONBOARDING';
   const visibleNavItems = isPendingOnboarding
     ? filteredNavItems.filter(item => item.tab !== 'booking')
@@ -587,7 +633,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             </div>
           )}
 
-          <MemberNotificationBell clientId={activeClient?.id} />
+          <MemberNotificationBell clientId={activeClient?.id} onNavigate={handleNavigate} />
 
           <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-muted-foreground hover:text-foreground">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
