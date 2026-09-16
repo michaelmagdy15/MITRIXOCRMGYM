@@ -10,9 +10,13 @@ import { auth } from '../firebase';
 import { format, addDays, subDays, isSameDay } from 'date-fns';
 import { safeFormatDate, safeFormatTime, safeIsSameDay } from '../utils/dateUtils';
 
+import { useSettings } from '../contexts/SettingsContext';
+import { isBookingCutoffExceeded, getBookingCutoffMinutes } from '../utils/bookingCutoff';
+
 export const InzanClassSchedule: React.FC = () => {
   const { classes, loading } = useClasses();
   const { currentUser } = useAuth();
+  const { bookingWindow } = useSettings();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [actionClassId, setActionClassId] = useState<string | null>(null);
@@ -45,6 +49,21 @@ export const InzanClassSchedule: React.FC = () => {
 
     setActionClassId(classId);
     setFeedbackMessage(null);
+
+    if (action === 'join') {
+      const cls = classes.find(c => c.id === classId);
+      if (cls) {
+        const cutoffMinutes = getBookingCutoffMinutes(cls, bookingWindow);
+        if (isBookingCutoffExceeded(cls, cutoffMinutes)) {
+          setFeedbackMessage({
+            text: `Booking for this session closed ${cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.`,
+            type: 'error'
+          });
+          setActionClassId(null);
+          return;
+        }
+      }
+    }
 
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -192,13 +211,18 @@ export const InzanClassSchedule: React.FC = () => {
             const isFull = attendees.length >= cls.capacity;
             const isBusy = actionClassId === cls.id;
 
+            const cutoffMinutes = getBookingCutoffMinutes(cls, bookingWindow);
+            const isCutoff = isBookingCutoffExceeded(cls, cutoffMinutes);
+
             return (
-              <Card key={cls.id} className="overflow-hidden flex flex-col border hover:border-primary/40 transition-colors">
-                <div className={`h-1.5 ${isBooked ? 'bg-emerald-500' : isWaitlisted ? 'bg-amber-500' : 'bg-primary'}`} />
+              <Card key={cls.id} className={`overflow-hidden flex flex-col border transition-all ${
+                isCutoff && !isBooked && !isWaitlisted ? 'opacity-75 bg-muted/20 border-border/40' : 'hover:border-primary/40'
+              }`}>
+                <div className={`h-1.5 ${isBooked ? 'bg-emerald-500' : isWaitlisted ? 'bg-amber-500' : isCutoff ? 'bg-muted-foreground/30' : 'bg-primary'}`} />
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-start gap-2">
                     <div>
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
                           {cls.category || 'General'}
                         </span>
@@ -210,6 +234,11 @@ export const InzanClassSchedule: React.FC = () => {
                         {isWaitlisted && (
                           <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs">
                             Waitlisted
+                          </Badge>
+                        )}
+                        {isCutoff && !isBooked && !isWaitlisted && (
+                          <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/30 text-xs font-bold">
+                            Registration Closed
                           </Badge>
                         )}
                       </div>
@@ -273,6 +302,14 @@ export const InzanClassSchedule: React.FC = () => {
                         onClick={() => handleBookingAction(cls.id, 'leave')}
                       >
                         {isBusy ? 'Leaving waitlist...' : 'Leave Waitlist'}
+                      </Button>
+                    ) : isCutoff ? (
+                      <Button 
+                        variant="secondary" 
+                        className="w-full font-medium opacity-60 cursor-not-allowed text-muted-foreground"
+                        disabled={true}
+                      >
+                        Booking Closed
                       </Button>
                     ) : isFull ? (
                       <Button 

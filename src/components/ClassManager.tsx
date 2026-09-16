@@ -97,6 +97,7 @@ export const ClassManager: React.FC = () => {
   const [capacity, setCapacity] = useState(15);
   const [price, setPrice] = useState(0);
   const [branch, setBranch] = useState(branches?.[0] || 'Maxim Compound');
+  const [cutoffMinutes, setCutoffMinutes] = useState<number>(120);
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [repeatWeeks, setRepeatWeeks] = useState(4);
   
@@ -223,6 +224,7 @@ export const ClassManager: React.FC = () => {
     setCapacity(15);
     setPrice(0);
     setBranch(branches?.[0] || 'Maxim Compound');
+    setCutoffMinutes(120);
     setRepeatWeekly(false);
     setRepeatWeeks(4);
     setFormError(null);
@@ -249,6 +251,7 @@ export const ClassManager: React.FC = () => {
     setCapacity(cls.capacity);
     setPrice(cls.price);
     setBranch(cls.branch || branches?.[0] || 'Maxim Compound');
+    setCutoffMinutes(cls.cutoffMinutes ?? 120);
     setRepeatWeekly(false);
     setRepeatWeeks(4);
     setFormError(null);
@@ -306,6 +309,7 @@ export const ClassManager: React.FC = () => {
           instructorName,
           capacity: Number(capacity) || 15,
           price: Number(price) || 0,
+          cutoffMinutes: Number(cutoffMinutes) || 120,
           date,
           time: startTime,
           startTime: startIso,
@@ -332,6 +336,7 @@ export const ClassManager: React.FC = () => {
             instructorName,
             capacity: Number(capacity) || 15,
             price: Number(price) || 0,
+            cutoffMinutes: Number(cutoffMinutes) || 120,
             date: dateString,
             time: startTime,
             startTime: sIso,
@@ -538,7 +543,9 @@ export const ClassManager: React.FC = () => {
           body: JSON.stringify({
             classId: rosterClass.id,
             action: 'join',
-            clientId: memberIdToAdd
+            clientId: memberIdToAdd,
+            isAdminRequest: true,
+            role: currentUser?.role || 'STAFF'
           })
         });
         const data = await res.json().catch(() => ({}));
@@ -1549,6 +1556,24 @@ export const ClassManager: React.FC = () => {
                     className="h-9 text-xs"
                   />
                 )}
+              </div>
+            </div>
+
+            <div className="space-y-1.5 p-3 bg-muted/20 border border-border/50 rounded-xl">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Booking Cutoff Window (Minutes)</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={0}
+                  max={1440}
+                  value={cutoffMinutes}
+                  onChange={e => setCutoffMinutes(Number(e.target.value))}
+                  required
+                  className="h-9 text-xs w-32"
+                />
+                <span className="text-xs text-muted-foreground">
+                  (e.g., 90 or 120 mins). Clients cannot book inside this window before start time. Staff can always enroll walk-ins.
+                </span>
               </div>
             </div>
 

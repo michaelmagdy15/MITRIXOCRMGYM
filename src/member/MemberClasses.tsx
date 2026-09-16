@@ -14,9 +14,10 @@ import { isSessionTierAllowed, isSessionBranchAllowed, getMemberCategory, normal
 import { getTenantId } from '../firebase';
 import { useSettings } from '../contexts/SettingsContext';
 import StrikeWeeklyScheduleView from '../components/StrikeWeeklyScheduleView';
+import { isBookingCutoffExceeded, getBookingCutoffMinutes, formatCutoffBadgeText } from '../utils/bookingCutoff';
 
 export default function MemberClasses({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: (packageId?: string) => void }) {
-  const { branding } = useSettings();
+  const { branding, bookingWindow } = useSettings();
   const [classes, setClasses] = useState<ClassSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
@@ -84,6 +85,10 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   }, []);
 
   const handleOpenBookingDialog = (gymClass: ClassSchedule) => {
+    const cutoffMinutes = getBookingCutoffMinutes(gymClass, bookingWindow);
+    if (isBookingCutoffExceeded(gymClass, cutoffMinutes)) {
+      return;
+    }
     setSelectedBookingClass(gymClass);
     setIsBookingDialogOpen(true);
   };
@@ -524,6 +529,9 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
               </Card>
             ) : (
               filteredClasses.map(gymClass => {
+                const cutoffMinutes = getBookingCutoffMinutes(gymClass, bookingWindow);
+                const isCutoff = isBookingCutoffExceeded(gymClass, cutoffMinutes);
+
                 const isBooked = client ? (
                   (gymClass.attendees || []).includes(client.id) ||
                   Boolean(client.memberId && (gymClass.attendees || []).includes(client.memberId)) ||
@@ -538,11 +546,19 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                 const spotsLeft = Math.max(0, gymClass.capacity - (gymClass.attendees || []).length);
 
                 return (
-                  <Card key={gymClass.id} className={`border border-border/60 bg-card rounded-2xl shadow-xs transition-all ${isBooked ? 'border-primary/40 bg-primary/5' : ''} ${isWaitlisted ? 'border-amber-500/40 bg-amber-500/5' : ''}`}>
+                  <Card key={gymClass.id} className={`border rounded-2xl shadow-xs transition-all ${
+                    isBooked
+                      ? 'border-primary/40 bg-primary/5'
+                      : isWaitlisted
+                      ? 'border-amber-500/40 bg-amber-500/5'
+                      : isCutoff
+                      ? 'border-border/40 bg-muted/20 opacity-75'
+                      : 'border-border/60 bg-card'
+                  }`}>
                     <CardContent className="p-4 space-y-3">
                       <div className="flex justify-between items-start">
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <Badge variant="outline" className={`text-[9px] uppercase tracking-wider font-bold py-0.5 px-2 rounded-md ${
                               (gymClass.category || '').toLowerCase().includes('kid') ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20' :
                               (gymClass.category || '').toLowerCase().includes('junior') ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20' :
@@ -557,6 +573,11 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                             }`}>
                               {gymClass.branch}
                             </span>
+                            {isCutoff && !isBooked && !isWaitlisted && (
+                              <Badge variant="outline" className="text-[9px] font-bold text-destructive bg-destructive/10 border-destructive/30">
+                                Registration Closed
+                              </Badge>
+                            )}
                           </div>
                           <h4 className="text-sm font-bold text-foreground leading-snug tracking-tight">{gymClass.name}</h4>
                           {((gymClass as any).coachName || gymClass.instructorName) && (
@@ -589,7 +610,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                               Waitlisted (#{(gymClass.waitlist || []).indexOf(client?.id || '') + 1})
                             </Badge>
                           )}
-                          {spotsLeft <= 3 && spotsLeft > 0 && !isBooked && !isWaitlisted && (
+                          {spotsLeft <= 3 && spotsLeft > 0 && !isBooked && !isWaitlisted && !isCutoff && (
                             <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-bold ml-1.5">
                               {spotsLeft} spots left
                             </Badge>
@@ -605,6 +626,15 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                             disabled={actionClassId === gymClass.id}
                           >
                             {isWaitlisted ? 'Leave Waitlist' : 'Leave'}
+                          </Button>
+                        ) : isCutoff ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 text-xs font-semibold rounded-xl px-3.5 opacity-60 cursor-not-allowed text-muted-foreground"
+                            disabled={true}
+                          >
+                            Booking Closed
                           </Button>
                         ) : (
                           <Button

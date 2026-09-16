@@ -729,11 +729,18 @@ export interface OfferEntry {
   order: number;
 }
 
+export interface BookingWindowConfig {
+  defaultCutoffMinutes: number; // e.g., 90 or 120 minutes
+  allowWalkInsViaAdminOnly: boolean; // true
+}
+
 export interface BranchLocation {
   branchName: string;
   displayName: string;
   address: string;
   mapUrl?: string;
+  bookingWindow?: BookingWindowConfig;
+  cutoffMinutes?: number;
 }
 
 export interface StorefrontConfig {

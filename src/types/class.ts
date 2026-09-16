@@ -25,6 +25,8 @@ export interface ClassSchedule {
   allowedTiers?: string[];
   date?: string;
   time?: string;
+  cutoffMinutes?: number;
+  allowWalkInsViaAdminOnly?: boolean;
 }
 
 export type BookingStatus = 'booked' | 'waitlisted' | 'waitlist' | 'cancelled' | 'no-show' | 'attended';

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { BrandingSettings, SalesTarget, Branch, FeatureFlags, StorefrontConfig } from '../types';
+import { BookingWindowConfig, DEFAULT_BOOKING_WINDOW_CONFIG } from '../utils/bookingCutoff';
 import { PayoutConfig } from '../types/payout';
 import { auth, db, getTenantId } from '../firebase';
 import { addAuditLog } from '../services/auditService';
@@ -66,6 +67,8 @@ interface SettingsContextType {
   updateFeatures: (updates: Partial<FeatureFlags>) => Promise<void>;
   storefrontConfig: StorefrontConfig;
   updateStorefrontConfig: (config: Partial<StorefrontConfig>) => Promise<void>;
+  bookingWindow: BookingWindowConfig;
+  updateBookingWindow: (config: Partial<BookingWindowConfig>) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -161,6 +164,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       }
     ]
   };
+  const [bookingWindow, setBookingWindow] = useState<BookingWindowConfig>(DEFAULT_BOOKING_WINDOW_CONFIG);
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>(DEFAULT_STOREFRONT);
 
   // Helper to preload image before setting loaded state
@@ -237,6 +241,11 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
 
       if (settings.features) setFeatures(prev => ({ ...prev, ...settings.features }));
       if (settings.storefront) setStorefrontConfig(prev => ({ ...prev, ...settings.storefront }));
+      if (settings.bookingWindow) {
+        setBookingWindow(prev => ({ ...prev, ...settings.bookingWindow }));
+      } else if (settings['booking-window']) {
+        setBookingWindow(prev => ({ ...prev, ...settings['booking-window'] }));
+      }
       if (settings.branches?.branches && Array.isArray(settings.branches.branches)) {
         setBranches(settings.branches.branches);
       }
@@ -329,6 +338,12 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     await addAuditLog('UPDATE', 'SYSTEM', 'storefront', `Updated storefront configuration`);
   }, []);
 
+  const updateBookingWindow = useCallback(async (updates: Partial<BookingWindowConfig>) => {
+    await updateSetting('bookingWindow', updates);
+    setBookingWindow(prev => ({ ...prev, ...updates }));
+    await addAuditLog('UPDATE', 'SYSTEM', 'bookingWindow', `Updated booking cutoff window to ${updates.defaultCutoffMinutes ?? 120}m`);
+  }, []);
+
   const value = useMemo(() => ({
     branding,
     updateBranding,
@@ -347,7 +362,9 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     updateFeatures,
     storefrontConfig,
     updateStorefrontConfig,
-  }), [branding, searchQuery, salesTarget, branches, commissionRates, defaultPayoutRates, features, storefrontConfig, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates, updateDefaultPayoutRates, updateFeatures, updateStorefrontConfig]);
+    bookingWindow,
+    updateBookingWindow,
+  }), [branding, searchQuery, salesTarget, branches, commissionRates, defaultPayoutRates, features, storefrontConfig, bookingWindow, updateBranding, updateSalesTarget, updateBranches, updateCommissionRates, updateDefaultPayoutRates, updateFeatures, updateStorefrontConfig, updateBookingWindow]);
 
   const [isExiting, setIsExiting] = useState(false);
   const [isDone, setIsDone] = useState(false);

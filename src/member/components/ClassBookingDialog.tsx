@@ -16,6 +16,7 @@ import {
 import { format, parseISO } from 'date-fns';
 import { safeFormatDate, safeFormatTime, safeParseExpiryToEndOfDay } from '../../utils/dateUtils';
 import { isSessionBranchAllowed, getMemberCategory } from '../../utils/memberCategories';
+import { isBookingCutoffExceeded, formatCutoffBadgeText, getBookingCutoffMinutes } from '../../utils/bookingCutoff';
 
 interface ClassBookingDialogProps {
   open: boolean;
@@ -145,6 +146,8 @@ export function ClassBookingDialog({
     Boolean(client.portalUserId && (gymClass.waitlist || []).includes(client.portalUserId));
   const isFull = (gymClass.attendees || []).length >= gymClass.capacity;
   const spotsLeft = Math.max(0, gymClass.capacity - (gymClass.attendees || []).length);
+  const cutoffMinutes = getBookingCutoffMinutes(gymClass);
+  const isCutoff = isBookingCutoffExceeded(gymClass, cutoffMinutes);
 
   const matchingPackage: { packageName: string; sessionsRemaining?: any } | null = (client.packages || []).find(
     (p: any) => p.status === 'Active' && (p.sessionsRemaining === 'unlimited' || Number(p.sessionsRemaining) > 0)
@@ -166,6 +169,13 @@ export function ClassBookingDialog({
   };
 
   const handleConfirmBooking = async () => {
+    if (isCutoff && !isBooked && !isWaitlisted) {
+      setErrorMessage(
+        `Booking for this session closed ${cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.`
+      );
+      return;
+    }
+
     if (!hasAcceptedBookingPolicy) {
       setErrorMessage('Please accept the class booking terms before continuing.');
       return;
@@ -322,13 +332,18 @@ export function ClassBookingDialog({
         ) : (
           <div className="space-y-5">
             <DialogHeader className="space-y-1.5 text-left">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant={gymClass.category === 'Event' ? 'default' : 'secondary'} className="text-[9px] uppercase tracking-wider h-5 px-2">
                   {gymClass.category || 'Class'}
                 </Badge>
                 <Badge variant="outline" className="text-[10px] font-bold text-primary border-primary/20">
                   {gymClass.branch}
                 </Badge>
+                {isCutoff && !isBooked && !isWaitlisted && (
+                  <Badge variant="outline" className="text-[9px] font-bold text-destructive bg-destructive/10 border-destructive/30">
+                    Booking closed (Cutoff was {formatCutoffBadgeText(cutoffMinutes)} prior to class)
+                  </Badge>
+                )}
               </div>
               <DialogTitle className="text-xl font-black uppercase tracking-tight text-foreground">
                 {gymClass.name}
@@ -406,6 +421,18 @@ export function ClassBookingDialog({
                   </div>
                 )}
 
+                {isCutoff && !isBooked && !isWaitlisted && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl flex items-start gap-2.5 text-left">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-bold">Booking Closed</p>
+                      <p className="text-[11px] opacity-90 leading-relaxed">
+                        Booking for this session closed {cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2 pt-2">
                   <Button
                     variant="outline"
@@ -416,12 +443,18 @@ export function ClassBookingDialog({
                     Cancel
                   </Button>
                   <Button
-                    className="w-2/3 h-11 rounded-xl text-xs font-black uppercase tracking-wider bg-primary text-primary-foreground shadow-lg hover:bg-primary/90"
+                    className={`w-2/3 h-11 rounded-xl text-xs font-black uppercase tracking-wider ${
+                      isCutoff && !isBooked && !isWaitlisted
+                        ? 'bg-muted text-muted-foreground cursor-not-allowed border border-border/80'
+                        : 'bg-primary text-primary-foreground shadow-lg hover:bg-primary/90'
+                    }`}
                     onClick={handleConfirmBooking}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || (isCutoff && !isBooked && !isWaitlisted)}
                   >
                     {isSubmitting ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isCutoff && !isBooked && !isWaitlisted ? (
+                      'Booking Closed'
                     ) : isFull ? (
                       'Join Waitlist'
                     ) : (
@@ -442,6 +475,18 @@ export function ClassBookingDialog({
                     You need a valid class package or session pass to attend this workout at <strong>{gymClass.branch}</strong>. Select an option below:
                   </p>
                 </div>
+
+                {isCutoff && !isBooked && !isWaitlisted && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl flex items-start gap-2.5 text-left">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="font-bold">Booking Window Closed</p>
+                      <p className="text-[11px] opacity-90 leading-relaxed">
+                        Online booking for this session closed {cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {passRequestSuccess ? (
                   <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 text-center space-y-2">

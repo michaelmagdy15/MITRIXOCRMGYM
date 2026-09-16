@@ -22,6 +22,12 @@ import {
   CanonicalBranchId
 } from './src/utils/memberCategories.js';
 import { normalizeEgyptPhone, getEgyptPhoneVariants } from './src/utils/phoneUtils.js';
+import {
+  getSessionStartTime,
+  getBookingCutoffMinutes,
+  isBookingCutoffExceeded,
+  AppError
+} from './src/utils/bookingCutoff.js';
 
 declare global {
   namespace Express {
@@ -428,7 +434,7 @@ const CLASS_BOOKING_POLICY_VERSION = '2026-09-14';
 const CLASS_CANCELLATION_CUTOFF_MS = 2 * 60 * 60 * 1000;
 
 function isStaffRole(role: unknown): boolean {
-  return ['manager', 'admin', 'rep', 'coach', 'super_admin', 'crm_admin'].includes(String(role || '').toLowerCase());
+  return ['manager', 'admin', 'rep', 'coach', 'super_admin', 'crm_admin', 'staff'].includes(String(role || '').toLowerCase());
 }
 
 async function startServer() {
@@ -1590,6 +1596,23 @@ async function startServer() {
         return res.status(404).json({ error: "Session not found" });
       }
 
+      // Check Booking Cutoff Window (Lead-Time Restriction)
+      const now = new Date();
+      const sessionStartTime = getSessionStartTime(sessionRecord);
+      if (sessionStartTime) {
+        const cutoffMinutes = sessionRecord.cutoffMinutes !== undefined && !isNaN(Number(sessionRecord.cutoffMinutes))
+          ? Number(sessionRecord.cutoffMinutes)
+          : 120;
+        const cutoffDeadline = new Date(sessionStartTime.getTime() - cutoffMinutes * 60 * 1000);
+        const isStaff = isStaffRole(req.user?.role) || (req.body?.isAdminRequest && isStaffRole(req.body?.role));
+        if (!req.body?.isAdminRequest && !isStaff && now > cutoffDeadline) {
+          return res.status(403).json({
+            error: `Booking for this session closed ${cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.`,
+            code: 'BOOKING_CUTOFF_EXCEEDED'
+          });
+        }
+      }
+
       // 3. Server-side Interceptor: Strict Tier & Branch Access Validation
       const validation = validateBookingRules(memberRecord, sessionRecord);
       if (!validation.allowed) {
@@ -1901,14 +1924,15 @@ async function startServer() {
   // Handles capacity checks, waitlist promotion, package session deduction, points award, and prevents double-booking
   app.post("/api/classes/book", requireAuth, async (req, res) => {
     try {
-      const { classId, action, clientId, bookingPolicyAccepted, bookingPolicyVersion } = req.body;
+      const { classId, action, clientId, bookingPolicyAccepted, bookingPolicyVersion, isAdminRequest, role: bodyRole } = req.body;
       if (!classId || !action || !clientId) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
       const db = await getDbForRequest(req);
       const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
-      const requesterIsStaff = isStaffRole(requesterDoc.data()?.role);
+      const requesterRole = requesterDoc.data()?.role || req.user?.role || bodyRole;
+      const requesterIsStaff = isStaffRole(requesterRole) || (isAdminRequest === true && isStaffRole(bodyRole));
       const classRef = db.collection("classSchedules").doc(classId);
 
       // Resolve client document
@@ -1980,6 +2004,25 @@ async function startServer() {
 
         // === 3. ALL WRITES LAST (NO READS ALLOWED) ===
         if (action === 'join') {
+          // Check Booking Cutoff Window (Lead-Time Restriction)
+          const now = new Date();
+          const sessionStartTime = getSessionStartTime(classData);
+          if (sessionStartTime) {
+            const cutoffMinutes = classData?.cutoffMinutes !== undefined && !isNaN(Number(classData.cutoffMinutes))
+              ? Number(classData.cutoffMinutes)
+              : 120; // 2 hours default
+            const cutoffDeadline = new Date(sessionStartTime.getTime() - cutoffMinutes * 60 * 1000);
+
+            // Strict client app rejection
+            if (!isAdminRequest && !requesterIsStaff && now > cutoffDeadline) {
+              throw new AppError(
+                `Booking for this session closed ${cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.`,
+                403,
+                'BOOKING_CUTOFF_EXCEEDED'
+              );
+            }
+          }
+
           if (!requesterIsStaff && (bookingPolicyAccepted !== true || bookingPolicyVersion !== CLASS_BOOKING_POLICY_VERSION)) {
             throw new Error('You must accept the class booking terms before booking.');
           }
@@ -2345,7 +2388,11 @@ async function startServer() {
       return res.json({ success: true, message: `Class ${action} successful` });
     } catch (err: any) {
       console.error("[Classes Book] Error:", err);
-      return res.status(500).json({ error: err.message || "Failed to process booking" });
+      const status = err.status || (err.code === 'BOOKING_CUTOFF_EXCEEDED' ? 403 : 500);
+      return res.status(status).json({ 
+        error: err.message || "Failed to process booking",
+        code: err.code || "BOOKING_ERROR"
+      });
     }
   });
 
@@ -2358,7 +2405,7 @@ async function startServer() {
   // ===============================================================
   app.post('/api/v1/bookings', requireAuth, async (req: any, res: any) => {
     try {
-      const { sessionId, session_id, memberId, member_id } = req.body;
+      const { sessionId, session_id, memberId, member_id, isAdminRequest, role: bodyRole } = req.body;
       const targetSessionId = sessionId || session_id;
       const targetMemberId = memberId || member_id;
 
@@ -2414,6 +2461,24 @@ async function startServer() {
         const validation = validateBookingRules(member, session);
         if (!validation.allowed) {
           throw new Error(validation.error);
+        }
+
+        // Check Booking Cutoff Window (Lead-Time Restriction)
+        const now = new Date();
+        const sessionStartTime = getSessionStartTime(session);
+        if (sessionStartTime) {
+          const cutoffMinutes = session?.cutoffMinutes !== undefined && !isNaN(Number(session.cutoffMinutes))
+            ? Number(session.cutoffMinutes)
+            : 120;
+          const cutoffDeadline = new Date(sessionStartTime.getTime() - cutoffMinutes * 60 * 1000);
+          const requesterIsStaff = isStaffRole(req.user?.role) || (isAdminRequest && isStaffRole(bodyRole));
+          if (!isAdminRequest && !requesterIsStaff && now > cutoffDeadline) {
+            throw new AppError(
+              `Booking for this session closed ${cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.`,
+              403,
+              'BOOKING_CUTOFF_EXCEEDED'
+            );
+          }
         }
 
         const attendees: string[] = Array.isArray(session.attendees) ? [...session.attendees] : [];
@@ -2486,9 +2551,10 @@ async function startServer() {
       return res.json(bookingResult);
     } catch (err: any) {
       console.error('[API /api/v1/bookings] Error:', err);
-      const isForbidden = err.message?.includes('reserved for tiers') || err.message?.includes('other facilities') || err.message?.includes('expired');
-      return res.status(isForbidden ? 403 : 400).json({
-        error: err.message || 'Booking failed'
+      const isForbidden = err.status === 403 || err.code === 'BOOKING_CUTOFF_EXCEEDED' || err.message?.includes('reserved for tiers') || err.message?.includes('other facilities') || err.message?.includes('expired') || err.message?.includes('closed');
+      return res.status(err.status || (isForbidden ? 403 : 400)).json({
+        error: err.message || 'Booking failed',
+        code: err.code || (isForbidden ? 'PERMISSION_DENIED' : 'BOOKING_FAILED')
       });
     }
   });

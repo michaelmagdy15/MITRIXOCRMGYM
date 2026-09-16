@@ -178,6 +178,7 @@ export function generateStrikeClassesForDateRange(
           type: 'Class',
           status: 'active',
           capacity: slot.capacity,
+          cutoffMinutes: 120,
           attendees: [],
           waitlist: [],
           coachName: 'Strike Team',

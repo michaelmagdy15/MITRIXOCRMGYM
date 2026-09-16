@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
 import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, FileText, Coffee, Package, Smartphone, Phone, Search as SearchIcon, MessageSquare, Star, ClipboardList, Target } from 'lucide-react';
@@ -11,7 +12,7 @@ import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, File
 import { activeConfig } from './firebase';
 
 export default function AdminHub() {
-  const { features, updateFeatures } = useSettings();
+  const { features, updateFeatures, bookingWindow, updateBookingWindow } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -33,6 +34,8 @@ export default function AdminHub() {
   const [serviceCategoryTargets, setServiceCategoryTargets] = useState(features.serviceCategoryTargets === true);
   const [classBookingSystem, setClassBookingSystem] = useState(features.classBookingSystem === true);
   const [nutrition, setNutrition] = useState(features.nutrition === true);
+  const [defaultCutoffMinutes, setDefaultCutoffMinutes] = useState(bookingWindow?.defaultCutoffMinutes ?? 120);
+  const [allowWalkInsViaAdminOnly, setAllowWalkInsViaAdminOnly] = useState(bookingWindow?.allowWalkInsViaAdminOnly !== false);
 
   const handleSave = async () => {
     setIsLoading(true);
@@ -56,6 +59,10 @@ export default function AdminHub() {
         serviceCategoryTargets,
         classBookingSystem,
         nutrition
+      });
+      await updateBookingWindow({
+        defaultCutoffMinutes: Number(defaultCutoffMinutes) || 120,
+        allowWalkInsViaAdminOnly
       });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -194,6 +201,62 @@ export default function AdminHub() {
                 </div>
                 <Switch checked={classBookingSystem} onCheckedChange={setClassBookingSystem} disabled={isLoading} />
               </div>
+
+              {classBookingSystem && (
+                <div className="ml-11 mb-4 p-4 bg-muted/40 rounded-xl border space-y-3">
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Mobile App Booking Cutoff Window
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Restricts clients from booking classes within this lead-time window before session start.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                    <div>
+                      <Label className="text-xs font-semibold">Cutoff Lead Time (Minutes)</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={1440}
+                          step={15}
+                          value={defaultCutoffMinutes}
+                          onChange={(e) => setDefaultCutoffMinutes(Number(e.target.value))}
+                          className="w-28 h-9 text-xs"
+                          disabled={isLoading}
+                        />
+                        <div className="flex items-center gap-1">
+                          {[90, 120].map((mins) => (
+                            <Button
+                              key={mins}
+                              type="button"
+                              variant={defaultCutoffMinutes === mins ? "default" : "outline"}
+                              size="sm"
+                              className="h-9 text-xs px-2.5"
+                              onClick={() => setDefaultCutoffMinutes(mins)}
+                              disabled={isLoading}
+                            >
+                              {mins}m ({mins / 60}h)
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between sm:justify-start sm:gap-4 pt-4 sm:pt-0">
+                      <div>
+                        <Label className="text-xs font-semibold">Allow Walk-Ins via CRM Only</Label>
+                        <p className="text-[11px] text-muted-foreground">Front-desk staff can bypass cutoff window</p>
+                      </div>
+                      <Switch
+                        checked={allowWalkInsViaAdminOnly}
+                        onCheckedChange={setAllowWalkInsViaAdminOnly}
+                        disabled={isLoading}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Reports */}
               <div className="flex items-center justify-between py-4">

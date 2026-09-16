@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, onSnapshot, doc, setDoc, updateDoc, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ClassBooking, BookingStatus } from '../types/class';
+import { isBookingCutoffExceeded, AppError } from '../utils/bookingCutoff';
 
 export function useClassBookings(classId?: string) {
   const [bookings, setBookings] = useState<ClassBooking[]>([]);
@@ -30,8 +31,24 @@ export function useClassBookings(classId?: string) {
     return () => unsubscribe();
   }, [classId]);
 
-  const bookClass = async (bookingData: Omit<ClassBooking, 'id' | 'bookedAt'>) => {
+  const bookClass = async (
+    bookingData: Omit<ClassBooking, 'id' | 'bookedAt'>,
+    options?: { isAdminRequest?: boolean; cutoffMinutes?: number; classStartTime?: string }
+  ) => {
     try {
+      const startTime = options?.classStartTime || bookingData.classStartTime;
+      const cutoffMinutes = options?.cutoffMinutes ?? 120;
+      if (!options?.isAdminRequest && startTime) {
+        const isCutoff = isBookingCutoffExceeded({ startTime }, cutoffMinutes);
+        if (isCutoff) {
+          throw new AppError(
+            `Booking for this session closed ${cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.`,
+            403,
+            'BOOKING_CUTOFF_EXCEEDED'
+          );
+        }
+      }
+
       const newBookingRef = doc(collection(db, 'classBookings'));
       await setDoc(newBookingRef, {
         ...bookingData,
