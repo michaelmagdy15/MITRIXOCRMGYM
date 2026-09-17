@@ -1,7 +1,6 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { getFirestore } from "firebase-admin/firestore";
-import * as admin from "firebase-admin";
 
 // Run every 15 minutes to check for no-shows
 export const processNoShows = onSchedule("*/15 * * * *", async (event) => {
@@ -47,15 +46,23 @@ export const processNoShows = onSchedule("*/15 * * * *", async (event) => {
         batch.update(bookingDoc.ref, { status: "no-show" });
         noShowCount++;
 
-        // Add a strike to the member (using a new 'strikes' subcollection or field)
+        // Add a strike to the member and enforce lockout if strikes exceed threshold
         const memberId = bookingDoc.data().memberId;
         if (memberId) {
           const clientRef = tenantDb.collection("clients").doc(memberId);
-          // Increment the no-show strikes count
-          batch.update(clientRef, {
-            noShowStrikes: admin.firestore.FieldValue.increment(1),
+          const clientDoc = await clientRef.get();
+          const currentStrikes = (clientDoc.data()?.noShowStrikes || 0) + 1;
+          const updateData: Record<string, any> = {
+            noShowStrikes: currentStrikes,
             lastNoShowAt: new Date().toISOString()
-          });
+          };
+          if (currentStrikes >= 3) {
+            // Lock out bookings for 7 days
+            const blockedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+            updateData.bookingBlockedUntil = blockedUntil;
+            logger.info(`[processNoShows] Member ${memberId} reached ${currentStrikes} no-show strikes. Booking blocked until ${blockedUntil}`);
+          }
+          batch.update(clientRef, updateData);
         }
       }
       

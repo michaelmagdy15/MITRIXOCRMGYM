@@ -18,7 +18,7 @@ import Packages from './Packages';
 import Coaches from './Coaches';
 import MyProfile from './components/MyProfile';
 import CommissionReport from './components/CommissionReport';
-import { BadgePercent, QrCode, Printer, MapPin, Plus, Trophy } from 'lucide-react';
+import { BadgePercent, QrCode, Printer, MapPin, Plus, Trophy, Bell } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Branch } from './types';
 import { exportDatabaseToJson, restoreDatabaseFromJson, mergeBackupRecords } from './services/backupService';
@@ -30,6 +30,7 @@ import AdminPointsManager from './components/AdminPointsManager';
 import AdminActivityFeed from './components/AdminActivityFeed';
 import AdminGamificationManager from './components/AdminGamificationManager';
 import AdminStorefrontManager from './components/AdminStorefrontManager';
+import NotificationTemplateSettings from './components/NotificationTemplateSettings';
 
 export default function Settings() {
   const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches, defaultPayoutRates, updateDefaultPayoutRates } = useAppContext();
@@ -676,6 +677,10 @@ export default function Settings() {
           <TabsTrigger value="payouts" className="flex items-center gap-2 whitespace-nowrap">
             <Coins className="w-4 h-4" />
             Payout Rates
+          </TabsTrigger>
+          <TabsTrigger value="notifications" className="flex items-center gap-2 whitespace-nowrap">
+            <Bell className="w-4 h-4" />
+            Notification Templates
           </TabsTrigger>
           <TabsTrigger value="backup" className="flex items-center gap-2 whitespace-nowrap">
             <Download className="h-4 w-4" />
@@ -1375,6 +1380,11 @@ export default function Settings() {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── Notification Templates ── */}
+        <TabsContent value="notifications" className="animate-in fade-in-50 duration-500">
+          <NotificationTemplateSettings />
         </TabsContent>
 
         {/* ── Backup ── */}

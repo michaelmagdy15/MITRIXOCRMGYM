@@ -27,10 +27,10 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
     }
 
     const unsub = onSnapshot(collection(db, 'payments'), (snapshot) => {
-      // Filter out soft-deleted payments (where deleted_at is not null)
+      // Filter out soft-deleted payments (where deleted_at is not null), unless status is refunded
       setPayments(snapshot.docs
         .map(d => ({ ...d.data(), id: d.id } as Payment))
-        .filter(p => !p.deleted_at)
+        .filter(p => !p.deleted_at || p.status === 'refunded')
       );
       setLoading(false);
     }, (error) => {

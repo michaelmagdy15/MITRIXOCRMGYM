@@ -8,21 +8,82 @@
 
 **MitrixoGYM** — a multi-tenant Firebase CRM platform for fitness gyms and fitness studios. Mission: comprehensive member management, staff management, payments, packages, attendance tracking, and guest management for multiple gym brands under a single platform.
 
-**Current state:** v1.2 — Multi-tenant architecture with 2 active tenants (Strike, Inzan Athletics). Native mobile full-screen wallpaper splash loader for iPhones and Androids; complete elimination of legacy "mitrixogymcrm" branding from loading states, meta tags, and PWA manifests; resolved group class attendees & orphan references; fixed drop sessions localization and payments table client name resolution; fixed hidden "Hold" members and universal CRM search; eliminated repeating client records in payments; enforced non-destructive `{ merge: true }` writes across all collections; staff emergency override; member quick start onboarding guide. Strict tenant isolation maintained: Strike `(default)` and Inzan Athletics (`db-inzanathletics`) pristine.
+**Current state:** v1.12 — Full desktop CRM parity (Strike & Inzan standalone portable executables with local SQLite databases and outbox sync engine), Strike brand purity ("STRIKE HAS NO ORANGE"), and complete Inzan Athletics feature specifications closure (Nutrition Module, 1-Click Calendar Sync, Notification Templates & Member Preferences, Explicit Payment Status & Maker-Checker Refund Workflow, No-Show Strike Lockout). Strict multi-tenant isolation maintained: Strike `(default)` and Inzan Athletics (`db-inzanathletics`).
 
-**Active session (2026-09-13):**
-- **Mobile-Native Splash Loader**: Created full-screen wallpaper splash for iPhones and Androids only (`/strike_slide_outdoor.png` background + ambient vignette + centered white Strike logo + progress bar pill + "STRIKE BOXING CLUB" tagline) with zero white flash or web app stutter; smooth dismissal on auth ready.
-- **Brand Purification**: Completely eliminated "mitrixogymcrm" text from `index.html` meta tags (`apple-mobile-web-app-title`, `application-name`), PWA manifest (`vite.config.ts`), `SettingsContext.tsx`, `App.tsx`, `Login.tsx`, and member UI components.
-- **Relational Integrity & Orphan Resolution**: Fixed class attendees rendering "Unknown Client" via `resolveAttendee(attendee, clients)` with clickable profile links; coach client loading unblocked in `useClients.ts`.
-- **Drop Sessions & Payments Table Resolution**: Fixed `payments.table.unknown_client` raw localization code; supported `isGuest` / `clientId: 'WALK-IN-GUEST'` in `transactionService.ts`.
-- **"Hold" Members & Search Visibility**: Added `"all"` default tab in `Clients.tsx` showing Active, Hold, and Expiring Soon members; search now queries all members regardless of active tab.
-- **Non-Destructive Writes**: Enforced `{ merge: true }` across all Firestore write paths.
-- **Payments Repeating Records**: Fixed Menna GAD repeating bug in `Payments.tsx` with strict indexed maps and guarded fallbacks.
-- **Staff Emergency Override & Member Onboarding**: Added front desk emergency admission to `ClassManager.tsx` and 3-step Quick Guide card to `MemberHome.tsx`.
+**Active session (2026-09-18):**
+- **Native Windows Desktop CRM Overhaul**: Built and published portable .NET 9 executables for Strike Boxing Club (`MitrixoGym.Strike.Desktop.exe`) and Inzan Athletics (`MitrixoGym.Inzan.Desktop.exe`) with 100% full CRM parity, offline local SQLite engine (`strike_local.db`, `inzan_local.db`), 6 full modules (Dashboard, Clients Directory, Attendance Kiosk, Payments & POS, Schedules, Outbox Sync), and authoritative database snapshots loaded (1,081 Strike members, 5,852 Inzan members).
+- **Strike Desktop Theme Alignment**: Strict enforcement of "STRIKE HAS NO ORANGE" — pure white canvas (`#FFFFFF`), light gray borders (`#E5E7EB`), matte black pills (`#000000`), and emerald green stat highlights (`#10B981`) matching the live web CRM.
+- **Inzan Desktop Theme Alignment**: Deep charcoal dark mode (`#0B0F17` / `#1E293B`) with crimson rose accents (`#E11D48`).
+- **Inzan Athletics Nutrition Module (PRD §11)**: Full admin workspace (`src/NutritionModule.tsx`), real-time Firestore hooks (`src/hooks/useNutrition.ts`), member portal booking & consultation tracker (`src/member/MemberNutrition.tsx`), gated navigation in `src/App.tsx` and `src/member/MemberPortal.tsx`.
+- **1-Click Calendar Sync (PRD §6.3, Classes PRD §2.A)**: RFC 5545 `.ics` generator and Google Calendar URL builder (`src/utils/calendarSync.ts`), dropdown component (`src/components/CalendarSyncButton.tsx`), embedded on booked class cards and upcoming PT sessions.
+- **Notification Templates & Member Preferences (PRD §15)**: Admin template editor (`src/components/NotificationTemplateSettings.tsx`) in `src/Settings.tsx` with dynamic variable interpolation; toggle switches in `src/member/MemberProfile.tsx` for Push Notifications, Class Reminders, and Session Updates.
+- **Payment Status & Maker-Checker Refund Workflow (PRD §17, §20)**: Explicit statuses (`paid`, `pending`, `refunded`, `failed`) on `Payment`, status badges and "Request Refund" dialog in `src/Payments.tsx`, approval execution in `src/admin/AdminRequests.tsx` and `src/services/approvalService.ts` with session restoration, entitlement cancellation, and coach earnings exclusion.
+- **Configurable No-Show Penalties & Strike Lockout (Classes PRD §3.C)**: Pre-booking lockout validation in `server.ts` and automated 7-day lockout job in `functions/src/classes/noShowJob.ts` triggered on 3 strikes.
+- **Multi-Tenant Isolation & Quality Gate**: `npm run lint` $\rightarrow$ 0 errors; `npm run build` $\rightarrow$ 0 errors; `dotnet test` $\rightarrow$ 23/23 tests green; cloud functions build clean.
 
 ---
 
-## 8. Live Session Log — 2026-09-13 (most recent)
+## 8. Live Session Log — 2026-09-18 (most recent)
+
+### Comprehensive Scope & Detailed Breakdown
+
+#### Part 1: Native Windows Desktop CRM Overhaul & Offline Capability Parity
+- **Requirements Delivered**:
+  1. Complete capability parity between the web CRM and offline desktop apps.
+  2. Authoritative local SQLite database engines initialized from full Firestore snapshots (1,081 Strike members / 60 class schedules; 5,852 Inzan members / 5 class schedules).
+  3. Exact visual styling matching web CRM:
+     - **Strike Desktop**: Zero orange throughout the entire application. Pure white cards, matte black pills, light gray borders, and emerald green stat highlights.
+     - **Inzan Desktop**: Dark charcoal background (`#0B0F17`), container panels (`#1E293B`), and crimson rose accents (`#E11D48`).
+  4. 6 Full Offline Modules: Dashboard with live KPIs, Clients Directory with drawer, Attendance Kiosk with barcode/RFID scanner buffer, Payments & POS Terminal with receipt printing, Class Schedules Timetable, and Outbox Sync Queue.
+  5. 23/23 tests passing in `MitrixoGym.Desktop.sln`.
+
+#### Part 2: Comprehensive Nutrition Module (Inzan PRD §11)
+- **Data Model & Types** ([`src/types/nutrition.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/types/nutrition.ts)):
+  - Strict interfaces: `NutritionAppointmentStatus`, `NutritionAppointment`, `NutritionConsultation`, `NutritionistProfile`, and `BodyMetrics` (`weight`, `bodyFatPercentage`, `muscleMass`, `bmr`, `height`, `visceralFat`).
+- **Real-Time Hook & Actions** ([`src/hooks/useNutrition.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/hooks/useNutrition.ts)):
+  - Real-time listeners on `nutritionAppointments` and `nutritionistProfiles`.
+  - Actions: `bookAppointment`, `updateAppointmentStatus`, `saveConsultationNotes`, `saveNutritionistProfile`, `fetchClientConsultations`.
+  - Writes to tenant-isolated `nutritionAppointments` and private notes subcollection `nutritionAppointments/{id}/notes` with immutable audit logging.
+- **Admin/Manager Workspace** ([`src/NutritionModule.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/NutritionModule.tsx)):
+  - 4 full tabs: **Appointments Queue** (KPI cards, date/status filters, inline actions), **Nutritionists** (profile roster, working hours schedule builder), **Client History & Metrics** (longitudinal client search, Recharts metric progress curves), and **Analytics** (sessions count, completion %, no-show rate, nutritionist workload comparison).
+- **Member Portal UI** ([`src/member/MemberNutrition.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/MemberNutrition.tsx) & [`src/member/MemberPortal.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/MemberPortal.tsx)):
+  - Dynamic slot generator with conflict detection, booking workflow, private consultation advice and action checklist review, and personal body metric tracking.
+- **Tenant Isolation & Navigation** ([`src/App.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/App.tsx) & [`src/contexts/SettingsContext.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/contexts/SettingsContext.tsx)):
+  - Gated automatically for Inzan Athletics via `(features.nutrition === true || isInzan)`; completely disabled for Strike Boxing Club (no clutter, zero orange).
+
+#### Part 3: 1-Click Calendar Sync (Inzan PRD §6.3, Classes PRD §2.A)
+- **Calendar Engine** ([`src/utils/calendarSync.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/utils/calendarSync.ts)):
+  - `generateIcsFile`: Generates RFC 5545 `.ics` iCalendar text files with UTC timestamps and triggers direct browser download for Apple Calendar, Outlook, and Android.
+  - `getGoogleCalendarUrl`: Generates web template links for instant Google Calendar entry.
+- **Dropdown Component** ([`src/components/CalendarSyncButton.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/components/CalendarSyncButton.tsx)):
+  - Polished dropdown button built on `@base-ui/react/menu` with instant visual feedback and Sonner notifications.
+- **Integrations**:
+  - [`src/member/MemberClasses.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/MemberClasses.tsx): Embedded on booked class cards with "My Bookings" program filter and count badge.
+  - [`src/member/MemberSessions.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/MemberSessions.tsx): Embedded on upcoming 1-on-1 and Group PT session cards.
+
+#### Part 4: Notification Templates & Member Preferences (Inzan PRD §15)
+- **Template System** ([`src/components/NotificationTemplateSettings.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/components/NotificationTemplateSettings.tsx) & [`src/types/notificationTemplate.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/types/notificationTemplate.ts)):
+  - Admin template configuration in [`src/Settings.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Settings.tsx) for Class Reminders, Session Bookings, Expiration Warnings, and Payment Receipts with live token substitution preview (`{{memberName}}`, `{{className}}`, `{{expiryDate}}`).
+- **Member Preferences** ([`src/member/MemberProfile.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/MemberProfile.tsx)):
+  - "Notification Preferences" card with toggle switches for Push Notifications, Class Reminders, and Session Updates, persisting directly to `users/{uid}.notificationPreferences`.
+
+#### Part 5: Explicit Payment Status & Maker-Checker Refund Workflow (Inzan PRD §17, §20)
+- **Data Model** ([`src/types.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/types.ts)):
+  - Added explicit statuses: `'paid' | 'pending' | 'refunded' | 'failed'` with refund audit metadata (`refundAmount`, `refundMethod`, `refundedAt`, `refundedBy`).
+- **Payments UI & Request Dialog** ([`src/Payments.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Payments.tsx)):
+  - Color-coded status badges and "Request Refund" row action dialog submitting to `createApprovalRequest('refund', ...)`.
+- **Approval & Execution** ([`src/services/approvalService.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/services/approvalService.ts) & [`src/admin/AdminRequests.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/admin/AdminRequests.tsx)):
+  - Manager approval sets `status = 'refunded'`, records soft delete timestamp (`deleted_at`), cancels linked entitlements, restores package session balances, and logs an immutable audit diff. Excludes refunded amounts from coach commission and branch revenue calculations.
+
+#### Part 6: Configurable No-Show Penalties & Strike Lockout (Classes PRD §3.C)
+- **Server Gate** ([`server.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/server.ts)):
+  - Enforces `client.strikeLockoutUntil` checks before confirming any class booking. Rejects with HTTP 403 when a member is currently under lockout.
+- **Automated Lockout Job** ([`functions/src/classes/noShowJob.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/functions/src/classes/noShowJob.ts)):
+  - Automatically records strikes for unexcused no-shows and triggers a 7-day class booking lockout upon reaching 3 strikes.
+
+---
+
+## 9. Live Session Log — 2026-09-13
 
 ### Comprehensive Scope & Detailed Breakdown
 

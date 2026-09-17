@@ -15,6 +15,7 @@ import { getTenantId } from '../firebase';
 import { useSettings } from '../contexts/SettingsContext';
 import StrikeWeeklyScheduleView from '../components/StrikeWeeklyScheduleView';
 import { isBookingCutoffExceeded, getBookingCutoffMinutes, formatCutoffBadgeText } from '../utils/bookingCutoff';
+import CalendarSyncButton from '../components/CalendarSyncButton';
 
 export default function MemberClasses({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: (packageId?: string) => void }) {
   const { branding, bookingWindow } = useSettings();
@@ -198,12 +199,52 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
   };
 
   const [branchFilter, setBranchFilter] = useState<string>('all');
-  const [categoryFilter, setCategoryFilter] = useState<'all' | 'mine' | 'Kids' | 'Juniors' | 'Adults'>('mine');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'mine' | 'booked' | 'Kids' | 'Juniors' | 'Adults'>('mine');
 
   const memberCategory = useMemo(() => getMemberCategory(client), [client]);
 
+  const isClassBookedByClient = (c: ClassSchedule): boolean => {
+    if (!client) return false;
+    return (
+      (c.attendees || []).includes(client.id) ||
+      Boolean(client.memberId && (c.attendees || []).includes(client.memberId)) ||
+      Boolean(client.portalUserId && (c.attendees || []).includes(client.portalUserId))
+    );
+  };
+
+  const bookedClassesCount = useMemo(() => {
+    return classes.filter(isClassBookedByClient).length;
+  }, [classes, client]);
+
+  const getClassEventDateTimes = (c: ClassSchedule) => {
+    const dateStr = getClassDateStr(c) || format(new Date(), 'yyyy-MM-dd');
+    let start = c.startTime;
+    let end = c.endTime;
+
+    if (!start || !start.includes('T')) {
+      const timePart = start ? (start.length === 5 ? `${start}:00` : start) : '10:00:00';
+      start = `${dateStr}T${timePart}`;
+    }
+    if (!end || !end.includes('T')) {
+      const timePart = end ? (end.length === 5 ? `${end}:00` : end) : '11:15:00';
+      end = `${dateStr}T${timePart}`;
+    }
+    return { start, end };
+  };
+
   // Filter classes for selected date, client tier/category, and branch
   const filteredClasses = useMemo(() => {
+    if (categoryFilter === 'booked') {
+      const booked = classes.filter(c => isClassBookedByClient(c));
+      booked.sort((a, b) => {
+        const da = getClassDateStr(a) || '';
+        const db = getClassDateStr(b) || '';
+        if (da !== db) return da.localeCompare(db);
+        return (a.startTime || '').localeCompare(b.startTime || '');
+      });
+      return booked;
+    }
+
     return classes.filter(c => {
       try {
         const dateStr = getClassDateStr(c);
@@ -426,6 +467,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
               </span>
               {[
                 { id: 'mine', label: `My Plan (${memberCategory})` },
+                { id: 'booked', label: `My Bookings${bookedClassesCount > 0 ? ` (${bookedClassesCount})` : ''}` },
                 { id: 'all', label: 'All Classes' },
                 { id: 'Juniors', label: 'Juniors' },
                 { id: 'Kids', label: 'Kids' },
@@ -496,7 +538,11 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
           {/* ─── Selected Date Header ─── */}
           <div className="flex items-center justify-between pt-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {isToday(selectedDate) ? 'Today' : format(selectedDate, 'EEEE, dd MMM')}
+              {categoryFilter === 'booked'
+                ? 'My Bookings'
+                : isToday(selectedDate)
+                ? 'Today'
+                : format(selectedDate, 'EEEE, dd MMM')}
             </p>
             <span className="text-xs text-muted-foreground font-medium">
               {filteredClasses.length} {filteredClasses.length === 1 ? 'class' : 'classes'}
@@ -510,9 +556,23 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                 <CardContent className="py-10 text-center text-muted-foreground text-xs space-y-2">
                   <Calendar className="h-6 w-6 mx-auto opacity-30" />
                   <p className="font-semibold text-foreground">
-                    No classes scheduled for {isToday(selectedDate) ? 'today' : format(selectedDate, 'dd MMM')}.
+                    {categoryFilter === 'booked'
+                      ? "You haven't booked any classes yet."
+                      : `No classes scheduled for ${isToday(selectedDate) ? 'today' : format(selectedDate, 'dd MMM')}.`}
                   </p>
-                  {nextDateWithClasses && (
+                  {categoryFilter === 'booked' ? (
+                    <div className="pt-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs font-semibold rounded-xl gap-1.5 text-primary border-primary/30 hover:bg-primary/10"
+                        onClick={() => setCategoryFilter('mine')}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Browse Available Classes
+                      </Button>
+                    </div>
+                  ) : nextDateWithClasses ? (
                     <div className="pt-2">
                       <Button
                         size="sm"
@@ -524,7 +584,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                         Jump to next class on {format(nextDateWithClasses, 'EEEE, dd MMM')}
                       </Button>
                     </div>
-                  )}
+                  ) : null}
                 </CardContent>
               </Card>
             ) : (
@@ -618,15 +678,31 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                         </div>
 
                         {isBooked || isWaitlisted ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 border-border text-muted-foreground hover:text-foreground transition-all text-xs font-semibold rounded-xl"
-                            onClick={() => handleLeaveBooking(gymClass)}
-                            disabled={actionClassId === gymClass.id}
-                          >
-                            {isWaitlisted ? 'Leave Waitlist' : 'Leave'}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            {isBooked && (
+                              <CalendarSyncButton
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs font-semibold rounded-xl border-primary/30 hover:border-primary/60 text-primary bg-primary/5 hover:bg-primary/10"
+                                event={{
+                                  title: `${gymClass.name}${((gymClass as any).coachName || gymClass.instructorName) ? ` with ${(gymClass as any).coachName || gymClass.instructorName}` : ''}`,
+                                  description: `Inzan Athletics Class: ${gymClass.name}\nInstructor: ${(gymClass as any).coachName || gymClass.instructorName || 'Coach'}\nBranch: ${gymClass.branch || ''}\nTime: ${getClassTimeDisplay(gymClass)}${(gymClass as any).description ? `\n\n${(gymClass as any).description}` : ''}`,
+                                  location: gymClass.branch || 'Inzan Athletics',
+                                  startTime: getClassEventDateTimes(gymClass).start,
+                                  endTime: getClassEventDateTimes(gymClass).end
+                                }}
+                              />
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 border-border text-muted-foreground hover:text-foreground transition-all text-xs font-semibold rounded-xl"
+                              onClick={() => handleLeaveBooking(gymClass)}
+                              disabled={actionClassId === gymClass.id}
+                            >
+                              {isWaitlisted ? 'Leave Waitlist' : 'Leave'}
+                            </Button>
+                          </div>
                         ) : isCutoff ? (
                           <Button
                             size="sm"

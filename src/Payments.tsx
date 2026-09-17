@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO, addDays } from 'date-fns';
 import { safeFormatDate, safeAddDays, toValidDate, safeIsoDate } from './utils/dateUtils';
-import { Payment, Client } from './types';
+import { Payment, Client, RefundDetails } from './types';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
@@ -52,8 +52,9 @@ export default function Payments() {
   
   const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false);
   const [refundPaymentId, setRefundPaymentId] = useState<string | null>(null);
+  const [refundAmount, setRefundAmount] = useState('');
   const [refundReason, setRefundReason] = useState('');
-  const [refundMethod, setRefundMethod] = useState('Cash');
+  const [refundMethod, setRefundMethod] = useState<'Original Method' | 'Cash' | 'Bank Transfer'>('Original Method');
   
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
@@ -581,25 +582,73 @@ export default function Payments() {
     
     const payment = payments.find(p => p.id === refundPaymentId);
     if (!payment) return;
+
+    const parsedAmount = parseFloat(refundAmount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setAlertTitle('Invalid Amount');
+      setAlertDescription('Please enter a valid refund amount greater than 0.');
+      setAlertOpen(true);
+      return;
+    }
+
+    if (parsedAmount > payment.amount) {
+      setAlertTitle('Invalid Amount');
+      setAlertDescription(`Refund amount cannot exceed the original payment amount of ${payment.amount} LE.`);
+      setAlertOpen(true);
+      return;
+    }
+
+    if (!refundReason.trim()) {
+      setAlertTitle('Reason Required');
+      setAlertDescription('Please provide a reason for the refund request.');
+      setAlertOpen(true);
+      return;
+    }
+
+    const effectiveMethod = refundMethod === 'Original Method' ? payment.method : refundMethod;
+    const client = resolvePaymentClient(payment);
+    const clientDisplayName = 
+      client?.name || 
+      payment.clientName || 
+      payment.client_name || 
+      payment.guestName || 
+      (payment as any).guest_name || 
+      'Walk-in Guest';
     
     try {
+      const refundDetails: RefundDetails = {
+        paymentId: payment.id,
+        amount: parsedAmount,
+        refundMethod: effectiveMethod,
+      };
+
       await createApprovalRequest(
         'refund',
-        { paymentId: payment.id, amount: payment.amount, refundMethod },
-        refundReason,
+        {
+          ...refundDetails,
+          clientId: payment.clientId,
+          clientName: clientDisplayName,
+          packageType: payment.packageType,
+          originalAmount: payment.amount,
+          originalMethod: payment.method,
+          entitlementId: payment.linkedEntitlementId,
+        },
+        refundReason.trim(),
         currentUser.id,
-        currentUser.name || 'Admin',
+        currentUser.name || 'Staff',
         currentUser.role,
         payment.id,
-        'payment'
+        'payment',
+        'manager'
       );
       
       setIsRefundDialogOpen(false);
       setRefundPaymentId(null);
       setRefundReason('');
+      setRefundAmount('');
       
-      setAlertTitle('Success');
-      setAlertDescription('Refund request has been submitted for approval.');
+      setAlertTitle('Refund Request Submitted');
+      setAlertDescription('Refund request has been submitted for manager approval.');
       setAlertOpen(true);
     } catch (err: any) {
       setAlertTitle('Error');
@@ -756,6 +805,37 @@ export default function Payments() {
       case 'Bank Transfer': return <FileText className="h-4 w-4 mr-2 text-purple-600" />;
       case 'Instapay': return <Smartphone className="h-4 w-4 mr-2 text-pink-600" />;
       default: return <DollarSign className="h-4 w-4 mr-2 text-gray-600" />;
+    }
+  };
+
+  const renderStatusBadge = (status?: Payment['status']) => {
+    const s = (status || 'paid').toLowerCase();
+    switch (s) {
+      case 'refunded':
+        return (
+          <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 text-[11px] font-semibold">
+            Refunded
+          </Badge>
+        );
+      case 'pending':
+        return (
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 text-[11px] font-semibold">
+            Pending
+          </Badge>
+        );
+      case 'failed':
+        return (
+          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800 text-[11px] font-semibold">
+            Failed
+          </Badge>
+        );
+      case 'paid':
+      default:
+        return (
+          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 text-[11px] font-semibold">
+            Paid
+          </Badge>
+        );
     }
   };
 
@@ -939,6 +1019,7 @@ export default function Payments() {
   const coachEarnings = React.useMemo(() => {
     const map: Record<string, number> = {};
     for (const p of filteredPayments) {
+      if (p.status === 'refunded') continue;
       if (p.coachName) {
         map[p.coachName] = (map[p.coachName] || 0) + (Number(p.amount) || 0);
       }
@@ -967,6 +1048,7 @@ export default function Payments() {
     const clientMap = new Map(clients.map(c => [c.id, c]));
     const totals: Record<string, Record<string, number>> = {};
     for (const p of filteredPayments) {
+      if (p.status === 'refunded') continue;
       const branch = clientMap.get(p.clientId)?.branch || 'Unknown';
       if (!totals[branch]) totals[branch] = { Cash: 0, 'Credit Card': 0, 'Bank Transfer': 0, Instapay: 0, Other: 0, Total: 0 };
       const row = totals[branch]!;
@@ -1605,6 +1687,7 @@ export default function Payments() {
                   <TableHead>{t('payments.table.date')}</TableHead>
                   <TableHead>{t('payments.table.client')}</TableHead>
                   <TableHead>{t('payments.table.amount')}</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="hidden sm:table-cell">{t('payments.table.branch')}</TableHead>
                   <TableHead className="hidden sm:table-cell">{t('payments.table.method')}</TableHead>
                   <TableHead className="hidden md:table-cell">{t('payments.table.package')}</TableHead>
@@ -1694,6 +1777,9 @@ export default function Payments() {
                           </div>
                         </TableCell>
                         <TableCell className="font-bold text-green-600 text-xs sm:text-sm">{payment.amount.toLocaleString()} {t('payments.currency_le')}</TableCell>
+                        <TableCell>
+                          {renderStatusBadge(payment.status)}
+                        </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           <Badge variant="secondary" className="text-[10px]">
                             {payment.branch || client?.branch || t('leads.tabs.unassigned')}
@@ -2064,42 +2150,63 @@ export default function Payments() {
                               </Button>
                             )}
 
-                            {/* Refund Request Button */}
-                            {(payment as any).status !== 'Refunded' && (
+                            {/* Refund Request Button for paid payments */}
+                            {(!payment.status || payment.status === 'paid') && (
                               <Dialog open={isRefundDialogOpen && refundPaymentId === payment.id} onOpenChange={(open) => {
                                 if (open) {
                                   setRefundPaymentId(payment.id);
-                                  setIsRefundDialogOpen(true);
+                                  setRefundAmount(payment.amount.toString());
+                                  setRefundMethod('Original Method');
                                   setRefundReason('');
+                                  setIsRefundDialogOpen(true);
                                 } else {
                                   setIsRefundDialogOpen(false);
                                   setRefundPaymentId(null);
                                 }
                               }}>
-                                <DialogTrigger render={<Button variant="ghost" size="sm" title="Request Refund" className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20" />}>
+                                <DialogTrigger render={<Button variant="ghost" size="sm" title="Request Refund" className="text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20" />}>
                                   <RotateCcw className="h-4 w-4" />
                                 </DialogTrigger>
                                 <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl rounded-2xl p-6">
                                   <DialogHeader>
-                                    <DialogTitle>Request Refund</DialogTitle>
+                                    <DialogTitle className="flex items-center gap-2">
+                                      <RotateCcw className="h-5 w-5 text-purple-600" />
+                                      Request Refund
+                                    </DialogTitle>
                                   </DialogHeader>
-                                  <div className="space-y-4">
+                                  <div className="space-y-4 pt-2">
                                     <p className="text-sm text-muted-foreground">
-                                      Request approval to refund {payment.amount} LE for this payment.
+                                      Submit a maker-checker refund request for <strong>{clientDisplayName}</strong>.
                                     </p>
+
+                                    <div className="space-y-2">
+                                      <Label className="text-sm font-semibold">Refund Amount (LE)</Label>
+                                      <Input
+                                        type="number"
+                                        min="1"
+                                        max={payment.amount}
+                                        placeholder="Refund Amount"
+                                        value={refundAmount}
+                                        onChange={(e) => setRefundAmount(e.target.value)}
+                                        className="rounded-lg"
+                                      />
+                                      <span className="text-xs text-muted-foreground">Original Payment: {payment.amount.toLocaleString()} LE</span>
+                                    </div>
+
                                     <div className="space-y-2">
                                       <Label className="text-sm font-semibold">Refund Method</Label>
-                                      <Select value={refundMethod} onValueChange={(val) => setRefundMethod(val || 'Cash')}>
+                                      <Select value={refundMethod} onValueChange={(val) => setRefundMethod(val as any || 'Original Method')}>
                                         <SelectTrigger className="h-9">
                                           <SelectValue placeholder="Select Method" />
                                         </SelectTrigger>
                                         <SelectContent>
+                                          <SelectItem value="Original Method">Original Method ({payment.method})</SelectItem>
                                           <SelectItem value="Cash">Cash</SelectItem>
-                                          <SelectItem value="Credit Card">Credit Card</SelectItem>
                                           <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
                                         </SelectContent>
                                       </Select>
                                     </div>
+
                                     <div className="space-y-2">
                                       <Label className="text-sm font-semibold">Reason for Refund</Label>
                                       <Input
@@ -2109,11 +2216,16 @@ export default function Payments() {
                                         className="rounded-lg"
                                       />
                                     </div>
+
                                     <div className="flex gap-2 justify-end pt-4">
                                       <Button variant="outline" onClick={() => setIsRefundDialogOpen(false)}>
                                         Cancel
                                       </Button>
-                                      <Button onClick={handleRequestRefund} disabled={!refundReason.trim()} className="bg-blue-600 hover:bg-blue-700">
+                                      <Button 
+                                        onClick={handleRequestRefund} 
+                                        disabled={!refundReason.trim() || !refundAmount || Number(refundAmount) <= 0 || Number(refundAmount) > payment.amount} 
+                                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                                      >
                                         Submit Request
                                       </Button>
                                     </div>
@@ -2141,7 +2253,7 @@ export default function Payments() {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       {t('payments.no_payments')}
                     </TableCell>
                   </TableRow>

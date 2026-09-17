@@ -12,7 +12,10 @@
     "lint": "tsc --noEmit",
     "audit:frontend": "node scripts/lighthouse-audit.js",
     "audit:backend": "autocannon -c 10 -d 30 -p 10 -H \"x-audit-bypass: true\" http://localhost:3000/api/clients",
-    "audit:db": "node scripts/db-audit.js"
+    "audit:db": "node scripts/db-audit.js",
+    "desktop:build": "dotnet build src/desktop/MitrixoGym.Desktop.sln",
+    "desktop:test": "dotnet test src/desktop/MitrixoGym.Desktop.sln",
+    "desktop:publish": "dotnet publish src/desktop/MitrixoGym.Strike.Desktop/MitrixoGym.Strike.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/desktop/Strike-Portable && dotnet publish src/desktop/MitrixoGym.Inzan.Desktop/MitrixoGym.Inzan.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist/desktop/Inzan-Portable"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

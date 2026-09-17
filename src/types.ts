@@ -185,6 +185,13 @@ export interface User {
   jobTitle?: InzanJobTitle | string;
   trainerType?: 'Full-Time' | 'Part-Time';
   reportsTo?: string; // userId of supervisor/manager
+  notificationPreferences?: NotificationPreferences;
+}
+
+export interface NotificationPreferences {
+  pushNotifications: boolean;
+  classReminders: boolean;
+  sessionUpdates: boolean;
 }
 
 export interface PTPackageRecord {
@@ -227,7 +234,7 @@ export interface AuditLog {
   userId: string;
   userName?: string;
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'APPROVE' | 'REJECT' | 'OVERRIDE';
-  entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION' | 'PAYOUT' | 'ASSESSMENT' | 'SHIFT_HANDOVER';
+  entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION' | 'PAYOUT' | 'ASSESSMENT' | 'SHIFT_HANDOVER' | 'USER' | 'SETTINGS';
   entityId: string;
   details: string;
   diff?: AuditDiff[];
@@ -265,6 +272,11 @@ export interface Payment {
   amount_paid: number;
   date: string; // ISO string
   method: 'Cash' | 'Credit Card' | 'Bank Transfer' | 'Instapay' | 'Other';
+  status?: 'paid' | 'pending' | 'refunded' | 'failed';
+  refundMethod?: string;
+  refundAmount?: number;
+  refundedAt?: string;
+  refundedBy?: string;
   instapayRef?: string; // 12 digits
   packageType: string;
   package_category_type: PaymentCategory;

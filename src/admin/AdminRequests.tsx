@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context';
 import { db } from '../firebase';
-import { collection, query, getDocs, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, getDocs, orderBy, doc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +14,8 @@ import { ClipboardList, Target, PauseCircle, CheckCircle2, Phone, User as UserIc
 import { useAuth } from '../contexts/AuthContext';
 import { ApprovalRequest } from '../types/approval';
 import { approveRequest, rejectRequest } from '../services/approvalService';
+import { addAuditLog } from '../services/auditService';
+import { AuditDiff, Payment } from '../types';
 
 export default function AdminRequests() {
   const { users } = useAppContext();
@@ -95,11 +97,160 @@ export default function AdminRequests() {
     }
   };
 
+  const handleApproveRefund = async (request: ApprovalRequest) => {
+    if (!currentUser) return;
+
+    // Maker-checker rule: Anti-self-approval rule
+    if (request.requesterId && request.requesterId === currentUser.id) {
+      throw new Error('Maker cannot approve their own request. A secondary manager or General Manager must countersign.');
+    }
+
+    const paymentId = request.targetEntityId || request.details?.paymentId;
+    if (!paymentId) {
+      throw new Error('Target payment ID is missing from approval request.');
+    }
+
+    const paymentRef = doc(db, 'payments', paymentId);
+    const paymentSnap = await getDoc(paymentRef);
+    const paymentData = paymentSnap.exists() ? (paymentSnap.data() as Payment) : null;
+    const refundTimestamp = new Date().toISOString();
+
+    // 1. Update target payments doc setting status = 'refunded' and deleted_at = ISO timestamp
+    await updateDoc(paymentRef, {
+      status: 'refunded',
+      deleted_at: refundTimestamp,
+      refundMethod: request.details?.refundMethod || 'Cash',
+      refundAmount: request.details?.amount,
+      refundedAt: refundTimestamp,
+      refundedBy: currentUser.id,
+      updatedAt: serverTimestamp()
+    });
+
+    // 2. Restore or adjust client package sessions / entitlement if linked
+    const entitlementId = paymentData?.linkedEntitlementId || request.details?.entitlementId;
+    if (entitlementId) {
+      try {
+        const entRef = doc(db, 'entitlements', entitlementId);
+        const entSnap = await getDoc(entRef);
+        if (entSnap.exists()) {
+          await updateDoc(entRef, {
+            status: 'cancelled',
+            cancelledAt: refundTimestamp,
+            cancelledReason: `Refund approved: ${request.reason || 'Manager approval'}`,
+            updatedAt: serverTimestamp()
+          });
+        }
+      } catch (entErr) {
+        console.warn('Error adjusting linked entitlement on refund:', entErr);
+      }
+    }
+
+    const clientId = paymentData?.clientId || request.details?.clientId;
+    if (clientId && clientId !== 'WALK-IN-GUEST') {
+      try {
+        const clientRef = doc(db, 'clients', clientId);
+        const clientSnap = await getDoc(clientRef);
+        if (clientSnap.exists()) {
+          const clientData = clientSnap.data();
+          const pkgs: any[] = Array.isArray(clientData.packages) ? [...clientData.packages] : [];
+          const targetPkgType = paymentData?.packageType || request.details?.packageType;
+          let sessionsToRestore = 0;
+          let packageFound = false;
+
+          const updatedPackages = pkgs.map((pkg: any) => {
+            const isMatch = (entitlementId && (pkg.id === entitlementId || pkg.entitlementId === entitlementId)) ||
+              (targetPkgType && (pkg.packageName === targetPkgType || pkg.name === targetPkgType) && pkg.status === 'Active');
+            
+            if (isMatch && !packageFound) {
+              packageFound = true;
+              if (typeof pkg.sessionsRemaining === 'number') {
+                sessionsToRestore = pkg.sessionsRemaining;
+              } else if (typeof pkg.sessionsTotal === 'number') {
+                sessionsToRestore = pkg.sessionsTotal;
+              }
+              return {
+                ...pkg,
+                status: 'Cancelled',
+                cancelledReason: 'Refund approved',
+                cancelledAt: refundTimestamp
+              };
+            }
+            return pkg;
+          });
+
+          const clientUpdates: any = {
+            packages: updatedPackages,
+            updatedAt: serverTimestamp()
+          };
+
+          if (sessionsToRestore > 0 && typeof clientData.sessionsRemaining === 'number') {
+            clientUpdates.sessionsRemaining = Math.max(0, clientData.sessionsRemaining - sessionsToRestore);
+          }
+
+          if (clientData.packageType === targetPkgType) {
+            const remainingActivePkg = updatedPackages.find((p: any) => p.status === 'Active');
+            if (remainingActivePkg) {
+              clientUpdates.packageType = remainingActivePkg.packageName || remainingActivePkg.name;
+            } else {
+              clientUpdates.status = 'Expired';
+            }
+          }
+
+          await updateDoc(clientRef, clientUpdates);
+        }
+      } catch (clientErr) {
+        console.warn('Error adjusting client package sessions on refund:', clientErr);
+      }
+    }
+
+    // 3. Log an immutable audit entry via addAuditLog with diff
+    const diff: AuditDiff[] = [
+      { field: 'status', oldValue: paymentData?.status || 'paid', newValue: 'refunded' },
+      { field: 'deleted_at', oldValue: paymentData?.deleted_at || null, newValue: refundTimestamp },
+      { field: 'refundAmount', oldValue: null, newValue: request.details?.amount },
+      { field: 'refundMethod', oldValue: null, newValue: request.details?.refundMethod || 'Cash' }
+    ];
+
+    await addAuditLog(
+      'APPROVE',
+      'PAYMENT',
+      paymentId,
+      `Approved refund of ${request.details?.amount} LE for payment ${paymentId}. Status updated to 'refunded' and soft-deleted. Entitlement/package balance adjusted.`,
+      currentUser.name || 'Manager',
+      {
+        diff,
+        reason: request.reason || 'Refund approved by manager',
+        branch: paymentData?.branch
+      }
+    );
+
+    // 4. Mark approval request as approved
+    const reqRef = doc(db, 'approvalRequests', request.id);
+    await updateDoc(reqRef, {
+      status: 'approved',
+      approvedBy: currentUser.id,
+      approvedAt: refundTimestamp,
+      updatedAt: serverTimestamp()
+    });
+
+    await addAuditLog(
+      'UPDATE',
+      'SYSTEM',
+      request.id,
+      `Approved refund approval request for payment ${paymentId}`,
+      currentUser.name || 'Manager'
+    );
+  };
+
   const handleApproveAction = async (request: ApprovalRequest) => {
     if (!currentUser) return;
     setProcessingId(request.id);
     try {
-      await approveRequest(request.id, currentUser.id, currentUser.name || 'Admin');
+      if (request.type === 'refund') {
+        await handleApproveRefund(request);
+      } else {
+        await approveRequest(request.id, currentUser.id, currentUser.name || 'Admin');
+      }
       await fetchRequests();
     } catch (err: any) {
       console.error(err);

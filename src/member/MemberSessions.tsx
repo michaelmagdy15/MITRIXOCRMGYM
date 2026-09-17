@@ -17,6 +17,7 @@ import { AssessmentDialog } from './components/AssessmentDialog';
 import { SessionRatingDialog } from './components/SessionRatingDialog';
 import { createApprovalRequest } from '../services/approvalService';
 import { useAuth } from '../contexts/AuthContext';
+import CalendarSyncButton from '../components/CalendarSyncButton';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
   Scheduled:  { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50',   text: 'Scheduled' },
@@ -26,6 +27,23 @@ const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
 };
 
 const DAYS_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+const getSessionEventDates = (s: any) => {
+  const dateStr = s.date || format(new Date(), 'yyyy-MM-dd');
+  const startTimeStr = s.startTime ? (s.startTime.length === 5 ? `${s.startTime}:00` : s.startTime) : '10:00:00';
+  const startIso = `${dateStr}T${startTimeStr}`;
+  let endIso = '';
+  if (s.endTime) {
+    const endTimeStr = s.endTime.length === 5 ? `${s.endTime}:00` : s.endTime;
+    endIso = `${dateStr}T${endTimeStr}`;
+  } else {
+    const [h = 10, m = 0] = (s.startTime || '10:00').split(':').map(Number);
+    const endH = String((h + 1) % 24).padStart(2, '0');
+    const endM = String(m).padStart(2, '0');
+    endIso = `${dateStr}T${endH}:${endM}:00`;
+  }
+  return { startIso, endIso };
+};
 
 export default function MemberSessions({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: () => void }) {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -548,7 +566,20 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                       </p>
                     )}
 
-                    <div className="flex gap-2 mt-3 pt-2.5 border-t border-border/40 justify-start">
+                    <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-border/40 justify-start flex-wrap">
+                      <CalendarSyncButton
+                        size="xs"
+                        variant="outline"
+                        buttonText="Add to Calendar"
+                        className="text-[10px] text-primary border-primary/20 hover:border-primary/40 h-7 font-bold px-2.5 bg-primary/5 hover:bg-primary/10"
+                        event={{
+                          title: `PT Session with ${getTrainerName(session.coachId)} (${session.type || '1-on-1'})`,
+                          description: `Personal Training Session with Coach ${getTrainerName(session.coachId)}.\nType: ${session.type || '1-on-1'}\nBranch: ${session.branch || 'Inzan Athletics'}${session.notes ? `\nFocus/Notes: ${session.notes}` : ''}`,
+                          location: session.branch || 'Inzan Athletics',
+                          startTime: getSessionEventDates(session).startIso,
+                          endTime: getSessionEventDates(session).endIso
+                        }}
+                      />
                       <Button
                         size="xs"
                         variant="outline"

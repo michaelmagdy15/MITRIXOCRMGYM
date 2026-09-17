@@ -1,0 +1,49 @@
+<Application x:Class="MitrixoGym.Inzan.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:MitrixoGym.Inzan.Desktop.Converters">
+    <Application.Resources>
+        <!-- Value Converters -->
+        <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <conv:BoolToVisibilityConverter x:Key="InverseBoolToVis" Invert="True" />
+        <conv:NullToVisibilityConverter x:Key="NullToVis" />
+        <conv:NullToVisibilityConverter x:Key="InverseNullToVis" Invert="True" />
+        <conv:MemberStatusToBrushConverter x:Key="StatusToBrush" />
+        <conv:SyncStatusToBrushConverter x:Key="SyncStatusToBrush" />
+
+        <!-- Inzan Athletics Deep Charcoal & Crimson Glassmorphic Palette -->
+        <SolidColorBrush x:Key="BrushBackgroundDark" Color="#09090B" />
+        <SolidColorBrush x:Key="BrushBackgroundMain" Color="#0B0B0E" />
+        <SolidColorBrush x:Key="BrushCard" Color="#121217" />
+        <SolidColorBrush x:Key="BrushCardHover" Color="#181820" />
+        <SolidColorBrush x:Key="BrushCardElevated" Color="#16161D" />
+        <SolidColorBrush x:Key="BrushBorder" Color="#27272A" />
+        <SolidColorBrush x:Key="BrushBorderLight" Color="#3F3F46" />
+        <SolidColorBrush x:Key="BrushBorderTranslucent" Color="#14FFFFFF" />
+
+        <!-- Inzan Brand Crimson Accent (#E11D48 / #F43F5E) -->
+        <SolidColorBrush x:Key="BrushInzanCrimson" Color="#E11D48" />
+        <SolidColorBrush x:Key="BrushInzanCrimsonHover" Color="#BE123C" />
+        <SolidColorBrush x:Key="BrushInzanCrimsonLight" Color="#F43F5E" />
+        <SolidColorBrush x:Key="BrushInzanCrimsonGlow" Color="#33E11D48" />
+        <SolidColorBrush x:Key="BrushInzanPrimary" Color="#E11D48" />
+        <SolidColorBrush x:Key="BrushInzanPrimaryLight" Color="#F43F5E" />
+        <SolidColorBrush x:Key="BrushInzanEmerald" Color="#E11D48" />
+        <SolidColorBrush x:Key="BrushInzanEmeraldDark" Color="#BE123C" />
+        <SolidColorBrush x:Key="BrushInzanEmeraldLight" Color="#F43F5E" />
+
+        <!-- Success & Status Accents (#22C55E) -->
+        <SolidColorBrush x:Key="BrushSuccess" Color="#22C55E" />
+        <SolidColorBrush x:Key="BrushSuccessDark" Color="#16A34A" />
+        <SolidColorBrush x:Key="BrushSuccessGlow" Color="#2622C55E" />
+        <SolidColorBrush x:Key="BrushWarning" Color="#F59E0B" />
+        <SolidColorBrush x:Key="BrushDanger" Color="#EF4444" />
+        <SolidColorBrush x:Key="BrushInzanGold" Color="#F59E0B" />
+        <SolidColorBrush x:Key="BrushInzanGoldLight" Color="#FBBF24" />
+
+        <!-- Clean Modern Typography & Silver-Gray Text Palette -->
+        <SolidColorBrush x:Key="BrushTextPrimary" Color="#F4F4F5" />
+        <SolidColorBrush x:Key="BrushTextSecondary" Color="#A1A1AA" />
+        <SolidColorBrush x:Key="BrushTextMuted" Color="#71717A" />
+    </Application.Resources>
+</Application>

@@ -33,3 +33,10 @@ apple-iphone-15-black-mockup/
 graphify-out/
 src/graphify-out/
 docs/redgits_pages/
+backups/
+
+# .NET / Visual Studio
+**/bin/
+**/obj/
+*.user
+*.suo

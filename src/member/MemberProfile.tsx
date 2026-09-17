@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { db, storage, auth, getTenantId } from '../firebase';
-import { doc, updateDoc, collection, query, where, getDocs, addDoc, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, writeBatch } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Calendar, Flame, Trophy, Camera, Loader2 } from 'lucide-react';
+import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Calendar, Flame, Trophy, Camera, Loader2, Bell, Dumbbell } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -96,6 +97,69 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
   // Attendance stats for hero card
   const [totalCheckins, setTotalCheckins] = useState(0);
   const [currentStreak, setCurrentStreak] = useState(0);
+
+  // Notification Preferences State
+  const [notificationPreferences, setNotificationPreferences] = useState<{
+    pushNotifications: boolean;
+    classReminders: boolean;
+    sessionUpdates: boolean;
+  }>({
+    pushNotifications: true,
+    classReminders: true,
+    sessionUpdates: true,
+  });
+  const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const loadNotificationPreferences = async () => {
+      try {
+        const userDocRef = doc(db, 'users', currentUser.id);
+        const snap = await getDoc(userDocRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.notificationPreferences) {
+            setNotificationPreferences({
+              pushNotifications: data.notificationPreferences.pushNotifications ?? true,
+              classReminders: data.notificationPreferences.classReminders ?? true,
+              sessionUpdates: data.notificationPreferences.sessionUpdates ?? true,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error loading notification preferences:', err);
+      }
+    };
+    loadNotificationPreferences();
+  }, [currentUser?.id]);
+
+  const handleToggleNotification = async (
+    key: 'pushNotifications' | 'classReminders' | 'sessionUpdates',
+    checked: boolean
+  ) => {
+    const updated = {
+      ...notificationPreferences,
+      [key]: checked,
+    };
+    setNotificationPreferences(updated);
+
+    if (!currentUser?.id) return;
+    setIsSavingNotifications(true);
+    try {
+      const userDocRef = doc(db, 'users', currentUser.id);
+      await updateDoc(userDocRef, {
+        notificationPreferences: updated,
+      });
+      toast.success('Notification preference saved');
+    } catch (err) {
+      console.error('Error updating notification preferences:', err);
+      toast.error('Failed to save notification preference');
+      // Revert on error
+      setNotificationPreferences(prev => ({ ...prev, [key]: !checked }));
+    } finally {
+      setIsSavingNotifications(false);
+    }
+  };
 
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
@@ -431,6 +495,74 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
           <Button variant="outline" size="sm" onClick={toggleTheme} className="h-9 px-4 font-bold border-primary/20 hover:border-primary/40">
             Switch Theme
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Notification Preferences Section */}
+      <Card className="border bg-card/40 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <Bell className="h-4 w-4 text-primary" />
+            Notification Preferences
+          </CardTitle>
+          <CardDescription className="text-[11px]">
+            Manage how you receive alerts for classes, personal training, and club announcements.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-3">
+          {/* Push Notifications Toggle */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-background/50 border border-border/40">
+            <div className="space-y-0.5 min-w-0 pr-2">
+              <Label htmlFor="push-notifs" className="text-xs font-bold text-foreground flex items-center gap-1.5 cursor-pointer">
+                <Bell className="h-3.5 w-3.5 text-primary" /> Push Notifications
+              </Label>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Receive instant alerts on your mobile & desktop devices.
+              </p>
+            </div>
+            <Switch
+              id="push-notifs"
+              checked={notificationPreferences.pushNotifications}
+              onCheckedChange={(checked) => handleToggleNotification('pushNotifications', checked)}
+              disabled={isSavingNotifications}
+            />
+          </div>
+
+          {/* Class Reminders Toggle */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-background/50 border border-border/40">
+            <div className="space-y-0.5 min-w-0 pr-2">
+              <Label htmlFor="class-reminders" className="text-xs font-bold text-foreground flex items-center gap-1.5 cursor-pointer">
+                <Calendar className="h-3.5 w-3.5 text-primary" /> Class Reminders
+              </Label>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Reminders 24 hours and 1 hour before booked group classes.
+              </p>
+            </div>
+            <Switch
+              id="class-reminders"
+              checked={notificationPreferences.classReminders}
+              onCheckedChange={(checked) => handleToggleNotification('classReminders', checked)}
+              disabled={isSavingNotifications}
+            />
+          </div>
+
+          {/* Session Updates Toggle */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-background/50 border border-border/40">
+            <div className="space-y-0.5 min-w-0 pr-2">
+              <Label htmlFor="session-updates" className="text-xs font-bold text-foreground flex items-center gap-1.5 cursor-pointer">
+                <Dumbbell className="h-3.5 w-3.5 text-primary" /> Session Updates
+              </Label>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Alerts when your coach books, reschedules, or confirms PT workouts.
+              </p>
+            </div>
+            <Switch
+              id="session-updates"
+              checked={notificationPreferences.sessionUpdates}
+              onCheckedChange={(checked) => handleToggleNotification('sessionUpdates', checked)}
+              disabled={isSavingNotifications}
+            />
+          </div>
         </CardContent>
       </Card>
 

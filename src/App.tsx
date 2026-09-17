@@ -126,6 +126,11 @@ function AppContent() {
     return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
   }, [branding?.companyName]);
 
+  const isInzan = React.useMemo(() => {
+    const tenantId = getTenantId();
+    return tenantId.toLowerCase().includes('inzan') || (branding?.companyName || '').toLowerCase().includes('inzan');
+  }, [branding?.companyName]);
+
   const toggleSidebar = () => {
     setIsSidebarCollapsed(prev => {
       const next = !prev;
@@ -658,7 +663,7 @@ function AppContent() {
       id: 'nutrition',
       label: 'Nutrition',
       icon: Activity,
-      show: features.nutrition === true && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: (features.nutrition === true || isInzan) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'coach')
     },
     { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: effectiveRole !== 'admin' },
     {
@@ -1204,7 +1209,7 @@ function AppContent() {
               </TabsContent>
             )}
 
-            {features.nutrition === true && (
+            {(features.nutrition === true || isInzan) && (
               <TabsContent value="nutrition" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
                 <NutritionModule />
               </TabsContent>

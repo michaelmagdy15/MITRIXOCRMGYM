@@ -93,8 +93,13 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
   }, [branding?.companyName]);
 
+  const isInzan = useMemo(() => {
+    const tenantId = getTenantId();
+    return tenantId.toLowerCase().includes('inzan') || (branding?.companyName || '').toLowerCase().includes('inzan');
+  }, [branding?.companyName]);
+
   const isMobile = useMemo(() => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike/i.test(navigator.userAgent) || window.innerWidth < 768;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM-Mobile|Strike.*Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
   }, []);
   
   const filteredNavItems = useMemo(() => {
@@ -110,7 +115,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       }
       if (item.tab === 'wallet' && features.wallet === false) return false;
       if (item.tab === 'invites' && features.operations === false) return false;
-      if (item.tab === 'nutrition' && features.nutrition === false) return false;
+      if (item.tab === 'nutrition' && features.nutrition === false && !isInzan) return false;
       return true;
     }).map(item => {
       if (item.tab === 'home' && isStrike && isMobile) {
@@ -118,7 +123,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       }
       return item;
     });
-  }, [features, isStrike, isMobile]);
+  }, [features, isStrike, isInzan, isMobile]);
 
   const [activeTab, setActiveTab] = useState<MemberTab>((initialTab as MemberTab) || 'home');
 
@@ -243,7 +248,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     } else if (target === 'invites') {
       if (features.operations !== false) setActiveTab('invites');
     } else if (target === 'nutrition') {
-      if (features.nutrition !== false) setActiveTab('nutrition');
+      if (features.nutrition !== false || isInzan) setActiveTab('nutrition');
     }
   };
 
@@ -713,7 +718,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         {activeTab === 'wallet' && <MemberWallet client={activeClient} />}
         {activeTab === 'locker' && <MemberLocker client={activeClient} />}
         {activeTab === 'invites' && <MemberInvites client={activeClient} />}
-        {activeTab === 'nutrition' && <MemberNutrition />}
+        {activeTab === 'nutrition' && <MemberNutrition client={activeClient} />}
         
         {activeTab === 'profile' && (
           <div className="space-y-4">

@@ -162,7 +162,8 @@ async function executeApprovalSideEffects(req: ApprovalRequest) {
     case 'refund':
       // Update payment status
       await updateDoc(doc(db, 'payments', targetEntityId), {
-        status: 'Refunded',
+        status: 'refunded',
+        deleted_at: new Date().toISOString(),
         refundMethod: details.refundMethod || 'Cash',
         refundAmount: details.amount,
         updatedAt: serverTimestamp()

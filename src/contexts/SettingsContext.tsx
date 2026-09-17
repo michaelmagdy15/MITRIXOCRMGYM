@@ -115,7 +115,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     complaints: false,
     advancedReports: false,
     surveys: false,
-    serviceCategoryTargets: false
+    serviceCategoryTargets: false,
+    nutrition: getTenantId().toLowerCase().includes('inzan')
   });
 
   // Storefront CMS config

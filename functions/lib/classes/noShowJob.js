@@ -37,7 +37,6 @@ exports.processNoShows = void 0;
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const logger = __importStar(require("firebase-functions/logger"));
 const firestore_1 = require("firebase-admin/firestore");
-const admin = __importStar(require("firebase-admin"));
 // Run every 15 minutes to check for no-shows
 exports.processNoShows = (0, scheduler_1.onSchedule)("*/15 * * * *", async (event) => {
     logger.info("[processNoShows] Starting no-show job for Inzan Athletics...");
@@ -72,15 +71,23 @@ exports.processNoShows = (0, scheduler_1.onSchedule)("*/15 * * * *", async (even
                 // Mark as no-show
                 batch.update(bookingDoc.ref, { status: "no-show" });
                 noShowCount++;
-                // Add a strike to the member (using a new 'strikes' subcollection or field)
+                // Add a strike to the member and enforce lockout if strikes exceed threshold
                 const memberId = bookingDoc.data().memberId;
                 if (memberId) {
                     const clientRef = tenantDb.collection("clients").doc(memberId);
-                    // Increment the no-show strikes count
-                    batch.update(clientRef, {
-                        noShowStrikes: admin.firestore.FieldValue.increment(1),
+                    const clientDoc = await clientRef.get();
+                    const currentStrikes = (clientDoc.data()?.noShowStrikes || 0) + 1;
+                    const updateData = {
+                        noShowStrikes: currentStrikes,
                         lastNoShowAt: new Date().toISOString()
-                    });
+                    };
+                    if (currentStrikes >= 3) {
+                        // Lock out bookings for 7 days
+                        const blockedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+                        updateData.bookingBlockedUntil = blockedUntil;
+                        logger.info(`[processNoShows] Member ${memberId} reached ${currentStrikes} no-show strikes. Booking blocked until ${blockedUntil}`);
+                    }
+                    batch.update(clientRef, updateData);
                 }
             }
             await batch.commit();

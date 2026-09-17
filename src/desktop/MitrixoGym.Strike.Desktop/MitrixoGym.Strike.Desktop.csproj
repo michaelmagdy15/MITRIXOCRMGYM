@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationTitle>STRIKE RECEPTION DESK</ApplicationTitle>
+    <RootNamespace>MitrixoGym.Strike.Desktop</RootNamespace>
+    <AssemblyName>MitrixoGym.Strike.Desktop</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MitrixoGym.Desktop.Core\MitrixoGym.Desktop.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\strike_members.json" />
+    <EmbeddedResource Include="Assets\strike_classes.json" />
+    <Resource Include="Assets\logo.png" />
+  </ItemGroup>
+
+</Project>
