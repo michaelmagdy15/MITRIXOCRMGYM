@@ -24,8 +24,8 @@ function getTenantBrandedName(): string {
     if (tenantId.toLowerCase() === 'strike') {
       return 'STRIKE';
     }
-    if (tenantId.toLowerCase() === 'inzan') {
-      return 'INZAN';
+    if (tenantId.toLowerCase().includes('inzan')) {
+      return 'INZAN ATHLETICS';
     }
     return tenantId.charAt(0).toUpperCase() + tenantId.slice(1);
   } catch {

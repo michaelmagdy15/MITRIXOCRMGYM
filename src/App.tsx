@@ -573,7 +573,7 @@ function AppContent() {
   }
 
   if (!currentUser) {
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM/i.test(navigator.userAgent) || window.innerWidth < 768;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike|Inzan/i.test(navigator.userAgent) || window.innerWidth < 768;
     if (isMobile && features.mobileApp === true && showPortalOverride !== 'crm') {
       return (
         <MemberPortal 

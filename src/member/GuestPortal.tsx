@@ -157,7 +157,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   
   const tenantId = getTenantId();
   const isStrike = tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM/i.test(navigator.userAgent) || window.innerWidth < 768;
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike|Inzan/i.test(navigator.userAgent) || window.innerWidth < 768;
   const { addToCart } = useCart();
   const [preloaderState, setPreloaderState] = useState<'loading' | 'exiting' | 'hidden'>('hidden');
   
@@ -534,8 +534,8 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         </div>
       </header>
 
-      {/* ── TABS ── */}
-      {(!isStrike || !isMobile) && enabledTabs.length > 0 && (
+      {/* ── TABS (DESKTOP) ── */}
+      {!isMobile && enabledTabs.length > 0 && (
         <div className="bg-card border-b px-2 flex overflow-x-auto no-scrollbar py-2 gap-2 sticky top-[calc(4rem+env(safe-area-inset-top))] z-30">
           {enabledTabs.map(tab => (
             <button
@@ -555,7 +555,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       )}
 
       {/* ── MAIN STOREFRONT CONTENT ── */}
-      <main className={`flex-1 overflow-y-auto ${isStrike && isMobile ? 'pb-[calc(5.5rem+env(safe-area-inset-bottom))]' : ''}`}>
+      <main className={`flex-1 overflow-y-auto ${isMobile ? 'pb-[calc(5.5rem+env(safe-area-inset-bottom))]' : ''}`}>
         
         {activeTab === 'book' && (
           <div className="space-y-8 py-6 sf-tab-enter">
@@ -576,7 +576,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                     {isStrike ? (
                       <BoxingGlovesIcon className="h-7 w-7 text-foreground drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
                     ) : (
-                      <Dumbbell className="h-7 w-7 text-red-500 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
+                      <Dumbbell className="h-7 w-7 text-foreground drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]" />
                     )}
                   </div>
                   <span className="text-[11px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
@@ -590,7 +590,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
                 >
                   <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
-                    <MapPin strokeWidth={1.25} className={`h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-amber-500'}`} />
+                    <MapPin strokeWidth={1.25} className="h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] text-foreground" />
                   </div>
                   <span className="text-[11px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
                     Locations
@@ -603,7 +603,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
                 >
                   <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
-                    <Calendar strokeWidth={1.25} className={`h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-yellow-600'}`} />
+                    <Calendar strokeWidth={1.25} className="h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] text-foreground" />
                   </div>
                   <span className="text-[11px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
                     Schedule
@@ -616,7 +616,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   className="flex flex-col items-center justify-center text-center cursor-pointer active:scale-95 transition-transform outline-none group"
                 >
                   <div className="w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1">
-                    <Megaphone strokeWidth={1.25} className={`h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] ${isStrike ? 'text-foreground' : 'text-emerald-500'}`} />
+                    <Megaphone strokeWidth={1.25} className="h-7 w-7 drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)] text-foreground" />
                   </div>
                   <span className="text-[11px] font-bold mt-1 text-foreground/80 group-hover:text-foreground transition-colors truncate w-full px-0.5">
                     Announcements
@@ -1821,8 +1821,8 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         </div>
       )}
 
-      {/* ── BOTTOM ACTION BAR ── */}
-      {(!isStrike || !isMobile) && (
+      {/* ── BOTTOM ACTION BAR (DESKTOP) ── */}
+      {!isMobile && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background to-transparent z-40 flex flex-col items-center gap-2">
           {isLoggedIn ? (
             <div className="flex gap-2 w-[90vw] max-w-sm">
@@ -1855,7 +1855,8 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         </div>
       )}
 
-      {isStrike && isMobile && (
+      {/* ── BOTTOM NAV BAR (MOBILE) ── */}
+      {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur-md bg-opacity-90">
           {[
             { 

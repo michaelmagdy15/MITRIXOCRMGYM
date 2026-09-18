@@ -473,7 +473,7 @@ function MainApp() {
           mediaCapturePermissionGrantType="grant"
 
           // Custom User-Agent suffix for Guideline 4.8 Apple Sign-In compliance
-          applicationNameForUserAgent="mitrixogymcrmCRM-Mobile"
+          applicationNameForUserAgent={`${APP_NAME}-Mobile mitrixogymcrmCRM-Mobile`}
 
           // Handle load errors
           onError={() => {

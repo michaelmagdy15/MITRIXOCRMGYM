@@ -18,7 +18,7 @@ import { isBookingCutoffExceeded, getBookingCutoffMinutes, formatCutoffBadgeText
 import CalendarSyncButton from '../components/CalendarSyncButton';
 
 export default function MemberClasses({ client, onSwitchToStore }: { client: Client | null; onSwitchToStore?: (packageId?: string) => void }) {
-  const { branding, bookingWindow } = useSettings();
+  const { branding, bookingWindow, branches } = useSettings();
   const [classes, setClasses] = useState<ClassSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionClassId, setActionClassId] = useState<string | null>(null);
@@ -32,6 +32,30 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
     const tenantId = getTenantId();
     return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
   }, [branding?.companyName]);
+
+  const availableBranches = useMemo(() => {
+    if (branches && branches.length > 0) {
+      return [
+        { id: 'all', label: 'All Branches' },
+        ...branches.map((b: any) => {
+          const name = typeof b === 'string' ? b : String(b?.name || b?.id || '');
+          return {
+            id: normalizeBranchName(name),
+            label: name
+          };
+        })
+      ];
+    }
+    if (isStrike) {
+      return [
+        { id: 'all', label: 'All Branches' },
+        { id: 'maxim', label: 'Maxim' },
+        { id: 'mivida', label: 'Mivida' },
+        { id: 'impact', label: 'Impact' },
+      ];
+    }
+    return [{ id: 'all', label: 'All Branches' }];
+  }, [branches, isStrike]);
 
   // Generate date range: 7 days before and 14 days after today
   const dateRange = Array.from({ length: 21 }, (_, i) => addDays(new Date(), i - 7));
@@ -440,12 +464,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
               <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mr-1 shrink-0">
                 Location:
               </span>
-              {[
-                { id: 'all', label: 'All Branches' },
-                { id: 'maxim', label: 'Maxim' },
-                { id: 'mivida', label: 'Mivida' },
-                { id: 'impact', label: 'Impact' },
-              ].map(b => (
+              {availableBranches.map(b => (
                 <button
                   key={b.id}
                   type="button"

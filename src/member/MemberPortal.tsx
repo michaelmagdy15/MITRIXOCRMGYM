@@ -99,7 +99,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   }, [branding?.companyName]);
 
   const isMobile = useMemo(() => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM-Mobile|Strike.*Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM-Mobile|Strike.*Mobile|Inzan.*Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
   }, []);
   
   const filteredNavItems = useMemo(() => {
