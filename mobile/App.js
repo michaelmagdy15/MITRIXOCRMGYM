@@ -360,9 +360,21 @@ function MainApp() {
     }
   };
 
-  // Script injected before first paint — makes push token globally accessible
+  // Script injected before first paint — makes push token globally accessible and locks mobile zoom
   const runBeforeFirstPaint = `
     window.expoPushToken = ${JSON.stringify(expoPushToken)};
+    (function() {
+      var meta = document.querySelector('meta[name="viewport"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'viewport';
+        document.head.appendChild(meta);
+      }
+      meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover';
+      document.addEventListener('gesturestart', function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
+      document.addEventListener('gestureend', function(e) { e.preventDefault(); }, { passive: false });
+    })();
     true;
   `;
 
@@ -447,6 +459,8 @@ function MainApp() {
           showsHorizontalScrollIndicator={false}
           // Note: scalesPageToFit removed — deprecated and no-op in modern RN WebView.
           // Control scaling via <meta name="viewport"> in your web app instead.
+          setBuiltInZoomControls={false}
+          setDisplayZoomControls={false}
 
           // Technical WebView configurations
           javaScriptEnabled={true}

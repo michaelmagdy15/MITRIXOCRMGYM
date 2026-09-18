@@ -478,3 +478,16 @@
     }
   }
 }
+
+/* ─── Mobile Zoom Lock & Touch Optimization ─── */
+html, body, #root {
+  touch-action: pan-x pan-y;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Prevent iOS Safari auto-zoom on input focus */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}

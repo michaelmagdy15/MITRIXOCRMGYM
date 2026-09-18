@@ -2279,6 +2279,27 @@ export default function Clients() {
                       </div>
                     </div>
                   </div>
+
+                  {/* CENTER: Large Member ID */}
+                  <div className="flex items-center justify-center my-1 sm:my-0">
+                    <div 
+                      onClick={() => {
+                        const idToCopy = activeClient.memberId ? String(activeClient.memberId).replace(/^#/, '') : activeClient.id;
+                        if (idToCopy) {
+                          navigator.clipboard.writeText(idToCopy);
+                          toast.success(`Member ID copied: ${idToCopy}`);
+                        }
+                      }}
+                      title="Click to copy Member ID"
+                      className="px-5 py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border/80 rounded-xl flex flex-col items-center sm:items-start justify-center shadow-sm"
+                    >
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Member ID</span>
+                      <span className="text-xl sm:text-2xl font-black font-mono tracking-wider text-foreground">
+                        {activeClient.memberId ? (String(activeClient.memberId).startsWith('#') ? activeClient.memberId : `#${activeClient.memberId}`) : (activeClient.id || '—')}
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
                     <div className="text-left sm:text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0">
                       <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>

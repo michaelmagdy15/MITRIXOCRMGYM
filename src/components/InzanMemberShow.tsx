@@ -349,7 +349,12 @@ export function InzanMemberShow({
           <UserIcon className="h-4 w-4 text-zinc-400" />
           <span>Member Profile Management</span>
         </div>
-        <span className="text-[11px] font-mono text-zinc-400">TENANT: INZAN ATHLETICS</span>
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-mono font-bold text-zinc-300">
+            ID: {client.memberId ? (String(client.memberId).startsWith('#') ? client.memberId : `#${client.memberId}`) : client.id}
+          </span>
+          <span className="text-[11px] font-mono text-zinc-400">TENANT: INZAN ATHLETICS</span>
+        </div>
       </div>
 
       {/* Main Container */}
@@ -387,6 +392,24 @@ export function InzanMemberShow({
                 )}
               </p>
             </div>
+          </div>
+
+          {/* Large Member ID Display */}
+          <div 
+            onClick={() => {
+              const idToCopy = client.memberId ? String(client.memberId).replace(/^#/, '') : client.id;
+              if (idToCopy) {
+                navigator.clipboard.writeText(idToCopy);
+                toast.success(`Member ID copied: ${idToCopy}`);
+              }
+            }}
+            title="Click to copy Member ID"
+            className="px-5 py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border rounded-xl flex flex-col items-center sm:items-start justify-center shrink-0 shadow-sm"
+          >
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Member ID</span>
+            <span className="text-xl sm:text-2xl font-black font-mono tracking-wider text-foreground">
+              {client.memberId ? (String(client.memberId).startsWith('#') ? client.memberId : `#${client.memberId}`) : (client.id || '—')}
+            </span>
           </div>
 
           {/* Buttons bar */}
