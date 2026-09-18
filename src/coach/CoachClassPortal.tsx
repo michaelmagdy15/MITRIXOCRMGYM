@@ -250,19 +250,19 @@ function ClassRosterView({ classData, clientMap, onBack }: { classData: ClassSch
             const isWaitlisted = member.status === 'waitlist';
 
             return (
-              <Card key={member.id} className={isCheckedIn ? 'border-green-200 bg-green-50/30' : isNoShow ? 'border-red-200 bg-red-50/30' : ''}>
+              <Card key={member.id} className={isCheckedIn ? 'border-zinc-400/60 bg-zinc-100/50 dark:bg-zinc-800/50' : isNoShow ? 'border-zinc-300/40 bg-zinc-50/50 dark:bg-zinc-900/40 opacity-75' : 'border-zinc-200 dark:border-zinc-800'}>
                 <CardContent className="p-3 flex items-center justify-between">
                   <div>
-                    <p className="font-semibold">{client?.name || 'Unknown Member'}</p>
+                    <p className="font-semibold text-foreground">{client?.name || 'Unknown Member'}</p>
                     <div className="flex items-center gap-2 mt-1">
                       {isWaitlisted ? (
-                        <Badge variant="secondary" className="text-xs bg-orange-500/10 text-orange-600">Waitlisted (#{waitlist.indexOf(member.id) + 1})</Badge>
+                        <Badge variant="secondary" className="text-xs bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border border-zinc-300 dark:border-zinc-700">Waitlisted (#{waitlist.indexOf(member.id) + 1})</Badge>
                       ) : isCheckedIn ? (
-                        <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600">Checked In</Badge>
+                        <Badge className="text-xs bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold"><CheckCircle className="h-3 w-3 mr-1" /> Checked In</Badge>
                       ) : isNoShow ? (
-                        <Badge variant="secondary" className="text-xs bg-red-500/10 text-red-600">No Show</Badge>
+                        <Badge variant="outline" className="text-xs text-zinc-500 border-zinc-300 dark:border-zinc-700 line-through">No Show</Badge>
                       ) : (
-                        <Badge variant="outline" className="text-xs text-blue-500 border-blue-200">Booked</Badge>
+                        <Badge variant="outline" className="text-xs text-foreground border-zinc-300 dark:border-zinc-700">Booked</Badge>
                       )}
                     </div>
                   </div>
@@ -273,7 +273,7 @@ function ClassRosterView({ classData, clientMap, onBack }: { classData: ClassSch
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          className="h-8 text-muted-foreground"
+                          className="h-8 text-muted-foreground hover:text-foreground"
                           disabled={updating === member.id}
                           onClick={() => handleStatusUpdate(member.id, 'uncheckin')}
                         >
@@ -283,8 +283,8 @@ function ClassRosterView({ classData, clientMap, onBack }: { classData: ClassSch
                         <>
                           <Button 
                             size="sm" 
-                            variant="outline" 
-                            className="h-8 text-green-600 border-green-200 hover:bg-green-50"
+                            variant="default" 
+                            className="h-8 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-semibold"
                             disabled={updating === member.id}
                             onClick={() => handleStatusUpdate(member.id, 'checkin')}
                           >
@@ -293,7 +293,7 @@ function ClassRosterView({ classData, clientMap, onBack }: { classData: ClassSch
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            className="h-8 text-red-500 border-red-200 hover:bg-red-50"
+                            className="h-8 text-zinc-500 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                             disabled={updating === member.id}
                             onClick={() => handleStatusUpdate(member.id, 'noshow')}
                           >

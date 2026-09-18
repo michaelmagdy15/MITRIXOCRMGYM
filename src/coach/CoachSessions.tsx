@@ -15,15 +15,18 @@ import { Assessment } from '../types';
 
 type StatusFilter = 'all' | SessionStatus;
 
-const DEFAULT_STYLE = { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50', icon: <Clock className="h-3.5 w-3.5" /> };
+const DEFAULT_STYLE = { 
+  badge: 'bg-zinc-100 text-zinc-900 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700', 
+  icon: <Clock className="h-3.5 w-3.5" /> 
+};
 
 const STATUS_STYLES: Record<string, { badge: string; icon: React.ReactNode }> = {
-  Scheduled:   { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50',   icon: <Clock className="h-3.5 w-3.5" /> },
-  Completed:   { badge: 'bg-green-500/10 text-green-600 border-green-200/50', icon: <CheckCircle className="h-3.5 w-3.5" /> },
-  Attended:    { badge: 'bg-green-500/10 text-green-600 border-green-200/50', icon: <CheckCircle className="h-3.5 w-3.5" /> },
-  'No Show':   { badge: 'bg-red-500/10 text-red-600 border-red-200/50',     icon: <XCircle className="h-3.5 w-3.5" /> },
-  Rescheduled: { badge: 'bg-amber-500/10 text-amber-600 border-amber-200/50', icon: <Clock className="h-3.5 w-3.5" /> },
-  Cancelled:   { badge: 'bg-gray-500/10 text-gray-500 border-gray-200/50',   icon: <Ban className="h-3.5 w-3.5" /> },
+  Scheduled:   { badge: 'bg-zinc-100 text-zinc-900 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-700 font-semibold', icon: <Clock className="h-3.5 w-3.5" /> },
+  Completed:   { badge: 'bg-zinc-900 text-white border-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-300 font-bold', icon: <CheckCircle className="h-3.5 w-3.5" /> },
+  Attended:    { badge: 'bg-zinc-900 text-white border-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-300 font-bold', icon: <CheckCircle className="h-3.5 w-3.5" /> },
+  'No Show':   { badge: 'bg-zinc-200 text-zinc-600 border-zinc-300 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800 line-through', icon: <XCircle className="h-3.5 w-3.5" /> },
+  Rescheduled: { badge: 'bg-zinc-100 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700', icon: <Clock className="h-3.5 w-3.5" /> },
+  Cancelled:   { badge: 'bg-zinc-100 text-zinc-400 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-500 dark:border-zinc-800', icon: <Ban className="h-3.5 w-3.5" /> },
 };
 
 export default function CoachSessions() {
@@ -32,7 +35,16 @@ export default function CoachSessions() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [clientMap, setClientMap] = useState<Record<string, Client>>({});
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [activeTab, setActiveTab] = useState('sessions');
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('coach_sessions_tab');
+      if (stored) {
+        sessionStorage.removeItem('coach_sessions_tab');
+        return stored;
+      }
+    } catch {}
+    return 'sessions';
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -80,19 +92,24 @@ export default function CoachSessions() {
       });
     });
 
-    // Fetch Assessments
-    const qAssessments = query(collection(db, 'assessments'), where('preferredCoachId', '==', currentUser.id));
-    const unsubAssessments = onSnapshot(qAssessments, (snap) => {
-      const records = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assessment));
-      records.sort((a, b) => (toValidDate(b.createdAt)?.getTime() || 0) - (toValidDate(a.createdAt)?.getTime() || 0));
-      setAssessments(records);
+    // Fetch Assessments with comprehensive coach mapping
+    const unsubAssessments = onSnapshot(collection(db, 'assessments'), (snap) => {
+      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assessment));
+      const myAssessments = all.filter(a =>
+        a.assignedCoachId === currentUser.id ||
+        a.preferredCoachId === currentUser.id ||
+        (currentUser.coachId && (a.assignedCoachId === currentUser.coachId || a.preferredCoachId === currentUser.coachId)) ||
+        (currentUser.name && (a.assignedCoachName === currentUser.name || a.preferredCoachName === currentUser.name || a.coachName === currentUser.name))
+      );
+      myAssessments.sort((a, b) => (toValidDate(b.createdAt)?.getTime() || 0) - (toValidDate(a.createdAt)?.getTime() || 0));
+      setAssessments(myAssessments);
     });
 
     return () => {
       unsubSessions();
       unsubAssessments();
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.coachId, currentUser?.name]);
 
   const handleStatusUpdate = async (id: string, newStatus: SessionStatus) => {
     try {
@@ -190,13 +207,13 @@ export default function CoachSessions() {
                       </div>
                       {session.status === 'Scheduled' && (
                         <div className="flex gap-2 mt-3">
-                          <Button size="sm" variant="outline" className="gap-1 text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleStatusUpdate(session.id, 'Completed')}>
+                          <Button size="sm" variant="default" className="gap-1 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 h-8" onClick={() => handleStatusUpdate(session.id, 'Completed')}>
                             <CheckCircle className="h-3.5 w-3.5" /> Mark Completed
                           </Button>
-                          <Button size="sm" variant="outline" className="gap-1 text-red-500 border-red-200 hover:bg-red-50" onClick={() => handleStatusUpdate(session.id, 'No Show')}>
+                          <Button size="sm" variant="outline" className="gap-1 text-zinc-500 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 h-8" onClick={() => handleStatusUpdate(session.id, 'No Show')}>
                             <XCircle className="h-3.5 w-3.5" /> No Show
                           </Button>
-                          <Button size="sm" variant="ghost" className="gap-1 text-muted-foreground hover:text-foreground" onClick={() => handleStatusUpdate(session.id, 'Cancelled')}>
+                          <Button size="sm" variant="ghost" className="gap-1 text-muted-foreground hover:text-foreground h-8" onClick={() => handleStatusUpdate(session.id, 'Cancelled')}>
                             Cancel
                           </Button>
                         </div>
@@ -211,7 +228,7 @@ export default function CoachSessions() {
 
         <TabsContent value="assessments" className="space-y-4 mt-4">
           {assessments.length === 0 ? (
-            <Card>
+            <Card className="border border-zinc-200 dark:border-zinc-800">
               <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
                 <ClipboardList className="h-12 w-12 opacity-20" />
                 <p>No assessment requests found.</p>
@@ -222,24 +239,24 @@ export default function CoachSessions() {
               {assessments.map(assessment => {
                 const cleanPhone = (assessment.phone || '').replace(/[^0-9]/g, '');
                 return (
-                  <Card key={assessment.id} className="hover:shadow-sm transition-shadow border-l-4 border-l-primary">
+                  <Card key={assessment.id} className="hover:shadow-sm transition-shadow border-l-4 border-l-zinc-900 dark:border-l-zinc-100 border-zinc-200 dark:border-zinc-800 bg-card">
                     <CardContent className="p-5 space-y-3">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-bold text-base">{assessment.clientName}</p>
                             {assessment.membershipId && (
-                              <Badge variant="outline" className="text-xs font-mono bg-muted/60">
+                              <Badge variant="outline" className="text-xs font-mono bg-muted/60 border-zinc-300 dark:border-zinc-700">
                                 ID: {assessment.membershipId}
                               </Badge>
                             )}
                             {assessment.membershipType && (
-                              <Badge variant="secondary" className="text-xs">
+                              <Badge variant="secondary" className="text-xs border border-zinc-200 dark:border-zinc-700">
                                 {assessment.membershipType}
                               </Badge>
                             )}
                             {assessment.ageGroup && (
-                              <Badge variant="outline" className="text-xs">
+                              <Badge variant="outline" className="text-xs border-zinc-300 dark:border-zinc-700">
                                 Age: {assessment.ageGroup}
                               </Badge>
                             )}
@@ -248,12 +265,16 @@ export default function CoachSessions() {
                             Requested: {safeFormatDate(assessment.createdAt, 'MMM d, yyyy HH:mm', 'Recently')}
                           </p>
                         </div>
-                        <Badge variant={assessment.status === 'Pending' ? 'default' : 'secondary'}>
+                        <Badge 
+                          className={assessment.status === 'Pending' 
+                            ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold border-zinc-700' 
+                            : 'bg-zinc-100 dark:bg-zinc-800 text-muted-foreground border-zinc-300 dark:border-zinc-700'}
+                        >
                           {assessment.status}
                         </Badge>
                       </div>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-muted/30 p-3 rounded-lg border border-border/50">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-zinc-50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
                         {assessment.phone && (
                           <div className="flex items-center gap-1.5">
                             <span className="font-semibold text-muted-foreground">WhatsApp:</span>
@@ -261,7 +282,7 @@ export default function CoachSessions() {
                               href={`https://wa.me/${cleanPhone}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="font-medium text-emerald-600 hover:underline inline-flex items-center gap-1"
+                              className="font-bold text-foreground hover:underline inline-flex items-center gap-1"
                             >
                               {assessment.phone} ↗
                             </a>
@@ -284,16 +305,16 @@ export default function CoachSessions() {
                       </div>
 
                       {(assessment.notes || assessment.injuries || assessment.goals) && (
-                        <div className="text-xs bg-amber-500/5 border border-amber-500/20 p-2.5 rounded-lg space-y-1">
+                        <div className="text-xs bg-zinc-100 dark:bg-zinc-900/60 border border-zinc-300 dark:border-zinc-700 p-2.5 rounded-lg space-y-1">
                           {(assessment.notes || assessment.injuries) && (
                             <p>
-                              <span className="font-bold text-amber-700 dark:text-amber-400">Injuries / Notes:</span>{' '}
+                              <span className="font-bold text-zinc-900 dark:text-zinc-100 uppercase text-[10px] tracking-wider">Injuries / Notes:</span>{' '}
                               <span className="text-foreground/90">{assessment.notes || assessment.injuries}</span>
                             </p>
                           )}
                           {assessment.goals && (
                             <p>
-                              <span className="font-bold text-muted-foreground">Goals:</span>{' '}
+                              <span className="font-bold text-muted-foreground uppercase text-[10px] tracking-wider">Goals:</span>{' '}
                               <span className="text-foreground/90 italic">{assessment.goals}</span>
                             </p>
                           )}
@@ -301,12 +322,12 @@ export default function CoachSessions() {
                       )}
 
                       {assessment.status === 'Pending' && (
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t">
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
                           {cleanPhone && (
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-xs h-8 text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                              className="text-xs h-8 text-foreground border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                               onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
                             >
                               Open WhatsApp Chat
@@ -314,7 +335,7 @@ export default function CoachSessions() {
                           )}
                           <Button 
                             size="sm" 
-                            className="text-xs h-8 ml-auto"
+                            className="text-xs h-8 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 ml-auto font-bold"
                             onClick={() => updateDoc(doc(db, 'assessments', assessment.id), { status: 'Contacted', updatedAt: new Date().toISOString() })}
                           >
                             Mark as Contacted

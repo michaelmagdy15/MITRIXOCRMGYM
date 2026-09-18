@@ -225,11 +225,11 @@ export default function CoachClients() {
   };
 
   const statusColor: Record<string, string> = {
-    Active: 'bg-green-500/10 text-green-600 border-green-500/20',
-    'Nearly Expired': 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-    Expired: 'bg-red-500/10 text-red-600 border-red-500/20',
-    Lead: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
-    Hold: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
+    Active: 'bg-zinc-900 text-white border-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-300 font-bold',
+    'Nearly Expired': 'bg-zinc-200 text-zinc-800 border-zinc-400 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-600 font-medium',
+    Expired: 'bg-zinc-100 text-zinc-500 border-zinc-300 dark:bg-zinc-900 dark:text-zinc-500 dark:border-zinc-800 line-through',
+    Lead: 'bg-zinc-100 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700',
+    Hold: 'bg-zinc-100 text-zinc-600 border-zinc-300 dark:bg-zinc-800/80 dark:text-zinc-400 dark:border-zinc-700',
   };
 
   const displayedList = activeTab === 'my-clients' ? myClients : allMembers;

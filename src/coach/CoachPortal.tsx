@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign } from 'lucide-react';
+import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign, Flame } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import CoachHome from './CoachHome';
 import CoachSchedule from './CoachSchedule';
@@ -17,7 +17,7 @@ type CoachTab = 'home' | 'classes' | 'schedule' | 'members' | 'sessions' | 'earn
 
 const NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Home',     icon: <Home className="h-5 w-5" /> },
-  { tab: 'classes',  label: 'Classes',  icon: <Users className="h-5 w-5" /> },
+  { tab: 'classes',  label: 'Classes',  icon: <Flame className="h-5 w-5" /> },
   { tab: 'schedule', label: 'Schedule', icon: <Calendar className="h-5 w-5" /> },
   { tab: 'members',  label: 'Members',  icon: <Users className="h-5 w-5" /> },
   { tab: 'sessions', label: 'Sessions', icon: <Dumbbell className="h-5 w-5" /> },

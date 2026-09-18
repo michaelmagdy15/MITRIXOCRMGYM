@@ -43,12 +43,12 @@ export default function CoachEarnings() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'paid':
-        return <Badge className="bg-green-100 text-green-800 hover:bg-green-200 border-green-200"><CheckCircle className="w-3 h-3 mr-1" /> Paid</Badge>;
+        return <Badge className="bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 border border-zinc-700 dark:border-zinc-300 font-bold"><CheckCircle className="w-3 h-3 mr-1" /> Paid</Badge>;
       case 'approved':
-        return <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200"><Clock className="w-3 h-3 mr-1" /> Processing</Badge>;
+        return <Badge className="bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border border-zinc-400 dark:border-zinc-700 font-medium"><Clock className="w-3 h-3 mr-1" /> Processing</Badge>;
       case 'draft':
       default:
-        return <Badge variant="outline" className="text-muted-foreground">Draft</Badge>;
+        return <Badge variant="outline" className="text-zinc-500 border-zinc-300 dark:border-zinc-700">Draft</Badge>;
     }
   };
 
