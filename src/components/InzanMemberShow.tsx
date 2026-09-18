@@ -23,7 +23,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { collection, query, where, onSnapshot, addDoc, orderBy } from 'firebase/firestore';
 import { SalesTransferLog, TrainerTransferLog } from '../types';
 import { toast } from 'sonner';
-import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette } from 'lucide-react';
+import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette, ArrowLeft } from 'lucide-react';
 import { compressImage } from '../utils/imageUtils';
 import EntitlementManager from './EntitlementManager';
 
@@ -293,50 +293,63 @@ export function InzanMemberShow({
   };
 
   return (
-    <div className="flex flex-col w-full h-[92vh] overflow-hidden bg-background text-foreground">
-      {/* Redgits Style Top Navigation Bar */}
-      <div className="bg-muted/30 px-6 py-2 flex items-center justify-between border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-          {[
-            { id: 'member_data', label: 'Member Data' },
-            { id: 'package_data', label: 'Package Data' },
-            { id: 'financials', label: 'Financial Accounts List' },
-            { id: 'freezing', label: 'Freezing List' },
-            { id: 'activities', label: 'Activities' },
-            { id: 'files', label: 'Files' },
-            { id: 'others', label: 'Others' },
-            { id: 'comments', label: 'Comments Log' },
-            { id: 'transfers', label: 'Transfer History' },
-            { id: 'entitlements', label: 'Entitlements' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as TabType)}
-              className={`px-3 py-1 text-xs font-bold rounded transition-all duration-150 whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-primary text-primary-foreground shadow'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+    <div className="flex flex-col w-full h-full min-h-0 overflow-hidden bg-background text-foreground">
+      {/* Top Navigation Bar with Back Button */}
+      <div className="bg-muted/30 px-6 py-2.5 flex items-center justify-between border-b border-border flex-shrink-0 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            className="h-8 px-3 text-xs font-bold gap-1.5 border-border bg-card hover:bg-muted shadow-sm shrink-0"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Members
+          </Button>
+          <div className="h-4 w-px bg-border hidden sm:block shrink-0" />
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+            {[
+              { id: 'member_data', label: 'Member Data' },
+              { id: 'package_data', label: 'Package Data' },
+              { id: 'financials', label: 'Financial Accounts List' },
+              { id: 'freezing', label: 'Freezing List' },
+              { id: 'activities', label: 'Activities' },
+              { id: 'files', label: 'Files' },
+              { id: 'others', label: 'Others' },
+              { id: 'comments', label: 'Comments Log' },
+              { id: 'transfers', label: 'Transfer History' },
+              { id: 'entitlements', label: 'Entitlements' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as TabType)}
+                className={`px-3 py-1 text-xs font-bold rounded transition-all duration-150 whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-primary text-primary-foreground shadow'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
         <button 
           onClick={onClose}
-          className="text-muted-foreground hover:text-foreground font-black text-sm p-1 ml-4"
+          className="text-muted-foreground hover:text-foreground font-black text-sm p-1 ml-2 shrink-0"
+          title="Close"
         >
           ✕
         </button>
       </div>
 
-      {/* Blue Header Section */}
-      <div className="bg-[#0284c7] px-6 py-2.5 flex items-center justify-between flex-shrink-0 text-white shadow-sm">
-        <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider">
-          <UserIcon className="h-4 w-4" />
-          <span>a Member Show</span>
+      {/* Inzan Carbon Header Section */}
+      <div className="bg-zinc-950 px-6 py-2 flex items-center justify-between flex-shrink-0 text-white border-b border-zinc-800 shadow-sm">
+        <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-zinc-300">
+          <UserIcon className="h-4 w-4 text-zinc-400" />
+          <span>Member Profile Management</span>
         </div>
-        <span className="text-xs opacity-90">Tenant: Inzan Athletics</span>
+        <span className="text-[11px] font-mono text-zinc-400">TENANT: INZAN ATHLETICS</span>
       </div>
 
       {/* Main Container */}

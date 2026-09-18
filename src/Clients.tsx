@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Minus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity, X, Maximize2, Minimize2, TrendingUp, RotateCcw } from 'lucide-react';
+import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Minus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity, X, Maximize2, Minimize2, TrendingUp, RotateCcw, ArrowLeft } from 'lucide-react';
 import { Client, InteractionType, InteractionOutcome, ClientPackage } from './types';
 import { format, parseISO, isValid, isAfter, isBefore, addDays, subDays, differenceInDays } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -1629,8 +1629,10 @@ export default function Clients() {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className={activeClient ? 'h-full w-full' : 'space-y-4'}>
+      {!activeClient && (
+        <>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{t('members.title')}</h2>
           <div className="flex gap-4 mt-1 text-xs text-muted-foreground font-semibold">
@@ -2202,6 +2204,8 @@ export default function Clients() {
           </div>
         </DialogContent>
       </Dialog>
+        </>
+      )}
 
       {whatsAppClient && (
         <WhatsAppDialog
@@ -2217,69 +2221,81 @@ export default function Clients() {
       )}
 
       {activeClient && (
-        <Dialog open={!!activeClientId} onOpenChange={(open) => { if (!open) setActiveClientId(null); }}>
+        <div className="-m-4 md:-m-8 min-h-[calc(100vh-4.5rem)] flex flex-col bg-background overflow-hidden animate-in fade-in duration-200">
           {features?.customMemberProfile ? (
-            <DialogContent className="p-0 border border-border shadow-2xl w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col bg-background rounded-2xl">
-              <InzanMemberShow
-                client={activeClient}
-                onClose={() => setActiveClientId(null)}
-                onUpdateClient={updateClient}
-                payments={payments}
-                attendances={attendances}
-                users={users}
-                packages={packages}
-                currentUser={currentUser}
-                setUpgradeDialogClientId={setUpgradeDialogClientId}
-                setUpgradePkgName={setUpgradePkgName}
-                setUpgradeStartDate={setUpgradeStartDate}
-                setAddPackageDialogClientId={setAddPackageDialogClientId}
-                setRenewDialogClientId={setRenewDialogClientId}
-                setRenewPkgName={setRenewPkgName}
-                setRenewStartDate={setRenewStartDate}
-              />
-            </DialogContent>
+            <InzanMemberShow
+              client={activeClient}
+              onClose={() => setActiveClientId(null)}
+              onUpdateClient={updateClient}
+              payments={payments}
+              attendances={attendances}
+              users={users}
+              packages={packages}
+              currentUser={currentUser}
+              setUpgradeDialogClientId={setUpgradeDialogClientId}
+              setUpgradePkgName={setUpgradePkgName}
+              setUpgradeStartDate={setUpgradeStartDate}
+              setAddPackageDialogClientId={setAddPackageDialogClientId}
+              setRenewDialogClientId={setRenewDialogClientId}
+              setRenewPkgName={setRenewPkgName}
+              setRenewStartDate={setRenewStartDate}
+            />
           ) : (
-            <DialogContent className={fullPageView ? 'w-screen h-screen max-w-none max-h-none rounded-none overflow-hidden flex flex-col p-0 border-none shadow-2xl bg-background' : 'w-[96vw] sm:max-w-5xl max-h-[92vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-2xl bg-background'}>
-            {/* Header */}
-            <DialogHeader className="px-6 pr-12 sm:pr-6 pt-5 pb-4 border-b bg-muted/20 flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <User className="h-5 w-5 text-primary" />
+            <div className="w-full h-full flex flex-col overflow-hidden bg-background">
+              {/* Header */}
+              <div className="px-6 pr-6 pt-4 pb-4 border-b bg-muted/20 flex-shrink-0">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveClientId(null)}
+                      className="gap-2 font-bold shadow-sm"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to Members
+                    </Button>
+                    <div className="h-6 w-px bg-border hidden sm:block" />
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <User className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="text-left">
+                        <h2 className="text-lg font-bold leading-tight flex items-center gap-2">
+                          <span>{activeClient.name}</span>
+                          <span className={activeClient.status === 'Active' ? 'text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 font-semibold border border-green-500/20' : activeClient.status === 'Nearly Expired' ? 'text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-semibold border border-amber-500/20' : 'text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 font-semibold border border-red-500/20'}>
+                            {activeClient.status}
+                          </span>
+                        </h2>
+                        <p className="text-xs text-muted-foreground">
+                          {activeClient.phone} · {activeClient.branch || 'No branch'}
+                        </p>
+                        {(activeClient.salesName || activeClient.assignedTo) && (
+                          <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                            <UserPlus className="h-3 w-3" />
+                            Sales Rep: {resolveUserDisplay(activeClient.assignedTo || activeClient.salesName, users, activeClient.salesName || 'Unassigned')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-left">
-                    <DialogTitle className="text-lg font-bold leading-tight">{activeClient.name}</DialogTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {activeClient.phone} · {activeClient.branch || 'No branch'} ·{' '}
-                      <span className={activeClient.status === 'Active' ? 'text-green-600 font-semibold' : activeClient.status === 'Nearly Expired' ? 'text-amber-600 font-semibold' : 'text-red-500 font-semibold'}>
-                        {activeClient.status}
-                      </span>
-                    </p>
-                    {(activeClient.salesName || activeClient.assignedTo) && (
-                      <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
-                        <UserPlus className="h-3 w-3" />
-                        Sales Rep: {resolveUserDisplay(activeClient.assignedTo || activeClient.salesName, users, activeClient.salesName || 'Unassigned')}
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                    <div className="text-left sm:text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0">
+                      <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>
+                      <span className="text-xl sm:text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setActiveClientId(null)}
+                      className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                      title="Close"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
-                  <div className="text-left sm:text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0">
-                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>
-                    <span className="text-xl sm:text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-10 px-2.5"
-                    onClick={() => setFullPageView(v => !v)}
-                    title={fullPageView ? 'Compact view' : 'Full page view'}
-                  >
-                    {fullPageView ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                  </Button>
                 </div>
               </div>
-            </DialogHeader>
 
             <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Modern scrollable horizontal tab pills */}
@@ -3765,10 +3781,10 @@ export default function Clients() {
                 </TabsContent>
               </div>
             </Tabs>
-            </DialogContent>
-          )}
-        </Dialog>
-      )}
+          </div>
+        )}
+      </div>
+    )}
       
       <Dialog open={!!upgradeDialogClientId} onOpenChange={(open) => { if (!open) { setUpgradeDialogClientId(null); setUpgradePkgName(''); setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd')); } }}>
         <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
@@ -4327,7 +4343,7 @@ export default function Clients() {
         </DialogContent>
       </Dialog>
 
-      {upcomingBirthdays.length > 0 && (
+      {!activeClient && upcomingBirthdays.length > 0 && (
         <Card className="border-pink-200 dark:border-pink-900">
           <CardHeader className="bg-pink-50 dark:bg-pink-900/20 pb-4">
             <CardTitle className="flex items-center text-pink-600 dark:text-pink-400">
