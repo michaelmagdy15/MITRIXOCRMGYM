@@ -24,20 +24,31 @@ export default function CoachClassPortal() {
   useEffect(() => {
     if (!currentUser) return;
     
-    // Fetch classes assigned to this instructor (from today onwards)
-    const q = query(
-      collection(db, 'classSchedules'), 
-      where('instructorId', '==', currentUser.id)
-    );
-    
-    const unsub = onSnapshot(q, (snap) => {
+    // Fetch classes and filter by coach ID or Name
+    const unsub = onSnapshot(collection(db, 'classSchedules'), (snap) => {
       const records = snap.docs.map(d => ({ ...d.data(), id: d.id } as ClassSchedule));
       
-      // Filter out past classes manually (or keep today's)
       const now = new Date();
       now.setHours(0,0,0,0);
       
-      const upcoming = records.filter(c => {
+      const currentUserName = (currentUser.name || '').trim().toLowerCase();
+      const currentCoachId = currentUser.coachId || '';
+      
+      const myClasses = records.filter(c => {
+        const matchesId = Boolean(
+          (c.instructorId && c.instructorId === currentUser.id) ||
+          (currentCoachId && c.instructorId === currentCoachId)
+        );
+        const matchesName = Boolean(
+          currentUserName && (
+            (c.instructorName && c.instructorName.trim().toLowerCase() === currentUserName) ||
+            (c.coachName && c.coachName.trim().toLowerCase() === currentUserName)
+          )
+        );
+        return matchesId || matchesName;
+      });
+
+      const upcoming = myClasses.filter(c => {
         const d = toValidDate(c.startTime);
         if (!d) return false;
         d.setHours(0,0,0,0);
@@ -47,10 +58,13 @@ export default function CoachClassPortal() {
       upcoming.sort((a, b) => (toValidDate(a.startTime)?.getTime() || 0) - (toValidDate(b.startTime)?.getTime() || 0));
       setClasses(upcoming);
       setLoading(false);
+    }, (err) => {
+      console.error('[CoachClassPortal] Error loading classes:', err);
+      setLoading(false);
     });
     
     return () => unsub();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.coachId, currentUser?.name]);
 
   useEffect(() => {
     // Pre-fetch all clients to map memberId -> Name

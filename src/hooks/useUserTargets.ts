@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UserSalesTarget, User } from '../types';
 import { db, auth } from '../firebase';
-import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, query, where } from 'firebase/firestore';
 import { addAuditLog } from '../services/auditService';
 import { cleanData } from '../utils';
 
@@ -10,11 +10,16 @@ export const useUserTargets = (currentUser: User | null) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentUser || currentUser.role === 'client') {
+    if (!currentUser || currentUser.role === 'client' || currentUser.role === 'coach') {
       setLoading(false);
       return;
     }
-    const unsub = onSnapshot(collection(db, 'userTargets'), (snapshot) => {
+    const isManager = ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'].includes(currentUser.role || '');
+    const targetsQuery = isManager
+      ? collection(db, 'userTargets')
+      : query(collection(db, 'userTargets'), where('userId', '==', currentUser.id));
+
+    const unsub = onSnapshot(targetsQuery, (snapshot) => {
       setUserTargets(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as UserSalesTarget)));
       setLoading(false);
     }, (error) => {

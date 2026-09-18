@@ -184,7 +184,7 @@ service cloud.firestore {
     // CLASS SCHEDULES (Class Definitions)
     match /classSchedules/{classId} {
       allow read: if isAuthenticated();
-      allow write: if isManager() || (isStaff() && !isCoach());
+      allow write: if isStaff();
     }
     
     // CLASS BOOKINGS (Class Reservations)

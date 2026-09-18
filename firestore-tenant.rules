@@ -295,8 +295,8 @@ service cloud.firestore {
     }
 
     match /userTargets/{targetId} {
-      allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.userId == request.auth.uid);
-      allow list: if canViewGlobalDashboard() || (isSalesRep() && resource.data.userId == request.auth.uid);
+      allow get: if canViewGlobalDashboard() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow list: if canViewGlobalDashboard() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow write: if canViewGlobalDashboard();
     }
 
@@ -428,6 +428,55 @@ service cloud.firestore {
       allow read: if true;
       allow create, delete: if isTenantStaff();
       allow update: if isTenantStaff();
+    }
+
+    match /classSchedules/{scheduleId} {
+      allow read: if true;
+      allow create, delete: if isTenantStaff();
+      allow update: if isTenantStaff();
+    }
+
+    match /classBookings/{bookingId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) || resource.data.memberId != null && isOwnClientRecord(resource.data.memberId)));
+      allow create: if isTenantStaff() || (isAuthenticated() && (request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId) || request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId)));
+      allow update: if isTenantStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) || resource.data.memberId != null && isOwnClientRecord(resource.data.memberId)));
+      allow delete: if isTenantStaff();
+    }
+
+    match /payoutRecords/{payoutId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.coachId == request.auth.uid);
+      allow write: if isTenantAdmin();
+    }
+
+    match /nutritionAppointments/{appointmentId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId));
+      allow update: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow delete: if isTenantAdmin();
+    }
+
+    match /nutritionConsultations/{consultationId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow write: if isTenantStaff();
+    }
+
+    match /nutritionistProfiles/{profileId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantAdmin();
+    }
+
+    match /shiftHandovers/{handoverId} {
+      allow read, write: if isTenantStaff();
+    }
+
+    match /complaints/{complaintId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isAuthenticated();
+      allow update, delete: if isTenantStaff();
+    }
+
+    match /approvalRequests/{requestId} {
+      allow read, write: if isTenantStaff();
     }
 
     match /traffic/{logId} {

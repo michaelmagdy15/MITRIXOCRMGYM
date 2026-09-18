@@ -5,6 +5,7 @@ export interface ClassSchedule {
   name: string;
   instructorId: string;
   instructorName: string;
+  coachName?: string;
   category: string;
   capacity: number;
   price: number; // 0 for free classes
