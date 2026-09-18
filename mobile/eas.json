@@ -30,8 +30,21 @@
     "production-inzanathletics": {
       "extends": "production",
       "env": {
+        "APP_TENANT": "inzanathletics",
         "GYM_SUBDOMAIN": "inzanathletics",
-        "APP_NAME": "Inzan",
+        "APP_NAME": "INZAN Athletics",
+        "PRODUCTION_URL": "https://inzanathletics.com"
+      }
+    },
+    "preview-inzanathletics": {
+      "extends": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_TENANT": "inzanathletics",
+        "GYM_SUBDOMAIN": "inzanathletics",
+        "APP_NAME": "INZAN Athletics",
         "PRODUCTION_URL": "https://inzanathletics.com"
       }
     }

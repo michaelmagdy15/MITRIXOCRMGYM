@@ -1,71 +1,116 @@
-/**
- * Dynamic Expo config — reads EAS build-time env vars.
- *
- * process.env is available HERE (Node context during `expo prebuild` / `eas build`)
- * but NOT inside App.js at runtime. Values flow:
- *   process.env → extra → Constants.expoConfig.extra
- *
- * For white-label builds, the generate_white_label.cjs script creates config.json
- * which is loaded as a fallback when env vars aren't set.
- *
- * IMPORTANT: STRIKE is the ONLY tenant that may fall back to hardcoded defaults.
- * White-label builds MUST set PRODUCTION_URL + APP_NAME explicitly (via EAS env or
- * config.json). A missing config on a non-STRIKE build throws at build time so we
- * never silently ship one gym's app pointing at another gym's data.
- */
+const path = require('path');
+const fs = require('fs');
 
-const STRIKE_DEFAULTS = {
-  PRODUCTION_URL: 'https://strike-egy.com/',
-  APP_NAME: 'STRIKE',
+/**
+ * Tenant Profiles Specification
+ * Single source of truth for multi-tenant mobile builds.
+ */
+const TENANT_PROFILES = {
+  strike: {
+    APP_NAME: 'STRIKE',
+    APP_SLUG: 'strike-eg',
+    SCHEME: 'strike-eg',
+    BUNDLE_ID: 'com.mitrixogymcrmboxing.crm',
+    PRODUCTION_URL: 'https://strike-egy.com/',
+    ICON: './assets/icon.png',
+    SPLASH: './assets/splash-icon.png',
+    ADAPTIVE_FOREGROUND: './assets/android-icon-foreground.png',
+    EAS_PROJECT_ID: '91ff5ffa-407c-49c6-9a0e-c1edc54db1fb',
+  },
+  inzanathletics: {
+    APP_NAME: 'INZAN Athletics',
+    APP_SLUG: 'inzanathletics',
+    SCHEME: 'inzanathletics',
+    BUNDLE_ID: 'com.inzanathletics.crm',
+    PRODUCTION_URL: 'https://inzanathletics.com/',
+    ICON: './assets/inzan/icon.png',
+    SPLASH: './assets/inzan/splash-icon.png',
+    ADAPTIVE_FOREGROUND: './assets/inzan/android-icon-foreground.png',
+    EAS_PROJECT_ID: '91ff5ffa-407c-49c6-9a0e-c1edc54db1fb',
+  },
 };
 
 let fileConfig = {};
 try {
   fileConfig = require('./config.json');
 } catch (_) {
-  // config.json is optional — only exists for white-label builds
+  // config.json is optional — only exists for manual white-label overrides
 }
 
 const baseConfig = require('./app.json');
 
 module.exports = ({ config }) => {
-  const productionUrl = process.env.PRODUCTION_URL || fileConfig.PRODUCTION_URL;
-  const appName = process.env.APP_NAME || fileConfig.APP_NAME;
+  // Resolve active tenant key
+  const envTenant = (process.env.APP_TENANT || process.env.GYM_SUBDOMAIN || fileConfig.TENANT_ID || '').toLowerCase();
+  const envAppName = process.env.APP_NAME || fileConfig.APP_NAME || '';
 
-  // No explicit config at all — only allowed for the STRIKE tenant.
-  if (!productionUrl && !appName) {
-    // Safe: this is the documented STRIKE default build.
-    return {
-      ...baseConfig.expo,
-      extra: {
-        ...baseConfig.expo.extra,
-        ...STRIKE_DEFAULTS,
-      },
-    };
+  let tenantKey = 'strike';
+  if (envTenant.includes('inzan') || envAppName.toLowerCase().includes('inzan')) {
+    tenantKey = 'inzanathletics';
+  } else if (envTenant && TENANT_PROFILES[envTenant]) {
+    tenantKey = envTenant;
   }
 
-  // Partial config is never valid — fail loudly at build time.
-  if (!productionUrl || !appName) {
-    throw new Error(
-      `[app.config] Incomplete white-label config: PRODUCTION_URL=${productionUrl ?? '(missing)'} ` +
-      `APP_NAME=${appName ?? '(missing)'}. Set both via EAS env or config.json. ` +
-      `If this is the STRIKE build, omit both to use the STRIKE defaults.`
-    );
-  }
+  const profile = TENANT_PROFILES[tenantKey] || TENANT_PROFILES.strike;
 
-  // Validate URL shape so a typo doesn't ship an app that loads nothing.
+  // Resolve specific parameters (explicit env/file vars override profile defaults)
+  const appName = process.env.APP_NAME || fileConfig.APP_NAME || profile.APP_NAME;
+  const appSlug = (process.env.APP_SLUG || process.env.GYM_SUBDOMAIN || profile.APP_SLUG).toLowerCase().replace(/[^a-z0-9-]/g, '');
+  const appScheme = (process.env.APP_SCHEME || profile.SCHEME).toLowerCase().replace(/[^a-z0-9-]/g, '');
+  const bundleId = process.env.BUNDLE_ID || fileConfig.BUNDLE_ID || profile.BUNDLE_ID;
+  const productionUrl = process.env.PRODUCTION_URL || fileConfig.PRODUCTION_URL || profile.PRODUCTION_URL;
+  const easProjectId = process.env.EAS_PROJECT_ID || fileConfig.EAS_PROJECT_ID || profile.EAS_PROJECT_ID;
+
+  // Validate URL shape
   try {
     new URL(productionUrl);
   } catch (e) {
     throw new Error(`[app.config] PRODUCTION_URL is not a valid URL: ${productionUrl}`);
   }
 
+  // Resolve icon and splash assets
+  const projectRoot = __dirname;
+  const resolvedIcon = fs.existsSync(path.resolve(projectRoot, profile.ICON))
+    ? profile.ICON
+    : baseConfig.expo.icon;
+  const resolvedSplash = fs.existsSync(path.resolve(projectRoot, profile.SPLASH))
+    ? profile.SPLASH
+    : (baseConfig.expo.splash && baseConfig.expo.splash.image ? baseConfig.expo.splash.image : './assets/splash-icon.png');
+  const resolvedForeground = fs.existsSync(path.resolve(projectRoot, profile.ADAPTIVE_FOREGROUND))
+    ? profile.ADAPTIVE_FOREGROUND
+    : (baseConfig.expo.android?.adaptiveIcon?.foregroundImage || './assets/android-icon-foreground.png');
+
   return {
     ...baseConfig.expo,
+    name: appName,
+    slug: appSlug,
+    scheme: appScheme,
+    icon: resolvedIcon,
+    ios: {
+      ...baseConfig.expo.ios,
+      bundleIdentifier: bundleId,
+    },
+    android: {
+      ...baseConfig.expo.android,
+      package: bundleId,
+      adaptiveIcon: {
+        ...baseConfig.expo.android?.adaptiveIcon,
+        foregroundImage: resolvedForeground,
+      },
+    },
+    splash: {
+      ...baseConfig.expo.splash,
+      image: resolvedSplash,
+    },
     extra: {
       ...baseConfig.expo.extra,
+      eas: {
+        ...baseConfig.expo.extra?.eas,
+        projectId: easProjectId,
+      },
       PRODUCTION_URL: productionUrl,
       APP_NAME: appName,
+      APP_TENANT: tenantKey,
     },
   };
 };

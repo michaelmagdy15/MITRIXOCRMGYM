@@ -19,7 +19,11 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "assets:inzan": "node scripts/setup_inzan_assets.cjs",
+    "build:inzan:preview": "eas build --platform android --profile preview-inzanathletics",
+    "build:inzan:prod": "eas build --platform all --profile production-inzanathletics",
+    "build:strike:prod": "eas build --platform all --profile production-strike"
   },
   "private": true
 }
