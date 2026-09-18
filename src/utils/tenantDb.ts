@@ -182,7 +182,22 @@ export function getRequestHostname(req: Request): string {
     } catch {}
   }
 
-  // 4. Hostname
+  // 4. Cloudflare / Reverse proxy headers (X-Forwarded-Host)
+  const rawForwarded = typeof req.headers?.['x-forwarded-host'] === 'string'
+    ? req.headers['x-forwarded-host']
+    : (Array.isArray(req.headers?.['x-forwarded-host']) ? (req.headers['x-forwarded-host'][0] || '') : '');
+  const forwardedHost = ((rawForwarded.split(',')[0] || '').trim().split(':')[0] || '').toLowerCase();
+  if (forwardedHost && forwardedHost !== 'localhost') {
+    if (forwardedHost.includes('inzanathletics') || forwardedHost.includes('inzan')) {
+      return 'inzanathletics.mitrixo.com';
+    }
+    if (forwardedHost.includes('strike')) {
+      return 'strike.mitrixo.com';
+    }
+    return forwardedHost;
+  }
+
+  // 5. Hostname
   if (req.hostname && req.hostname !== 'localhost') {
     return req.hostname;
   }

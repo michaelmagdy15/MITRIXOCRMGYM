@@ -231,12 +231,48 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
   const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(config)};</script>`;
   let updatedHtml = html.replace("<!-- FIREBASE_CONFIG_PLACEHOLDER -->", scriptTag);
   
-  const isTenantInzan = config?.tenantId === 'inzanathletics' || hostname.includes('inzan');
+  const isTenantInzan = config?.tenantId === 'inzanathletics' || hostname.toLowerCase().includes('inzan');
   const tenantName = isTenantInzan ? 'INZAN ATHLETICS' : 'STRIKE';
+  const tenantFullTitle = isTenantInzan ? 'INZAN ATHLETICS' : 'Strike Boxing Club';
+  const tenantDesc = isTenantInzan 
+    ? 'Official Member Portal & Training Management - Inzan Athletics' 
+    : 'Official Member Portal & Gym Management - Strike Boxing Club';
   const favicon = isTenantInzan ? '/inzan-favicon.png' : '/favicon.png';
+  const pwaIcon = isTenantInzan ? '/inzan-pwa-icon.png' : '/pwa-icon.png';
+  const splashLogo = isTenantInzan ? '/inzanlogo.png' : '/strikelogo_white.png';
+  
+  // Prefer the exact public custom domain if accessed, otherwise construct from hostname
+  const normalizedHost = hostname.toLowerCase();
+  const hostDomain = normalizedHost.includes('inzanathletics.com')
+    ? 'https://inzanathletics.com'
+    : (normalizedHost.includes('inzanathletics.mitrixo.com')
+        ? 'https://inzanathletics.mitrixo.com'
+        : (hostname.includes('localhost') ? `http://${hostname}` : `https://${hostname}`));
+  
+  const ogImage = isTenantInzan ? `${hostDomain}/inzan-og.png` : `https://strike-egy.com/pwa-icon.png`;
 
-  updatedHtml = updatedHtml.replace(/<title>.*?<\/title>/i, `<title>${tenantName}</title>`);
+  // Update Page Title
+  updatedHtml = updatedHtml.replace(/<title>.*?<\/title>/i, `<title>${tenantFullTitle}</title>`);
+  
+  // Update Favicon & PWA Icons
   updatedHtml = updatedHtml.replace(/\/favicon\.png/g, favicon);
+  updatedHtml = updatedHtml.replace(/\/pwa-icon\.png/g, pwaIcon);
+  
+  // Update App Titles for home screen
+  updatedHtml = updatedHtml.replace(/content="STRIKE"/g, `content="${tenantName}"`);
+  
+  // Update OpenGraph / Social Metadata
+  updatedHtml = updatedHtml.replace(/content="Strike Boxing Club"/g, `content="${tenantFullTitle}"`);
+  updatedHtml = updatedHtml.replace(/content="Official Member Portal & Gym Management Platform"/g, `content="${tenantDesc}"`);
+  updatedHtml = updatedHtml.replace(/content="https:\/\/strike-egy\.com\/pwa-icon\.png"/g, `content="${ogImage}"`);
+
+  // Update initial static splash screen assets in HTML for non-JS / crawler requests
+  if (isTenantInzan) {
+    updatedHtml = updatedHtml.replace(/\/strikelogo_white\.png/g, splashLogo);
+    updatedHtml = updatedHtml.replace(/STRIKE BOXING CLUB/g, 'INZAN ATHLETICS');
+    updatedHtml = updatedHtml.replace(/\/strike_slide_outdoor\.png/g, '/mitrixogymcrm_sessions_slide.png');
+  }
+
   return updatedHtml;
 }
 
