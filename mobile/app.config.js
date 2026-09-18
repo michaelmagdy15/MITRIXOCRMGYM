@@ -26,7 +26,7 @@ const TENANT_PROFILES = {
     ICON: './assets/inzan/icon.png',
     SPLASH: './assets/inzan/splash-icon.png',
     ADAPTIVE_FOREGROUND: './assets/inzan/android-icon-foreground.png',
-    EAS_PROJECT_ID: '91ff5ffa-407c-49c6-9a0e-c1edc54db1fb',
+    EAS_PROJECT_ID: '0440486c-49e4-4cde-a0de-afb11c7899af',
   },
 };
 
@@ -55,7 +55,7 @@ module.exports = ({ config }) => {
 
   // Resolve specific parameters (explicit env/file vars override profile defaults)
   const appName = process.env.APP_NAME || fileConfig.APP_NAME || profile.APP_NAME;
-  const appSlug = (process.env.APP_SLUG || process.env.GYM_SUBDOMAIN || profile.APP_SLUG).toLowerCase().replace(/[^a-z0-9-]/g, '');
+  const appSlug = (process.env.APP_SLUG || fileConfig.APP_SLUG || profile.APP_SLUG).toLowerCase().replace(/[^a-z0-9-]/g, '');
   const appScheme = (process.env.APP_SCHEME || profile.SCHEME).toLowerCase().replace(/[^a-z0-9-]/g, '');
   const bundleId = process.env.BUNDLE_ID || fileConfig.BUNDLE_ID || profile.BUNDLE_ID;
   const productionUrl = process.env.PRODUCTION_URL || fileConfig.PRODUCTION_URL || profile.PRODUCTION_URL;
@@ -79,6 +79,13 @@ module.exports = ({ config }) => {
   const resolvedForeground = fs.existsSync(path.resolve(projectRoot, profile.ADAPTIVE_FOREGROUND))
     ? profile.ADAPTIVE_FOREGROUND
     : (baseConfig.expo.android?.adaptiveIcon?.foregroundImage || './assets/android-icon-foreground.png');
+
+  const easConfig = { ...(baseConfig.expo?.extra?.eas || {}) };
+  if (easProjectId) {
+    easConfig.projectId = easProjectId;
+  } else {
+    delete easConfig.projectId;
+  }
 
   return {
     ...baseConfig.expo,
@@ -104,10 +111,7 @@ module.exports = ({ config }) => {
     },
     extra: {
       ...baseConfig.expo.extra,
-      eas: {
-        ...baseConfig.expo.extra?.eas,
-        projectId: easProjectId,
-      },
+      eas: easConfig,
       PRODUCTION_URL: productionUrl,
       APP_NAME: appName,
       APP_TENANT: tenantKey,
