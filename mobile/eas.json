@@ -42,6 +42,9 @@
       "android": {
         "buildType": "apk"
       },
+      "ios": {
+        "simulator": true
+      },
       "env": {
         "APP_TENANT": "inzanathletics",
         "GYM_SUBDOMAIN": "inzanathletics",
