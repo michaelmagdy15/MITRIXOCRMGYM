@@ -180,7 +180,7 @@ async function executeApprovalSideEffects(req: ApprovalRequest) {
         const pkgs = clientData.packages || [];
         const updatedPkgs = pkgs.map((p: any) => {
           if (p.id === details.entitlementId || p.packageId === details.entitlementId) {
-            return { ...p, remainingSessions: details.newTotal };
+            return { ...p, sessionsRemaining: details.newTotal };
           }
           return p;
         });

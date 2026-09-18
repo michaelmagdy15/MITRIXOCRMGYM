@@ -2,6 +2,10 @@ import React, { useMemo } from 'react';
 import { downloadFile } from './utils/download';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import {
@@ -128,6 +132,40 @@ export default function Reports() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     downloadFile(blob, `${filename}.csv`);
   };
+
+  const exportToPDF = (data: any[], filename: string) => {
+    if (data.length === 0) return;
+    const doc = new jsPDF();
+    const headers = Object.keys(data[0]);
+    const body = data.map(row => headers.map(h => row[h] == null ? '' : String(row[h])));
+    autoTable(doc, {
+      head: [headers],
+      body: body,
+    });
+    doc.save(`${filename}.pdf`);
+  };
+
+  const exportToXLSX = (data: any[], filename: string) => {
+    if (data.length === 0) return;
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+    XLSX.writeFile(workbook, `${filename}.xlsx`);
+  };
+
+  const ExportMenu = ({ data, filename, className, variant = 'outline', size = 'sm', children }: any) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant={variant} size={size} className={className} />}>
+        {children}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => exportToCSV(data, filename)}>Export as CSV</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportToPDF(data, filename)}>Export as PDF</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportToXLSX(data, filename)}>Export as XLSX</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
 
   // --- KPI: Revenue this month ---
   const revenueThisMonth = useMemo(
@@ -339,9 +377,7 @@ export default function Reports() {
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">{t('reports.revenue_per_source')}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => exportToCSV(sourceCSV, 'lead_sources')}>
-              <Download className="h-4 w-4 mr-1" /> {t('reports.export')}
-            </Button>
+            <ExportMenu data={sourceCSV} filename="lead_sources"><Download className="h-4 w-4 mr-1" /> {t('reports.export')}</ExportMenu>
           </CardHeader>
           <CardContent>
             {sourceROI.length === 0 ? (
@@ -395,9 +431,7 @@ export default function Reports() {
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">{t('reports.call_them')}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => exportToCSV(churnCSV, 'members_at_risk')}>
-              <Download className="h-4 w-4 mr-1" /> {t('reports.export')}
-            </Button>
+            <ExportMenu data={churnCSV} filename="members_at_risk"><Download className="h-4 w-4 mr-1" /> {t('reports.export')}</ExportMenu>
           </CardHeader>
           <CardContent>
             <div className="space-y-1 max-h-[280px] overflow-y-auto pr-1">
@@ -451,9 +485,7 @@ export default function Reports() {
                 {t('reports.retention_desc')}
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => exportToCSV(cohortCSV, 'retention')}>
-              <Download className="h-4 w-4 mr-1" /> {t('reports.export')}
-            </Button>
+            <ExportMenu data={cohortCSV} filename="retention"><Download className="h-4 w-4 mr-1" /> {t('reports.export')}</ExportMenu>
           </CardHeader>
           <CardContent>
             {cohortRetention.length === 0 ? (
@@ -532,26 +564,23 @@ export default function Reports() {
               </p>
             </div>
 
-            <Button
+            <ExportMenu 
+              data={[
+                {
+                  Month: format(now, 'yyyy-MM'),
+                  'Expiring Members': revenueForecast.expiringCount,
+                  'Total Potential (LE)': revenueForecast.sumValue,
+                  'Avg Renewal Rate': (revenueForecast.renewalRate * 100).toFixed(1) + '%',
+                  'Expected Revenue (LE)': Math.round(revenueForecast.forecast),
+                },
+              ]}
+              filename={`renewal_forecast_${format(now, 'yyyy_MM')}`}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
-              onClick={() =>
-                exportToCSV(
-                  [
-                    {
-                      Month: format(now, 'yyyy-MM'),
-                      'Expiring Members': revenueForecast.expiringCount,
-                      'Total Potential (LE)': revenueForecast.sumValue,
-                      'Avg Renewal Rate': (revenueForecast.renewalRate * 100).toFixed(1) + '%',
-                      'Expected Revenue (LE)': Math.round(revenueForecast.forecast),
-                    },
-                  ],
-                  `renewal_forecast_${format(now, 'yyyy_MM')}`
-                )
-              }
+              variant="default"
             >
               <Download className="h-4 w-4 mr-2" />
               {t('reports.download_forecast')}
-            </Button>
+            </ExportMenu>
           </CardContent>
         </Card>
       </div>

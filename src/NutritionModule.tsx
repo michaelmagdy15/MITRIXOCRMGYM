@@ -28,7 +28,8 @@ import {
   Phone,
   ArrowUpRight,
   ShieldCheck,
-  ChevronDown
+  ChevronDown,
+  Download
 } from 'lucide-react';
 import {
   NutritionAppointment,
@@ -480,6 +481,26 @@ export default function NutritionModule() {
     const notesLoggedCount = appointments.filter((a) => a.hasConsultationNotes).length;
     return { todayCount, scheduledCount, completedCount, noShowCount, notesLoggedCount };
   }, [appointments, todayStr]);
+
+  const exportNutritionCSV = () => {
+    const headers = ['Date', 'Time', 'Client', 'Nutritionist', 'Status'];
+    const rows = appointments.map(a => [
+      a.date,
+      a.startTime,
+      clients.find(c => c.id === a.clientId)?.name || a.clientId,
+      profiles.find(p => p.id === a.nutritionistId)?.name || a.nutritionistId,
+      a.status
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].map(e => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `nutrition_report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Report exported to CSV');
+  };
 
   // Analytics Stats
   const analyticsData = useMemo(() => {
@@ -1396,6 +1417,16 @@ export default function NutritionModule() {
       {/* TAB 4: ANALYTICS */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-bold text-card-foreground">Manager Analytics</h2>
+            <button
+              onClick={exportNutritionCSV}
+              className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </button>
+          </div>
           {/* Top KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-card p-5 rounded-xl border border-border shadow-xs">

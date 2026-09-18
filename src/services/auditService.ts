@@ -6,7 +6,25 @@ import { cleanData } from '../utils';
 /**
  * Adds an audit log entry to Firestore with optional before/after diffs and justification reasons.
  */
-export const addAuditLog = async (
+export async function addAuditLog(
+  action: 'OVERRIDE' | 'ADJUSTMENT',
+  entityType: AuditLog['entityType'],
+  entityId: string,
+  details: string,
+  userName: string | undefined,
+  options: { diff?: AuditDiff[]; reason: string; branch?: Branch; }
+): Promise<void>;
+
+export async function addAuditLog(
+  action: Exclude<AuditLog['action'], 'OVERRIDE' | 'ADJUSTMENT'>,
+  entityType: AuditLog['entityType'],
+  entityId: string,
+  details: string,
+  userName?: string,
+  options?: { diff?: AuditDiff[]; reason?: string; branch?: Branch; }
+): Promise<void>;
+
+export async function addAuditLog(
   action: AuditLog['action'], 
   entityType: AuditLog['entityType'], 
   entityId: string, 
@@ -17,7 +35,7 @@ export const addAuditLog = async (
     reason?: string;
     branch?: Branch;
   }
-): Promise<void> => {
+): Promise<void> {
   const currentUser = auth.currentUser;
   if (!currentUser) return;
 
@@ -52,4 +70,4 @@ export const addAuditLog = async (
   } catch (error) {
     console.error('Audit Log Error:', error);
   }
-};
+}

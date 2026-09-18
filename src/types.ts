@@ -73,12 +73,12 @@ export interface PasswordResetRequest {
 }
 
 export type SessionType = '1-on-1' | 'Partner' | 'Small Group' | 'Class' | 'Nutrition';
-export const PT_CAPACITY_LIMITS: Record<SessionType, number> = {
-  '1-on-1': 1,
-  'Partner': 2,
-  'Small Group': 5,
-  'Class': 30,
-  'Nutrition': 1
+export const PT_CAPACITY_LIMITS: Record<SessionType, { min: number; max: number }> = {
+  '1-on-1': { min: 1, max: 1 },
+  'Partner': { min: 2, max: 2 },
+  'Small Group': { min: 3, max: 5 },
+  'Class': { min: 1, max: 30 },
+  'Nutrition': { min: 1, max: 1 }
 };
 export type SessionStatus = 'Scheduled' | 'Completed' | 'No Show' | 'Rescheduled' | 'Cancelled';
 
@@ -233,7 +233,7 @@ export interface AuditLog {
   id: string;
   userId: string;
   userName?: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'APPROVE' | 'REJECT' | 'OVERRIDE';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'APPROVE' | 'REJECT' | 'OVERRIDE' | 'ADJUSTMENT';
   entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION' | 'PAYOUT' | 'ASSESSMENT' | 'SHIFT_HANDOVER' | 'USER' | 'SETTINGS';
   entityId: string;
   details: string;
@@ -660,6 +660,8 @@ export interface Complaint {
   createdBy: string;
   createdByName?: string;
   createdAt: string;
+  slaDeadline?: string;
+  isEscalated?: boolean;
 }
 
 export interface SalesTransferLog {

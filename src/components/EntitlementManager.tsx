@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useEntitlements, useEntitlementAdjustments } from '../hooks/useEntitlements';
 import { Entitlement, EntitlementAdjustment } from '../types/entitlement';
 import { refundEntitlement, freezeEntitlement, unfreezeEntitlement } from '../services/entitlementService';
+import { createApprovalRequest } from '../services/approvalService';
 import { useAuth } from '../contexts/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,8 +20,9 @@ export default function EntitlementManager({ memberId }: { memberId: string }) {
   const { currentUser } = useAuth();
   
   const [selectedEntitlement, setSelectedEntitlement] = useState<Entitlement | null>(null);
-  const [actionType, setActionType] = useState<'freeze' | 'unfreeze' | 'refund' | null>(null);
+  const [actionType, setActionType] = useState<'freeze' | 'unfreeze' | 'refund' | 'adjust_balance' | null>(null);
   const [reason, setReason] = useState('');
+  const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewHistoryId, setViewHistoryId] = useState<string | null>(null);
 
@@ -53,10 +55,31 @@ export default function EntitlementManager({ memberId }: { memberId: string }) {
       } else if (actionType === 'refund') {
         await refundEntitlement(selectedEntitlement.id, reason, currentUser.id);
         toast.success("Entitlement refunded and cancelled.");
+      } else if (actionType === 'adjust_balance') {
+        const currentTotal = selectedEntitlement.sessionsTotal === 'unlimited' ? 0 : selectedEntitlement.sessionsTotal;
+        const newTotal = Number(currentTotal) + Number(adjustmentAmount);
+        await createApprovalRequest(
+          'balance_adjustment',
+          {
+            entitlementId: selectedEntitlement.id,
+            clientId: memberId,
+            adjustmentAmount: Number(adjustmentAmount),
+            newTotal
+          },
+          reason,
+          currentUser.id,
+          currentUser.name || 'Staff',
+          currentUser.role || 'staff',
+          memberId,
+          'client',
+          'manager' // approverRole
+        );
+        toast.success("Balance adjustment request submitted for approval.");
       }
       setSelectedEntitlement(null);
       setActionType(null);
       setReason('');
+      setAdjustmentAmount(0);
     } catch (error: any) {
       toast.error(error.message || "Action failed");
     } finally {
@@ -143,6 +166,9 @@ export default function EntitlementManager({ memberId }: { memberId: string }) {
               <Button size="sm" variant="ghost" onClick={() => setViewHistoryId(viewHistoryId === ent.id ? null : ent.id)}>
                 <Clock className="h-4 w-4 mr-2" /> {viewHistoryId === ent.id ? 'Hide History' : 'View History'}
               </Button>
+              <Button size="sm" variant="outline" className="text-orange-500 hover:text-orange-600" onClick={() => { setSelectedEntitlement(ent); setActionType('adjust_balance'); setAdjustmentAmount(0); }}>
+                <RefreshCw className="h-4 w-4 mr-2" /> Adjust Balance
+              </Button>
             </div>
 
             {viewHistoryId === ent.id && (
@@ -155,7 +181,7 @@ export default function EntitlementManager({ memberId }: { memberId: string }) {
       ))}
 
       <Dialog open={!!selectedEntitlement && !!actionType} onOpenChange={(open) => {
-        if (!open) { setSelectedEntitlement(null); setActionType(null); setReason(''); }
+        if (!open) { setSelectedEntitlement(null); setActionType(null); setReason(''); setAdjustmentAmount(0); }
       }}>
         <DialogContent>
           <DialogHeader>
@@ -164,10 +190,22 @@ export default function EntitlementManager({ memberId }: { memberId: string }) {
               {actionType === 'refund' && "This will permanently cancel the entitlement and record a refund adjustment."}
               {actionType === 'freeze' && "This will pause the validity of the entitlement until unfrozen."}
               {actionType === 'unfreeze' && "This will reactivate the entitlement and extend its validity by the frozen duration."}
+              {actionType === 'adjust_balance' && "This will request a manager's approval to manually adjust the remaining sessions."}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
+            {actionType === 'adjust_balance' && (
+              <div className="space-y-2">
+                <Label>Adjustment Amount (use negative to deduct)</Label>
+                <Input 
+                  type="number" 
+                  value={adjustmentAmount} 
+                  onChange={(e) => setAdjustmentAmount(Number(e.target.value))}
+                  placeholder="e.g. 5 or -2"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Reason</Label>
               <Input 
@@ -179,10 +217,10 @@ export default function EntitlementManager({ memberId }: { memberId: string }) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setSelectedEntitlement(null); setActionType(null); }} disabled={isSubmitting}>
+            <Button variant="outline" onClick={() => { setSelectedEntitlement(null); setActionType(null); setAdjustmentAmount(0); }} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button variant={actionType === 'refund' ? 'destructive' : 'default'} onClick={handleAction} disabled={isSubmitting || !reason.trim()}>
+            <Button variant={actionType === 'refund' ? 'destructive' : 'default'} onClick={handleAction} disabled={isSubmitting || !reason.trim() || (actionType === 'adjust_balance' && adjustmentAmount === 0)}>
               {isSubmitting ? 'Processing...' : 'Confirm'}
             </Button>
           </DialogFooter>

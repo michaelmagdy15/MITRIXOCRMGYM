@@ -5,6 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 import { useAppContext } from './context';
 import { useAuditLogs } from './hooks/useAuditLogs';
 import { useAuth } from './contexts/AuthContext';
@@ -82,6 +86,40 @@ export default function AdvancedReports() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     downloadFile(blob, `${filename}.csv`);
   };
+
+  const exportToPDF = (data: any[], filename: string) => {
+    if (data.length === 0) return;
+    const doc = new jsPDF();
+    const headers = Object.keys(data[0]);
+    const body = data.map(row => headers.map(h => row[h] == null ? '' : String(row[h])));
+    autoTable(doc, {
+      head: [headers],
+      body: body,
+    });
+    doc.save(`${filename}.pdf`);
+  };
+
+  const exportToXLSX = (data: any[], filename: string) => {
+    if (data.length === 0) return;
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+    XLSX.writeFile(workbook, `${filename}.xlsx`);
+  };
+
+  const ExportMenu = ({ data, filename, className, variant = 'outline', size = 'sm', children }: any) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button variant={variant} size={size} className={className} />}>
+        {children}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => exportToCSV(data, filename)}>Export as CSV</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportToPDF(data, filename)}>Export as PDF</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => exportToXLSX(data, filename)}>Export as XLSX</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
 
   const reportTabs: ReportTab[] = [
     { id: 'expired-members', label: 'Expired Members', icon: Users },
@@ -632,15 +670,11 @@ export default function AdvancedReports() {
       <FilterRow showStaff showDateRange />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{expiredMembersData.length} expired members</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
+        <ExportMenu data={
           expiredMembersData.map(c => ({
             Name: c.name, MemberId: c.memberId, Phone: c.phone, Package: c.packageType,
             ExpiryDate: formatDate(c.membershipExpiry), SalesRep: c.salesName, Branch: c.branch,
-          })),
-          'expired_members'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+          }))} filename="expired_members"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {expiredMembersData.length === 0 ? <EmptyState message="No expired members found." /> : (
         <>
@@ -689,15 +723,11 @@ export default function AdvancedReports() {
       <FilterRow showDateRange={false} />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{packageMembersData.length} active members</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
+        <ExportMenu data={
           packageMembersData.map(c => ({
             Name: c.name, MemberId: c.memberId, Package: c.packageType, StartDate: formatDate(c.startDate),
             EndDate: formatDate(c.membershipExpiry), Sessions: c.sessionsRemaining, Branch: c.branch,
-          })),
-          'package_members'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+          }))} filename="package_members"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {packageMembersData.length === 0 ? <EmptyState message="No active members found." /> : (
         <>
@@ -748,12 +778,8 @@ export default function AdvancedReports() {
         <FilterRow showDateRange />
         <div className="flex items-center justify-between mb-3">
           <Badge variant="secondary">Total: {formatCurrency(total)}</Badge>
-          <Button size="sm" variant="outline" onClick={() => exportToCSV(
-            incomeByServiceData.map(d => ({ Category: d.name, Revenue: d.value })),
-            'income_by_service'
-          )}>
-            <Download className="h-4 w-4 mr-1" /> Export
-          </Button>
+          <ExportMenu data={
+            incomeByServiceData.map(d => ({ Category: d.name, Revenue: d.value }))} filename="income_by_service"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
         </div>
         {incomeByServiceData.length === 0 ? <EmptyState message="No payment data found." /> : (
           <>
@@ -793,12 +819,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange={false} />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{staffInvitationsData.length} staff members</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          staffInvitationsData.map(d => ({ SalesRep: d.salesRep, Total: d.total, Active: d.active, Expired: d.expired })),
-          'staff_invitations'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          staffInvitationsData.map(d => ({ SalesRep: d.salesRep, Total: d.total, Active: d.active, Expired: d.expired }))} filename="staff_invitations"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {staffInvitationsData.length === 0 ? <EmptyState message="No staff data found." /> : (
         <>
@@ -840,15 +862,11 @@ export default function AdvancedReports() {
       <FilterRow showDateRange={false} />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{notActiveMembersData.length} inactive members (30+ days)</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
+        <ExportMenu data={
           notActiveMembersData.map(c => ({
             Name: c.name, MemberId: c.memberId, Phone: c.phone, Package: c.packageType,
             LastAttendance: c.lastAttendance ? formatDate(c.lastAttendance) : 'Never', Branch: c.branch,
-          })),
-          'not_active_members'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+          }))} filename="not_active_members"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {notActiveMembersData.length === 0 ? <EmptyState message="All active members have recent attendance." /> : (
         <TableWrapper>
@@ -877,12 +895,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange={false} />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{guestMembersData.length} guest members</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          guestMembersData.map(c => ({ Name: c.name, Phone: c.phone, Branch: c.branch, CreatedAt: formatDate(c.createdAt) })),
-          'guest_members'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          guestMembersData.map(c => ({ Name: c.name, Phone: c.phone, Branch: c.branch, CreatedAt: formatDate(c.createdAt) }))} filename="guest_members"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {guestMembersData.length === 0 ? <EmptyState message="No guest members found." /> : (
         <TableWrapper>
@@ -907,12 +921,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange={false} />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{marketingReportData.length} lead sources</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          marketingReportData.map(d => ({ Source: d.source, Total: d.total, Active: d.active, Expired: d.expired, ConversionRate: d.conversionRate })),
-          'marketing_report'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          marketingReportData.map(d => ({ Source: d.source, Total: d.total, Active: d.active, Expired: d.expired, ConversionRate: d.conversionRate }))} filename="marketing_report"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {marketingReportData.length === 0 ? <EmptyState message="No marketing data found." /> : (
         <>
@@ -957,12 +967,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{marketingByPackageData.length} source-package combinations</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          marketingByPackageData.map(d => ({ Source: d.source, Package: d.packageType, Count: d.count, Revenue: d.revenue })),
-          'marketing_by_package'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          marketingByPackageData.map(d => ({ Source: d.source, Package: d.packageType, Count: d.count, Revenue: d.revenue }))} filename="marketing_by_package"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {marketingByPackageData.length === 0 ? <EmptyState message="No marketing-by-package data found." /> : (
         <TableWrapper>
@@ -987,15 +993,11 @@ export default function AdvancedReports() {
       <FilterRow showStaff showDateRange />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{packageUpgradesData.length} upgrades</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
+        <ExportMenu data={
           packageUpgradesData.map(p => ({
             Client: p.client_name, PreviousPackage: p.previousPackageName, NewPackage: p.packageType,
             Amount: p.amount_paid || p.amount, Date: formatDate(p.date || p.created_at), SalesRep: p.salesName,
-          })),
-          'package_upgrades'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+          }))} filename="package_upgrades"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {packageUpgradesData.length === 0 ? <EmptyState message="No package upgrades found." /> : (
         <TableWrapper>
@@ -1022,12 +1024,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{trainerExerciseData.length} trainers</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          trainerExerciseData.map(d => ({ Trainer: d.trainerName, Total: d.total, Attended: d.attended, NoShow: d.noShow, Cancelled: d.cancelled })),
-          'trainer_exercise'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          trainerExerciseData.map(d => ({ Trainer: d.trainerName, Total: d.total, Attended: d.attended, NoShow: d.noShow, Cancelled: d.cancelled }))} filename="trainer_exercise"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {trainerExerciseData.length === 0 ? <EmptyState message="No trainer session data found." /> : (
         <>
@@ -1070,12 +1068,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{topActivityData.reduce((s, d) => s + (d.checkIns || 0), 0)} total check-ins</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          topActivityData.map(d => ({ Day: d.day, CheckIns: d.checkIns })),
-          'top_activity'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          topActivityData.map(d => ({ Day: d.day, CheckIns: d.checkIns }))} filename="top_activity"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {topActivityData.every(d => d.checkIns === 0) ? <EmptyState message="No attendance data found." /> : (
         <>
@@ -1115,12 +1109,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{memberAttendanceData.length} members with attendance</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          memberAttendanceData.map(d => ({ Name: d.name, MemberId: d.memberId, TotalAttendances: d.totalAttendances, LastAttendance: d.lastAttendance ? formatDate(d.lastAttendance) : 'N/A' })),
-          'member_attendance'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          memberAttendanceData.map(d => ({ Name: d.name, MemberId: d.memberId, TotalAttendances: d.totalAttendances, LastAttendance: d.lastAttendance ? formatDate(d.lastAttendance) : 'N/A' }))} filename="member_attendance"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {memberAttendanceData.length === 0 ? <EmptyState message="No attendance records found." /> : (
         <TableWrapper>
@@ -1145,12 +1135,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange={false} />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{memberPointsData.length} members</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          memberPointsData.map(d => ({ Rank: d.rank, Name: d.name, MemberId: d.memberId, Points: d.points, Package: d.packageType, Branch: d.branch })),
-          'member_points'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          memberPointsData.map(d => ({ Rank: d.rank, Name: d.name, MemberId: d.memberId, Points: d.points, Package: d.packageType, Branch: d.branch }))} filename="member_points"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {memberPointsData.length === 0 ? <EmptyState message="No member points data found." /> : (
         <TableWrapper>
@@ -1185,12 +1171,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange={false} />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{referralsData.length} referred members</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          referralsData.map(c => ({ Member: c.name, ReferredBy: c.referredByName || c.referredBy, DateJoined: formatDate(c.createdAt), Package: c.packageType })),
-          'referrals'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          referralsData.map(c => ({ Member: c.name, ReferredBy: c.referredByName || c.referredBy, DateJoined: formatDate(c.createdAt), Package: c.packageType }))} filename="referrals"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {referralsData.length === 0 ? <EmptyState message="No referral data found." /> : (
         <TableWrapper>
@@ -1215,12 +1197,8 @@ export default function AdvancedReports() {
       <FilterRow showDateRange={false} />
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{nationalMembersData.length} nationalities</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          nationalMembersData.map(d => ({ Nationality: d.nationality, Count: d.count, Percentage: d.percentage })),
-          'national_members'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          nationalMembersData.map(d => ({ Nationality: d.nationality, Count: d.count, Percentage: d.percentage }))} filename="national_members"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {nationalMembersData.length === 0 ? <EmptyState message="No nationality data found." /> : (
         <>
@@ -1277,12 +1255,8 @@ export default function AdvancedReports() {
       </div>
       <div className="flex items-center justify-between mb-3">
         <Badge variant="secondary">{staffLogsData.length} log entries</Badge>
-        <Button size="sm" variant="outline" onClick={() => exportToCSV(
-          staffLogsData.map(l => ({ Date: formatDateTime(l.timestamp), User: l.userName, Action: l.action, EntityType: l.entityType, Details: l.details })),
-          'staff_logs'
-        )}>
-          <Download className="h-4 w-4 mr-1" /> Export
-        </Button>
+        <ExportMenu data={
+          staffLogsData.map(l => ({ Date: formatDateTime(l.timestamp), User: l.userName, Action: l.action, EntityType: l.entityType, Details: l.details }))} filename="staff_logs"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
       </div>
       {staffLogsData.length === 0 ? <EmptyState message="No audit logs found." /> : (
         <TableWrapper>

@@ -15,8 +15,14 @@ import { Complaint, ComplaintCategory } from './types';
 import { downloadCSV } from './utils/download';
 import { format } from 'date-fns';
 import { safeFormatDate } from './utils/dateUtils';
-import { MessageSquare, Plus, AlertTriangle, CheckCircle2, Clock, XCircle, Star, Tag, Trash2 } from 'lucide-react';
+import { MessageSquare, Plus, AlertTriangle, CheckCircle2, Clock, XCircle, Star, Tag, Trash2, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
+
+const isOverdue = (complaint: Complaint) => {
+  if (complaint.status === 'Resolved' || complaint.status === 'Closed') return false;
+  if (!complaint.slaDeadline) return false;
+  return new Date() > new Date(complaint.slaDeadline);
+};
 
 const priorityBadgeClass = (priority: string) => {
   switch (priority) {
@@ -157,6 +163,8 @@ export default function Complaints() {
         createdAt: new Date().toISOString(),
         createdBy: currentUser?.id || '',
         createdByName: currentUser?.name || '',
+        slaDeadline: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(), // 48 hours SLA
+        isEscalated: false,
       };
 
       const docRef = doc(collection(db, 'complaints'));
@@ -202,6 +210,20 @@ export default function Complaints() {
       toast.success('Complaint deleted');
     } catch (err: any) {
       toast.error('Failed to delete: ' + (err.message || 'Unknown error'));
+    }
+  };
+
+  // ── Escalate Complaint ──
+  const handleEscalateComplaint = async (complaintId: string) => {
+    try {
+      const docRef = doc(db, 'complaints', complaintId);
+      await updateDoc(docRef, { isEscalated: true });
+      toast.success('Complaint escalated to manager');
+      if (detailComplaint?.id === complaintId) {
+        setDetailComplaint({ ...detailComplaint, isEscalated: true });
+      }
+    } catch (err: any) {
+      toast.error('Failed to escalate: ' + (err.message || 'Unknown error'));
     }
   };
 
@@ -404,7 +426,19 @@ export default function Complaints() {
                     ) : (
                       filteredComplaints.map((complaint) => (
                         <tr key={complaint.id} className="border-b hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openDetail(complaint)}>
-                          <td className="p-3 font-medium">{complaint.title}</td>
+                          <td className="p-3 font-medium">
+                            <div className="flex flex-col gap-1">
+                              <span>{complaint.title}</span>
+                              <div className="flex items-center gap-1">
+                                {complaint.isEscalated && (
+                                  <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">Escalated</Badge>
+                                )}
+                                {isOverdue(complaint) && (
+                                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-red-500 text-red-500">Overdue</Badge>
+                                )}
+                              </div>
+                            </div>
+                          </td>
                           <td className="p-3 text-muted-foreground">{complaint.category || '—'}</td>
                           <td className="p-3">
                             <Badge className={priorityBadgeClass(complaint.priority)}>{complaint.priority}</Badge>
@@ -637,6 +671,24 @@ export default function Complaints() {
                     <span className="ml-1">{detailComplaint.createdBy || '—'}</span>
                   </div>
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="font-medium text-muted-foreground">SLA Deadline:</span>
+                    <span className={`ml-1 ${isOverdue(detailComplaint) ? 'text-red-500 font-bold' : ''}`}>
+                      {detailComplaint.slaDeadline ? safeFormatDate(detailComplaint.slaDeadline, 'MMM dd, yyyy HH:mm') : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-muted-foreground">Escalated:</span>
+                    <span className="ml-1">
+                      {detailComplaint.isEscalated ? (
+                        <Badge variant="destructive" className="text-[10px] px-1 py-0 h-4">Yes</Badge>
+                      ) : (
+                        'No'
+                      )}
+                    </span>
+                  </div>
+                </div>
                 {detailComplaint.resolvedAt && (
                   <div className="grid grid-cols-2 gap-2 border-t pt-2">
                     <div>
@@ -653,17 +705,27 @@ export default function Complaints() {
 
               {/* Editable status */}
               <div className="border-t pt-4 space-y-3">
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={detailStatus} onValueChange={v => setDetailStatus(v || 'Open')}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Open">Open</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="Resolved">Resolved</SelectItem>
-                      <SelectItem value="Closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2 flex-1 mr-4">
+                    <Label>Status</Label>
+                    <Select value={detailStatus} onValueChange={v => setDetailStatus(v || 'Open')}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Open">Open</SelectItem>
+                        <SelectItem value="In Progress">In Progress</SelectItem>
+                        <SelectItem value="Resolved">Resolved</SelectItem>
+                        <SelectItem value="Closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {!detailComplaint.isEscalated && detailComplaint.status !== 'Resolved' && detailComplaint.status !== 'Closed' && (
+                    <div className="mt-6">
+                      <Button variant="destructive" size="sm" onClick={() => handleEscalateComplaint(detailComplaint.id)}>
+                        <ShieldAlert className="h-4 w-4 mr-1" />
+                        Escalate to Manager
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="resolution-notes">Resolution Notes</Label>

@@ -50,7 +50,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           // Raise precache limit to 5 MB so all split chunks are accepted
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+          maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           ignoreURLParametersMatching: [/^cb$/],
           cleanupOutdatedCaches: true,
