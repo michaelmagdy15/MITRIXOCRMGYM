@@ -25,6 +25,8 @@ import { AlertDialog } from './components/AlertDialog';
 import { PaymentCategory, PAYMENT_CATEGORIES, resolvePaymentCategory } from './utils/paymentCategories';
 import { createApprovalRequest } from './services/approvalService';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
+import { resolvePaymentBranch, normalizeBranchName } from './utils/branchUtils';
+import { toCanonicalBranchId } from './utils/memberCategories';
 
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
@@ -72,6 +74,7 @@ export default function Payments() {
   const [pendingNewPhone, setPendingNewPhone] = useState<string | null>(null);
   const [isWalkInGuest, setIsWalkInGuest] = useState(false);
   const [guestClientName, setGuestClientName] = useState('');
+  const [paymentBranch, setPaymentBranch] = useState('');
 
   useEffect(() => {
     if (!pendingNewPhone) return;
@@ -387,12 +390,14 @@ export default function Payments() {
       const isRenewalPayment = !isGuest && !!existingActivePackage;
 
       const pkg = packages.find(p => p.name === packageType);
-      const clientBranch = newClientBranch || selectedClient?.branch || '';
+      const effectiveBranch = normalizeBranchName(paymentBranch || newClientBranch || selectedClient?.branch || currentUser?.branch || (branches.length > 0 ? branches[0] : ''));
 
       await processPaymentTransaction({
         clientId: isGuest ? 'WALK-IN-GUEST' : clientId,
         clientName: effectiveClientName,
-        clientBranch,
+        clientBranch: effectiveBranch,
+        branch: effectiveBranch,
+        branchId: toCanonicalBranchId(effectiveBranch) || undefined,
         clientStatus: isGuest ? 'Active' : selectedClient?.status,
         clientPackages: selectedClient?.packages,
         isGuest,
@@ -431,6 +436,7 @@ export default function Payments() {
       setIsCreatingNew(false);
       setIsWalkInGuest(false);
       setGuestClientName('');
+      setPaymentBranch('');
       // Reset form
       setClientId('');
       setClientSearch('');
@@ -537,10 +543,13 @@ export default function Payments() {
       const priceDiff = prevSysPkg ? pkg.price - prevSysPkg.price : pkg.price;
       const amountToPay = Math.max(0, priceDiff);
 
+      const clientBranchNorm = normalizeBranchName(client.branch);
       await processPaymentTransaction({
         clientId: client.id,
         clientName: client.name,
-        clientBranch: client.branch,
+        clientBranch: clientBranchNorm,
+        branch: clientBranchNorm,
+        branchId: toCanonicalBranchId(clientBranchNorm) || undefined,
         clientStatus: client.status,
         clientPackages: client.packages,
         amount: amountToPay,
@@ -747,7 +756,7 @@ export default function Payments() {
               <div class="label">${labelMemberId}</div>
               <div class="value">${client?.memberId ? '#' + client.memberId : 'N/A'}</div>
               <div class="label">${labelBranch}</div>
-              <div class="value">${client?.branch || 'N/A'}</div>
+              <div class="value">${resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : 'N/A'}</div>
             </div>
             <div class="details-col align-end">
               <div class="label">${labelReceiptNo}</div>
@@ -948,8 +957,11 @@ export default function Payments() {
       // Method filter
       if (deferredFilterMethod !== 'All' && payment.method !== deferredFilterMethod) return false;
 
-      // Branch filter (via client)
-      if (deferredFilterBranch !== 'All' && client?.branch !== deferredFilterBranch) return false;
+      // Branch filter (via payment and client)
+      if (deferredFilterBranch !== 'All') {
+        const paymentBranch = resolvePaymentBranch(payment, client);
+        if (paymentBranch !== deferredFilterBranch) return false;
+      }
 
       // Sales name filter — canonicalize both sides so variants like "Maison Mohmed" match "Maison Mohamed"
       if (filterSalesName !== 'All') {
@@ -1049,7 +1061,8 @@ export default function Payments() {
     const totals: Record<string, Record<string, number>> = {};
     for (const p of filteredPayments) {
       if (p.status === 'refunded') continue;
-      const branch = clientMap.get(p.clientId)?.branch || 'Unknown';
+      const client = clientMap.get(p.clientId);
+      const branch = resolvePaymentBranch(p, client);
       if (!totals[branch]) totals[branch] = { Cash: 0, 'Credit Card': 0, 'Bank Transfer': 0, Instapay: 0, Other: 0, Total: 0 };
       const row = totals[branch]!;
       const m = (METHODS as readonly string[]).includes(p.method) ? p.method : 'Other';
@@ -1167,6 +1180,7 @@ export default function Payments() {
                                   setGuestClientName(clientSearch.trim());
                                   setIsWalkInGuest(true);
                                   setClientSearch(clientSearch.trim());
+                                  if (!paymentBranch) setPaymentBranch(currentUser?.branch || (branches.length > 0 ? branches[0] : '') || '');
                                   setClientDropdownOpen(false);
                                 }}
                               >
@@ -1192,6 +1206,7 @@ export default function Payments() {
                                     onMouseDown={() => {
                                       setClientId(client.id);
                                       setClientSearch(`${client.name}${client.phone ? ` (${client.phone})` : ''}`);
+                                      if (client.branch) setPaymentBranch(client.branch);
                                       setClientDropdownOpen(false);
                                     }}
                                   >
@@ -1348,6 +1363,23 @@ export default function Payments() {
                   </div>
                 </div>
 
+                <div className="space-y-3">
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.branch') || 'Branch'}</Label>
+                  <Select 
+                    value={paymentBranch || (branches.length > 0 ? branches[0] : '')} 
+                    onValueChange={(v) => v && setPaymentBranch(v)}
+                  >
+                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                      <SelectValue placeholder={t('leads.branch') || 'Select Branch'} />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none shadow-2xl">
+                      {branches.map(b => (
+                        <SelectItem key={b} value={b} className="rounded-xl py-3 px-4">{b}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="col-span-full">
                   {(() => {
                     const currentSelectedClient = clientId ? clients.find(c => c.id === clientId) : null;
@@ -1356,13 +1388,14 @@ export default function Payments() {
                         packages={visiblePackages}
                         selectedPackageName={packageType}
                         initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
-                        initialBranch={currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
+                        initialBranch={paymentBranch || currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
                         branches={branches}
                         onCategoryChange={(cat) => {
                           if (isCreatingNew) setNewClientCategory(cat);
                         }}
                         onBranchChange={(b) => {
                           if (isCreatingNew) setNewClientBranch(b);
+                          if (b && b !== 'All Branches') setPaymentBranch(b);
                         }}
                         onPackageSelect={(pkg, isPt) => {
                           if (!pkg) {
@@ -1782,7 +1815,7 @@ export default function Payments() {
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           <Badge variant="secondary" className="text-[10px]">
-                            {payment.branch || client?.branch || t('leads.tabs.unassigned')}
+                            {resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : t('leads.tabs.unassigned')}
                           </Badge>
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
@@ -1936,7 +1969,7 @@ export default function Payments() {
                                   setEditingPaymentId(payment.id);
                                   setEditAmount(payment.amount.toString());
                                   setEditNotes(payment.notes || '');
-                                  setEditBranch(payment.branch || client?.branch || '');
+                                  setEditBranch(resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : '');
                                   setEditMethod(payment.method);
                                   setEditSalesName(payment.salesName || '');
                                   setEditCoachName(payment.coachName || '');
@@ -2076,6 +2109,8 @@ export default function Payments() {
                                           amount: parseFloat(editAmount),
                                           notes: editNotes || undefined,
                                           branch: editBranch || undefined,
+                                          branchId: toCanonicalBranchId(editBranch) || undefined,
+                                          clientBranch: editBranch || undefined,
                                           method: editMethod,
                                           salesName: editSalesName || undefined,
                                           sales_rep_id: salesRepId || undefined,

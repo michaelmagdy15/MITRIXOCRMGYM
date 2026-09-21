@@ -287,6 +287,8 @@ export interface Payment {
   sales_rep_id: string;
   salesName?: string;
   branch?: Branch; // Branch where payment was recorded
+  branchId?: string; // Canonical branch ID (e.g. strike_maxim, impact)
+  clientBranch?: string; // Branch associated with client at payment time
   discountType?: 'percentage' | 'amount'; // Type of discount
   discountValue?: number; // Discount percentage (0-100) or fixed amount
   discountedAmount?: number; // Final amount after discount

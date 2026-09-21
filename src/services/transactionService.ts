@@ -3,7 +3,9 @@ import { db } from '../firebase';
 import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
 import { addAuditLog } from './auditService';
-import { PaymentCategory } from '../utils/paymentCategories';
+import { PaymentCategory, resolvePaymentCategory } from '../utils/paymentCategories';
+import { toCanonicalBranchId } from '../utils/memberCategories';
+import { normalizeBranchName } from '../utils/branchUtils';
 import { toValidDate, safeIsoDate, safeAddDays, safeFormatDate } from '../utils/dateUtils';
 
 /**
@@ -27,6 +29,8 @@ export interface PaymentTransactionParams {
   clientId: string;
   clientName: string;
   clientBranch?: string;
+  branch?: string;
+  branchId?: string;
   clientStatus?: string;
   clientPackages?: any[];
 
@@ -66,6 +70,11 @@ export interface PaymentTransactionParams {
 export const processPaymentTransaction = async (params: PaymentTransactionParams): Promise<void> => {
   const isGuestClient = params.isGuest || !params.clientId || params.clientId === 'WALK-IN-GUEST' || params.clientId === 'GUEST' || params.clientId === 'GUEST-LEAD';
 
+  const rawBranch = params.branch || params.clientBranch || '';
+  const effectiveBranch = normalizeBranchName(rawBranch);
+  const effectiveBranchId = params.branchId || toCanonicalBranchId(effectiveBranch) || undefined;
+  const effectiveCategory = params.packageCategory || resolvePaymentCategory(params.packageType);
+
   if (isGuestClient) {
     const paymentRef = doc(collection(db, 'payments'));
     const actualAmountPaid = params.amount_paid !== undefined ? params.amount_paid : params.amount;
@@ -82,14 +91,16 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       date: safeIsoDate(params.paymentDate, true),
       instapayRef: params.instapayRef,
       packageType: params.packageType,
-      package_category_type: params.packageCategory,
+      package_category_type: effectiveCategory,
       coachName: params.coachName,
       notes: params.notes,
       receiptSerial: params.receiptSerial || undefined,
       recordedBy: params.recordedBy,
       salesName: params.salesName,
       sales_rep_id: params.sales_rep_id,
-      branch: params.clientBranch || '',
+      branch: effectiveBranch || undefined,
+      branchId: effectiveBranchId,
+      clientBranch: effectiveBranch || undefined,
       discountType: params.discountType,
       discountValue: params.discountValue,
       discountedAmount: params.discountedAmount,
@@ -208,14 +219,16 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       date: safeIsoDate(params.paymentDate, true),
       instapayRef: params.instapayRef,
       packageType: params.packageType,
-      package_category_type: params.packageCategory,
+      package_category_type: effectiveCategory,
       coachName: params.coachName,
       notes: params.notes,
       receiptSerial: params.receiptSerial || undefined,
       recordedBy: params.recordedBy,
       salesName: params.salesName,
       sales_rep_id: params.sales_rep_id,
-      branch: params.clientBranch || '',
+      branch: effectiveBranch || undefined,
+      branchId: effectiveBranchId,
+      clientBranch: effectiveBranch || undefined,
       discountType: params.discountType,
       discountValue: params.discountValue,
       discountedAmount: params.discountedAmount,

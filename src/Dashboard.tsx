@@ -12,6 +12,7 @@ import { SALES_NAME_MAPPING } from './constants';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { differenceInDays, isSameDay, parseISO, isAfter, isBefore, addDays, subDays, subMonths, startOfMonth, endOfMonth, isWithinInterval, format, getDay } from 'date-fns';
 import { safeFormatDate, toValidDate } from './utils/dateUtils';
+import { resolvePaymentBranch } from './utils/branchUtils';
 import { useLanguage } from './contexts/LanguageContext';
 import { toast } from 'sonner';
 
@@ -282,7 +283,10 @@ export default function Dashboard() {
     let filtered = allPayments;
     if (selectedBranch !== 'all') {
       const branchClientIds = new Set(allClients.filter(c => c.branch === selectedBranch).map(c => c.id));
-      filtered = filtered.filter(p => branchClientIds.has(p.clientId));
+      filtered = filtered.filter(p => {
+        const pBranch = resolvePaymentBranch(p, clientMap.get(p.clientId));
+        return pBranch === selectedBranch || branchClientIds.has(p.clientId);
+      });
     }
 
     if (!canViewGlobalDashboard && currentUser) {
@@ -290,7 +294,7 @@ export default function Dashboard() {
     }
 
     return filtered;
-  }, [allPayments, allClients, selectedBranch, canViewGlobalDashboard, currentUser, isPaymentAttributedToRep]);
+  }, [allPayments, allClients, selectedBranch, canViewGlobalDashboard, currentUser, isPaymentAttributedToRep, clientMap]);
 
   // Only super_admin and crm_admin can drill into individual rep performance.
   // admin / manager see aggregate global data but cannot filter by rep.
