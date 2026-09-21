@@ -34,7 +34,13 @@ interface CoachStats {
   totalSessionsAllTime: number;
 }
 
-export default function CoachHome({ onNavigate }: { onNavigate: (tab: CoachTab) => void }) {
+export default function CoachHome({ 
+  onNavigate, 
+  onStartFloor 
+}: { 
+  onNavigate: (tab: CoachTab) => void;
+  onStartFloor?: (client?: any, session?: any) => void;
+}) {
   const { currentUser } = useAuth();
   const [stats, setStats] = useState<CoachStats>({
     totalClients: 0,
@@ -360,6 +366,19 @@ export default function CoachHome({ onNavigate }: { onNavigate: (tab: CoachTab) 
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {item.type === 'pt' && onStartFloor && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStartFloor({ id: item.id, name: item.title });
+                      }}
+                      className="h-7 text-[10px] font-bold border-amber-500/40 text-amber-600 hover:bg-amber-500/10 px-2 rounded-lg gap-1"
+                    >
+                      <Flame className="h-3 w-3 fill-current" /> Floor
+                    </Button>
+                  )}
                   <Badge variant="secondary" className="text-xs bg-zinc-100 dark:bg-zinc-800 text-foreground font-mono font-medium border border-zinc-200 dark:border-zinc-700">
                     {item.statusOrCapacity}
                   </Badge>
@@ -371,12 +390,19 @@ export default function CoachHome({ onNavigate }: { onNavigate: (tab: CoachTab) 
         )}
       </div>
 
-      {/* ─── Coach Command Center Actions (All 6 PRD Modules) ─── */}
+      {/* ─── Coach Command Center Actions (All PRD Modules + Floor Mode) ─── */}
       <div className="space-y-3">
         <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Command Center</h3>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {[
+            { 
+              icon: <Flame className="h-5 w-5 text-amber-500 fill-amber-500/20" />, 
+              label: 'Live Floor Mode', 
+              desc: 'Real-time workout logger, sets, reps, rest timer & PRs', 
+              tab: 'floor' as CoachTab,
+              action: () => onStartFloor ? onStartFloor() : onNavigate('floor' as CoachTab)
+            },
             { 
               icon: <Users className="h-5 w-5" />, 
               label: 'Group Classes', 

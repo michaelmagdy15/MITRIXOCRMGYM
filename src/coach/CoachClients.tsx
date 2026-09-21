@@ -10,12 +10,16 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, Search, Phone, Minus, CheckCircle2, AlertTriangle, Activity, TrendingUp } from 'lucide-react';
+import { Users, Search, Phone, Minus, CheckCircle2, AlertTriangle, Activity, TrendingUp, Flame } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useTheme } from '../contexts/ThemeContext';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
-export default function CoachClients() {
+export default function CoachClients({ 
+  onStartFloor 
+}: { 
+  onStartFloor?: (client?: Client) => void; 
+} = {}) {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<'my-clients' | 'all-members'>('my-clients');
@@ -320,6 +324,15 @@ export default function CoachClients() {
                         </span>
                       )}
                     </div>
+                    {onStartFloor && (
+                      <Button
+                        size="sm"
+                        className="gap-1 bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs shadow-xs"
+                        onClick={() => onStartFloor(client)}
+                      >
+                        <Flame className="h-3.5 w-3.5 fill-current" /> Workout
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"

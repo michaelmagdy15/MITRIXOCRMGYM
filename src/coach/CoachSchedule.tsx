@@ -19,7 +19,7 @@ import {
   Clock, Plus, Check, CheckCircle2, XCircle, Ban, 
   ChevronLeft, ChevronRight, Copy, Lock, Unlock, 
   Sliders, CalendarDays, Coffee, Search, Phone, 
-  AlertCircle, Dumbbell, Sparkles
+  AlertCircle, Dumbbell, Sparkles, Flame
 } from 'lucide-react';
 import { format, addDays, subDays, startOfWeek, isSameDay, isToday } from 'date-fns';
 import { toValidDate } from '../utils/dateUtils';
@@ -87,7 +87,11 @@ function formatTimeTo12h(timeStr: string): string {
   return `${h12}:${m} ${period}`;
 }
 
-export default function CoachSchedule() {
+export default function CoachSchedule({ 
+  onStartFloor 
+}: { 
+  onStartFloor?: (client?: Client, session?: Session) => void; 
+} = {}) {
   const { currentUser } = useAuth();
   const [activeView, setActiveView] = useState<'timetable' | 'settings'>('timetable');
   const [schedule, setSchedule] = useState<CoachScheduleType['days']>(DEFAULT_SCHEDULE);
@@ -1304,6 +1308,21 @@ export default function CoachSchedule() {
                   </div>
                 )}
               </div>
+
+              {/* Launch Floor Mode Action */}
+              {onStartFloor && (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const clientObj = clients.find(c => c.id === selectedSession.clientId) || ({ id: selectedSession.clientId, name: selectedSession.clientName || 'Member' } as Client);
+                    onStartFloor(clientObj, selectedSession);
+                    setSelectedSession(null);
+                  }}
+                  className="w-full h-9 font-bold text-xs gap-1.5 bg-amber-500 hover:bg-amber-600 text-black shadow-sm"
+                >
+                  <Flame className="h-4 w-4 fill-current" /> Start Floor Workout
+                </Button>
+              )}
 
               {/* Status Update Quick Buttons */}
               <div className="space-y-2">

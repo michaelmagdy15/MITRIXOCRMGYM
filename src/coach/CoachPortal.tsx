@@ -12,8 +12,10 @@ import CoachSessions from './CoachSessions';
 import CoachProfile from './CoachProfile';
 import CoachClassPortal from './CoachClassPortal';
 import CoachEarnings from './CoachEarnings';
+import CoachFloorMode from './CoachFloorMode';
+import { Client, Session } from '../types';
 
-type CoachTab = 'home' | 'classes' | 'schedule' | 'members' | 'sessions' | 'earnings' | 'profile';
+export type CoachTab = 'home' | 'classes' | 'schedule' | 'members' | 'sessions' | 'earnings' | 'profile' | 'floor';
 
 const NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Home',     icon: <Home className="h-5 w-5" /> },
@@ -30,6 +32,12 @@ export default function CoachPortal() {
   const { branding } = useSettings();
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<CoachTab>('home');
+  const [floorContext, setFloorContext] = useState<{ client?: Client | null; session?: Session | null } | null>(null);
+
+  const handleStartFloor = (client?: Client | null, session?: Session | null) => {
+    setFloorContext({ client: client || null, session: session || null });
+    setActiveTab('floor');
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
@@ -45,6 +53,17 @@ export default function CoachPortal() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          {/* Quick Floor Mode Launcher Button */}
+          <Button
+            variant={activeTab === 'floor' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleStartFloor()}
+            className="h-8 text-xs font-bold gap-1.5 rounded-xl border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shadow-xs"
+          >
+            <Flame className="h-3.5 w-3.5 fill-current" />
+            <span className="hidden sm:inline">Live</span> Floor Mode
+          </Button>
+
           <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
@@ -61,13 +80,20 @@ export default function CoachPortal() {
       </header>
 
       <main className="flex-1 container mx-auto px-3 sm:px-4 py-6 pb-24 max-w-4xl">
-        {activeTab === 'home'     && <CoachHome onNavigate={setActiveTab} />}
+        {activeTab === 'home'     && <CoachHome onNavigate={setActiveTab} onStartFloor={handleStartFloor} />}
         {activeTab === 'classes'  && <CoachClassPortal />}
-        {activeTab === 'schedule' && <CoachSchedule />}
-        {activeTab === 'members'  && <CoachClients />}
+        {activeTab === 'schedule' && <CoachSchedule onStartFloor={handleStartFloor} />}
+        {activeTab === 'members'  && <CoachClients onStartFloor={handleStartFloor} />}
         {activeTab === 'sessions' && <CoachSessions />}
         {activeTab === 'earnings' && <CoachEarnings />}
         {activeTab === 'profile'  && <CoachProfile />}
+        {activeTab === 'floor'    && (
+          <CoachFloorMode 
+            initialClient={floorContext?.client} 
+            initialSession={floorContext?.session} 
+            onExit={() => setActiveTab('home')} 
+          />
+        )}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1.5 shadow-lg backdrop-blur-md bg-opacity-90">
