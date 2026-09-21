@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MITRIXOGYMCRM — Quote Builder</title>
+<title id="page-title">Quote Builder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Barlow:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -630,7 +630,7 @@
 
 <header class="app-header">
   <div class="brand">
-    <div class="brand-logo"><img src="mitrixogymcrmlogo_white.png" alt="MITRIXOGYMCRM"></div>
+    <div class="brand-logo"><img id="brand-logo-img" src="mitrixogymcrmlogo_white.png" alt="Quote Builder"></div>
     <div class="brand-sep"></div>
     <div class="brand-sub">Quote Builder</div>
   </div>
@@ -855,65 +855,175 @@
 
 <script>
 /* ═══════════════════════════════════════════
+   MULTI-TENANT BRANDING CONTEXT
+═══════════════════════════════════════════ */
+function getTenantContext() {
+  const params = new URLSearchParams(window.location.search);
+  let tenant = (params.get('tenant') || '').toLowerCase();
+  
+  if (!tenant) {
+    try {
+      if (window.parent && window.parent.location) {
+        const parentParams = new URLSearchParams(window.parent.location.search);
+        tenant = (parentParams.get('tenant') || '').toLowerCase();
+        if (!tenant) {
+          const pHost = (window.parent.location.hostname || '').toLowerCase();
+          if (pHost.includes('inzan')) tenant = 'inzanathletics';
+          else if (pHost.includes('strike')) tenant = 'strike';
+        }
+      }
+    } catch {}
+  }
+
+  if (!tenant) {
+    const host = (window.location.hostname || '').toLowerCase();
+    if (host.includes('inzan')) tenant = 'inzanathletics';
+    else if (host.includes('strike')) tenant = 'strike';
+  }
+
+  const isInzan = tenant === 'inzan' || tenant === 'inzanathletics';
+  const defaultCompany = isInzan ? 'INZAN ATHLETICS' : 'STRIKE';
+  const defaultLogo = isInzan ? '/inzanlogo_white.png' : 'mitrixogymcrmlogo_white.png';
+  const defaultCurrency = 'EGP';
+  const defaultBranch = isInzan ? 'Garden 8 / INZAN Facility' : 'STRIKE Facility';
+
+  return {
+    tenant: isInzan ? 'inzanathletics' : 'strike',
+    isInzan,
+    companyName: params.get('company') || defaultCompany,
+    logoUrl: params.get('logo') || defaultLogo,
+    currency: params.get('currency') || defaultCurrency,
+    currencySymbol: params.get('currencySymbol') || 'LE',
+    branch: params.get('branch') || defaultBranch,
+    prefix: isInzan ? 'INZ-' : 'STR-',
+    filePrefix: isInzan ? 'INZAN_ATHLETICS' : 'STRIKE'
+  };
+}
+
+let tenantContext = getTenantContext();
+
+/* ═══════════════════════════════════════════
    STATE
 ═══════════════════════════════════════════ */
 const newId = () => Math.random().toString(36).slice(2, 8);
 
-const state = {
-  quote: { number: '', date: today(), valid: plusDays(30), type: 'Sports Program' },
-  program: {
-    name: 'Kids Boxing & Fitness Program',
-    description: 'A safe, fun and professional training program designed to build stronger kids — physically, mentally and socially.',
-    metadata: [
-      { id: newId(), key: 'Age Group', value: 'Children Groups' },
-      { id: newId(), key: 'Location', value: 'mitrixogymcrm Facility' },
-      { id: newId(), key: 'Supervision', value: 'Full Supervision & Care' }
-    ]
-  },
-  schedule: {
-    showFrequency: true,
-    sessionsPerWeek: 3,
-    sessionDuration: '1 Hour 30 Minutes',
-    minParticipants: 15,
-    maxParticipants: 20,
-    slot1: '09:00 AM – 10:30 AM',
-    slot2: '10:30 AM – 12:00 PM'
-  },
-  client: { organization: '', contact: '', email: '' },
-  pricing: {
-    currency: 'EGP',
-    mode: 'per_participant',
-    discountPercent: 0,
-    taxPercent: 0
-  },
-  durations: [
-    {
-      id: newId(), label: '1 Month Program',
-      packages: [
-        { id: newId(), name: 'Package A', participants: 20, price: 1850 },
-        { id: newId(), name: 'Package B', participants: 15, price: 2200 }
-      ]
-    },
-    {
-      id: newId(), label: '3 Months Program',
-      packages: [
-        { id: newId(), name: 'Package A', participants: 20, price: 3900 },
-        { id: newId(), name: 'Package B', participants: 15, price: 4100 }
-      ]
-    }
-  ],
-  notes: [
-    { id: newId(), text: 'Pricing includes coaching, supervision and station setup.' },
-    { id: newId(), text: 'Sessions are scheduled upon agreement and availability.' },
-    { id: newId(), text: "All training activities are adapted to children's age and level." },
-    { id: newId(), text: 'Non-refundable after program confirmation.' }
-  ],
-  footer: {
-    tagline1: 'Building Stronger Kids,',
-    tagline2: 'Inside & Outside The Ring.',
-    founder: 'Shady Youssef'
+function getDefaultState(tc = tenantContext) {
+  if (tc.isInzan) {
+    return {
+      quote: { number: '', date: today(), valid: plusDays(30), type: 'Sports Program' },
+      program: {
+        name: 'Athletic Performance & Conditioning Program',
+        description: 'An elite, science-backed athletic training and conditioning program designed to develop peak physical performance, strength, agility, and functional fitness.',
+        metadata: [
+          { id: newId(), key: 'Age Group', value: 'Youth & Adult Athletes' },
+          { id: newId(), key: 'Location', value: tc.branch || 'Garden 8 / INZAN Facility' },
+          { id: newId(), key: 'Supervision', value: 'Certified Performance Coaches & Trainers' }
+        ]
+      },
+      schedule: {
+        showFrequency: true,
+        sessionsPerWeek: 3,
+        sessionDuration: '1 Hour 15 Minutes',
+        minParticipants: 12,
+        maxParticipants: 20,
+        slot1: '09:00 AM – 10:15 AM',
+        slot2: '05:00 PM – 06:15 PM'
+      },
+      client: { organization: '', contact: '', email: '' },
+      pricing: {
+        currency: tc.currency || 'EGP',
+        mode: 'per_participant',
+        discountPercent: 0,
+        taxPercent: 0
+      },
+      durations: [
+        {
+          id: newId(), label: '1 Month Program',
+          packages: [
+            { id: newId(), name: 'Package A (Group)', participants: 20, price: 2500 },
+            { id: newId(), name: 'Package B (Semi-Private)', participants: 12, price: 3200 }
+          ]
+        },
+        {
+          id: newId(), label: '3 Months Program',
+          packages: [
+            { id: newId(), name: 'Package A (Group)', participants: 20, price: 6500 },
+            { id: newId(), name: 'Package B (Semi-Private)', participants: 12, price: 8200 }
+          ]
+        }
+      ],
+      notes: [
+        { id: newId(), text: 'Pricing includes head coach programming, physical performance assessment, and full facility access.' },
+        { id: newId(), text: 'Sessions are scheduled in advance according to facility lane availability.' },
+        { id: newId(), text: 'All training protocols adhere to international athletic conditioning standards.' },
+        { id: newId(), text: 'Non-refundable after program confirmation and onboarding.' }
+      ],
+      footer: {
+        tagline1: 'High Performance Athletics,',
+        tagline2: 'Built For Peak Performance.',
+        founder: 'INZAN Management'
+      }
+    };
+  } else {
+    return {
+      quote: { number: '', date: today(), valid: plusDays(30), type: 'Sports Program' },
+      program: {
+        name: 'Kids Boxing & Fitness Program',
+        description: 'A safe, fun and professional training program designed to build stronger kids — physically, mentally and socially.',
+        metadata: [
+          { id: newId(), key: 'Age Group', value: 'Children Groups' },
+          { id: newId(), key: 'Location', value: tc.branch || 'STRIKE Facility' },
+          { id: newId(), key: 'Supervision', value: 'Full Supervision & Care' }
+        ]
+      },
+      schedule: {
+        showFrequency: true,
+        sessionsPerWeek: 3,
+        sessionDuration: '1 Hour 30 Minutes',
+        minParticipants: 15,
+        maxParticipants: 20,
+        slot1: '09:00 AM – 10:30 AM',
+        slot2: '10:30 AM – 12:00 PM'
+      },
+      client: { organization: '', contact: '', email: '' },
+      pricing: {
+        currency: tc.currency || 'EGP',
+        mode: 'per_participant',
+        discountPercent: 0,
+        taxPercent: 0
+      },
+      durations: [
+        {
+          id: newId(), label: '1 Month Program',
+          packages: [
+            { id: newId(), name: 'Package A', participants: 20, price: 1850 },
+            { id: newId(), name: 'Package B', participants: 15, price: 2200 }
+          ]
+        },
+        {
+          id: newId(), label: '3 Months Program',
+          packages: [
+            { id: newId(), name: 'Package A', participants: 20, price: 3900 },
+            { id: newId(), name: 'Package B', participants: 15, price: 4100 }
+          ]
+        }
+      ],
+      notes: [
+        { id: newId(), text: 'Pricing includes coaching, supervision and station setup.' },
+        { id: newId(), text: 'Sessions are scheduled upon agreement and availability.' },
+        { id: newId(), text: "All training activities are adapted to children's age and level." },
+        { id: newId(), text: 'Non-refundable after program confirmation.' }
+      ],
+      footer: {
+        tagline1: 'Building Stronger Kids,',
+        tagline2: 'Inside & Outside The Ring.',
+        founder: 'Shady Youssef'
+      }
+    };
   }
-};
+}
+
+const state = getDefaultState();
 
 function migrateState(s) {
   if (!s) return;
@@ -1038,15 +1148,28 @@ const Store = {
    QUOTE NUMBER
 ═══════════════════════════════════════════ */
 async function genQuoteNum() {
+  const tc = tenantContext;
   const yr = new Date().getFullYear();
-  const pfx = `STR-${yr}-`;
-  const keys = await Store.list('sqt:');
+  const pfx = `${tc.prefix}${yr}-`;
+  const tenantKeyPrefix = `sqt_${tc.tenant}:`;
+  const keys = await Store.list(tenantKeyPrefix);
   let max = 0;
   for (const k of keys) {
     const q = await Store.get(k);
     if (q?.quote?.number?.startsWith(pfx)) {
       const n = parseInt(q.quote.number.slice(pfx.length), 10);
       if (!isNaN(n) && n > max) max = n;
+    }
+  }
+  // Check legacy unnamespaced keys if tenant is strike
+  if (!tc.isInzan) {
+    const legacyKeys = await Store.list('sqt:');
+    for (const k of legacyKeys) {
+      const q = await Store.get(k);
+      if (q?.quote?.number?.startsWith(pfx)) {
+        const n = parseInt(q.quote.number.slice(pfx.length), 10);
+        if (!isNaN(n) && n > max) max = n;
+      }
     }
   }
   return pfx + String(max + 1).padStart(3, '0');
@@ -1350,10 +1473,10 @@ function renderPreview() {
 
   el.innerHTML = `
     <div class="doc-header">
-      <div class="doc-logo"><img src="mitrixogymcrmlogo_white.png" alt="MITRIXOGYMCRM"></div>
+      <div class="doc-logo"><img src="${esc(tenantContext.logoUrl)}" alt="${esc(tenantContext.companyName)}"></div>
       <div class="doc-logo-bar"></div>
       <div class="doc-meta-top">
-        <div class="doc-meta-num">${esc(s.quote.number || 'STR-2026-—')}</div>
+        <div class="doc-meta-num">${esc(s.quote.number || (tenantContext.prefix + new Date().getFullYear() + '-—'))}</div>
         <div style="color:#fff;font-weight:600;">${esc(quoteTypeLabel).toUpperCase()}</div>
         <div>Issued · ${fmtDate(s.quote.date)}</div>
         <div>Valid · ${fmtDate(s.quote.valid)}</div>
@@ -1410,7 +1533,7 @@ function renderPreview() {
     ` : ''}
 
     <div class="doc-footer">
-      <div class="doc-footer-logo"><img src="mitrixogymcrmlogo_white.png" alt="MITRIXOGYMCRM"></div>
+      <div class="doc-footer-logo"><img src="${esc(tenantContext.logoUrl)}" alt="${esc(tenantContext.companyName)}"></div>
       <div class="doc-footer-divider"></div>
       <div class="doc-footer-tagline">
         <div class="doc-footer-tagline-main">${esc(s.footer.tagline1)}</div>
@@ -1472,16 +1595,7 @@ async function downloadPDF() {
 
     // Ensure logo base64 is available (may not be ready if download clicked very quickly)
     if (!window._logoB64) {
-      try {
-        window._logoB64 = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          fetch('mitrixogymcrmlogo_white.png').then(res => res.blob()).then(blob => {
-            r.onload = e => resolve(e.target.result);
-            r.onerror = reject;
-            r.readAsDataURL(blob);
-          }).catch(reject);
-        });
-      } catch { /* will capture without logo swap */ }
+      await preloadLogo(tenantContext.logoUrl);
     }
 
     // Swap all <img> srcs to base64 to prevent canvas tainting (CORS)
@@ -1543,12 +1657,12 @@ async function downloadPDF() {
 
     pdf.addImage(imgData, 'JPEG', xOffset, yOffset, finalW, finalH, undefined, 'FAST');
 
-    const safeName = (state.client.organization || state.program.name || 'mitrixogymcrm')
+    const safeName = (state.client.organization || state.program.name || tenantContext.filePrefix)
       .replace(/[^a-z0-9]+/gi, '-').toLowerCase();
     const num = (state.quote.number || 'quote').replace(/[^a-z0-9-]/gi, '');
 
     // pdf.save() triggers a proper named download — no blob URL needed
-    pdf.save(`MITRIXOGYMCRM_${num}_${safeName}.pdf`);
+    pdf.save(`${tenantContext.filePrefix}_${num}_${safeName}.pdf`);
 
     showToast('PDF Downloaded');
   } catch (err) {
@@ -1577,14 +1691,14 @@ function drawPDF(pdf) {
   // ── HEADER BAR ──
   pdf.setFillColor(...darkBg); pdf.rect(0, 0, W, 90, 'F');
 
-  // MITRIXOGYMCRM logo image
+  // Tenant logo image
   const logoX = ML, logoY = 18;
   if (window._logoB64) {
     pdf.addImage(window._logoB64, 'PNG', logoX, logoY, 0, 44);
   } else {
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(32); pdf.setTextColor(...white);
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(28); pdf.setTextColor(...white);
     let cx = logoX;
-    for (const ch of 'MITRIXOGYMCRM') { pdf.text(ch, cx, 50); cx += pdf.getTextWidth(ch) + 3.2; }
+    for (const ch of tenantContext.companyName) { pdf.text(ch, cx, 50); cx += pdf.getTextWidth(ch) + 2.5; }
   }
 
   // Gold bar under logo
@@ -1593,7 +1707,7 @@ function drawPDF(pdf) {
   // Quote meta — top right
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10);
   pdf.setTextColor(...gold);
-  pdf.text(state.quote.number || 'STR-2026-—', W - MR, 30, { align: 'right' });
+  pdf.text(state.quote.number || `${tenantContext.prefix}${new Date().getFullYear()}-—`, W - MR, 30, { align: 'right' });
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(180, 180, 180);
   pdf.text(`Issued · ${fmtDate(state.quote.date)}`, W - MR, 44, { align: 'right' });
   pdf.text(`Valid until · ${fmtDate(state.quote.valid)}`, W - MR, 56, { align: 'right' });
@@ -1844,19 +1958,20 @@ function drawPDF(pdf) {
   if (window._logoB64) {
     pdf.addImage(window._logoB64, 'PNG', ML, footerY + 10, 0, 32);
   } else {
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(20); pdf.setTextColor(...white);
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(18); pdf.setTextColor(...white);
     let fx = ML;
-    for (const ch of 'MITRIXOGYMCRM') { pdf.text(ch, fx, footerY + 28); fx += pdf.getTextWidth(ch) + 2.2; }
+    for (const ch of tenantContext.companyName) { pdf.text(ch, fx, footerY + 28); fx += pdf.getTextWidth(ch) + 2; }
   }
 
+  const sepX = ML + (tenantContext.isInzan ? 140 : 100);
   pdf.setDrawColor(180, 180, 180); pdf.setLineWidth(1);
-  pdf.line(ML + 100, footerY + 12, ML + 100, footerY + 44);
+  pdf.line(sepX, footerY + 12, sepX, footerY + 44);
 
   // Taglines from state
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...white);
-  pdf.text((state.footer.tagline1 || '').toUpperCase(), ML + 112, footerY + 24);
+  pdf.text((state.footer.tagline1 || '').toUpperCase(), sepX + 12, footerY + 24);
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10); pdf.setTextColor(...gold);
-  pdf.text((state.footer.tagline2 || '').toUpperCase(), ML + 112, footerY + 38);
+  pdf.text((state.footer.tagline2 || '').toUpperCase(), sepX + 12, footerY + 38);
 
   // Contact Details from state
   if (state.footer.founder) {
@@ -1875,7 +1990,7 @@ async function saveQuote() {
     state.quote.number = await genQuoteNum();
     document.getElementById('f-quote-num').value = state.quote.number;
   }
-  await Store.set(`sqt:${state.quote.number}`, { ...state, savedAt: new Date().toISOString() });
+  await Store.set(`sqt_${tenantContext.tenant}:${state.quote.number}`, { ...state, tenant: tenantContext.tenant, savedAt: new Date().toISOString() });
   showToast(`Saved · ${state.quote.number}`); renderPreview();
 }
 
@@ -1883,7 +1998,13 @@ async function openSavedDialog() {
   const list = document.getElementById('saved-list');
   list.innerHTML = '<div class="saved-empty">Loading…</div>';
   document.getElementById('dlg-saved').classList.add('open');
-  const keys = await Store.list('sqt:');
+  const tenantPrefix = `sqt_${tenantContext.tenant}:`;
+  let keys = await Store.list(tenantPrefix);
+  if (!tenantContext.isInzan) {
+    const legacyKeys = await Store.list('sqt:');
+    const filteredLegacy = legacyKeys.filter(k => !k.startsWith('sqt_inzan'));
+    keys = Array.from(new Set([...keys, ...filteredLegacy]));
+  }
   if (!keys.length) { list.innerHTML = '<div class="saved-empty">No saved quotes.</div>'; return; }
   const quotes = (await Promise.all(keys.map(async k => ({ k, d: await Store.get(k) }))))
     .filter(x => x.d).sort((a, b) => (b.d.savedAt || '').localeCompare(a.d.savedAt || ''));
@@ -1995,20 +2116,250 @@ function showToast(msg) {
 }
 
 /* ═══════════════════════════════════════════
-   INIT
+   PRELOAD LOGO & DYNAMIC BRANDING
 ═══════════════════════════════════════════ */
-async function init() {
-  // Preload logo as base64 for jsPDF (awaited so it's ready before any download)
+async function preloadLogo(url) {
   try {
+    const targetUrl = url || tenantContext.logoUrl;
     window._logoB64 = await new Promise((resolve, reject) => {
-      fetch('mitrixogymcrmlogo_white.png').then(res => res.blob()).then(blob => {
+      fetch(targetUrl).then(res => res.blob()).then(blob => {
         const reader = new FileReader();
         reader.onload = e => resolve(e.target.result);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
       }).catch(reject);
     });
-  } catch {}
+  } catch (err) {
+    console.warn('Could not preload logo base64:', err);
+  }
+}
+
+function applyTenantBranding() {
+  const tc = tenantContext;
+  const yr = new Date().getFullYear();
+  const pageTitle = document.getElementById('page-title');
+  if (pageTitle) pageTitle.textContent = `${tc.companyName} — Quote Builder`;
+  document.title = `${tc.companyName} — Quote Builder`;
+
+  const brandImg = document.getElementById('brand-logo-img');
+  if (brandImg) {
+    brandImg.src = tc.logoUrl;
+    brandImg.alt = tc.companyName;
+  }
+
+  const progInp = document.getElementById('f-prog-name');
+  if (progInp) {
+    progInp.placeholder = tc.isInzan
+      ? 'Athletic Performance & Conditioning Program'
+      : 'Kids Boxing & Fitness Program';
+  }
+
+  const quoteNumInp = document.getElementById('f-quote-num');
+  if (quoteNumInp) {
+    quoteNumInp.placeholder = `${tc.prefix}${yr}-001`;
+  }
+
+  const fTag1 = document.getElementById('f-footer-tag1');
+  if (fTag1) {
+    fTag1.placeholder = tc.isInzan ? 'High Performance Athletics,' : 'Building Stronger Kids,';
+  }
+
+  const fTag2 = document.getElementById('f-footer-tag2');
+  if (fTag2) {
+    fTag2.placeholder = tc.isInzan ? 'Built For Peak Performance.' : 'Inside & Outside The Ring.';
+  }
+
+  const fFounder = document.getElementById('f-footer-founder');
+  if (fFounder) {
+    fFounder.placeholder = tc.isInzan ? 'INZAN Management' : 'Shady Youssef';
+  }
+
+  const fCurr = document.getElementById('f-currency');
+  if (fCurr && !fCurr.value) {
+    fCurr.value = tc.currency || 'EGP';
+  }
+}
+
+// Listen for postMessage from parent window/iframe host
+window.addEventListener('message', async (event) => {
+  if (event.data?.type === 'SET_TENANT_BRANDING') {
+    const d = event.data;
+    const isInzan = d.isInzan || d.tenantId === 'inzanathletics' || d.tenantId === 'inzan';
+    tenantContext = {
+      tenant: isInzan ? 'inzanathletics' : 'strike',
+      isInzan,
+      companyName: d.companyName || (isInzan ? 'INZAN ATHLETICS' : 'STRIKE'),
+      logoUrl: d.logoUrl || (isInzan ? '/inzanlogo_white.png' : 'mitrixogymcrmlogo_white.png'),
+      currency: d.currencyCode || 'EGP',
+      currencySymbol: d.currencySymbol || 'LE',
+      branch: d.defaultBranch || (isInzan ? 'Garden 8 / INZAN Facility' : 'STRIKE Facility'),
+      prefix: isInzan ? 'INZ-' : 'STR-',
+      filePrefix: isInzan ? 'INZAN_ATHLETICS' : 'STRIKE'
+    };
+    applyTenantBranding();
+    await preloadLogo(tenantContext.logoUrl);
+    renderPreview();
+  }
+});
+
+function getQuoteTypeDefaults(tc = tenantContext) {
+  if (tc.isInzan) {
+    const sportsTemplate = {
+      name: 'Athletic Performance & Conditioning Program',
+      description: 'An elite, science-backed athletic training and conditioning program designed to develop peak physical performance, strength, agility, and functional fitness.',
+      metadata: [
+        { key: 'Age Group', value: 'Youth & Adult Athletes' },
+        { key: 'Location', value: tc.branch || 'Garden 8 / INZAN Facility' },
+        { key: 'Supervision', value: 'Certified Performance Coaches & Trainers' }
+      ],
+      pricing: { currency: tc.currency || 'EGP', mode: 'per_participant', discountPercent: 0, taxPercent: 0 },
+      slot1: '09:00 AM – 10:15 AM', slot2: '05:00 PM – 06:15 PM',
+      durations: [
+        { label: '1 Month Program', packages: [{ name: 'Package A (Group)', participants: 20, price: 2500 }, { name: 'Package B (Semi-Private)', participants: 12, price: 3200 }] },
+        { label: '3 Months Program', packages: [{ name: 'Package A (Group)', participants: 20, price: 6500 }, { name: 'Package B (Semi-Private)', participants: 12, price: 8200 }] }
+      ],
+      notes: [
+        'Pricing includes head coach programming, physical performance assessment, and full facility access.',
+        'Sessions are scheduled in advance according to facility lane availability.',
+        'All training protocols adhere to international athletic conditioning standards.',
+        'Non-refundable after program confirmation and onboarding.'
+      ],
+      footer: { tagline1: 'High Performance Athletics,', tagline2: 'Built For Peak Performance.', founder: 'INZAN Management' }
+    };
+
+    const eventTemplate = {
+      name: 'INZAN Athletic Event & Combine Package',
+      description: 'A high-impact athletic experience featuring professional fitness combines, functional challenges, and performance activations for all ages.',
+      metadata: [
+        { key: 'Age Group', value: 'All Ages & Athletic Levels' },
+        { key: 'Location', value: 'Client Venue / Garden 8 INZAN Facility' },
+        { key: 'Supervision', value: 'Head Coaches & Event Operations' }
+      ],
+      pricing: { currency: 'USD', mode: 'flat_rate', discountPercent: 5, taxPercent: 14 },
+      slot1: '10:00 AM – 01:00 PM', slot2: '03:00 PM – 06:00 PM',
+      durations: [
+        { label: 'Half-Day Event', packages: [{ name: 'Standard Activation', participants: 50, price: 5000 }, { name: 'Pro Performance Combine', participants: 50, price: 8000 }] },
+        { label: 'Full-Day Event', packages: [{ name: 'Standard Activation', participants: 100, price: 9000 }, { name: 'Pro Performance Combine', participants: 100, price: 14000 }] }
+      ],
+      notes: [
+        'Pricing includes professional athletic testing gear, timing gates, and performance coaching staff.',
+        'Venue logistics and facility access permissions to be coordinated in advance.',
+        'Minimum 5 days notice required for booking.',
+        'Non-refundable after confirmation.'
+      ],
+      footer: { tagline1: 'Elevate Your Event,', tagline2: 'Unleash True Potential.', founder: 'INZAN Management' }
+    };
+
+    const corporateTemplate = {
+      name: 'INZAN Corporate Athletic Wellness Program',
+      description: 'Tailored corporate fitness & recovery sessions to boost team energy, mental resilience, and health through elite functional conditioning.',
+      metadata: [
+        { key: 'Age Group', value: 'Corporate Teams' },
+        { key: 'Location', value: 'Client Office / Garden 8 INZAN Facility' },
+        { key: 'Supervision', value: 'Corporate Wellness Director & Coaches' }
+      ],
+      pricing: { currency: 'EUR', mode: 'flat_rate', discountPercent: 10, taxPercent: 12 },
+      slot1: '08:00 AM – 09:30 AM', slot2: '12:00 PM – 01:30 PM',
+      durations: [
+        { label: 'Monthly Retainer', packages: [{ name: 'Team of 20', participants: 20, price: 7500 }, { name: 'Team of 40', participants: 40, price: 13000 }] },
+        { label: 'Quarterly Package', packages: [{ name: 'Team of 20', participants: 20, price: 20000 }, { name: 'Team of 40', participants: 40, price: 34000 }] }
+      ],
+      notes: [
+        'Pricing includes dedicated coach, posture/mobility screening, and structured workout plans.',
+        'Flexible scheduling aligned with corporate team availability.',
+        'Quarterly health and biometric progression reports included.',
+        'Non-refundable after program confirmation.'
+      ],
+      footer: { tagline1: 'Corporate Excellence,', tagline2: 'Stronger Teams, Healthier Minds.', founder: 'INZAN Management' }
+    };
+
+    return {
+      'Sports Program': sportsTemplate,
+      'sports': sportsTemplate,
+      'Sports Events': eventTemplate,
+      'event': eventTemplate,
+      'Event': eventTemplate,
+      'Corporate Wellness': corporateTemplate,
+      'corporate': corporateTemplate,
+      'Corporate Event': corporateTemplate
+    };
+  } else {
+    // Strike defaults
+    const sportsTemplate = {
+      name: 'Kids Boxing & Fitness Program',
+      description: 'A safe, fun and professional training program designed to build stronger kids — physically, mentally and socially.',
+      metadata: [
+        { key: 'Age Group', value: 'Children Groups' },
+        { key: 'Location', value: tc.branch || 'STRIKE Facility' },
+        { key: 'Supervision', value: 'Full Supervision & Care' }
+      ],
+      pricing: { currency: tc.currency || 'EGP', mode: 'per_participant', discountPercent: 0, taxPercent: 0 },
+      slot1: '09:00 AM – 10:30 AM', slot2: '10:30 AM – 12:00 PM',
+      durations: [
+        { label: '1 Month Program', packages: [{ name: 'Package A', participants: 20, price: 1850 }, { name: 'Package B', participants: 15, price: 2200 }] },
+        { label: '3 Months Program', packages: [{ name: 'Package A', participants: 20, price: 3900 }, { name: 'Package B', participants: 15, price: 4100 }] }
+      ],
+      notes: ['Pricing includes coaching, supervision and station setup.', 'Sessions are scheduled upon agreement and availability.', "All training activities are adapted to children's age and level.", 'Non-refundable after program confirmation.'],
+      footer: { tagline1: 'Building Stronger Kids,', tagline2: 'Inside & Outside The Ring.', founder: 'Shady Youssef' }
+    };
+
+    const eventTemplate = {
+      name: 'STRIKE Event Package',
+      description: 'A high-energy event experience featuring professional boxing and fitness activations for all ages.',
+      metadata: [
+        { key: 'Age Group', value: 'All Ages' },
+        { key: 'Location', value: 'Client Venue / STRIKE Facility' },
+        { key: 'Supervision', value: 'Full Event Coordination' }
+      ],
+      pricing: { currency: 'USD', mode: 'flat_rate', discountPercent: 5, taxPercent: 14 },
+      slot1: '10:00 AM – 01:00 PM', slot2: '03:00 PM – 06:00 PM',
+      durations: [
+        { label: 'Half-Day Event', packages: [{ name: 'Basic', participants: 50, price: 4500 }, { name: 'Premium', participants: 50, price: 7000 }] },
+        { label: 'Full-Day Event', packages: [{ name: 'Basic', participants: 100, price: 8000 }, { name: 'Premium', participants: 100, price: 12000 }] }
+      ],
+      notes: ['Pricing includes equipment setup and professional coaches.', 'Venue logistics and transport are client responsibility.', 'Minimum 3 days notice required for booking.', 'Non-refundable after confirmation.'],
+      footer: { tagline1: 'Unleash Your Energy,', tagline2: 'STRIKE Your Event Today.', founder: 'Shady Youssef' }
+    };
+
+    const corporateTemplate = {
+      name: 'STRIKE Corporate Wellness Program',
+      description: 'Tailored corporate wellness sessions to boost team morale, health, and productivity through professional boxing and fitness coaching.',
+      metadata: [
+        { key: 'Age Group', value: 'Corporate Teams' },
+        { key: 'Location', value: 'Client Office / STRIKE Facility' },
+        { key: 'Supervision', value: 'HR & Coaching Coordination' }
+      ],
+      pricing: { currency: 'EUR', mode: 'flat_rate', discountPercent: 10, taxPercent: 12 },
+      slot1: '08:00 AM – 09:30 AM', slot2: '12:00 PM – 01:30 PM',
+      durations: [
+        { label: 'Monthly Retainer', packages: [{ name: 'Team of 20', participants: 20, price: 6500 }, { name: 'Team of 40', participants: 40, price: 11000 }] },
+        { label: 'Quarterly Package', packages: [{ name: 'Team of 20', participants: 20, price: 17000 }, { name: 'Team of 40', participants: 40, price: 28000 }] }
+      ],
+      notes: ['Pricing includes dedicated coach, equipment, and session planning.', 'Scheduling is flexible and agreed upon in advance.', 'Progress reports available upon request.', 'Non-refundable after program confirmation.'],
+      footer: { tagline1: 'Corporate Excellence,', tagline2: 'Healthy Minds, Stronger Teams.', founder: 'Shady Youssef' }
+    };
+
+    return {
+      'Sports Program': sportsTemplate,
+      'sports': sportsTemplate,
+      'Sports Events': eventTemplate,
+      'event': eventTemplate,
+      'Event': eventTemplate,
+      'Corporate Wellness': corporateTemplate,
+      'corporate': corporateTemplate,
+      'Corporate Event': corporateTemplate
+    };
+  }
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════ */
+async function init() {
+  applyTenantBranding();
+
+  // Preload logo as base64 for jsPDF (awaited so it's ready before any download)
+  await preloadLogo(tenantContext.logoUrl);
 
   // Run backward compatible migrations
   migrateState(state);
@@ -2022,62 +2373,10 @@ async function init() {
   wireForm();
 
   // Quote type switcher
-  const quoteTypeDefaults = {
-    sports: {
-      name: 'Kids Boxing & Fitness Program',
-      description: 'A safe, fun and professional training program designed to build stronger kids — physically, mentally and socially.',
-      metadata: [
-        { key: 'Age Group', value: 'Children Groups' },
-        { key: 'Location', value: 'mitrixogymcrm Facility' },
-        { key: 'Supervision', value: 'Full Supervision & Care' }
-      ],
-      pricing: { currency: 'EGP', mode: 'per_participant', discountPercent: 0, taxPercent: 0 },
-      slot1: '09:00 AM – 10:30 AM', slot2: '10:30 AM – 12:00 PM',
-      durations: [
-        { label: '1 Month Program', packages: [{ name: 'Package A', participants: 20, price: 1850 }, { name: 'Package B', participants: 15, price: 2200 }] },
-        { label: '3 Months Program', packages: [{ name: 'Package A', participants: 20, price: 3900 }, { name: 'Package B', participants: 15, price: 4100 }] }
-      ],
-      notes: ['Pricing includes coaching, supervision and station setup.', 'Sessions are scheduled upon agreement and availability.', "All training activities are adapted to children's age and level.", 'Non-refundable after program confirmation.'],
-      footer: { tagline1: 'Building Stronger Kids,', tagline2: 'Inside & Outside The Ring.', founder: 'Shady Youssef' }
-    },
-    event: {
-      name: 'mitrixogymcrm Event Package',
-      description: 'A high-energy event experience featuring professional boxing and fitness activations for all ages.',
-      metadata: [
-        { key: 'Age Group', value: 'All Ages' },
-        { key: 'Location', value: 'Client Venue / mitrixogymcrm Facility' },
-        { key: 'Supervision', value: 'Full Event Coordination' }
-      ],
-      pricing: { currency: 'USD', mode: 'flat_rate', discountPercent: 5, taxPercent: 14 },
-      slot1: '10:00 AM – 01:00 PM', slot2: '03:00 PM – 06:00 PM',
-      durations: [
-        { label: 'Half-Day Event', packages: [{ name: 'Basic', participants: 50, price: 4500 }, { name: 'Premium', participants: 50, price: 7000 }] },
-        { label: 'Full-Day Event', packages: [{ name: 'Basic', participants: 100, price: 8000 }, { name: 'Premium', participants: 100, price: 12000 }] }
-      ],
-      notes: ['Pricing includes equipment setup and professional coaches.', 'Venue logistics and transport are client responsibility.', 'Minimum 3 days notice required for booking.', 'Non-refundable after confirmation.'],
-      footer: { tagline1: 'Unleash Your Energy,', tagline2: 'mitrixogymcrm Your Event Today.', founder: 'Shady Youssef' }
-    },
-    corporate: {
-      name: 'mitrixogymcrm Corporate Wellness Program',
-      description: 'Tailored corporate wellness sessions to boost team morale, health, and productivity through professional boxing and fitness coaching.',
-      metadata: [
-        { key: 'Age Group', value: 'Corporate Teams' },
-        { key: 'Location', value: 'Client Office / mitrixogymcrm Facility' },
-        { key: 'Supervision', value: 'HR & Coaching Coordination' }
-      ],
-      pricing: { currency: 'EUR', mode: 'flat_rate', discountPercent: 10, taxPercent: 12 },
-      slot1: '08:00 AM – 09:30 AM', slot2: '12:00 PM – 01:30 PM',
-      durations: [
-        { label: 'Monthly Retainer', packages: [{ name: 'Team of 20', participants: 20, price: 6500 }, { name: 'Team of 40', participants: 40, price: 11000 }] },
-        { label: 'Quarterly Package', packages: [{ name: 'Team of 20', participants: 20, price: 17000 }, { name: 'Team of 40', participants: 40, price: 28000 }] }
-      ],
-      notes: ['Pricing includes dedicated coach, equipment, and session planning.', 'Scheduling is flexible and agreed upon in advance.', 'Progress reports available upon request.', 'Non-refundable after program confirmation.'],
-      footer: { tagline1: 'Corporate Excellence,', tagline2: 'Healthy Minds, Stronger Teams.', founder: 'Shady Youssef' }
-    }
-  };
-
   document.getElementById('f-quote-type')?.addEventListener('change', e => {
-    const d = quoteTypeDefaults[e.target.value];
+    const val = e.target.value;
+    const defaultsMap = getQuoteTypeDefaults(tenantContext);
+    const d = defaultsMap[val] || defaultsMap[val.toLowerCase()] || defaultsMap['Sports Program'];
     if (!d) return;
     state.program = {
       name: d.name,
@@ -2124,38 +2423,9 @@ async function init() {
   document.getElementById('dlg-saved').onclick = e => { if (e.target.id === 'dlg-saved') e.target.classList.remove('open'); };
   document.getElementById('btn-reset').onclick = async () => {
     if (!confirm('Reset? Unsaved changes will be lost.')) return;
-    state.durations = [
-      { id: newId(), label: '1 Month Program', packages: [{ id: newId(), name: 'Package A', participants: 20, price: 1850 }, { id: newId(), name: 'Package B', participants: 15, price: 2200 }] },
-      { id: newId(), label: '3 Months Program', packages: [{ id: newId(), name: 'Package A', participants: 20, price: 3900 }, { id: newId(), name: 'Package B', participants: 15, price: 4100 }] }
-    ];
-    state.notes = [
-      { id: newId(), text: 'Pricing includes coaching, supervision and station setup.' },
-      { id: newId(), text: 'Sessions are scheduled upon agreement and availability.' },
-      { id: newId(), text: "All training activities are adapted to children's age and level." },
-      { id: newId(), text: 'Non-refundable after program confirmation.' }
-    ];
-    state.client = { organization: '', contact: '', email: '' };
-    state.program = {
-      name: 'Kids Boxing & Fitness Program',
-      description: 'A safe, fun and professional training program designed to build stronger kids — physically, mentally and socially.',
-      metadata: [
-        { id: newId(), key: 'Age Group', value: 'Children Groups' },
-        { id: newId(), key: 'Location', value: 'mitrixogymcrm Facility' },
-        { id: newId(), key: 'Supervision', value: 'Full Supervision & Care' }
-      ]
-    };
-    state.quote = { number: await genQuoteNum(), date: today(), valid: plusDays(30) };
-    state.pricing = {
-      currency: 'EGP',
-      mode: 'per_participant',
-      discountPercent: 0,
-      taxPercent: 0
-    };
-    state.footer = {
-      tagline1: 'Building Stronger Kids,',
-      tagline2: 'Inside & Outside The Ring.',
-      founder: 'Shady Youssef'
-    };
+    const fresh = getDefaultState(tenantContext);
+    Object.assign(state, fresh);
+    state.quote.number = await genQuoteNum();
     syncForm(); renderMetadata(); renderDurations(); renderNotes(); renderPreview();
     showToast('Reset');
   };

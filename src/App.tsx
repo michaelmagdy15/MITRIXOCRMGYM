@@ -65,13 +65,18 @@ import Complaints from './Complaints';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
 
-const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com'];
+const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com', 'simary@inzan.com'];
 const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
 
 function AppContent() {
   const { currentUser: authUser } = useAuth();
-  const canUseQuoteGenerator = QUOTE_GENERATOR_EMAILS.includes((authUser?.email || '').toLowerCase());
   const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features, clients, activeTab, setActiveTab, activeClientId, setActiveClientId, setPrefilledLeadData, loadingClients, loadingPayments, loadingPackages, can, canAny } = useAppContext();
+  const canUseQuoteGenerator =
+    QUOTE_GENERATOR_EMAILS.includes((authUser?.email || currentUser?.email || '').toLowerCase()) ||
+    (authUser?.email || currentUser?.email || '').toLowerCase().endsWith('@inzan.com') ||
+    (authUser?.email || currentUser?.email || '').toLowerCase().includes('inzan') ||
+    effectiveRole === 'admin' ||
+    effectiveRole === 'crm_admin';
   const { theme, toggleTheme } = useTheme();
   const { t, language, toggleLanguage, isRtl } = useLanguage();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
