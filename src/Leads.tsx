@@ -1,5 +1,5 @@
 import { QRCodeSVG } from 'qrcode.react';
-import React, { useState, useDeferredValue, useRef, useEffect } from 'react';
+import React, { useState, useDeferredValue, useRef, useEffect, useMemo } from 'react';
 import { useAppContext } from './context';
 import { getTenantId } from './firebase';
 import { useLanguage } from './contexts/LanguageContext';
@@ -16,8 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format, parseISO, isBefore, addDays, differenceInDays } from 'date-fns';
 import { safeFormatDate, toValidDate, safeIsoDate } from './utils/dateUtils';
-import { Client, LeadCategory, LeadInterest, LeadSource, LeadStage, Branch, InteractionType, InteractionOutcome, Gender } from './types';
-import { Phone, Calendar, MessageSquare, Plus, FileSpreadsheet, Download, UserCheck, ArrowRight } from 'lucide-react';
+import { Client, LeadCategory, LeadInterest, LeadSource, LeadStage, Branch, InteractionType, InteractionOutcome, Gender, ClientPackage, Package, Coach } from './types';
+import { Phone, Calendar, MessageSquare, Plus, FileSpreadsheet, Download, UserCheck, ArrowRight, Package as PackageIcon, Sparkles, CheckCircle2, Clock, Building2, Dumbbell, CreditCard } from 'lucide-react';
 import ImportData from './ImportData';
 import ImportHistory from './ImportHistory';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -28,6 +28,7 @@ import { WhatsAppDialog } from './components/WhatsAppDialog';
 import { MessageCircle } from 'lucide-react';
 import { downloadFile } from './utils/download';
 import { PhoneInput } from './components/ui/PhoneInput';
+import { addAuditLog } from './services/auditService';
 
 export default function Leads() {
   const {
@@ -39,7 +40,12 @@ export default function Leads() {
     clients, addClient, updateClient, deleteMultipleClients, deleteClient, addComment, addInteraction,
     prefilledLeadData, setPrefilledLeadData,
     branches,
-    features
+    features,
+    packages,
+    coaches,
+    addPayment,
+    setActiveTab: setNavTab,
+    setActiveClientId
   } = useAppContext();
   const { t } = useLanguage();
   const isInzan = getTenantId() === 'inzanathletics' || features?.salesPipelineStages === '7-stage';
@@ -129,6 +135,19 @@ export default function Leads() {
 
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const [leadToConvert, setLeadToConvert] = useState<Client | null>(null);
+  const [convertPackageId, setConvertPackageId] = useState<string>('');
+  const [convertStartDate, setConvertStartDate] = useState<string>('');
+  const [convertEndDate, setConvertEndDate] = useState<string>('');
+  const [convertBranch, setConvertBranch] = useState<string>('');
+  const [convertCoachId, setConvertCoachId] = useState<string>('');
+  const [convertRecordPayment, setConvertRecordPayment] = useState<boolean>(true);
+  const [convertPaymentMethod, setConvertPaymentMethod] = useState<'Cash' | 'Credit Card' | 'Bank Transfer' | 'Instapay' | 'Other'>('Cash');
+  const [convertPaymentAmount, setConvertPaymentAmount] = useState<string>('');
+  const [convertInstapayRef, setConvertInstapayRef] = useState<string>('');
+  const [convertPaymentNotes, setConvertPaymentNotes] = useState<string>('');
+  const [convertError, setConvertError] = useState<string>('');
+  const [isSubmittingConvert, setIsSubmittingConvert] = useState<boolean>(false);
+  const [conversionSuccessInfo, setConversionSuccessInfo] = useState<{ memberName: string; packageName: string; memberId?: string } | null>(null);
   const [isMobileLeadDialogOpen, setIsMobileLeadDialogOpen] = useState(false);
 
   const getQRCodeAsBlob = async (memberId: string): Promise<Blob> => {
@@ -494,10 +513,78 @@ export default function Leads() {
     setNewLeadLinked(false);
   };
 
+  const availablePackages: Package[] = useMemo(() => {
+    return (packages || []).filter((p: Package) => p.is_active !== false && p.isActive !== false);
+  }, [packages]);
+
+  const availableCoaches = useMemo(() => {
+    const active = (coaches || []).filter((c: Coach) => c.active !== false);
+    if (active.length > 0) return active;
+    return (users || []).filter(u => u.role === 'coach').map(u => ({
+      id: u.id,
+      name: u.name,
+      active: true
+    }));
+  }, [coaches, users]);
+
+  const computeEndDate = (startStr: string, expiryDays: number): string => {
+    try {
+      if (!startStr) return '';
+      const d = parseISO(startStr);
+      if (isNaN(d.getTime())) return '';
+      const end = addDays(d, expiryDays || 30);
+      return format(end, 'yyyy-MM-dd');
+    } catch {
+      return '';
+    }
+  };
+
+  const openConvertDialog = (lead: Client) => {
+    setLeadToConvert(lead);
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const activePkgs = availablePackages;
+    const defaultBranch = lead.branch || (currentUser?.branch && currentUser.branch !== 'ALL' ? currentUser.branch : (branches[0] || ''));
+    const matchedPkg = activePkgs.find((p: Package) => p.branch === defaultBranch || p.branch === 'ALL' || !p.branch) || activePkgs[0] || null;
+
+    const pkgId = matchedPkg ? matchedPkg.id : '';
+    setConvertPackageId(pkgId);
+    setConvertStartDate(todayStr);
+    setConvertEndDate(matchedPkg ? computeEndDate(todayStr, matchedPkg.expiryDays) : computeEndDate(todayStr, 30));
+    setConvertBranch(defaultBranch);
+    setConvertCoachId('');
+    setConvertRecordPayment(true);
+    setConvertPaymentMethod('Cash');
+    setConvertPaymentAmount(matchedPkg ? String(matchedPkg.price) : '');
+    setConvertInstapayRef('');
+    setConvertPaymentNotes('');
+    setConvertError('');
+    setIsSubmittingConvert(false);
+    setIsConvertDialogOpen(true);
+  };
+
+  const handlePackageSelect = (pkgId: string) => {
+    setConvertPackageId(pkgId);
+    setConvertError('');
+    const pkg = availablePackages.find((p: Package) => p.id === pkgId);
+    if (pkg) {
+      setConvertEndDate(computeEndDate(convertStartDate, pkg.expiryDays));
+      setConvertPaymentAmount(String(pkg.price));
+    }
+  };
+
+  const handleStartDateSelect = (newStart: string) => {
+    setConvertStartDate(newStart);
+    const pkg = availablePackages.find((p: Package) => p.id === convertPackageId);
+    if (pkg) {
+      setConvertEndDate(computeEndDate(newStart, pkg.expiryDays));
+    } else {
+      setConvertEndDate(computeEndDate(newStart, 30));
+    }
+  };
+
   const handleStageChange = (lead: Client, newStage: LeadStage) => {
     if (newStage === 'Converted' || newStage === 'Won') {
-      setLeadToConvert(lead);
-      setIsConvertDialogOpen(true);
+      openConvertDialog(lead);
     } else {
       updateClient(lead.id, { stage: newStage });
     }
@@ -511,15 +598,124 @@ export default function Leads() {
     }
   };
 
-  const confirmConversion = () => {
-    if (leadToConvert) {
-      updateClient(leadToConvert.id, { 
-        stage: isInzan ? 'Won' : 'Converted', 
+  const handleConfirmConvert = async () => {
+    if (!leadToConvert) return;
+
+    if (!convertPackageId) {
+      setConvertError('Please select a membership package to assign to this member.');
+      return;
+    }
+
+    const selectedPkg = availablePackages.find((p: Package) => p.id === convertPackageId);
+    if (!selectedPkg) {
+      setConvertError('Selected package could not be found. Please choose an active package.');
+      return;
+    }
+
+    if (!convertStartDate) {
+      setConvertError('Please select a start date for the membership.');
+      return;
+    }
+
+    if (!convertEndDate) {
+      setConvertError('Please specify an expiry / end date.');
+      return;
+    }
+
+    setIsSubmittingConvert(true);
+    setConvertError('');
+
+    try {
+      const startIso = new Date(convertStartDate + 'T00:00:00').toISOString();
+      const endIso = new Date(convertEndDate + 'T23:59:59').toISOString();
+      const targetBranch = convertBranch || leadToConvert.branch || (currentUser?.branch !== 'ALL' ? currentUser?.branch : branches[0]) || '';
+
+      const selectedCoach = availableCoaches.find((c: any) => c.id === convertCoachId);
+      const coachName = selectedCoach?.name || undefined;
+
+      const newClientPkg: ClientPackage = {
+        id: 'pkg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+        packageName: selectedPkg.name,
+        startDate: startIso,
+        endDate: endIso,
+        sessionsTotal: selectedPkg.sessions,
+        sessionsRemaining: selectedPkg.sessions,
         status: 'Active',
-        startDate: new Date().toISOString()
-      });
+        subscriptionType: 'new',
+        trainerName: coachName,
+        salesRepName: currentUser?.name || undefined,
+        createdAt: new Date().toISOString(),
+        createdBy: currentUser?.name || currentUser?.email || 'Staff'
+      };
+
+      const finalStage: LeadStage = isInzan ? 'Won' : 'Converted';
+      const parsedAmount = parseFloat(convertPaymentAmount) || 0;
+      const isPaidInFull = convertRecordPayment && parsedAmount >= selectedPkg.price;
+
+      const clientUpdateData: Partial<Client> = {
+        stage: finalStage,
+        status: 'Active',
+        packageType: selectedPkg.name,
+        sessionsRemaining: selectedPkg.sessions,
+        startDate: startIso,
+        membershipExpiry: endIso,
+        branch: targetBranch as Branch,
+        packages: [newClientPkg],
+        paid: isPaidInFull,
+        salesRep: currentUser?.name || leadToConvert.salesRep,
+        salesName: currentUser?.name || leadToConvert.salesName,
+      };
+
+      if (coachName && convertCoachId) {
+        clientUpdateData.staffAssignments = {
+          ...(leadToConvert.staffAssignments || {}),
+          coach: { staffId: convertCoachId, staffName: coachName }
+        };
+      }
+
+      await updateClient(leadToConvert.id, clientUpdateData);
+
+      if (convertRecordPayment && parsedAmount > 0) {
+        await addPayment({
+          clientId: leadToConvert.id,
+          amount: parsedAmount,
+          date: new Date().toISOString(),
+          method: convertPaymentMethod,
+          packageType: selectedPkg.name,
+          status: 'paid',
+          branch: targetBranch as Branch,
+          sales_rep_id: currentUser?.id || '',
+          salesName: currentUser?.name || '',
+          notes: convertPaymentNotes.trim() || `Initial payment upon lead conversion for ${selectedPkg.name}`,
+          instapayRef: convertPaymentMethod === 'Instapay' && convertInstapayRef.trim() ? convertInstapayRef.trim() : undefined,
+        });
+      }
+
+      await addAuditLog(
+        'UPDATE',
+        'CLIENT',
+        leadToConvert.id,
+        `Converted lead "${leadToConvert.name}" to Active member with package "${selectedPkg.name}" (${selectedPkg.sessions} sessions, valid until ${convertEndDate}). Initial payment: ${convertRecordPayment ? `${parsedAmount} EGP (${convertPaymentMethod})` : 'Deferred/Pending'}.`,
+        currentUser?.name,
+        { branch: targetBranch as Branch }
+      );
+
+      const convertedName = leadToConvert.name;
+      const convertedMemberId = leadToConvert.memberId;
+
       setIsConvertDialogOpen(false);
       setLeadToConvert(null);
+      setConversionSuccessInfo({
+        memberName: convertedName,
+        packageName: selectedPkg.name,
+        memberId: convertedMemberId
+      });
+
+    } catch (err: any) {
+      console.error('Failed to convert lead:', err);
+      setConvertError(err?.message || 'Failed to complete conversion. Please try again.');
+    } finally {
+      setIsSubmittingConvert(false);
     }
   };
 
@@ -595,6 +791,17 @@ export default function Leads() {
               >
                 <MessageCircle className="h-4 w-4" />
               </Button>
+              {lead.stage !== 'Won' && lead.stage !== 'Converted' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950/30"
+                  onClick={() => openConvertDialog(lead)}
+                  title="Convert to Member with Package"
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -756,6 +963,18 @@ export default function Leads() {
                   >
                     <MessageCircle className="h-4 w-4" />
                   </Button>
+                  {lead.stage !== 'Won' && lead.stage !== 'Converted' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-600 hover:text-white font-semibold text-xs shadow-xs"
+                      onClick={() => openConvertDialog(lead)}
+                      title="Convert Lead to Member with Package"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span className="hidden xl:inline">Convert</span>
+                    </Button>
+                  )}
                   <Dialog onOpenChange={(open) => { if (open) { setSelectedLead(lead); loadLeadDetails(lead.id); } }}>
                     <DialogTrigger render={<Button variant="ghost" size="sm" />}>
                     <MessageSquare className="h-4 w-4 mr-2" />
@@ -774,6 +993,17 @@ export default function Leads() {
                               {lead.status}
                             </Badge>
                           </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {lead.stage !== 'Won' && lead.stage !== 'Converted' && (
+                            <Button
+                              onClick={() => openConvertDialog(lead)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-2 rounded-xl shadow-md h-10 px-4"
+                            >
+                              <Sparkles className="h-4 w-4" />
+                              Convert to Member
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </DialogHeader>
@@ -1598,33 +1828,363 @@ export default function Leads() {
         )}
       </Tabs>
 
-      <Dialog open={isConvertDialogOpen} onOpenChange={setIsConvertDialogOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-md md:max-w-lg rounded-2xl p-6">
+      {/* Enhanced Lead Conversion Dialog */}
+      <Dialog open={isConvertDialogOpen} onOpenChange={(open) => {
+        if (!isSubmittingConvert) {
+          setIsConvertDialogOpen(open);
+          if (!open) {
+            setLeadToConvert(null);
+            setConvertError('');
+          }
+        }
+      }}>
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
-            <DialogTitle>Convert Lead to Client?</DialogTitle>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl font-black">Convert Lead to Member</DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Assign membership package, schedule duration, and configure billing for this client.
+                </p>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-muted-foreground">
-              Would you like to convert <strong>{leadToConvert?.name}</strong> into an active client record? 
-              This will move them from Leads to Members.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsConvertDialogOpen(false)}>Cancel</Button>
-            <Button onClick={confirmConversion}>Confirm Conversion</Button>
+
+          {convertError && (
+            <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 text-red-600 rounded-xl text-xs font-medium">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{convertError}</span>
+            </div>
+          )}
+
+          {leadToConvert && (
+            <div className="space-y-6 pt-2">
+              {/* Lead Summary Strip */}
+              <div className="bg-muted/40 p-3.5 rounded-2xl border border-border/50 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wider">Prospect</span>
+                  <span className="font-bold text-sm text-foreground">{leadToConvert.name}</span>
+                  {leadToConvert.memberId && <span className="ml-1 text-muted-foreground">#{leadToConvert.memberId}</span>}
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wider">Phone</span>
+                  <span className="font-medium text-foreground">{leadToConvert.phone || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wider">Source</span>
+                  <Badge variant="outline" className="text-[10px]">{leadToConvert.source || 'Direct'}</Badge>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wider">Current Branch</span>
+                  <Badge variant="secondary" className="text-[10px]">{leadToConvert.branch || 'Unassigned'}</Badge>
+                </div>
+              </div>
+
+              {/* Step 1: Package Selection */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <PackageIcon className="h-3.5 w-3.5 text-primary" />
+                    Select Membership Package <span className="text-red-500">*</span>
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">
+                    {availablePackages.length} packages available
+                  </span>
+                </div>
+
+                {availablePackages.length === 0 ? (
+                  <div className="p-4 text-center border border-dashed rounded-xl text-xs text-muted-foreground">
+                    No active packages configured. Please configure packages in the Packages tab first.
+                  </div>
+                ) : (
+                  <Select value={convertPackageId} onValueChange={(v: string | null) => v && handlePackageSelect(v)}>
+                    <SelectTrigger className="h-12 rounded-xl bg-background/50 border-input">
+                      <SelectValue placeholder="Choose a membership or training package" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {availablePackages.map((pkg: Package) => (
+                        <SelectItem key={pkg.id} value={pkg.id}>
+                          <div className="flex items-center justify-between w-full gap-4">
+                            <span className="font-semibold">{pkg.name}</span>
+                            <div className="flex items-center gap-2 text-xs">
+                              <Badge variant="outline" className="text-[10px]">{pkg.type || 'Standard'}</Badge>
+                              <span className="font-bold text-emerald-600">{pkg.price} EGP</span>
+                              <span className="text-muted-foreground">· {pkg.sessions === 9999 || pkg.sessions === -1 ? 'Unlimited' : `${pkg.sessions} ses.`}</span>
+                              <span className="text-muted-foreground">· {pkg.expiryDays}d</span>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {/* Selected Package Details Pill */}
+                {(() => {
+                  const selectedPkg = availablePackages.find((p: Package) => p.id === convertPackageId);
+                  if (!selectedPkg) return null;
+                  return (
+                    <div className="p-3.5 bg-primary/5 border border-primary/15 rounded-2xl grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <span className="text-muted-foreground text-[10px] block font-medium">Type</span>
+                        <span className="font-semibold capitalize text-foreground">{selectedPkg.type || 'Standard'}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-[10px] block font-medium">Package Price</span>
+                        <span className="font-bold text-emerald-600">{selectedPkg.price} EGP</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-[10px] block font-medium">Sessions</span>
+                        <span className="font-semibold text-foreground">
+                          {selectedPkg.sessions === 9999 || selectedPkg.sessions === -1 ? 'Unlimited' : `${selectedPkg.sessions} Sessions`}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-[10px] block font-medium">Validity Period</span>
+                        <span className="font-semibold text-foreground">{selectedPkg.expiryDays} Days</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Step 2: Dates, Branch, Trainer */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-primary" />
+                    Start Date <span className="text-red-500">*</span>
+                  </Label>
+                  <Input 
+                    type="date"
+                    value={convertStartDate}
+                    onChange={(e) => handleStartDateSelect(e.target.value)}
+                    className="h-10 rounded-xl"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-primary" />
+                    Expiry / End Date <span className="text-red-500">*</span>
+                  </Label>
+                  <Input 
+                    type="date"
+                    value={convertEndDate}
+                    onChange={(e) => setConvertEndDate(e.target.value)}
+                    className="h-10 rounded-xl"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-primary" />
+                    Home Branch
+                  </Label>
+                  <Select value={convertBranch} onValueChange={(v: string | null) => setConvertBranch(v || '')}>
+                    <SelectTrigger className="h-10 rounded-xl">
+                      <SelectValue placeholder="Select Branch" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches.map(b => (
+                        <SelectItem key={b} value={b}>{b}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <Dumbbell className="h-3.5 w-3.5 text-primary" />
+                    Assigned Coach / Trainer (Optional)
+                  </Label>
+                  <Select value={convertCoachId || 'none'} onValueChange={(v: string | null) => setConvertCoachId(!v || v === 'none' ? '' : v)}>
+                    <SelectTrigger className="h-10 rounded-xl">
+                      <SelectValue placeholder="Assign Trainer (Optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None / Unassigned</SelectItem>
+                      {availableCoaches.map((c: any) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Step 3: Payment Section */}
+              <div className="border border-border/70 rounded-2xl p-4 bg-muted/20 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <Checkbox 
+                      id="record-payment-toggle"
+                      checked={convertRecordPayment}
+                      onCheckedChange={(checked) => setConvertRecordPayment(!!checked)}
+                    />
+                    <Label htmlFor="record-payment-toggle" className="text-xs font-bold cursor-pointer">
+                      Collect & Record Initial Payment Now
+                    </Label>
+                  </div>
+                  <Badge variant={convertRecordPayment ? "default" : "secondary"} className="text-[10px]">
+                    {convertRecordPayment ? "Payment Paid" : "Payment Pending"}
+                  </Badge>
+                </div>
+
+                {convertRecordPayment ? (
+                  <div className="space-y-3 pt-1">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] font-semibold text-muted-foreground">Payment Method</Label>
+                        <Select 
+                          value={convertPaymentMethod} 
+                          onValueChange={(v: any) => setConvertPaymentMethod(v)}
+                        >
+                          <SelectTrigger className="h-9 rounded-xl text-xs">
+                            <SelectValue placeholder="Payment Method" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Cash">Cash</SelectItem>
+                            <SelectItem value="Credit Card">Credit Card / Visa</SelectItem>
+                            <SelectItem value="Instapay">Instapay</SelectItem>
+                            <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] font-semibold text-muted-foreground">Amount Paid (EGP)</Label>
+                        <Input 
+                          type="number"
+                          value={convertPaymentAmount}
+                          onChange={(e) => setConvertPaymentAmount(e.target.value)}
+                          placeholder="Amount in EGP"
+                          className="h-9 rounded-xl text-xs font-semibold"
+                        />
+                      </div>
+                    </div>
+
+                    {convertPaymentMethod === 'Instapay' && (
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] font-semibold text-muted-foreground">Instapay 12-Digit Reference</Label>
+                        <Input 
+                          type="text"
+                          value={convertInstapayRef}
+                          onChange={(e) => setConvertInstapayRef(e.target.value)}
+                          placeholder="e.g. 123456789012"
+                          maxLength={12}
+                          className="h-9 rounded-xl text-xs font-mono"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <Label className="text-[11px] font-semibold text-muted-foreground">Payment Notes / Receipt Ref (Optional)</Label>
+                      <Input 
+                        type="text"
+                        value={convertPaymentNotes}
+                        onChange={(e) => setConvertPaymentNotes(e.target.value)}
+                        placeholder="Receipt number or notes..."
+                        className="h-9 rounded-xl text-xs"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground italic">
+                    Member will be created with "Payment Pending / Unpaid" status. Payment can be collected later from the Payments tab.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="mt-4 gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsConvertDialogOpen(false)}
+              disabled={isSubmittingConvert}
+              className="rounded-xl"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleConfirmConvert}
+              disabled={isSubmittingConvert || !convertPackageId}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-2 rounded-xl"
+            >
+              {isSubmittingConvert ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Converting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  Confirm Conversion & Create Member
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Conversion Success Dialog */}
+      {conversionSuccessInfo && (
+        <Dialog open={!!conversionSuccessInfo} onOpenChange={() => setConversionSuccessInfo(null)}>
+          <DialogContent className="sm:max-w-md rounded-3xl p-6 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 mb-2">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <DialogTitle className="text-xl font-bold">Lead Successfully Converted!</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-2">
+              <strong>{conversionSuccessInfo.memberName}</strong> has been enrolled as an active member with the <strong>{conversionSuccessInfo.packageName}</strong> package.
+            </p>
+            <DialogFooter className="mt-6 flex flex-col sm:flex-row gap-2 sm:justify-center">
+              <Button variant="outline" className="rounded-xl" onClick={() => setConversionSuccessInfo(null)}>
+                Stay on Leads
+              </Button>
+              <Button 
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 rounded-xl"
+                onClick={() => {
+                  setConversionSuccessInfo(null);
+                  setNavTab('clients');
+                }}
+              >
+                View in Members Directory
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       {/* Shared mobile lead dialog */}
       {selectedLead && (
         <Dialog open={isMobileLeadDialogOpen} onOpenChange={(open) => { setIsMobileLeadDialogOpen(open); if (!open) setSelectedLead(null); }}>
           <DialogContent className="!w-full !max-w-[1400px] h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl bg-background/95 backdrop-blur-xl">
-            <DialogHeader className="p-4 pb-4 bg-muted/30 border-b shrink-0">
-              <DialogTitle className="text-xl font-extrabold tracking-tight">Lead: <span className="text-primary">{selectedLead.name}</span></DialogTitle>
-              <div className="flex items-center gap-2 mt-1">
-                <div className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-black uppercase border border-primary/20">#{selectedLead.memberId || 'PENDING'}</div>
-                <Badge variant="outline" className="rounded-full text-[10px]">{selectedLead.status}</Badge>
+            <DialogHeader className="p-4 pb-4 bg-muted/30 border-b shrink-0 flex flex-row items-center justify-between">
+              <div>
+                <DialogTitle className="text-xl font-extrabold tracking-tight">Lead: <span className="text-primary">{selectedLead.name}</span></DialogTitle>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-black uppercase border border-primary/20">#{selectedLead.memberId || 'PENDING'}</div>
+                  <Badge variant="outline" className="rounded-full text-[10px]">{selectedLead.status}</Badge>
+                </div>
               </div>
+              {selectedLead.stage !== 'Won' && selectedLead.stage !== 'Converted' && (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setIsMobileLeadDialogOpen(false);
+                    openConvertDialog(selectedLead);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5 rounded-xl mr-6"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Convert
+                </Button>
+              )}
             </DialogHeader>
             <div className="flex-1 overflow-y-auto">
               {/* Tab nav */}
@@ -1655,7 +2215,14 @@ export default function Leads() {
                 </div>
                 <div className="space-y-2 pt-2">
                   <Label className="text-xs">Stage</Label>
-                  <Select defaultValue={selectedLead.stage} onValueChange={v => updateClient(selectedLead.id, { stage: v as LeadStage })}>
+                  <Select defaultValue={selectedLead.stage} onValueChange={v => {
+                    if (v === 'Won' || v === 'Converted') {
+                      setIsMobileLeadDialogOpen(false);
+                      openConvertDialog(selectedLead);
+                    } else {
+                      updateClient(selectedLead.id, { stage: v as LeadStage });
+                    }
+                  }}>
                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {(isInzan 
