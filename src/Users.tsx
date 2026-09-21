@@ -416,288 +416,354 @@ export default function Users() {
                 </Button>
 
                 <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-                  <DialogContent className="w-[96vw] sm:max-w-3xl md:max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-6 md:p-8">
-                    <DialogHeader>
-                      <DialogTitle className="text-xl md:text-2xl font-bold">Invite New User</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label>Name</Label>
-                        <Input 
-                          value={inviteName} 
-                          onChange={(e) => setInviteName(e.target.value)} 
-                          placeholder="User's full name"
-                        />
+                  <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[94vw] md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-[1440px] h-[92vh] max-h-[92vh] p-0 flex flex-col gap-0 rounded-3xl border shadow-2xl bg-background overflow-hidden">
+                    {/* Sticky Header */}
+                    <div className="px-6 py-4 border-b bg-card/80 backdrop-blur-sm flex items-center justify-between shrink-0 pr-14">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold text-base shrink-0">
+                          {inviteName ? inviteName.charAt(0).toUpperCase() : <UserIcon className="h-5 w-5" />}
+                        </div>
+                        <div>
+                          <DialogTitle className="text-lg sm:text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                            Invite New Staff Member
+                            <Badge variant="outline" className="text-xs font-mono uppercase tracking-wider">
+                              {inviteRole}
+                            </Badge>
+                          </DialogTitle>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Create staff profile, configure branch & sales target, and customize granular permissions.
+                          </p>
+                        </div>
                       </div>
+                    </div>
 
-                      <div className="space-y-2">
-                        <Label>Email</Label>
-                        <Input 
-                          type="email"
-                          value={inviteEmail} 
-                          onChange={(e) => setInviteEmail(e.target.value)} 
-                          placeholder="User's email"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Mobile Phone Number</Label>
-                        <Input 
-                          type="tel"
-                          value={invitePhone} 
-                          onChange={(e) => setInvitePhone(e.target.value)} 
-                          placeholder="e.g. +201000680580"
-                        />
-                        <p className="text-xs text-muted-foreground">Used for SMS password resets and login verification.</p>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Role</Label>
-                        <Select value={inviteRole} onValueChange={(v) => handleInviteRoleChange(v as UserRole)}>
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="rep">Rep</SelectItem>
-                            <SelectItem value="manager">Manager</SelectItem>
-                            {canInviteUsers && (
-                              <SelectItem value="admin">Admin</SelectItem>
-                            )}
-                            {canChangeRoles && (
-                              <>
-                                <SelectItem value="crm_admin">CRM Admin</SelectItem>
-                                <SelectItem value="super_admin">Super Admin</SelectItem>
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Branch</Label>
-                        <Select value={inviteBranch} onValueChange={(v) => setInviteBranch(v || '')}>
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="All Branches" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="">All Branches</SelectItem>
-                            {branches.map(b => (
-                              <SelectItem key={b} value={b}>{b}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Personal Sales Target (Optional)</Label>
-                        <Input 
-                          type="number"
-                          value={inviteTarget} 
-                          onChange={(e) => setInviteTarget(e.target.value)} 
-                          placeholder="Leave blank to use global target"
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Employment Status</Label>
-                        <Select value={inviteStatus} onValueChange={(val: any) => val && setInviteStatus(val)}>
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Select Status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="working">Working</SelectItem>
-                            <SelectItem value="nonworking">Non-Working</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {isInzan && (
-                        <div className="space-y-4 pt-4 border-t">
-                          <Label className="text-base font-semibold flex items-center gap-2">
-                            <Building2 className="w-4 h-4 text-primary" />
-                            INZAN Organizational Structure
-                          </Label>
-
-                          <div className="space-y-2">
-                            <Label>Department</Label>
-                            <Select 
-                              value={inviteDepartment} 
-                              onValueChange={(val: any) => {
-                                setInviteDepartment(val || '');
-                                setInviteJobTitle('');
-                              }}
-                            >
-                              <SelectTrigger className="h-11 rounded-xl">
-                                <SelectValue placeholder="Select Department" />
+                    {/* Main Workbench Body: 2 Columns on Desktop */}
+                    <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+                      <div className="grid grid-cols-1 lg:grid-cols-12 h-full divide-y lg:divide-y-0 lg:divide-x">
+                        
+                        {/* Left Column: Staff Identity & Profile */}
+                        <div className="lg:col-span-5 xl:col-span-4 p-5 sm:p-6 overflow-y-auto space-y-5 bg-muted/15">
+                          {/* Role Selection */}
+                          <div className="space-y-1.5 p-3.5 rounded-2xl bg-card border shadow-xs">
+                            <Label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                              <span>System Role</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">Access Level</span>
+                            </Label>
+                            <Select value={inviteRole} onValueChange={(v) => handleInviteRoleChange(v as UserRole)}>
+                              <SelectTrigger className="h-10 rounded-xl bg-background">
+                                <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">None / Unassigned</SelectItem>
-                                {INZAN_DEPARTMENTS.map(dept => (
-                                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                <SelectItem value="rep">Rep</SelectItem>
+                                <SelectItem value="manager">Manager</SelectItem>
+                                {canInviteUsers && (
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                )}
+                                {canChangeRoles && (
+                                  <>
+                                    <SelectItem value="crm_admin">CRM Admin</SelectItem>
+                                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                                  </>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Personal Information Group */}
+                          <div className="space-y-3.5">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <UserIcon className="h-3.5 w-3.5 text-primary" /> Personal Information
+                            </h4>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold">Full Name *</Label>
+                              <Input 
+                                value={inviteName} 
+                                onChange={(e) => setInviteName(e.target.value)} 
+                                placeholder="e.g. Maison Mohamed"
+                                className="h-10 rounded-xl bg-background"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold">Email Address *</Label>
+                              <Input 
+                                type="email"
+                                value={inviteEmail} 
+                                onChange={(e) => setInviteEmail(e.target.value)} 
+                                placeholder="user@gymdomain.com"
+                                className="h-10 rounded-xl bg-background"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold">Mobile Phone Number</Label>
+                              <Input 
+                                type="tel"
+                                value={invitePhone} 
+                                onChange={(e) => setInvitePhone(e.target.value)} 
+                                placeholder="e.g. +201000680580"
+                                className="h-10 rounded-xl bg-background"
+                              />
+                              <p className="text-[11px] text-muted-foreground">Used for SMS password resets and OTP verification.</p>
+                            </div>
+                          </div>
+
+                          {/* Branch & Employment Group */}
+                          <div className="space-y-3.5 pt-4 border-t">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <Building2 className="h-3.5 w-3.5 text-primary" /> Branch & Targets
+                            </h4>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Assigned Branch</Label>
+                                <Select value={inviteBranch} onValueChange={(v) => setInviteBranch(v || '')}>
+                                  <SelectTrigger className="h-10 rounded-xl bg-background">
+                                    <SelectValue placeholder="All Branches" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">All Branches</SelectItem>
+                                    {branches.map(b => (
+                                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Employment Status</Label>
+                                <Select value={inviteStatus} onValueChange={(val: any) => val && setInviteStatus(val)}>
+                                  <SelectTrigger className="h-10 rounded-xl bg-background">
+                                    <SelectValue placeholder="Select Status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="working">Working</SelectItem>
+                                    <SelectItem value="nonworking">Non-Working</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold">Personal Sales Target (Optional)</Label>
+                              <Input 
+                                type="number"
+                                value={inviteTarget} 
+                                onChange={(e) => setInviteTarget(e.target.value)} 
+                                placeholder="Leave blank to use global target"
+                                className="h-10 rounded-xl bg-background"
+                              />
+                            </div>
+                          </div>
+
+                          {/* INZAN Org Structure */}
+                          {isInzan && (
+                            <div className="space-y-3.5 pt-4 border-t">
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                <Building2 className="h-3.5 w-3.5 text-primary" /> INZAN Organization
+                              </h4>
+
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Department</Label>
+                                <Select 
+                                  value={inviteDepartment} 
+                                  onValueChange={(val: any) => {
+                                    setInviteDepartment(val || '');
+                                    setInviteJobTitle('');
+                                  }}
+                                >
+                                  <SelectTrigger className="h-10 rounded-xl bg-background">
+                                    <SelectValue placeholder="Select Department" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">None / Unassigned</SelectItem>
+                                    {INZAN_DEPARTMENTS.map(dept => (
+                                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {inviteDepartment && (
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold">Job Title / Position</Label>
+                                  <Select value={inviteJobTitle} onValueChange={(val: any) => setInviteJobTitle(val || '')}>
+                                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                                      <SelectValue placeholder="Select Job Title" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="">None / Unassigned</SelectItem>
+                                      {(INZAN_JOB_TITLES[inviteDepartment as InzanDepartment] || []).map(title => (
+                                        <SelectItem key={title} value={title}>{title}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+
+                              {inviteDepartment === 'Fitness' && (
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold">Trainer Contract Type</Label>
+                                  <Select value={inviteTrainerType} onValueChange={(val: any) => setInviteTrainerType(val || 'Full-Time')}>
+                                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                                      <SelectValue placeholder="Select Contract Type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
+                                      <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          <p className="text-[11px] text-muted-foreground pt-1">
+                            Note: Account created with default password <span className="font-mono font-semibold text-foreground">12345678</span>. User is prompted to change on first login.
+                          </p>
+                        </div>
+
+                        {/* Right Column: Permissions & Access Engine */}
+                        <div className="lg:col-span-7 xl:col-span-8 p-5 sm:p-6 overflow-y-auto space-y-5 bg-background">
+                          {/* Banner Card */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border shadow-xs">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Shield className="h-4 w-4 text-primary" />
+                                <h4 className="font-bold text-sm text-foreground">Operational Permissions & Access</h4>
+                                <Badge variant="outline" className="text-xs font-semibold border-primary/30 text-primary bg-primary/5">
+                                  {Object.values(inviteUseCustomOverrides ? inviteCustomPermissions : (permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || {})).filter(Boolean).length} / 88 active
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Assign an operational template or customize specific user-level permission overrides.
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 bg-muted/60 p-1.5 rounded-xl border shrink-0">
+                              <span className={`text-xs ${!inviteUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                                Template
+                              </span>
+                              <Switch
+                                checked={inviteUseCustomOverrides}
+                                onCheckedChange={(checked) => {
+                                  setInviteUseCustomOverrides(checked);
+                                  if (checked && Object.keys(inviteCustomPermissions).length === 0) {
+                                    const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
+                                    const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
+                                    setInviteCustomPermissions({ ...basePerms });
+                                  }
+                                }}
+                              />
+                              <span className={`text-xs ${inviteUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                                Custom Overrides
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Template Selection Dropdown */}
+                          <div className="space-y-1.5 p-3.5 rounded-2xl bg-muted/30 border">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs font-semibold text-foreground">Assigned Permission Template</Label>
+                              {invitePermissionTemplateId && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  {permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.description || ''}
+                                </span>
+                              )}
+                            </div>
+                            <Select 
+                              value={invitePermissionTemplateId} 
+                              onValueChange={(val: any) => handleInviteTemplateChange(val || '')}
+                            >
+                              <SelectTrigger className="h-10 rounded-xl bg-background">
+                                <SelectValue placeholder="Select a Permission Template..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">Role Defaults (Inherit from {inviteRole})</SelectItem>
+                                {permissionTemplates.map(tpl => (
+                                  <SelectItem key={tpl.id} value={tpl.id}>
+                                    {tpl.name} {tpl.isSystem ? '• (System Default)' : '• (Custom Template)'}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           </div>
 
-                          {inviteDepartment && (
-                            <div className="space-y-2">
-                              <Label>Job Title / Position</Label>
-                              <Select value={inviteJobTitle} onValueChange={(val: any) => setInviteJobTitle(val || '')}>
-                                <SelectTrigger className="h-11 rounded-xl">
-                                  <SelectValue placeholder="Select Job Title" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="">None / Unassigned</SelectItem>
-                                  {(INZAN_JOB_TITLES[inviteDepartment as InzanDepartment] || []).map(title => (
-                                    <SelectItem key={title} value={title}>{title}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                          {/* Permission Matrix or Preview */}
+                          {inviteUseCustomOverrides ? (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
+                                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                  Custom overrides are active. Adjust any of the 88 checkboxes below.
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
+                                    const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
+                                    setInviteCustomPermissions({ ...basePerms });
+                                  }}
+                                  className="h-7 text-xs text-primary hover:underline px-2.5 rounded-lg"
+                                >
+                                  Reset to Template Defaults
+                                </Button>
+                              </div>
+
+                              <PermissionMatrixEditor
+                                permissions={inviteCustomPermissions}
+                                onChange={setInviteCustomPermissions}
+                                defaultExpanded={false}
+                              />
                             </div>
-                          )}
-
-                          {inviteDepartment === 'Fitness' && (
-                            <div className="space-y-2">
-                              <Label>Trainer Contract Type</Label>
-                              <Select value={inviteTrainerType} onValueChange={(val: any) => setInviteTrainerType(val || 'Full-Time')}>
-                                <SelectTrigger className="h-11 rounded-xl">
-                                  <SelectValue placeholder="Select Contract Type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
-                                  <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Granular Permission Control & Templates */}
-                      <div className="space-y-4 pt-4 border-t">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                          <div>
-                            <Label className="text-base font-bold text-foreground flex items-center gap-2">
-                              <Shield className="h-4 w-4 text-primary" />
-                              Permissions & Operational Access
-                            </Label>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              Assign an operational template or customize specific user-level permission overrides.
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border">
-                            <span className={`text-xs ${!inviteUseCustomOverrides ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
-                              Template Defaults
-                            </span>
-                            <Switch
-                              checked={inviteUseCustomOverrides}
-                              onCheckedChange={(checked) => {
-                                setInviteUseCustomOverrides(checked);
-                                if (checked && Object.keys(inviteCustomPermissions).length === 0) {
-                                  const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
-                                  const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
-                                  setInviteCustomPermissions({ ...basePerms });
+                          ) : (
+                            <div className="space-y-3">
+                              <div className="text-xs text-muted-foreground px-1">
+                                Permissions are currently inherited from{' '}
+                                <strong className="text-foreground">
+                                  {permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.name || `Default ${inviteRole} role`}
+                                </strong>. Toggle <strong>"Custom Overrides"</strong> above to adjust individual permissions.
+                              </div>
+                              <PermissionMatrixEditor
+                                permissions={
+                                  (permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.permissions) ||
+                                  (inviteRole ? DEFAULT_ROLE_PERMISSIONS[inviteRole] : undefined) ||
+                                  ALL_PERMISSIONS_FALSE
                                 }
-                              }}
-                            />
-                            <span className={`text-xs ${inviteUseCustomOverrides ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
-                              Custom Overrides
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Template Selection Dropdown */}
-                        <div className="space-y-1.5 bg-muted/20 p-3.5 rounded-2xl border">
-                          <Label className="text-xs font-semibold">Assigned Permission Template</Label>
-                          <Select 
-                            value={invitePermissionTemplateId} 
-                            onValueChange={(val: any) => handleInviteTemplateChange(val || '')}
-                          >
-                            <SelectTrigger className="h-10 rounded-xl bg-background">
-                              <SelectValue placeholder="Select a Permission Template..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">Role Defaults (Inherit from {inviteRole})</SelectItem>
-                              {permissionTemplates.map(tpl => (
-                                <SelectItem key={tpl.id} value={tpl.id}>
-                                  {tpl.name} {tpl.isSystem ? '• (System Default)' : '• (Custom Template)'}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {/* Permission Matrix or Preview */}
-                        {inviteUseCustomOverrides ? (
-                          <div className="space-y-2 pt-1">
-                            <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
-                              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
-                                <Sparkles className="h-3.5 w-3.5" />
-                                Custom overrides are active for this user.
-                              </span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
-                                  const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
-                                  setInviteCustomPermissions({ ...basePerms });
-                                }}
-                                className="h-7 text-xs text-primary hover:underline px-2"
-                              >
-                                Reset to Template Defaults
-                              </Button>
+                                onChange={() => {}}
+                                readOnly={true}
+                                defaultExpanded={false}
+                              />
                             </div>
-
-                            <PermissionMatrixEditor
-                              permissions={inviteCustomPermissions}
-                              onChange={setInviteCustomPermissions}
-                              defaultExpanded={false}
-                            />
-                          </div>
-                        ) : (
-                          <div className="space-y-2 pt-1">
-                            <div className="text-xs text-muted-foreground px-1">
-                              Permissions are currently inherited from{' '}
-                              <strong className="text-foreground">
-                                {permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.name || `Default ${inviteRole} role`}
-                              </strong>. Toggle "Custom Overrides" above to adjust individual permissions.
-                            </div>
-                            <PermissionMatrixEditor
-                              permissions={
-                                (permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.permissions) ||
-                                (inviteRole ? DEFAULT_ROLE_PERMISSIONS[inviteRole] : undefined) ||
-                                ALL_PERMISSIONS_FALSE
-                              }
-                              onChange={() => {}}
-                              readOnly={true}
-                              defaultExpanded={false}
-                            />
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
-
-                      <p className="text-xs text-muted-foreground pt-2">
-                        Note: An account will be created with default password "12345678" and the user will be prompted to change it on first login.
-                      </p>
                     </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setIsInviteOpen(false)} disabled={isInviting}>
-                        Cancel
-                      </Button>
-                      <Button onClick={handleInvite} disabled={isInviting}>
-                        {isInviting ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Creating Account...
-                          </>
-                        ) : (
-                          'Send Invitation'
-                        )}
-                      </Button>
-                    </DialogFooter>
+
+                    {/* Sticky Footer */}
+                    <div className="px-6 py-3.5 border-t bg-card/90 backdrop-blur-sm flex items-center justify-between shrink-0">
+                      <div className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5">
+                        <Shield className="h-3.5 w-3.5 text-primary" /> Changes will be saved to the staff registry.
+                      </div>
+                      <div className="flex items-center gap-2.5 ml-auto">
+                        <Button variant="outline" onClick={() => setIsInviteOpen(false)} disabled={isInviting} className="h-9 rounded-xl px-4">
+                          Cancel
+                        </Button>
+                        <Button onClick={handleInvite} disabled={isInviting} className="h-9 rounded-xl px-5">
+                          {isInviting ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Creating Account...
+                            </>
+                          ) : (
+                            'Send Invitation'
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                   </DialogContent>
                 </Dialog>
               </>
@@ -1106,167 +1172,284 @@ export default function Users() {
       </Tabs>
 
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
-        <DialogContent className="w-[96vw] sm:max-w-3xl md:max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-6 md:p-8">
-          <DialogHeader>
-            <DialogTitle>{editingUser?.role === 'client' ? 'Edit Member Portal Credentials' : editingUser?.role === 'coach' ? 'Edit Coach Portal Credentials' : 'Edit User Profile'}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input 
-                value={editName} 
-                onChange={(e) => setEditName(e.target.value)} 
-                placeholder="User's full name"
-              />
+        {editingUser?.role === 'client' ? (
+          <DialogContent className="w-[95vw] sm:max-w-lg rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle>Edit Member Portal Credentials</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input 
+                  value={editName} 
+                  onChange={(e) => setEditName(e.target.value)} 
+                  placeholder="User's full name"
+                  className="h-10 rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input 
+                  type="email"
+                  value={editEmail} 
+                  onChange={(e) => setEditEmail(e.target.value)} 
+                  placeholder="User's email"
+                  className="h-10 rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mobile Phone Number</Label>
+                <Input 
+                  type="tel"
+                  value={editPhone} 
+                  onChange={(e) => setEditPhone(e.target.value)} 
+                  placeholder="e.g. +201000680580"
+                  className="h-10 rounded-xl"
+                />
+                <p className="text-xs text-muted-foreground">Used for SMS password resets and login verification.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Member ID (clientRecordId)</Label>
+                <Input 
+                  value={editClientRecordId} 
+                  onChange={(e) => setEditClientRecordId(e.target.value)} 
+                  placeholder="e.g. 1043"
+                  className="h-10 rounded-xl"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input 
-                type="email"
-                value={editEmail} 
-                onChange={(e) => setEditEmail(e.target.value)} 
-                placeholder="User's email"
-              />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
+              <Button onClick={handleUpdateUserDetails}>Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        ) : (
+          <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[94vw] md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-[1440px] h-[92vh] max-h-[92vh] p-0 flex flex-col gap-0 rounded-3xl border shadow-2xl bg-background overflow-hidden">
+            {/* Sticky Header */}
+            <div className="px-6 py-4 border-b bg-card/80 backdrop-blur-sm flex items-center justify-between shrink-0 pr-14">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold text-base shrink-0">
+                  {editName ? editName.charAt(0).toUpperCase() : <UserIcon className="h-5 w-5" />}
+                </div>
+                <div>
+                  <DialogTitle className="text-lg sm:text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                    {editingUser?.name || 'Edit Staff Profile'}
+                    {editingUser?.role && (
+                      <Badge variant="outline" className="text-xs font-mono uppercase tracking-wider">
+                        {editingUser.role}
+                      </Badge>
+                    )}
+                  </DialogTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Manage staff profile, branch assignments, sales targets, and granular permission access.
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Mobile Phone Number</Label>
-              <Input 
-                type="tel"
-                value={editPhone} 
-                onChange={(e) => setEditPhone(e.target.value)} 
-                placeholder="e.g. +201000680580"
-              />
-              <p className="text-xs text-muted-foreground">Used for SMS password resets and login verification.</p>
-            </div>
+            {/* Main Workbench Body: 2 Columns on Desktop */}
+            <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
+              <div className="grid grid-cols-1 lg:grid-cols-12 h-full divide-y lg:divide-y-0 lg:divide-x">
+                
+                {/* Left Column: Staff Identity & Profile */}
+                <div className="lg:col-span-5 xl:col-span-4 p-5 sm:p-6 overflow-y-auto space-y-5 bg-muted/15">
+                  {/* Identity Preview Card */}
+                  <div className="p-4 rounded-2xl border bg-card/60 shadow-xs flex items-center gap-3.5">
+                    <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold text-lg shrink-0">
+                      {editName ? editName.charAt(0).toUpperCase() : <UserIcon className="h-6 w-6" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-base text-foreground truncate">{editName || 'Staff Member'}</h3>
+                      <p className="text-xs text-muted-foreground truncate">{editEmail || 'No email'}</p>
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        {editingUser?.role && getRoleBadge(editingUser.role)}
+                        <Badge variant={editStatus === 'working' ? 'outline' : 'secondary'} className={`text-[10px] ${editStatus === 'working' ? 'border-emerald-500/40 text-emerald-600 bg-emerald-500/10' : 'text-muted-foreground'}`}>
+                          {editStatus === 'working' ? 'Working' : 'Non-Working'}
+                        </Badge>
+                        {editBranch && (
+                          <Badge variant="outline" className="text-[10px]">
+                            {editBranch}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
-            {editingUser?.role === 'client' ? (
-              <>
-                <div className="space-y-2">
-                  <Label>Member ID (clientRecordId)</Label>
-                  <Input 
-                    value={editClientRecordId} 
-                    onChange={(e) => setEditClientRecordId(e.target.value)} 
-                    placeholder="e.g. 1043"
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label>Branch</Label>
-                  <Select value={editBranch} onValueChange={(v) => setEditBranch(v || '')}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Branches" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All Branches</SelectItem>
-                      {branches.map(b => (
-                        <SelectItem key={b} value={b}>{b}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Personal Sales Target (Optional)</Label>
-                  <Input 
-                    type="number"
-                    value={editTarget} 
-                    onChange={(e) => setEditTarget(e.target.value)} 
-                    placeholder="Leave blank to use global target"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Employment Status</Label>
-                  <Select value={editStatus} onValueChange={(val: any) => val && setEditStatus(val)}>
-                    <SelectTrigger className="h-11 rounded-xl">
-                      <SelectValue placeholder="Select Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="working">Working</SelectItem>
-                      <SelectItem value="nonworking">Non-Working</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  {/* Personal Information Group */}
+                  <div className="space-y-3.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <UserIcon className="h-3.5 w-3.5 text-primary" /> Personal Information
+                    </h4>
 
-                {isInzan && (
-                  <div className="space-y-4 pt-4 border-t">
-                    <Label className="text-base font-semibold flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-primary" />
-                      INZAN Organizational Structure
-                    </Label>
-
-                    <div className="space-y-2">
-                      <Label>Department</Label>
-                      <Select 
-                        value={editDepartment} 
-                        onValueChange={(val: any) => {
-                          setEditDepartment(val || '');
-                          setEditJobTitle('');
-                        }}
-                      >
-                        <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue placeholder="Select Department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">None / Unassigned</SelectItem>
-                          {INZAN_DEPARTMENTS.map(dept => (
-                            <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Full Name *</Label>
+                      <Input 
+                        value={editName} 
+                        onChange={(e) => setEditName(e.target.value)} 
+                        placeholder="User's full name"
+                        className="h-10 rounded-xl bg-background"
+                      />
                     </div>
 
-                    {editDepartment && (
-                      <div className="space-y-2">
-                        <Label>Job Title / Position</Label>
-                        <Select value={editJobTitle} onValueChange={(val: any) => setEditJobTitle(val || '')}>
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Select Job Title" />
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Email Address *</Label>
+                      <Input 
+                        type="email"
+                        value={editEmail} 
+                        onChange={(e) => setEditEmail(e.target.value)} 
+                        placeholder="User's email"
+                        className="h-10 rounded-xl bg-background"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Mobile Phone Number</Label>
+                      <Input 
+                        type="tel"
+                        value={editPhone} 
+                        onChange={(e) => setEditPhone(e.target.value)} 
+                        placeholder="e.g. +201000680580"
+                        className="h-10 rounded-xl bg-background"
+                      />
+                      <p className="text-[11px] text-muted-foreground">Used for SMS password resets and login verification.</p>
+                    </div>
+                  </div>
+
+                  {/* Branch & Employment Group */}
+                  <div className="space-y-3.5 pt-4 border-t">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-primary" /> Branch & Targets
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">Assigned Branch</Label>
+                        <Select value={editBranch} onValueChange={(v) => setEditBranch(v || '')}>
+                          <SelectTrigger className="h-10 rounded-xl bg-background">
+                            <SelectValue placeholder="All Branches" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">None / Unassigned</SelectItem>
-                            {(INZAN_JOB_TITLES[editDepartment as InzanDepartment] || []).map(title => (
-                              <SelectItem key={title} value={title}>{title}</SelectItem>
+                            <SelectItem value="">All Branches</SelectItem>
+                            {branches.map(b => (
+                              <SelectItem key={b} value={b}>{b}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
 
-                    {editDepartment === 'Fitness' && (
-                      <div className="space-y-2">
-                        <Label>Trainer Contract Type</Label>
-                        <Select value={editTrainerType} onValueChange={(val: any) => setEditTrainerType(val || 'Full-Time')}>
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Select Contract Type" />
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">Employment Status</Label>
+                        <Select value={editStatus} onValueChange={(val: any) => val && setEditStatus(val)}>
+                          <SelectTrigger className="h-10 rounded-xl bg-background">
+                            <SelectValue placeholder="Select Status" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
-                            <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                            <SelectItem value="working">Working</SelectItem>
+                            <SelectItem value="nonworking">Non-Working</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
 
-                {/* Granular Permission Control & Templates */}
-                <div className="space-y-4 pt-4 border-t">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Personal Sales Target (Optional)</Label>
+                      <Input 
+                        type="number"
+                        value={editTarget} 
+                        onChange={(e) => setEditTarget(e.target.value)} 
+                        placeholder="Leave blank to use global target"
+                        className="h-10 rounded-xl bg-background"
+                      />
+                    </div>
+                  </div>
+
+                  {/* INZAN Org Structure */}
+                  {isInzan && (
+                    <div className="space-y-3.5 pt-4 border-t">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-primary" /> INZAN Organization
+                      </h4>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">Department</Label>
+                        <Select 
+                          value={editDepartment} 
+                          onValueChange={(val: any) => {
+                            setEditDepartment(val || '');
+                            setEditJobTitle('');
+                          }}
+                        >
+                          <SelectTrigger className="h-10 rounded-xl bg-background">
+                            <SelectValue placeholder="Select Department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">None / Unassigned</SelectItem>
+                            {INZAN_DEPARTMENTS.map(dept => (
+                              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {editDepartment && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Job Title / Position</Label>
+                          <Select value={editJobTitle} onValueChange={(val: any) => setEditJobTitle(val || '')}>
+                            <SelectTrigger className="h-10 rounded-xl bg-background">
+                              <SelectValue placeholder="Select Job Title" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">None / Unassigned</SelectItem>
+                              {(INZAN_JOB_TITLES[editDepartment as InzanDepartment] || []).map(title => (
+                                <SelectItem key={title} value={title}>{title}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {editDepartment === 'Fitness' && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Trainer Contract Type</Label>
+                          <Select value={editTrainerType} onValueChange={(val: any) => setEditTrainerType(val || 'Full-Time')}>
+                            <SelectTrigger className="h-10 rounded-xl bg-background">
+                              <SelectValue placeholder="Select Contract Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
+                              <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-muted-foreground pt-1">
+                    Note: Updating email allows user to login with the new email address.
+                  </p>
+                </div>
+
+                {/* Right Column: Permissions & Access Engine */}
+                <div className="lg:col-span-7 xl:col-span-8 p-5 sm:p-6 overflow-y-auto space-y-5 bg-background">
+                  {/* Banner Card */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border shadow-xs">
                     <div>
-                      <Label className="text-base font-bold text-foreground flex items-center gap-2">
+                      <div className="flex items-center gap-2">
                         <Shield className="h-4 w-4 text-primary" />
-                        Permissions & Operational Access
-                      </Label>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Assign an operational template or customize specific user-level permission overrides.
+                        <h4 className="font-bold text-sm text-foreground">Operational Permissions & Access</h4>
+                        <Badge variant="outline" className="text-xs font-semibold border-primary/30 text-primary bg-primary/5">
+                          {Object.values(editUseCustomOverrides ? editCustomPermissions : (permissionTemplates.find(t => t.id === editPermissionTemplateId)?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || {})).filter(Boolean).length} / 88 active
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Select a gym permission template or customize granular user overrides.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border">
-                      <span className={`text-xs ${!editUseCustomOverrides ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
-                        Template Defaults
+                    <div className="flex items-center gap-2 bg-muted/60 p-1.5 rounded-xl border shrink-0">
+                      <span className={`text-xs ${!editUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                        Template
                       </span>
                       <Switch
                         checked={editUseCustomOverrides}
@@ -1279,15 +1462,22 @@ export default function Users() {
                           }
                         }}
                       />
-                      <span className={`text-xs ${editUseCustomOverrides ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
+                      <span className={`text-xs ${editUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
                         Custom Overrides
                       </span>
                     </div>
                   </div>
 
                   {/* Template Selection Dropdown */}
-                  <div className="space-y-1.5 bg-muted/20 p-3.5 rounded-2xl border">
-                    <Label className="text-xs font-semibold">Assigned Permission Template</Label>
+                  <div className="space-y-1.5 p-3.5 rounded-2xl bg-muted/30 border">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-foreground">Assigned Permission Template</Label>
+                      {editPermissionTemplateId && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {permissionTemplates.find(t => t.id === editPermissionTemplateId)?.description || ''}
+                        </span>
+                      )}
+                    </div>
                     <Select 
                       value={editPermissionTemplateId} 
                       onValueChange={(val: any) => {
@@ -1316,22 +1506,22 @@ export default function Users() {
 
                   {/* Permission Matrix or Preview */}
                   {editUseCustomOverrides ? (
-                    <div className="space-y-2 pt-1">
+                    <div className="space-y-3">
                       <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
-                        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
-                          <Sparkles className="h-3.5 w-3.5" />
-                          Custom overrides are active for this user.
+                        <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                          <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                          Custom overrides are active. Adjust any of the 88 checkboxes below.
                         </span>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           onClick={() => {
                             const template = permissionTemplates.find(t => t.id === editPermissionTemplateId);
                             const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
                             setEditCustomPermissions({ ...basePerms });
                           }}
-                          className="h-7 text-xs text-primary hover:underline px-2"
+                          className="h-7 text-xs text-primary hover:underline px-2.5 rounded-lg"
                         >
                           Reset to Template Defaults
                         </Button>
@@ -1344,12 +1534,12 @@ export default function Users() {
                       />
                     </div>
                   ) : (
-                    <div className="space-y-2 pt-1">
+                    <div className="space-y-3">
                       <div className="text-xs text-muted-foreground px-1">
                         Permissions are currently inherited from{' '}
                         <strong className="text-foreground">
                           {permissionTemplates.find(t => t.id === editPermissionTemplateId)?.name || `Default ${editingUser?.role || 'role'} role`}
-                        </strong>. Toggle "Custom Overrides" above to adjust individual permissions.
+                        </strong>. Toggle <strong>"Custom Overrides"</strong> above to adjust individual permissions.
                       </div>
                       <PermissionMatrixEditor
                         permissions={
@@ -1364,18 +1554,25 @@ export default function Users() {
                     </div>
                   )}
                 </div>
-              </>
-            )}
+              </div>
+            </div>
 
-            <p className="text-xs text-muted-foreground pt-2">
-              Note: Updating their email here allows them to login with the new email address.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingUser(null)}>Cancel</Button>
-            <Button onClick={handleUpdateUserDetails}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
+            {/* Sticky Footer */}
+            <div className="px-6 py-3.5 border-t bg-card/90 backdrop-blur-sm flex items-center justify-between shrink-0">
+              <div className="text-xs text-muted-foreground hidden sm:flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5 text-primary" /> Changes will be saved and recorded to audit logs.
+              </div>
+              <div className="flex items-center gap-2.5 ml-auto">
+                <Button variant="outline" onClick={() => setEditingUser(null)} className="h-9 rounded-xl px-4">
+                  Cancel
+                </Button>
+                <Button onClick={handleUpdateUserDetails} className="h-9 rounded-xl px-5">
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        )}
       </Dialog>
 
       {performanceUser && (

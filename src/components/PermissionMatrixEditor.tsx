@@ -267,7 +267,7 @@ export const PermissionMatrixEditor: React.FC<PermissionMatrixEditorProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 max-w-full">
+          <div className="flex flex-wrap items-center gap-1.5 max-w-full">
             <button
               type="button"
               onClick={() => setSelectedCategory('all')}
@@ -277,7 +277,7 @@ export const PermissionMatrixEditor: React.FC<PermissionMatrixEditorProps> = ({
                   : 'bg-muted/60 text-muted-foreground hover:bg-muted'
               }`}
             >
-              All Categories ({PERMISSION_CATEGORIES.length})
+              All ({PERMISSION_CATEGORIES.length})
             </button>
             {PERMISSION_CATEGORIES.map(cat => (
               <button
@@ -290,7 +290,7 @@ export const PermissionMatrixEditor: React.FC<PermissionMatrixEditorProps> = ({
                     : 'bg-muted/60 text-muted-foreground hover:bg-muted'
                 }`}
               >
-                {cat.label.split(' ')[0]}
+                {cat.label}
               </button>
             ))}
           </div>
