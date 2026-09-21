@@ -60,7 +60,7 @@ export default function CoachPortal() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 pb-24 max-w-2xl">
+      <main className="flex-1 container mx-auto px-3 sm:px-4 py-6 pb-24 max-w-4xl">
         {activeTab === 'home'     && <CoachHome onNavigate={setActiveTab} />}
         {activeTab === 'classes'  && <CoachClassPortal />}
         {activeTab === 'schedule' && <CoachSchedule />}

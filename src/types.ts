@@ -80,7 +80,7 @@ export const PT_CAPACITY_LIMITS: Record<SessionType, { min: number; max: number 
   'Class': { min: 1, max: 30 },
   'Nutrition': { min: 1, max: 1 }
 };
-export type SessionStatus = 'Scheduled' | 'Completed' | 'No Show' | 'Rescheduled' | 'Cancelled';
+export type SessionStatus = 'Scheduled' | 'Completed' | 'Attended' | 'No Show' | 'Rescheduled' | 'Cancelled';
 
 export interface CoachSchedule {
   coachId: string; // userId
@@ -89,6 +89,8 @@ export interface CoachSchedule {
     startTime: string; 
     endTime: string; 
     capacities?: Partial<Record<SessionType, number>>;
+    slotDurationMinutes?: number;
+    blockedSlots?: string[];
   }>;
   updatedAt: string;
 }
