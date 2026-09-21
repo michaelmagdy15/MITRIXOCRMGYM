@@ -158,6 +158,39 @@ export interface ImportBatch {
   status: 'Completed' | 'Rolled Back';
 }
 
+export type PermissionCategory = 
+  | 'dashboard'
+  | 'payments'
+  | 'members'
+  | 'leads'
+  | 'attendance'
+  | 'classes'
+  | 'coaches'
+  | 'packages'
+  | 'reports'
+  | 'operations'
+  | 'settings';
+
+export interface PermissionDefinition {
+  key: string;
+  label: string;
+  description: string;
+  category: PermissionCategory;
+}
+
+export interface PermissionTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  isSystem?: boolean;
+  baseRole?: UserRole;
+  permissions: Record<string, boolean>;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  tenantId?: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -170,6 +203,8 @@ export interface User {
   can_access_settings_and_history?: boolean;
   can_delete_records?: boolean;
   can_assign_leads?: boolean;
+  permissionTemplateId?: string; // ID of assigned PermissionTemplate
+  customPermissions?: Record<string, boolean>; // Explicit user-level overrides (key -> boolean)
   lastSeen?: string;
   isPending?: boolean; // true = invited but hasn't logged in yet
   coachId?: string;    // e.g. 'COACH-001', only for role='coach'

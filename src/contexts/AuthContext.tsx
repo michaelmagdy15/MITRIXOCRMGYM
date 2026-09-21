@@ -35,7 +35,7 @@ interface AuthContextType {
   refreshUserData: () => Promise<void>;
   updateBranding: (updates: Partial<BrandingSettings>) => Promise<void>;
   deleteUser: (id: UserId) => Promise<void>;
-  inviteUser: (email: string, role: UserRole, displayName?: string, phone?: string) => Promise<void>;
+  inviteUser: (email: string, role: UserRole, displayName?: string, phone?: string, permissionTemplateId?: string) => Promise<void>;
   activatePendingUser: (pendingDocId: string, email: string, role: UserRole, name: string) => Promise<void>;
   createCoachAccount: (name: string, email: string, branch?: string) => Promise<{ uid: string; coachId: string }>;
   createClientAccount: (clientId: string, memberId: string, clientName: string, phone?: string) => Promise<{ uid: string }>;
@@ -759,8 +759,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await userService.deleteUser(id, user?.name);
   };
 
-  const inviteUser = async (email: string, role: UserRole, displayName?: string, phone?: string) => {
-    await userService.inviteUser(email, role, displayName, phone);
+  const inviteUser = async (email: string, role: UserRole, displayName?: string, phone?: string, permissionTemplateId?: string) => {
+    await userService.inviteUser(email, role, displayName, phone, permissionTemplateId);
   };
 
   const activatePendingUser = async (pendingDocId: string, email: string, role: UserRole, name: string) => {

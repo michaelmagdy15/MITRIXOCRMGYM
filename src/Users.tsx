@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { UserRole, User, InzanDepartment, InzanJobTitle } from './types';
-import { Shield, User as UserIcon, Plus, Trash2, Edit, BarChart, Clock, KeyRound, Loader2, CheckCircle2, RotateCcw, Search, Building2 } from 'lucide-react';
+import { Shield, User as UserIcon, Plus, Trash2, Edit, BarChart, Clock, KeyRound, Loader2, CheckCircle2, RotateCcw, Search, Building2, Sliders, SlidersHorizontal, Sparkles, Lock, Layers } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { safeFormatDistanceToNow } from './utils/dateUtils';
 import { UserPerformanceDialog } from './components/UserPerformanceDialog';
@@ -21,15 +22,31 @@ import { auth, db, getTenantId } from './firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
 import { INZAN_DEPARTMENTS, INZAN_JOB_TITLES } from './utils/inzanOrg';
+import { useAppContext } from './context';
+import { PermissionTemplatesTab } from './components/PermissionTemplatesTab';
+import { PermissionMatrixEditor } from './components/PermissionMatrixEditor';
+import { 
+  syncLegacyFlags, 
+  DEFAULT_ROLE_PERMISSIONS, 
+  ALL_PERMISSIONS_FALSE 
+} from './utils/permissions';
 
 export default function Users() {
   const { users, currentUser, updateUser, inviteUser, deleteUser, activatePendingUser, passwordResetRequests, approvePasswordResetRequest, denyPasswordResetRequest } = useAuth();
+  const { 
+    permissionTemplates, 
+    createPermissionTemplate, 
+    updatePermissionTemplate, 
+    deletePermissionTemplate,
+    can 
+  } = useAppContext();
   const { branches } = useSettings();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('rep');
+  const [invitePermissionTemplateId, setInvitePermissionTemplateId] = useState<string>('');
   const [activatingUserId, setActivatingUserId] = useState<string | null>(null);
   const [activatedUserId, setActivatedUserId] = useState<string | null>(null);
   const [approvingResetId, setApprovingResetId] = useState<string | null>(null);
@@ -41,6 +58,9 @@ export default function Users() {
   const [editEmail, setEditEmail] = useState('');
   const [editBranch, setEditBranch] = useState('');
   const [editTarget, setEditTarget] = useState('');
+  const [editPermissionTemplateId, setEditPermissionTemplateId] = useState<string>('');
+  const [editUseCustomOverrides, setEditUseCustomOverrides] = useState<boolean>(false);
+  const [editCustomPermissions, setEditCustomPermissions] = useState<Record<string, boolean>>({});
   const [editCanDeletePayments, setEditCanDeletePayments] = useState(false);
   const [editCanViewGlobalDashboard, setEditCanViewGlobalDashboard] = useState(false);
   const [editCanAccessSettings, setEditCanAccessSettings] = useState(false);
@@ -80,15 +100,31 @@ export default function Users() {
     setEditEmail(user.email);
     setEditBranch(user.branch || '');
     setEditTarget(user.salesTarget?.toString() || '');
-    setEditCanDeletePayments(user.can_delete_payments || false);
-    setEditCanViewGlobalDashboard(user.can_view_global_dashboard || false);
-    setEditCanAccessSettings(user.can_access_settings_and_history || false);
     setEditPhone(user.phone || '');
     setEditClientRecordId(user.clientRecordId || '');
     setEditStatus(user.status || 'working');
     setEditDepartment(user.department || '');
     setEditJobTitle(user.jobTitle || '');
     setEditTrainerType(user.trainerType || 'Full-Time');
+
+    // Granular Permissions & Templates
+    const templateId = user.permissionTemplateId || '';
+    setEditPermissionTemplateId(templateId);
+
+    const hasCustom = !!(user.customPermissions && Object.keys(user.customPermissions).length > 0);
+    setEditUseCustomOverrides(hasCustom);
+
+    if (hasCustom && user.customPermissions) {
+      setEditCustomPermissions({ ...user.customPermissions });
+    } else {
+      const template = permissionTemplates.find(t => t.id === templateId);
+      const initialPerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[user.role] || ALL_PERMISSIONS_FALSE;
+      setEditCustomPermissions({ ...initialPerms });
+    }
+
+    setEditCanDeletePayments(user.can_delete_payments || false);
+    setEditCanViewGlobalDashboard(user.can_view_global_dashboard || false);
+    setEditCanAccessSettings(user.can_access_settings_and_history || false);
   };
 
   const handleUpdateUserDetails = () => {
@@ -104,10 +140,22 @@ export default function Users() {
       } else {
         updates.branch = editBranch || undefined;
         updates.salesTarget = editTarget ? parseFloat(editTarget) : undefined;
-        updates.can_delete_payments = editCanDeletePayments;
-        updates.can_view_global_dashboard = editCanViewGlobalDashboard;
-        updates.can_access_settings_and_history = editCanAccessSettings;
         updates.status = editStatus;
+
+        // Granular Permissions & Templates
+        updates.permissionTemplateId = editPermissionTemplateId || undefined;
+        if (editUseCustomOverrides) {
+          updates.customPermissions = editCustomPermissions;
+          const legacy = syncLegacyFlags(editCustomPermissions);
+          Object.assign(updates, legacy);
+        } else {
+          updates.customPermissions = undefined;
+          const template = permissionTemplates.find(t => t.id === editPermissionTemplateId);
+          const effective = template?.permissions || DEFAULT_ROLE_PERMISSIONS[editingUser.role] || {};
+          const legacy = syncLegacyFlags(effective);
+          Object.assign(updates, legacy);
+        }
+
         if (isInzan) {
           updates.department = (editDepartment as InzanDepartment) || undefined;
           updates.jobTitle = (editJobTitle as InzanJobTitle) || undefined;
@@ -231,12 +279,19 @@ export default function Users() {
 
   const handleInvite = async () => {
     if (inviteEmail) {
-      await inviteUser(inviteEmail, inviteRole, inviteName || undefined, invitePhone || undefined);
+      await inviteUser(
+        inviteEmail, 
+        inviteRole, 
+        inviteName || undefined, 
+        invitePhone || undefined,
+        invitePermissionTemplateId || undefined
+      );
       setIsInviteOpen(false);
       setInviteEmail('');
       setInviteName('');
       setInvitePhone('');
       setInviteRole('rep');
+      setInvitePermissionTemplateId('');
     }
   };
 
@@ -253,6 +308,10 @@ export default function Users() {
           </TabsTrigger>
           <TabsTrigger value="members" className="data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-1.5 text-sm">
             Member Portal Accounts
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-1.5 text-sm">
+            <Shield className="w-3.5 h-3.5 mr-1.5 inline-block" />
+            Permission Templates & Roles
           </TabsTrigger>
         </TabsList>
 
@@ -317,6 +376,28 @@ export default function Users() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <Label>Permission Template (Optional)</Label>
+                      <Select 
+                        value={invitePermissionTemplateId} 
+                        onValueChange={(v: any) => setInvitePermissionTemplateId(v || '')}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a permission template (or use role defaults)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Role Defaults (Inherit from {inviteRole})</SelectItem>
+                          {permissionTemplates.map(tpl => (
+                            <SelectItem key={tpl.id} value={tpl.id}>
+                              {tpl.name} {tpl.isSystem ? '(System)' : '(Custom)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Assign an operational permission template immediately, or configure later.
+                      </p>
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setIsInviteOpen(false)}>Cancel</Button>
@@ -338,6 +419,7 @@ export default function Users() {
                     <TableHead>Branch</TableHead>
                     <TableHead>Last Seen</TableHead>
                     <TableHead>Current Role</TableHead>
+                    <TableHead>Permissions</TableHead>
                     {isInzan && <TableHead>Department & Title</TableHead>}
                     <TableHead>Change Role</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -382,6 +464,27 @@ export default function Users() {
                         {safeFormatDistanceToNow(user.lastSeen, { addSuffix: true }, 'Never')}
                       </TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>
+                      <TableCell>
+                        {user.permissionTemplateId ? (
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className="w-fit text-xs font-medium border-primary/40 text-primary bg-primary/5">
+                              <Sliders className="w-3 h-3 mr-1" />
+                              {permissionTemplates.find(t => t.id === user.permissionTemplateId)?.name || 'Assigned Template'}
+                            </Badge>
+                            {user.customPermissions && Object.keys(user.customPermissions).length > 0 && (
+                              <Badge className="w-fit text-[10px] bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                Custom Overrides
+                              </Badge>
+                            )}
+                          </div>
+                        ) : user.customPermissions && Object.keys(user.customPermissions).length > 0 ? (
+                          <Badge className="w-fit text-xs bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            Custom Overrides
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Role Defaults</span>
+                        )}
+                      </TableCell>
                       {isInzan && (
                         <TableCell>
                           {user.department ? (
@@ -693,10 +796,21 @@ export default function Users() {
             </div>
           )}
         </TabsContent>
+
+        <TabsContent value="templates" className="space-y-6 m-0 outline-none">
+          <PermissionTemplatesTab
+            users={users}
+            currentUser={currentUser}
+            templates={permissionTemplates}
+            onCreateTemplate={createPermissionTemplate}
+            onUpdateTemplate={updatePermissionTemplate}
+            onDeleteTemplate={deletePermissionTemplate}
+          />
+        </TabsContent>
       </Tabs>
 
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
-        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
+        <DialogContent className="w-[96vw] sm:max-w-3xl md:max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle>{editingUser?.role === 'client' ? 'Edit Member Portal Credentials' : editingUser?.role === 'coach' ? 'Edit Coach Portal Credentials' : 'Edit User Profile'}</DialogTitle>
           </DialogHeader>
@@ -841,32 +955,118 @@ export default function Users() {
                   </div>
                 )}
 
+                {/* Granular Permission Control & Templates */}
                 <div className="space-y-4 pt-4 border-t">
-                  <Label className="text-base">Granular Permissions</Label>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="can_delete" 
-                      checked={editCanDeletePayments} 
-                      onCheckedChange={(checked) => setEditCanDeletePayments(!!checked)} 
-                    />
-                    <Label htmlFor="can_delete" className="font-normal cursor-pointer">Can delete payments</Label>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <Label className="text-base font-bold text-foreground flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-primary" />
+                        Permissions & Operational Access
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Assign an operational template or customize specific user-level permission overrides.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border">
+                      <span className={`text-xs ${!editUseCustomOverrides ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
+                        Template Defaults
+                      </span>
+                      <Switch
+                        checked={editUseCustomOverrides}
+                        onCheckedChange={(checked) => {
+                          setEditUseCustomOverrides(checked);
+                          if (checked && Object.keys(editCustomPermissions).length === 0) {
+                            const template = permissionTemplates.find(t => t.id === editPermissionTemplateId);
+                            const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
+                            setEditCustomPermissions({ ...basePerms });
+                          }
+                        }}
+                      />
+                      <span className={`text-xs ${editUseCustomOverrides ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
+                        Custom Overrides
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="can_global" 
-                      checked={editCanViewGlobalDashboard} 
-                      onCheckedChange={(checked) => setEditCanViewGlobalDashboard(!!checked)} 
-                    />
-                    <Label htmlFor="can_global" className="font-normal cursor-pointer">Can view global dashboard</Label>
+
+                  {/* Template Selection Dropdown */}
+                  <div className="space-y-1.5 bg-muted/20 p-3.5 rounded-2xl border">
+                    <Label className="text-xs font-semibold">Assigned Permission Template</Label>
+                    <Select 
+                      value={editPermissionTemplateId} 
+                      onValueChange={(val: any) => {
+                        const newTplId = val || '';
+                        setEditPermissionTemplateId(newTplId);
+                        if (!editUseCustomOverrides) {
+                          const template = permissionTemplates.find(t => t.id === newTplId);
+                          const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
+                          setEditCustomPermissions({ ...basePerms });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-10 rounded-xl bg-background">
+                        <SelectValue placeholder="Select a Permission Template..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Role Defaults (Inherit from {editingUser?.role || 'role'})</SelectItem>
+                        {permissionTemplates.map(tpl => (
+                          <SelectItem key={tpl.id} value={tpl.id}>
+                            {tpl.name} {tpl.isSystem ? '• (System Default)' : '• (Custom Template)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox 
-                      id="can_settings" 
-                      checked={editCanAccessSettings} 
-                      onCheckedChange={(checked) => setEditCanAccessSettings(!!checked)} 
-                    />
-                    <Label htmlFor="can_settings" className="font-normal cursor-pointer">Can access settings & history logs</Label>
-                  </div>
+
+                  {/* Permission Matrix or Preview */}
+                  {editUseCustomOverrides ? (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
+                        <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Custom overrides are active for this user.
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const template = permissionTemplates.find(t => t.id === editPermissionTemplateId);
+                            const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
+                            setEditCustomPermissions({ ...basePerms });
+                          }}
+                          className="h-7 text-xs text-primary hover:underline px-2"
+                        >
+                          Reset to Template Defaults
+                        </Button>
+                      </div>
+
+                      <PermissionMatrixEditor
+                        permissions={editCustomPermissions}
+                        onChange={setEditCustomPermissions}
+                        defaultExpanded={false}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-1">
+                      <div className="text-xs text-muted-foreground px-1">
+                        Permissions are currently inherited from{' '}
+                        <strong className="text-foreground">
+                          {permissionTemplates.find(t => t.id === editPermissionTemplateId)?.name || `Default ${editingUser?.role || 'role'} role`}
+                        </strong>. Toggle "Custom Overrides" above to adjust individual permissions.
+                      </div>
+                      <PermissionMatrixEditor
+                        permissions={
+                          (permissionTemplates.find(t => t.id === editPermissionTemplateId)?.permissions) ||
+                          (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) ||
+                          ALL_PERMISSIONS_FALSE
+                        }
+                        onChange={() => {}}
+                        readOnly={true}
+                        defaultExpanded={false}
+                      />
+                    </div>
+                  )}
                 </div>
               </>
             )}

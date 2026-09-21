@@ -71,7 +71,7 @@ const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.co
 function AppContent() {
   const { currentUser: authUser } = useAuth();
   const canUseQuoteGenerator = QUOTE_GENERATOR_EMAILS.includes((authUser?.email || '').toLowerCase());
-  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features, clients, activeTab, setActiveTab, activeClientId, setActiveClientId, setPrefilledLeadData, loadingClients, loadingPayments, loadingPackages } = useAppContext();
+  const { currentUser, logout, isAuthReady, previewRole, setPreviewRole, effectiveRole, searchQuery, setSearchQuery, branding, canAccessSettings, canViewGlobalDashboard, canDeletePayments, isManagerOrSama, features, clients, activeTab, setActiveTab, activeClientId, setActiveClientId, setPrefilledLeadData, loadingClients, loadingPayments, loadingPackages, can, canAny } = useAppContext();
   const { theme, toggleTheme } = useTheme();
   const { t, language, toggleLanguage, isRtl } = useLanguage();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
@@ -626,20 +626,20 @@ function AppContent() {
   const isPlatformAdmin = PLATFORM_ADMIN_EMAILS.includes(currentUser?.email?.toLowerCase());
 
   const navItems = [
-    { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, show: true },
+    { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, show: can('dashboard.view') },
     {
       id: 'leads',
       label: t('nav.leads'),
       icon: UserPlus,
-      show: (features.leads !== false) && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: (features.leads !== false) && canAny(['leads.view_all', 'leads.view_assigned_only', 'leads.create'])
     },
-    { id: 'clients', label: t('nav.clients'), icon: Users, show: true },
-    { id: 'calendar', label: t('nav.calendar'), icon: CalendarIcon, show: true },
+    { id: 'clients', label: t('nav.clients'), icon: Users, show: can('members.view') },
+    { id: 'calendar', label: t('nav.calendar'), icon: CalendarIcon, show: canAny(['classes.view', 'coaches.schedule_pt']) },
     {
       id: 'bookings',
       label: 'Bookings',
       icon: ShoppingCart,
-      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'rep')
+      show: canAny(['classes.book_member', 'coaches.schedule_pt', 'payments.create'])
     },
     {
       id: 'requests',
@@ -657,7 +657,7 @@ function AppContent() {
       id: 'class-manager',
       label: 'Class Manager',
       icon: Target,
-      show: features.classBookingSystem === true && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: features.classBookingSystem === true && canAny(['classes.manage_schedule', 'classes.view'])
     },
     {
       id: 'nutrition',
@@ -670,32 +670,32 @@ function AppContent() {
       id: 'payments',
       label: t('nav.payments'),
       icon: CreditCard,
-      show: (features.payments !== false) && !!(canViewGlobalDashboard || canDeletePayments)
+      show: (features.payments !== false) && can('payments.view')
     },
-    { id: 'attendance', label: t('nav.attendance'), icon: Scan, show: features.attendance !== false },
+    { id: 'attendance', label: t('nav.attendance'), icon: Scan, show: (features.attendance !== false) && can('attendance.view') },
     {
       id: 'reports',
       label: t('nav.reports'),
       icon: BarChart3,
-      show: (features.reports !== false) && !!(isManagerOrSama && currentUser.role !== 'admin')
+      show: (features.reports !== false) && can('reports.view_basic') && currentUser.role !== 'admin'
     },
     {
       id: 'audit',
       label: t('nav.audit'),
       icon: History,
-      show: !!(canAccessSettings && currentUser.role !== 'admin')
+      show: can('reports.view_audit_logs') && currentUser.role !== 'admin'
     },
     {
       id: 'settings',
       label: t('nav.settings'),
       icon: SettingsIcon,
-      show: !!(canAccessSettings && currentUser.role !== 'admin')
+      show: can('settings.access') && currentUser.role !== 'admin'
     },
     {
       id: 'qrcode',
       label: t('nav.qrcode'),
       icon: Smartphone,
-      show: !!(canAccessSettings && currentUser.role !== 'admin' && !/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent))
+      show: can('settings.access') && currentUser.role !== 'admin' && !/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent)
     },
     {
       id: 'quotes',
@@ -707,7 +707,7 @@ function AppContent() {
       id: 'operations',
       label: t('nav.operations'),
       icon: Coffee,
-      show: (features.operations !== false) && (features.juiceBar !== false || features.locker !== false) && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: (features.operations !== false) && (features.juiceBar !== false || features.locker !== false) && canAny(['operations.pos_juice_bar', 'operations.lockers', 'operations.lost_found', 'operations.call_center', 'operations.complaints', 'operations.shift_handover'])
     },
     {
       id: 'admin-hub',
@@ -720,25 +720,25 @@ function AppContent() {
       id: 'advanced-reports',
       label: 'Premium Reports',
       icon: Star,
-      show: features.advancedReports === true && !!(isManagerOrSama && currentUser.role !== 'admin')
+      show: features.advancedReports === true && can('reports.view_advanced') && currentUser.role !== 'admin'
     },
     {
       id: 'call-center',
       label: 'Call Center',
       icon: Phone,
-      show: features.callCenter === true && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: features.callCenter === true && can('operations.call_center')
     },
     {
       id: 'lost-and-found',
       label: 'Lost & Found',
       icon: Search,
-      show: features.lostAndFound === true && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: features.lostAndFound === true && can('operations.lost_found')
     },
     {
       id: 'complaints',
       label: 'Complaints',
       icon: MessageSquare,
-      show: features.complaints === true && (effectiveRole === 'manager' || effectiveRole === 'rep' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: features.complaints === true && can('operations.complaints')
     }
   ];
 

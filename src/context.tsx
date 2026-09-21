@@ -41,9 +41,17 @@ import {
   Branch,
   CommissionRates,
   FeatureFlags,
-  PayoutConfig
+  PayoutConfig,
+  PermissionTemplate
 } from './types';
 import { cleanData } from './utils';
+import { hasPermission, getEffectiveUserPermissions } from './utils/permissions';
+import { 
+  subscribePermissionTemplates, 
+  createPermissionTemplate as createPermissionTemplateService, 
+  updatePermissionTemplate as updatePermissionTemplateService, 
+  deletePermissionTemplate as deletePermissionTemplateService 
+} from './services/permissionTemplateService';
 import { processPaymentTransaction, PaymentTransactionParams } from './services/transactionService';
 
 export interface AppContextType {
@@ -81,7 +89,7 @@ export interface AppContextType {
   deleteMultipleClients: (ids: string[]) => Promise<void>;
   updateUser: (id: string, updates: Partial<User>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
-  inviteUser: (email: string, role: UserRole) => Promise<void>;
+  inviteUser: (email: string, role: UserRole, displayName?: string, phone?: string, permissionTemplateId?: string) => Promise<void>;
   addComment: (clientId: string, text: string, author?: string) => Promise<void>;
   addInteraction: (clientId: string, interaction: Omit<InteractionLog, 'id' | 'author'>) => Promise<void>;
   addPayment: (payment: Omit<Payment, 'id' | 'client_name' | 'amount_paid' | 'created_at' | 'package_category_type' | 'deleted_at'>) => Promise<void>;
@@ -131,6 +139,14 @@ export interface AppContextType {
   processPaymentTransaction: (params: PaymentTransactionParams) => Promise<void>;
   fetchClientDetails: (clientId: string) => Promise<{ comments: CRMComment[]; interactions: InteractionLog[] }>;
   createClientAccount: (clientId: string, memberId: string, clientName: string, phone?: string) => Promise<{ uid: string }>;
+  permissionTemplates: PermissionTemplate[];
+  createPermissionTemplate: (template: Omit<PermissionTemplate, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updatePermissionTemplate: (id: string, updates: Partial<PermissionTemplate>) => Promise<void>;
+  deletePermissionTemplate: (id: string) => Promise<void>;
+  can: (permissionKey: string) => boolean;
+  canAny: (permissionKeys: string[]) => boolean;
+  canAll: (permissionKeys: string[]) => boolean;
+  userPermissions: Record<string, boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -237,6 +253,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeClientId, setActiveClientId] = useState<string | null>(null);
   const [prefilledLeadData, setPrefilledLeadData] = useState<{ name?: string; phone?: string } | null>(null);
 
+  // Permission Templates & Granular Permissions Engine
+  const [permissionTemplates, setPermissionTemplates] = useState<PermissionTemplate[]>([]);
+
+  React.useEffect(() => {
+    if (!isAuthReady) return;
+    const unsubscribe = subscribePermissionTemplates((templates) => {
+      setPermissionTemplates(templates);
+    });
+    return () => unsubscribe();
+  }, [isAuthReady]);
+
+  const permissionTemplatesMap = useMemo(() => {
+    const map: Record<string, PermissionTemplate> = {};
+    for (const tpl of permissionTemplates) {
+      map[tpl.id] = tpl;
+    }
+    return map;
+  }, [permissionTemplates]);
+
+  // Evaluated user context (respects role preview if active)
+  const effectiveUser = useMemo(() => {
+    if (!currentUser) return null;
+    if (previewRole) {
+      return {
+        ...currentUser,
+        role: previewRole,
+        permissionTemplateId: undefined,
+        customPermissions: undefined
+      };
+    }
+    return currentUser;
+  }, [currentUser, previewRole]);
+
+  const can = useCallback((permissionKey: string): boolean => {
+    return hasPermission(effectiveUser, permissionKey, permissionTemplatesMap);
+  }, [effectiveUser, permissionTemplatesMap]);
+
+  const canAny = useCallback((permissionKeys: string[]): boolean => {
+    return permissionKeys.some(key => can(key));
+  }, [can]);
+
+  const canAll = useCallback((permissionKeys: string[]): boolean => {
+    return permissionKeys.every(key => can(key));
+  }, [can]);
+
+  const userPermissions = useMemo(() => {
+    return getEffectiveUserPermissions(effectiveUser, permissionTemplatesMap);
+  }, [effectiveUser, permissionTemplatesMap]);
+
+  const createPermissionTemplate = useCallback(async (templateData: Omit<PermissionTemplate, 'id' | 'createdAt' | 'updatedAt'>) => {
+    return createPermissionTemplateService(templateData, currentUser?.id);
+  }, [currentUser?.id]);
+
+  const updatePermissionTemplate = useCallback(async (id: string, updates: Partial<PermissionTemplate>) => {
+    return updatePermissionTemplateService(id, updates);
+  }, []);
+
+  const deletePermissionTemplate = useCallback(async (id: string) => {
+    return deletePermissionTemplateService(id);
+  }, []);
+
   const isManagerOrSama = useMemo(() => {
     if (!currentUser) return false;
     const role = effectiveRole;
@@ -245,38 +322,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const canDeletePayments = useMemo(() => {
     if (!currentUser) return false;
-    const role = effectiveRole;
-    if (role === 'super_admin' || role === 'crm_admin' || role === 'manager' || role === 'admin') return true;
-    return !!currentUser.can_delete_payments;
-  }, [currentUser, effectiveRole]);
+    return can('payments.delete');
+  }, [currentUser, can]);
 
   const canAccessSettings = useMemo(() => {
     if (!currentUser) return false;
-    const role = effectiveRole;
-    if (role === 'super_admin' || role === 'crm_admin' || role === 'manager' || role === 'admin') return true;
-    return !!currentUser.can_access_settings_and_history;
-  }, [currentUser, effectiveRole]);
+    return can('settings.access');
+  }, [currentUser, can]);
 
   const canViewGlobalDashboard = useMemo(() => {
     if (!currentUser) return false;
-    const role = effectiveRole;
-    if (role === 'super_admin' || role === 'crm_admin' || role === 'manager' || role === 'admin') return true;
-    return !!currentUser.can_view_global_dashboard;
-  }, [currentUser, effectiveRole]);
+    return can('dashboard.view_global');
+  }, [currentUser, can]);
 
   const canDeleteRecords = useMemo(() => {
     if (!currentUser) return false;
-    const role = effectiveRole;
-    if (role === 'super_admin' || role === 'crm_admin' || role === 'manager' || role === 'admin') return true;
-    return !!currentUser.can_delete_records || !!currentUser.can_delete_payments;
-  }, [currentUser, effectiveRole]);
+    return can('members.delete') || can('payments.delete');
+  }, [currentUser, can]);
 
   const canAssignLeads = useMemo(() => {
     if (!currentUser) return false;
-    const role = effectiveRole;
-    if (role === 'super_admin' || role === 'crm_admin' || role === 'manager' || role === 'admin') return true;
-    return !!currentUser.can_assign_leads || !!currentUser.can_access_settings_and_history;
-  }, [currentUser, effectiveRole]);
+    return can('leads.assign');
+  }, [currentUser, can]);
 
   const getCanonicalName = useCallback((name: string) => {
     if (!name) return '';
@@ -536,7 +603,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateBranches,
     processPaymentTransaction,
     fetchClientDetails,
-    createClientAccount
+    createClientAccount,
+    permissionTemplates,
+    createPermissionTemplate,
+    updatePermissionTemplate,
+    deletePermissionTemplate,
+    can,
+    canAny,
+    canAll,
+    userPermissions
   }), [
     currentUser, effectiveRole, users, visibleClients, loadingClients,
     loadingExpired, expiredLoaded, fetchExpiredMembers,
@@ -546,7 +621,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     features, updateFeatures, previewRole, attendances, canDeletePayments, canAccessSettings,
     canViewGlobalDashboard, canDeleteRecords, canAssignLeads,
     commissionRates, isManagerOrSama, branches, fetchClientDetails, createClientAccount,
-    updatePayment
+    updatePayment, permissionTemplates, can, canAny, canAll, userPermissions,
+    createPermissionTemplate, updatePermissionTemplate, deletePermissionTemplate
   ]);
 
   return (
