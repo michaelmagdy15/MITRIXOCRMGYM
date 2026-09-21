@@ -46,7 +46,16 @@ export default function Users() {
   const [inviteName, setInviteName] = useState('');
   const [invitePhone, setInvitePhone] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('rep');
+  const [inviteBranch, setInviteBranch] = useState('');
+  const [inviteTarget, setInviteTarget] = useState('');
+  const [inviteStatus, setInviteStatus] = useState<'working' | 'nonworking'>('working');
+  const [inviteDepartment, setInviteDepartment] = useState<string>('');
+  const [inviteJobTitle, setInviteJobTitle] = useState<string>('');
+  const [inviteTrainerType, setInviteTrainerType] = useState<string>('Full-Time');
   const [invitePermissionTemplateId, setInvitePermissionTemplateId] = useState<string>('');
+  const [inviteUseCustomOverrides, setInviteUseCustomOverrides] = useState<boolean>(false);
+  const [inviteCustomPermissions, setInviteCustomPermissions] = useState<Record<string, boolean>>({});
+  const [isInviting, setIsInviting] = useState(false);
   const [activatingUserId, setActivatingUserId] = useState<string | null>(null);
   const [activatedUserId, setActivatedUserId] = useState<string | null>(null);
   const [approvingResetId, setApprovingResetId] = useState<string | null>(null);
@@ -277,21 +286,103 @@ export default function Users() {
     }
   };
 
+  const openInviteModal = () => {
+    setInviteEmail('');
+    setInviteName('');
+    setInvitePhone('');
+    setInviteRole('rep');
+    setInviteBranch('');
+    setInviteTarget('');
+    setInviteStatus('working');
+    setInviteDepartment('');
+    setInviteJobTitle('');
+    setInviteTrainerType('Full-Time');
+
+    const repTemplate = permissionTemplates.find(t => t.baseRole === 'rep') || permissionTemplates.find(t => t.id === 'sales-rep');
+    const templateId = repTemplate?.id || '';
+    setInvitePermissionTemplateId(templateId);
+    setInviteUseCustomOverrides(false);
+
+    const basePerms = repTemplate?.permissions || DEFAULT_ROLE_PERMISSIONS['rep'] || ALL_PERMISSIONS_FALSE;
+    setInviteCustomPermissions({ ...basePerms });
+    setIsInviteOpen(true);
+  };
+
+  const handleInviteRoleChange = (newRole: UserRole) => {
+    setInviteRole(newRole);
+    if (!inviteUseCustomOverrides) {
+      const matchingTpl = permissionTemplates.find(t => t.baseRole === newRole);
+      if (matchingTpl) {
+        setInvitePermissionTemplateId(matchingTpl.id);
+        setInviteCustomPermissions({ ...matchingTpl.permissions });
+      } else {
+        setInvitePermissionTemplateId('');
+        setInviteCustomPermissions({ ...(DEFAULT_ROLE_PERMISSIONS[newRole] || ALL_PERMISSIONS_FALSE) });
+      }
+    }
+  };
+
+  const handleInviteTemplateChange = (tplId: string) => {
+    setInvitePermissionTemplateId(tplId);
+    if (!inviteUseCustomOverrides) {
+      const template = permissionTemplates.find(t => t.id === tplId);
+      const basePerms = template?.permissions || (inviteRole ? DEFAULT_ROLE_PERMISSIONS[inviteRole] : undefined) || ALL_PERMISSIONS_FALSE;
+      setInviteCustomPermissions({ ...basePerms });
+    }
+  };
+
   const handleInvite = async () => {
-    if (inviteEmail) {
+    const cleanEmail = inviteEmail.trim().toLowerCase();
+    const cleanName = inviteName.trim();
+
+    if (!cleanEmail) {
+      window.alert("Please enter a valid email address.");
+      return;
+    }
+    if (!cleanName) {
+      window.alert("Please enter the user's full name.");
+      return;
+    }
+
+    setIsInviting(true);
+    try {
+      let customPermissions: Record<string, boolean> | undefined = undefined;
+      let legacy: any = {};
+
+      if (inviteUseCustomOverrides) {
+        customPermissions = inviteCustomPermissions;
+        legacy = syncLegacyFlags(inviteCustomPermissions);
+      } else {
+        const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
+        const effective = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || {};
+        legacy = syncLegacyFlags(effective);
+      }
+
       await inviteUser(
-        inviteEmail, 
+        cleanEmail, 
         inviteRole, 
-        inviteName || undefined, 
-        invitePhone || undefined,
-        invitePermissionTemplateId || undefined
+        cleanName, 
+        invitePhone.trim() || undefined,
+        invitePermissionTemplateId || undefined,
+        {
+          branch: inviteBranch || undefined,
+          salesTarget: inviteTarget ? parseFloat(inviteTarget) : undefined,
+          status: inviteStatus,
+          department: isInzan ? (inviteDepartment as InzanDepartment) || undefined : undefined,
+          jobTitle: isInzan ? (inviteJobTitle as InzanJobTitle) || undefined : undefined,
+          trainerType: (isInzan && inviteDepartment === 'Fitness') ? (inviteTrainerType as 'Full-Time' | 'Part-Time') : undefined,
+          customPermissions,
+          ...legacy
+        }
       );
+
       setIsInviteOpen(false);
-      setInviteEmail('');
-      setInviteName('');
-      setInvitePhone('');
-      setInviteRole('rep');
-      setInvitePermissionTemplateId('');
+      window.alert(`Successfully invited ${cleanName}! An account has been created with default password "12345678".`);
+    } catch (err: any) {
+      console.error("Invite user failed:", err);
+      window.alert(`Failed to invite user: ${err?.message || String(err)}`);
+    } finally {
+      setIsInviting(false);
     }
   };
 
@@ -319,92 +410,297 @@ export default function Users() {
           <div className="flex justify-between items-center">
             <p className="text-sm text-muted-foreground">Manage CRM access, phone numbers, and target metrics for gym staff.</p>
             {canInviteUsers && (
-              <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-                <DialogTrigger render={<Button />}>
+              <>
+                <Button onClick={openInviteModal} className="h-10 rounded-xl">
                   <Plus className="mr-2 h-4 w-4" /> Invite User
-                </DialogTrigger>
-                <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
-                  <DialogHeader>
-                    <DialogTitle className="text-xl md:text-2xl font-bold">Invite New User</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label>Full Name</Label>
-                      <Input 
-                        placeholder="e.g. Maison Mohamed" 
-                        value={inviteName} 
-                        onChange={(e) => setInviteName(e.target.value)} 
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Email Address</Label>
-                      <Input 
-                        type="email" 
-                        placeholder="user@example.com" 
-                        value={inviteEmail} 
-                        onChange={(e) => setInviteEmail(e.target.value)} 
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Mobile Phone Number (Optional)</Label>
-                      <Input 
-                        type="tel" 
-                        placeholder="+201000680580" 
-                        value={invitePhone} 
-                        onChange={(e) => setInvitePhone(e.target.value)} 
-                      />
-                      <p className="text-xs text-muted-foreground">Used for SMS password resets and OTP verification.</p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Role</Label>
-                      <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as UserRole)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="rep">Rep</SelectItem>
-                          <SelectItem value="manager">Manager</SelectItem>
-                          {canInviteUsers && (
-                            <SelectItem value="admin">Admin</SelectItem>
+                </Button>
+
+                <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
+                  <DialogContent className="w-[96vw] sm:max-w-3xl md:max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-6 md:p-8">
+                    <DialogHeader>
+                      <DialogTitle className="text-xl md:text-2xl font-bold">Invite New User</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label>Name</Label>
+                        <Input 
+                          value={inviteName} 
+                          onChange={(e) => setInviteName(e.target.value)} 
+                          placeholder="User's full name"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Email</Label>
+                        <Input 
+                          type="email"
+                          value={inviteEmail} 
+                          onChange={(e) => setInviteEmail(e.target.value)} 
+                          placeholder="User's email"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Mobile Phone Number</Label>
+                        <Input 
+                          type="tel"
+                          value={invitePhone} 
+                          onChange={(e) => setInvitePhone(e.target.value)} 
+                          placeholder="e.g. +201000680580"
+                        />
+                        <p className="text-xs text-muted-foreground">Used for SMS password resets and login verification.</p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Role</Label>
+                        <Select value={inviteRole} onValueChange={(v) => handleInviteRoleChange(v as UserRole)}>
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="rep">Rep</SelectItem>
+                            <SelectItem value="manager">Manager</SelectItem>
+                            {canInviteUsers && (
+                              <SelectItem value="admin">Admin</SelectItem>
+                            )}
+                            {canChangeRoles && (
+                              <>
+                                <SelectItem value="crm_admin">CRM Admin</SelectItem>
+                                <SelectItem value="super_admin">Super Admin</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Branch</Label>
+                        <Select value={inviteBranch} onValueChange={(v) => setInviteBranch(v || '')}>
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="All Branches" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">All Branches</SelectItem>
+                            {branches.map(b => (
+                              <SelectItem key={b} value={b}>{b}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Personal Sales Target (Optional)</Label>
+                        <Input 
+                          type="number"
+                          value={inviteTarget} 
+                          onChange={(e) => setInviteTarget(e.target.value)} 
+                          placeholder="Leave blank to use global target"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Employment Status</Label>
+                        <Select value={inviteStatus} onValueChange={(val: any) => val && setInviteStatus(val)}>
+                          <SelectTrigger className="h-11 rounded-xl">
+                            <SelectValue placeholder="Select Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="working">Working</SelectItem>
+                            <SelectItem value="nonworking">Non-Working</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {isInzan && (
+                        <div className="space-y-4 pt-4 border-t">
+                          <Label className="text-base font-semibold flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-primary" />
+                            INZAN Organizational Structure
+                          </Label>
+
+                          <div className="space-y-2">
+                            <Label>Department</Label>
+                            <Select 
+                              value={inviteDepartment} 
+                              onValueChange={(val: any) => {
+                                setInviteDepartment(val || '');
+                                setInviteJobTitle('');
+                              }}
+                            >
+                              <SelectTrigger className="h-11 rounded-xl">
+                                <SelectValue placeholder="Select Department" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="">None / Unassigned</SelectItem>
+                                {INZAN_DEPARTMENTS.map(dept => (
+                                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {inviteDepartment && (
+                            <div className="space-y-2">
+                              <Label>Job Title / Position</Label>
+                              <Select value={inviteJobTitle} onValueChange={(val: any) => setInviteJobTitle(val || '')}>
+                                <SelectTrigger className="h-11 rounded-xl">
+                                  <SelectValue placeholder="Select Job Title" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">None / Unassigned</SelectItem>
+                                  {(INZAN_JOB_TITLES[inviteDepartment as InzanDepartment] || []).map(title => (
+                                    <SelectItem key={title} value={title}>{title}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           )}
-                          {canChangeRoles && (
-                            <>
-                              <SelectItem value="crm_admin">CRM Admin</SelectItem>
-                              <SelectItem value="super_admin">Super Admin</SelectItem>
-                            </>
+
+                          {inviteDepartment === 'Fitness' && (
+                            <div className="space-y-2">
+                              <Label>Trainer Contract Type</Label>
+                              <Select value={inviteTrainerType} onValueChange={(val: any) => setInviteTrainerType(val || 'Full-Time')}>
+                                <SelectTrigger className="h-11 rounded-xl">
+                                  <SelectValue placeholder="Select Contract Type" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
+                                  <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Permission Template (Optional)</Label>
-                      <Select 
-                        value={invitePermissionTemplateId} 
-                        onValueChange={(v: any) => setInvitePermissionTemplateId(v || '')}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a permission template (or use role defaults)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">Role Defaults (Inherit from {inviteRole})</SelectItem>
-                          {permissionTemplates.map(tpl => (
-                            <SelectItem key={tpl.id} value={tpl.id}>
-                              {tpl.name} {tpl.isSystem ? '(System)' : '(Custom)'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Assign an operational permission template immediately, or configure later.
+                        </div>
+                      )}
+
+                      {/* Granular Permission Control & Templates */}
+                      <div className="space-y-4 pt-4 border-t">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <Label className="text-base font-bold text-foreground flex items-center gap-2">
+                              <Shield className="h-4 w-4 text-primary" />
+                              Permissions & Operational Access
+                            </Label>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Assign an operational template or customize specific user-level permission overrides.
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-xl border">
+                            <span className={`text-xs ${!inviteUseCustomOverrides ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
+                              Template Defaults
+                            </span>
+                            <Switch
+                              checked={inviteUseCustomOverrides}
+                              onCheckedChange={(checked) => {
+                                setInviteUseCustomOverrides(checked);
+                                if (checked && Object.keys(inviteCustomPermissions).length === 0) {
+                                  const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
+                                  const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
+                                  setInviteCustomPermissions({ ...basePerms });
+                                }
+                              }}
+                            />
+                            <span className={`text-xs ${inviteUseCustomOverrides ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
+                              Custom Overrides
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Template Selection Dropdown */}
+                        <div className="space-y-1.5 bg-muted/20 p-3.5 rounded-2xl border">
+                          <Label className="text-xs font-semibold">Assigned Permission Template</Label>
+                          <Select 
+                            value={invitePermissionTemplateId} 
+                            onValueChange={(val: any) => handleInviteTemplateChange(val || '')}
+                          >
+                            <SelectTrigger className="h-10 rounded-xl bg-background">
+                              <SelectValue placeholder="Select a Permission Template..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">Role Defaults (Inherit from {inviteRole})</SelectItem>
+                              {permissionTemplates.map(tpl => (
+                                <SelectItem key={tpl.id} value={tpl.id}>
+                                  {tpl.name} {tpl.isSystem ? '• (System Default)' : '• (Custom Template)'}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Permission Matrix or Preview */}
+                        {inviteUseCustomOverrides ? (
+                          <div className="space-y-2 pt-1">
+                            <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
+                              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Custom overrides are active for this user.
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
+                                  const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
+                                  setInviteCustomPermissions({ ...basePerms });
+                                }}
+                                className="h-7 text-xs text-primary hover:underline px-2"
+                              >
+                                Reset to Template Defaults
+                              </Button>
+                            </div>
+
+                            <PermissionMatrixEditor
+                              permissions={inviteCustomPermissions}
+                              onChange={setInviteCustomPermissions}
+                              defaultExpanded={false}
+                            />
+                          </div>
+                        ) : (
+                          <div className="space-y-2 pt-1">
+                            <div className="text-xs text-muted-foreground px-1">
+                              Permissions are currently inherited from{' '}
+                              <strong className="text-foreground">
+                                {permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.name || `Default ${inviteRole} role`}
+                              </strong>. Toggle "Custom Overrides" above to adjust individual permissions.
+                            </div>
+                            <PermissionMatrixEditor
+                              permissions={
+                                (permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.permissions) ||
+                                (inviteRole ? DEFAULT_ROLE_PERMISSIONS[inviteRole] : undefined) ||
+                                ALL_PERMISSIONS_FALSE
+                              }
+                              onChange={() => {}}
+                              readOnly={true}
+                              defaultExpanded={false}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-muted-foreground pt-2">
+                        Note: An account will be created with default password "12345678" and the user will be prompted to change it on first login.
                       </p>
                     </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsInviteOpen(false)}>Cancel</Button>
-                    <Button onClick={handleInvite}>Send Invitation</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsInviteOpen(false)} disabled={isInviting}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleInvite} disabled={isInviting}>
+                        {isInviting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Creating Account...
+                          </>
+                        ) : (
+                          'Send Invitation'
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
             )}
           </div>
 

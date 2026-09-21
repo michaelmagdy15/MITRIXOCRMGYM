@@ -89,7 +89,7 @@ export interface AppContextType {
   deleteMultipleClients: (ids: string[]) => Promise<void>;
   updateUser: (id: string, updates: Partial<User>) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
-  inviteUser: (email: string, role: UserRole, displayName?: string, phone?: string, permissionTemplateId?: string) => Promise<void>;
+  inviteUser: (email: string, role: UserRole, displayName?: string, phone?: string, permissionTemplateId?: string, options?: any) => Promise<void>;
   addComment: (clientId: string, text: string, author?: string) => Promise<void>;
   addInteraction: (clientId: string, interaction: Omit<InteractionLog, 'id' | 'author'>) => Promise<void>;
   addPayment: (payment: Omit<Payment, 'id' | 'client_name' | 'amount_paid' | 'created_at' | 'package_category_type' | 'deleted_at'>) => Promise<void>;

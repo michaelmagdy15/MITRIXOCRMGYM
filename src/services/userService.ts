@@ -10,7 +10,7 @@ import {
   getDocs
 } from 'firebase/firestore';
 import { db, auth, createFirebaseUser } from '../firebase';
-import { User, UserRole, UserId } from '../types';
+import { User, UserRole, UserId, InzanDepartment, InzanJobTitle } from '../types';
 import { cleanData } from '../utils';
 import { addAuditLog } from './auditService';
 
@@ -24,7 +24,29 @@ export const deleteUser = async (id: UserId, userName?: string) => {
   await addAuditLog('DELETE', 'CLIENT', id as any, `Deleted user account: ${userName || id}`);
 };
 
-export const inviteUser = async (email: string, role: UserRole, displayName?: string, phone?: string, permissionTemplateId?: string) => {
+export interface InviteUserOptions {
+  branch?: string;
+  salesTarget?: number;
+  status?: 'working' | 'nonworking';
+  department?: InzanDepartment;
+  jobTitle?: InzanJobTitle;
+  trainerType?: 'Full-Time' | 'Part-Time';
+  customPermissions?: Record<string, boolean>;
+  can_delete_payments?: boolean;
+  can_view_global_dashboard?: boolean;
+  can_access_settings_and_history?: boolean;
+  can_delete_records?: boolean;
+  can_assign_leads?: boolean;
+}
+
+export const inviteUser = async (
+  email: string, 
+  role: UserRole, 
+  displayName?: string, 
+  phone?: string, 
+  permissionTemplateId?: string,
+  options?: InviteUserOptions
+) => {
   // Check for existing user or invite
   const q = query(collection(db, 'users'), where('email', '==', email));
   const querySnapshot = await getDocs(q);
@@ -44,11 +66,23 @@ export const inviteUser = async (email: string, role: UserRole, displayName?: st
     name,
     email,
     role,
+    status: options?.status || 'working',
     ...(phone ? { phone: phone.trim() } : {}),
-    ...(permissionTemplateId ? { permissionTemplateId } : {})
+    ...(permissionTemplateId ? { permissionTemplateId } : {}),
+    ...(options?.branch ? { branch: options.branch } : {}),
+    ...(options?.salesTarget !== undefined ? { salesTarget: options.salesTarget } : {}),
+    ...(options?.department ? { department: options.department } : {}),
+    ...(options?.jobTitle ? { jobTitle: options.jobTitle } : {}),
+    ...(options?.trainerType ? { trainerType: options.trainerType } : {}),
+    ...(options?.customPermissions ? { customPermissions: options.customPermissions } : {}),
+    ...(options?.can_delete_payments !== undefined ? { can_delete_payments: options.can_delete_payments } : {}),
+    ...(options?.can_view_global_dashboard !== undefined ? { can_view_global_dashboard: options.can_view_global_dashboard } : {}),
+    ...(options?.can_access_settings_and_history !== undefined ? { can_access_settings_and_history: options.can_access_settings_and_history } : {}),
+    ...(options?.can_delete_records !== undefined ? { can_delete_records: options.can_delete_records } : {}),
+    ...(options?.can_assign_leads !== undefined ? { can_assign_leads: options.can_assign_leads } : {})
   };
 
-  await setDoc(doc(db, 'users', uid), newUser);
+  await setDoc(doc(db, 'users', uid), cleanData(newUser));
   await addAuditLog('CREATE', 'CLIENT', uid as any, `Invited user: ${email} as ${role}${phone ? ` (${phone})` : ''}${permissionTemplateId ? ` with template ${permissionTemplateId}` : ''}`);
   return uid as UserId;
 };
