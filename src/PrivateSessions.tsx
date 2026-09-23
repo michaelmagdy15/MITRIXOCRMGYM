@@ -86,22 +86,8 @@ export default function PrivateSessions() {
   };
 
   const handleUpdateStatus = (session: PTPackageRecord, status: PTPackageRecord['status']) => {
+    // updatePrivateSession atomically handles package balance adjustment (deduct/restore) on the client doc and active package
     updatePrivateSession(session.id, { status });
-    
-    if (status === 'Attended' || status === 'No Show') {
-      const client = clients.find(c => c.id === session.clientId);
-      if (client) {
-        let currentSessions = client.sessionsRemaining;
-        if (currentSessions === 'no attend') {
-          const match = client.packageType?.match(/(\d+)\s*S/i) || client.packageType?.match(/(\d+)\s*Session/i);
-          currentSessions = match ? parseInt(match[1]!, 10) : 0;
-        }
-        // Only decrement if sessions are finite and above zero (prevent negative sessions)
-        if (typeof currentSessions === 'number' && currentSessions > 0) {
-          updateClient(client.id, { sessionsRemaining: currentSessions - 1 });
-        }
-      }
-    }
   };
 
   const sessionsForSelectedDate = privateSessions

@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { useClients } from '../hooks/useClients';
+import { useAppContext } from '../context';
 import { Client, LeadStage } from '../types';
 import { format, parseISO } from 'date-fns';
 import { Users, Target, Calendar, TrendingDown, CheckCircle2, XCircle } from 'lucide-react';
@@ -20,7 +20,7 @@ const STAGES: { stage: LeadStage; label: string; color: string; icon: any }[] = 
 
 const ConversionFunnel: React.FC<ConversionFunnelProps> = ({ selectedRepId, selectedMonthStr }) => {
   const { currentUser } = useAuth();
-  const { clients } = useClients(currentUser);
+  const { clients } = useAppContext();
 
   const funnelData = useMemo(() => {
     // Filter leads for the selected rep and month

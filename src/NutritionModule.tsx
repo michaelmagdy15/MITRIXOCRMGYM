@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNutrition } from './hooks/useNutrition';
 import { useAuth } from './contexts/AuthContext';
-import { useClients } from './hooks/useClients';
-import { useCoaches } from './hooks/useCoaches';
+import { useAppContext } from './context';
 import {
   Calendar,
   Clock,
@@ -87,8 +86,7 @@ export default function NutritionModule() {
   } = useNutrition();
 
   const { currentUser, isSuperUser } = useAuth();
-  const { clients } = useClients(currentUser);
-  const { coaches } = useCoaches();
+  const { clients, coaches } = useAppContext();
 
   const isManagerOrSama =
     isSuperUser ||

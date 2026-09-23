@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useAppContext } from './context';
 import { getTenantId } from './firebase';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, Loader2 } from 'lucide-react';
 
 // Authorized emails who have direct owner access across all tenants
 const QUOTE_GENERATOR_ALLOWED_EMAILS = [
@@ -31,7 +31,9 @@ export default function QuoteGenerator() {
 
   const hasAccess = Boolean(isAuthorizedEmail || isAdminRole);
 
-  const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+  const [loadingHtml, setLoadingHtml] = useState(true);
 
   const companyName = branding?.companyName || (isInzan ? 'INZAN ATHLETICS' : 'STRIKE');
   // For dark header/doc-header bars, use crisp white logos:
@@ -50,6 +52,60 @@ export default function QuoteGenerator() {
   });
 
   const iframeSrc = `/quote-generator.html?${queryParams.toString()}`;
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadQuoteHtml() {
+      try {
+        setLoadingHtml(true);
+        // Direct fetch avoids ServiceWorker navigation interception
+        const res = await fetch(`/quote-generator.html?cb=${Date.now()}`);
+        if (!res.ok) {
+          throw new Error(`Failed to load quote generator: ${res.status}`);
+        }
+        let html = await res.text();
+
+        // Inject the tenant context directly so it executes immediately on iframe parse
+        const injectedContext = {
+          tenant: isInzan ? 'inzanathletics' : 'strike',
+          isInzan,
+          companyName,
+          logoUrl,
+          currency: currencyCode,
+          currencySymbol,
+          branch: defaultBranch,
+          prefix: isInzan ? 'INZ-' : 'STR-',
+          filePrefix: isInzan ? 'INZAN_ATHLETICS' : 'STRIKE'
+        };
+
+        const scriptTag = `<script>window.__INJECTED_TENANT__ = ${JSON.stringify(injectedContext)};</script>`;
+        if (html.includes('<head>')) {
+          html = html.replace('<head>', `<head>\n  ${scriptTag}`);
+        } else {
+          html = `${scriptTag}\n${html}`;
+        }
+
+        if (active) {
+          setSrcDoc(html);
+          setLoadingHtml(false);
+        }
+      } catch (err) {
+        console.error('[QuoteGenerator] Error loading quote-generator.html via srcDoc:', err);
+        if (active) {
+          setLoadingHtml(false);
+        }
+      }
+    }
+
+    if (hasAccess) {
+      loadQuoteHtml();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [hasAccess, isInzan, companyName, logoUrl, currencyCode, currencySymbol, defaultBranch]);
 
   const handleIframeLoad = () => {
     try {
@@ -84,11 +140,23 @@ export default function QuoteGenerator() {
     );
   }
 
+  if (loadingHtml) {
+    return (
+      <div className="w-full h-[calc(100vh-120px)] rounded-lg overflow-hidden border border-border shadow-lg flex items-center justify-center bg-card">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm font-medium">Loading {companyName} Quote Builder...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-[calc(100vh-120px)] rounded-lg overflow-hidden border border-border shadow-lg">
       <iframe
         ref={iframeRef}
-        src={iframeSrc}
+        srcDoc={srcDoc || undefined}
+        src={!srcDoc ? iframeSrc : undefined}
         onLoad={handleIframeLoad}
         title={`${companyName} Quote Generator`}
         className="w-full h-full"

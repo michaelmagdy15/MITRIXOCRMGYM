@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { db, auth } from '../firebase';
-import { collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, setDoc, query, where } from 'firebase/firestore';
 import { Task } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -19,7 +19,21 @@ export const useTasks = () => {
       return;
     }
 
-    const unsub = onSnapshot(collection(db, 'tasks'), (snapshot) => {
+    const isManagerRole =
+      effectiveRole === 'manager' ||
+      effectiveRole === 'admin' ||
+      effectiveRole === 'crm_admin' ||
+      effectiveRole === 'super_admin' ||
+      currentUser?.role === 'manager' ||
+      currentUser?.role === 'admin' ||
+      currentUser?.role === 'crm_admin' ||
+      currentUser?.role === 'super_admin';
+
+    const tasksQuery = isManagerRole
+      ? collection(db, 'tasks')
+      : query(collection(db, 'tasks'), where('assignedTo', '==', currentUser.id));
+
+    const unsub = onSnapshot(tasksQuery, (snapshot) => {
       setTasks(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Task)));
       setLoading(false);
     }, (error) => {

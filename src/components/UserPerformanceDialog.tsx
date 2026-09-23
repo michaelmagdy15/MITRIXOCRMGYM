@@ -2,8 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAppContext } from '../context';
 import { useAuth } from '../contexts/AuthContext';
-import { useClients } from '../hooks/useClients';
-import { usePayments } from '../hooks/usePayments';
 import { User } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Input } from '@/components/ui/input';
@@ -52,10 +50,8 @@ interface UserPerformanceDialogProps {
 }
 
 export function UserPerformanceDialog({ user, isOpen, onClose }: UserPerformanceDialogProps) {
-  const { userTargets, updateUserTarget, users } = useAppContext();
+  const { userTargets, updateUserTarget, users, clients, payments } = useAppContext();
   const { currentUser } = useAuth();
-  const { clients } = useClients(currentUser);
-  const { payments } = usePayments({ currentUser, clients, canDeletePayments: false });
   
   const [selectedMonthOffset, setSelectedMonthOffset] = useState(0);
   const selectedDate = subMonths(new Date(), selectedMonthOffset);

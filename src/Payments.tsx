@@ -2,9 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { SALES_NAME_MAPPING, toCanonical } from './constants';
-import { useCoaches } from './hooks/useCoaches';
-import { usePackages } from './hooks/usePackages';
-import { usePayments } from './hooks/usePayments';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -30,13 +27,29 @@ import { toCanonicalBranchId } from './utils/memberCategories';
 
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
-  const { clients, users, updateClient, addClient, currentUser, branding, canDeletePayments, branches, processPaymentTransaction, setActiveTab, setActiveClientId, features } = useAppContext();
-  const { coaches } = useCoaches();
-  const { packages } = usePackages();
+  const {
+    clients,
+    users,
+    updateClient,
+    addClient,
+    currentUser,
+    branding,
+    canDeletePayments,
+    branches,
+    processPaymentTransaction,
+    setActiveTab,
+    setActiveClientId,
+    features,
+    packages,
+    coaches,
+    payments,
+    addPayment,
+    deletePayment,
+    updatePayment,
+  } = useAppContext();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
   }, [packages, features]);
-  const { payments, addPayment, deletePayment, updatePayment } = usePayments({ currentUser, clients, canDeletePayments });
   const [isNewPaymentOpen, setIsNewPaymentOpen] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [editPaymentDate, setEditPaymentDate] = useState('');

@@ -13,17 +13,13 @@ import {
 import { useAppContext } from '../context';
 import { downloadFile } from '../utils/download';
 import { useAuth } from '../contexts/AuthContext';
-import { useClients } from '../hooks/useClients';
-import { usePayments } from '../hooks/usePayments';
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { SALES_NAME_MAPPING, SALES_MEMBERS, toCanonical } from '../constants';
 
 
 const CommissionReport: React.FC = () => {
-  const { commissionRates, updateCommissionRates, users, branding } = useAppContext();
+  const { commissionRates, updateCommissionRates, users, branding, clients, payments } = useAppContext();
   const { currentUser } = useAuth();
-  const { clients } = useClients(currentUser);
-  const { payments } = usePayments({ currentUser, clients, canDeletePayments: false });
 
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [editingRates, setEditingRates] = useState(false);

@@ -54,6 +54,13 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           ignoreURLParametersMatching: [/^cb$/],
           cleanupOutdatedCaches: true,
+          navigateFallbackDenylist: [
+            /^\/quote-generator\.html/,
+            /^\/help-guide\.html/,
+            /^\/privacy\.html/,
+            /^\/api/,
+            /^\/contracts\//
+          ],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/.*/i,

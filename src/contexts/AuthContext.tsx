@@ -17,6 +17,7 @@ import {
   addDoc,
   orderBy,
   runTransaction,
+  limit,
 } from 'firebase/firestore';
 import * as userService from '../services/userService';
 import { activatePendingUser as activatePendingUserService } from '../services/userService';
@@ -169,20 +170,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               try {
                 const userPhone = firebaseUser.phoneNumber || userData.phone || '';
                 const cleanPhone = userPhone.replace(/\D/g, '').slice(-9);
-                const allClientsSnap = await getDocs(collection(db, 'clients'));
-                const matchedClient = allClientsSnap.docs.find(d => {
-                  const data = d.data();
-                  if (data.portalUserId === userId) return true;
-                  const cPhone = (data.phone || '').replace(/\D/g, '').slice(-9);
-                  if (cleanPhone && cPhone && cPhone === cleanPhone) return true;
-                   if (userData?.email && (data.email || '').toLowerCase() === userData.email.toLowerCase()) return true;
-                  return false;
-                });
+                let matchedDoc: any = null;
 
-                if (matchedClient) {
-                  const cData = matchedClient.data();
-                  userData.clientRecordId = cData.memberId || matchedClient.id;
-                  userData.clientDocId = matchedClient.id;
+                // 1. Check if any client doc has portalUserId matching this user
+                const portalSnap = await getDocs(query(collection(db, 'clients'), where('portalUserId', '==', userId), limit(1)));
+                if (!portalSnap.empty) {
+                  matchedDoc = portalSnap.docs[0];
+                }
+
+                // 2. If not matched, query by email
+                if (!matchedDoc && userData?.email) {
+                  const emailLower = userData.email.toLowerCase();
+                  const emailSnap = await getDocs(query(collection(db, 'clients'), where('email', '==', emailLower), limit(1)));
+                  if (!emailSnap.empty) {
+                    matchedDoc = emailSnap.docs[0];
+                  } else {
+                    const rawEmailSnap = await getDocs(query(collection(db, 'clients'), where('email', '==', userData.email), limit(1)));
+                    if (!rawEmailSnap.empty) {
+                      matchedDoc = rawEmailSnap.docs[0];
+                    }
+                  }
+                }
+
+                // 3. If not matched, query by phone
+                if (!matchedDoc && userPhone) {
+                  const phoneSnap = await getDocs(query(collection(db, 'clients'), where('phone', '==', userPhone), limit(1)));
+                  if (!phoneSnap.empty) {
+                    matchedDoc = phoneSnap.docs[0];
+                  } else if (cleanPhone) {
+                    const cleanPhoneSnap = await getDocs(query(collection(db, 'clients'), where('phone', '==', cleanPhone), limit(1)));
+                    if (!cleanPhoneSnap.empty) {
+                      matchedDoc = cleanPhoneSnap.docs[0];
+                    }
+                  }
+                }
+
+                if (matchedDoc) {
+                  const cData = matchedDoc.data();
+                  userData.clientRecordId = cData.memberId || matchedDoc.id;
+                  userData.clientDocId = matchedDoc.id;
                   if (!userData.name || userData.name === 'New User') {
                     userData.name = cData.name || 'Member';
                   }
@@ -193,7 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     phone: userPhone || userData.phone || ''
                   });
                   if (!cData.portalUserId || cData.portalUserId !== userId) {
-                    await updateDoc(doc(db, 'clients', matchedClient.id), { portalUserId: userId });
+                    await updateDoc(doc(db, 'clients', matchedDoc.id), { portalUserId: userId });
                   }
                 }
               } catch (e) {

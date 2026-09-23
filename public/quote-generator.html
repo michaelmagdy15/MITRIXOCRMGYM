@@ -858,6 +858,10 @@
    MULTI-TENANT BRANDING CONTEXT
 ═══════════════════════════════════════════ */
 function getTenantContext() {
+  if (window.__INJECTED_TENANT__) {
+    return window.__INJECTED_TENANT__;
+  }
+
   const params = new URLSearchParams(window.location.search);
   let tenant = (params.get('tenant') || '').toLowerCase();
   
@@ -883,7 +887,7 @@ function getTenantContext() {
 
   const isInzan = tenant === 'inzan' || tenant === 'inzanathletics';
   const defaultCompany = isInzan ? 'INZAN ATHLETICS' : 'STRIKE';
-  const defaultLogo = isInzan ? '/inzanlogo_white.png' : 'mitrixogymcrmlogo_white.png';
+  const defaultLogo = isInzan ? '/inzanlogo_white.png' : '/strikelogo_white.png';
   const defaultCurrency = 'EGP';
   const defaultBranch = isInzan ? 'Garden 8 / INZAN Facility' : 'STRIKE Facility';
 
@@ -2189,7 +2193,7 @@ window.addEventListener('message', async (event) => {
       tenant: isInzan ? 'inzanathletics' : 'strike',
       isInzan,
       companyName: d.companyName || (isInzan ? 'INZAN ATHLETICS' : 'STRIKE'),
-      logoUrl: d.logoUrl || (isInzan ? '/inzanlogo_white.png' : 'mitrixogymcrmlogo_white.png'),
+      logoUrl: d.logoUrl || (isInzan ? '/inzanlogo_white.png' : '/strikelogo_white.png'),
       currency: d.currencyCode || 'EGP',
       currencySymbol: d.currencySymbol || 'LE',
       branch: d.defaultBranch || (isInzan ? 'Garden 8 / INZAN Facility' : 'STRIKE Facility'),

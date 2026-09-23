@@ -1,8 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { useAppContext } from './context';
-import { useClients } from './hooks/useClients';
-import { useAttendance } from './hooks/useAttendance';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,11 +15,21 @@ import { collection, query, onSnapshot } from 'firebase/firestore';
 import { ShiftHandoverDialog } from './components/ShiftHandoverDialog';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
-  const { currentUser, users, setActiveTab, setActiveClientId, branches, ptPackageRecords, branding, features } = useAppContext();
+  const {
+    currentUser,
+    users,
+    setActiveTab,
+    setActiveClientId,
+    branches,
+    ptPackageRecords,
+    branding,
+    features,
+    clients,
+    attendances,
+    recordAttendance,
+  } = useAppContext();
   const isInzan = getTenantId() === 'inzanathletics' || features?.shiftHandover === true || features?.commercialGymWorkspaces === true;
   const [isShiftHandoverOpen, setIsShiftHandoverOpen] = useState(false);
-  const { clients } = useClients(currentUser);
-  const { attendances, recordAttendance } = useAttendance(currentUser, clients);
   const { t, language, isRtl } = useLanguage();
 
   const [classes, setClasses] = useState<any[]>([]);

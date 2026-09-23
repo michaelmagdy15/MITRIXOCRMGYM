@@ -3219,6 +3219,15 @@ async function startServer() {
     
     // Serve static assets, but do not serve index.html statically (index: false)
     app.use(express.static(distPath, { index: false }));
+
+    // Explicitly serve standalone HTML files so they never fall through to index.html
+    app.get(["/quote-generator.html", "/help-guide.html", "/privacy.html"], (req, res, next) => {
+      const filePath = path.join(distPath, req.path);
+      if (fs.existsSync(filePath)) {
+        return res.sendFile(filePath);
+      }
+      next();
+    });
     
     app.get("*", async (req, res) => {
       const hostname = getRequestHostname(req);

@@ -200,15 +200,27 @@ export async function runMembershipExpirationWorker(db: FirebaseFirestore.Firest
         const canonicalClientId = doc.id;
         const memberIdStr = client.memberId ? String(client.memberId) : '';
 
-        // Query future bookings in classBookings
-        const bookingsQuery = db.collection('classBookings')
-          .where('status', '==', 'booked');
+        // Query future bookings specifically for this client instead of querying all bookings in the gym
+        const clientBookingSnaps = await Promise.all([
+          db.collection('classBookings')
+            .where('clientId', '==', canonicalClientId)
+            .where('status', '==', 'booked')
+            .get(),
+          memberIdStr && memberIdStr !== canonicalClientId
+            ? db.collection('classBookings')
+                .where('memberId', '==', memberIdStr)
+                .where('status', '==', 'booked')
+                .get()
+            : Promise.resolve({ docs: [] as any } as any)
+        ]);
 
-        const bookingsSnap = await bookingsQuery.get();
-        for (const bDoc of bookingsSnap.docs) {
+        const clientBookingDocs = [...clientBookingSnaps[0].docs, ...clientBookingSnaps[1].docs];
+        const seenBookingIds = new Set<string>();
+
+        for (const bDoc of clientBookingDocs) {
+          if (seenBookingIds.has(bDoc.id)) continue;
+          seenBookingIds.add(bDoc.id);
           const bData = bDoc.data();
-          const matchesClient = bData.clientId === canonicalClientId || (memberIdStr && bData.memberId === memberIdStr);
-          if (!matchesClient) continue;
 
           // Check if class schedule is in future
           const classScheduleId = bData.scheduleId || bData.classId;
