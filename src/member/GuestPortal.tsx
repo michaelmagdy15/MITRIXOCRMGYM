@@ -150,7 +150,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const { packages, branding, branches, coaches } = useAppContext();
   const { currentUser, logout } = useAuth();
   const { storefrontConfig } = useSettings();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, themeLocked } = useTheme();
   // Detect if user is logged in (either passed as prop or via auth context)
   const isLoggedIn = !!(client || currentUser);
   const displayName = client?.name || currentUser?.name || '';
@@ -524,7 +524,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
           <Button
             variant="ghost"
             size="icon"
-            onClick={toggleTheme}
+            onClick={toggleTheme} disabled={themeLocked}
             className="h-8 w-8 rounded-lg text-foreground hover:bg-muted shrink-0"
             title="Toggle Theme"
           >

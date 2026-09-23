@@ -25,7 +25,7 @@ import {
 
 export default function SubscriptionCheckout() {
   const { language, toggleLanguage, isRtl } = useLanguage();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, themeLocked } = useTheme();
 
   const plans = {
     starter: {
@@ -379,7 +379,7 @@ export default function SubscriptionCheckout() {
         </div>
         <div className="flex items-center gap-3">
 
-          <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 rounded-lg" title="Toggle Theme">
+          <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} className="h-8 w-8 rounded-lg" title="Toggle Theme">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>

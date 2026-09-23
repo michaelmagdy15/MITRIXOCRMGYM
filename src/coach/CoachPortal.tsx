@@ -30,7 +30,7 @@ const NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
 export default function CoachPortal() {
   const { currentUser, logout } = useAuth();
   const { branding } = useSettings();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, themeLocked } = useTheme();
   const [activeTab, setActiveTab] = useState<CoachTab>('home');
   const [floorContext, setFloorContext] = useState<{ client?: Client | null; session?: Session | null } | null>(null);
 
@@ -64,7 +64,7 @@ export default function CoachPortal() {
             <span className="hidden sm:inline">Live</span> Floor Mode
           </Button>
 
-          <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} className="h-8 w-8">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <div className="text-right hidden sm:block">

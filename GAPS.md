@@ -1,9 +1,21 @@
-﻿# GAPS.md â€” MitrixoGYM CRM Gap Analysis & What's Remaining
+# GAPS.md â€” MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-09-06 (Inzan PT & Classes System Audit, Unbroken Payment-Package Mirroring, Zero Invalid Time Value Hardening)
+Updated: 2026-09-23 (Inzan PT & Classes System Audit, Unbroken Payment-Package Mirroring, Zero Invalid Time Value Hardening)
 
 ---
 
+## RECENT WORK - 2026-09-23 (CONTRACT.1 / INZAN.THEME.1)
+
+- Fixed contract generation to download directly; removed automatic Web Share invocation.
+- Added explicit per-tenant contract assets/mappings. Strike retains its existing contract; Inzan uses a sanitized version of the supplied two-page agreement and its own member/payment fields. Unknown tenants fail visibly instead of receiving Strike branding.
+- Applied Inzan-only #000000 / #1A1A1A / #2B2B2B surfaces across shared CRM/member/coach tokens and native mobile shell. Strike retains existing colors and light/dark preference.
+- Proof: build and lint exit 0; Edge browser downloads and field assertions pass for both tenants; desktop/mobile login screenshots reviewed; Inzan PDF pages visually reviewed and canonical fields/widget appearances checked. Existing build warnings remain.
+- Decision: preserve the supplied agreement terms and white-paper PDF style; display recorded latest payment rather than invent missing invoice totals/discounts/allowances. Keep semantic status colors readable.
+- Scope: user's follow-up explicitly adds the Inzan theme to the contract work. requirements.md is absent from this checkout.
+- Release pending under hard limits: no public deployment or app-store release. Native shell needs an Inzan rebuild; authenticated production and physical-device smoke tests remain pending.
+- See docs/TENANT_CONTRACTS_AND_THEME.md for mappings, template sanitization, and verification instructions.
+
+---
 ## RECENT WORK - 2026-09-18 (MVP Completion: PT Capacity, Exports, SLAs, Maker-Checker)
 
 ### Fixed This Session
@@ -302,3 +314,4 @@ Implemented background sync via Vite PWA Service Worker for offline-capable mobi
 | C11: registerFreeUser | 2026-08-18 | Atomic counters/memberIds instead of clients scan |
 | C12: baseline lint | 2026-08-18 | Removed dead fix-migration route + firebaseAdmin import |
 
+- Delivery: user explicitly authorized committing and syncing the review branch codex/tenant-contracts-inzan-theme. Public deployment and app-store release remain pending.

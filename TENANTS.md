@@ -123,3 +123,7 @@ When a new tenant is provisioned:
 Email templates (functions/src/utils/mailer.ts) handle branding:
 - Company name fallback: "mitrixogymcrm" → "STRIKE"
 - Logo URL fallback: if not set, uses https://strike-egy.com/strikelogo.png for Strike tenant
+
+## Contracts and Inzan appearance (2026-09-23)
+
+Contract assets are explicitly mapped in src/config/contractTemplates.ts. Strike keeps its existing agreement; Inzan uses public/contracts/inzan-membership.pdf. Unknown tenants require their own template configuration. Inzan uses a fixed black/charcoal palette in the CRM, member/coach portals and Expo shell. See docs/TENANT_CONTRACTS_AND_THEME.md.

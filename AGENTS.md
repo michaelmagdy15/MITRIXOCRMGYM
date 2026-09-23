@@ -62,6 +62,7 @@
 
 | Trap | Detail |
 |---|---|
+| Contract template fallback | Never fall back to Strike for an unknown tenant. Use the resolved tenant template map; never ship a populated sample PDF or use Web Share for the download button. |
 | GET /api/settings returning empty | The endpoint was building an empty `settingsObj` without fetching from Firestore. Always verify endpoints actually read data. |
 | Hardcoded "mitrixogymcrm" default | SettingsContext defaults to 'mitrixogymcrm' — this is intentional as fallback but tenant settings should override on load. |
 | Tenant isolation via hostname | All data queries must use `getDbForRequest(req)` which derives database from hostname. Queries without tenant context = security vulnerability. |

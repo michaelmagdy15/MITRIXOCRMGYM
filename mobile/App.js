@@ -31,6 +31,7 @@ const PRODUCTION_URL =
   Constants?.expoConfig?.extra?.PRODUCTION_URL || 'https://strike-egy.com/';
 const APP_NAME =
   Constants?.expoConfig?.extra?.APP_NAME || 'STRIKE';
+const IS_INZAN = Constants?.expoConfig?.extra?.APP_TENANT === 'inzanathletics';
 const MEMBER_ALERTS_CHANNEL_ID = 'member-alerts';
 
 // Runtime validation: if PRODUCTION_URL is missing or not an https URL, show a
@@ -141,7 +142,7 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <SafeAreaView style={styles.safeArea}>
-          <StatusBar style="light" backgroundColor="#0a0a0a" />
+          <StatusBar style="light" backgroundColor={IS_INZAN ? "#000000" : "#0a0a0a"} />
           <View style={styles.offlineContainer}>
             <View style={styles.offlineIconContainer}>
               <Text style={styles.offlineIcon}>⚠️</Text>
@@ -385,7 +386,7 @@ function MainApp() {
   if (!CONFIG_VALID) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar style="light" backgroundColor="#0a0a0a" />
+        <StatusBar style="light" backgroundColor={IS_INZAN ? "#000000" : "#0a0a0a"} />
         <View style={styles.offlineContainer}>
           <View style={styles.offlineIconContainer}>
             <Text style={styles.offlineIcon}>⚙️</Text>
@@ -407,7 +408,7 @@ function MainApp() {
   if (hasFailedToLoad && !hasLoadedSuccessfully) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar style="dark" backgroundColor="#FFFFFF" />
+        <StatusBar style={IS_INZAN ? "light" : "dark"} backgroundColor={IS_INZAN ? "#000000" : "#FFFFFF"} />
         <View style={styles.offlineContainer}>
           <View style={styles.offlineIconContainer}>
             <Text style={styles.offlineIcon}>⚡</Text>
@@ -437,7 +438,7 @@ function MainApp() {
   // ─── Main Render ─────────────────────────────────────
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" backgroundColor="#FFFFFF" />
+      <StatusBar style={IS_INZAN ? "light" : "dark"} backgroundColor={IS_INZAN ? "#000000" : "#FFFFFF"} />
       <View style={styles.container}>
         <WebView
           key={key}
@@ -619,7 +620,7 @@ function NativeSplashScreen({ appName }) {
 
   return (
     <View style={StyleSheet.absoluteFillObject}>
-      <StatusBar style="light" backgroundColor="#050507" />
+      <StatusBar style="light" backgroundColor={IS_INZAN ? "#000000" : "#050507"} />
       {bgSource ? (
         <ImageBackground
           source={bgSource}
@@ -629,7 +630,7 @@ function NativeSplashScreen({ appName }) {
           {content}
         </ImageBackground>
       ) : (
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#050507' }]}>
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: IS_INZAN ? '#000000' : '#050507' }]}>
           {content}
         </View>
       )}
@@ -703,20 +704,20 @@ async function registerForPushNotificationsAsync() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: IS_INZAN ? '#000000' : '#FFFFFF',
   },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: IS_INZAN ? '#000000' : '#FFFFFF',
   },
   webview: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: IS_INZAN ? '#000000' : '#FFFFFF',
   },
 
   offlineContainer: {
     flex: 1,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: IS_INZAN ? '#000000' : '#0a0a0a',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 30,
@@ -725,7 +726,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#1f1f22',
+    backgroundColor: IS_INZAN ? '#1a1a1a' : '#1f1f22',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
@@ -761,7 +762,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   offlineBanner: {
-    backgroundColor: '#C20E1A',
+    backgroundColor: IS_INZAN ? '#2b2b2b' : '#C20E1A',
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -781,7 +782,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#070709',
+    backgroundColor: IS_INZAN ? '#000000' : '#070709',
   },
   loadingCard: {
     alignItems: 'center',
@@ -811,7 +812,7 @@ const styles = StyleSheet.create({
   },
   splashOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(5, 5, 7, 0.72)',
+    backgroundColor: IS_INZAN ? 'rgba(0, 0, 0, 0.72)' : 'rgba(5, 5, 7, 0.72)',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: Platform.OS === 'ios' ? 70 : 40,
@@ -830,7 +831,7 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: 'rgba(225, 29, 72, 0.28)',
+    backgroundColor: IS_INZAN ? '#2b2b2b' : 'rgba(225, 29, 72, 0.28)',
   },
   splashLogo: {
     width: 210,
@@ -855,7 +856,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 50,
-    backgroundColor: '#E11D48',
+    backgroundColor: IS_INZAN ? '#ffffff' : '#E11D48',
     borderRadius: 999,
   },
   splashTagline: {

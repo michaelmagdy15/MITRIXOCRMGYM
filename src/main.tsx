@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import './styles/transitions.css';
+import './styles/inzan-theme.css';
 
 // ── Guard 1: Register Service Worker for Offline Sync ──────────────────────
 // Re-enabling the PWA service worker to allow offline caching (Background Sync)

@@ -218,7 +218,8 @@
           var t = (params.get('tenant') || '').toLowerCase();
           var host = window.location.hostname.toLowerCase();
           var cfgTenant = (window.__FIREBASE_CONFIG__ && window.__FIREBASE_CONFIG__.tenantId) ? window.__FIREBASE_CONFIG__.tenantId.toLowerCase() : '';
-          var isInzan = t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1 || cfgTenant.indexOf('inzan') !== -1;
+          var isInzan = cfgTenant ? cfgTenant === 'inzanathletics' : (t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1);
+          if (isInzan) { document.documentElement.dataset.tenantTheme = 'inzanathletics'; document.documentElement.classList.add('dark'); document.documentElement.style.backgroundColor = '#000000'; }
           
           var companyName = isInzan ? 'INZAN ATHLETICS' : 'STRIKE';
           var faviconPath = isInzan ? '/inzan-favicon.png' : '/favicon.png';
@@ -289,7 +290,8 @@
             var t = (params.get('tenant') || '').toLowerCase();
             var host = window.location.hostname.toLowerCase();
             var cfgTenant = (window.__FIREBASE_CONFIG__ && window.__FIREBASE_CONFIG__.tenantId) ? window.__FIREBASE_CONFIG__.tenantId.toLowerCase() : '';
-            var isInzan = t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1 || cfgTenant.indexOf('inzan') !== -1;
+            var isInzan = cfgTenant ? cfgTenant === 'inzanathletics' : (t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1);
+          if (isInzan) { document.documentElement.dataset.tenantTheme = 'inzanathletics'; document.documentElement.classList.add('dark'); document.documentElement.style.backgroundColor = '#000000'; }
             var tenantKey = isInzan ? 'inzanathletics' : 'strike';
 
             var logo = document.getElementById('mobile-splash-logo');

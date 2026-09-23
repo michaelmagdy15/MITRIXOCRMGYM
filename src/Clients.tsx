@@ -84,16 +84,16 @@ export default function Clients() {
   }, [packages, features]);
   const activeClient = activeClientId ? clients.find(c => c.id === activeClientId) : null;
 
-  // Sales reps and managers may generate/share member contracts.
+  // Sales reps and managers may download member contracts.
   const canDownloadContract = ['rep', 'manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser?.role || '');
 
   const handleDownloadContract = () => {
     if (!activeClient) return;
-    const clientPayments = payments.filter(p => p.clientId === activeClient.id);
+    const clientPayments = payments.filter(p => p.clientId === activeClient.id && !p.deleted_at && (!p.status || p.status === 'paid'));
     const latestPayment = clientPayments.length > 0
       ? [...clientPayments].sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))[0]
       : null;
-    generateClientContract(activeClient, latestPayment?.amount, latestPayment?.method);
+    void generateClientContract(activeClient, { payment: latestPayment || undefined, printedBy: currentUser?.name });
   };
 
   const handleUpdateSessionsRemaining = async (change: number) => {
@@ -1595,11 +1595,11 @@ export default function Clients() {
                     <MessageCircle className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700" title="Generate Contract" onClick={() => {
-                    const clientPayments = payments.filter(p => p.clientId === client.id);
+                    const clientPayments = payments.filter(p => p.clientId === client.id && !p.deleted_at && (!p.status || p.status === 'paid'));
                     const latestPayment = clientPayments.length > 0 
                       ? clientPayments.sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))[0]
                       : null;
-                    generateClientContract(client, latestPayment?.amount, latestPayment?.method);
+                    void generateClientContract(client, { payment: latestPayment || undefined, printedBy: currentUser?.name });
                   }}>
                     <FileText className="h-4 w-4" />
                   </Button>

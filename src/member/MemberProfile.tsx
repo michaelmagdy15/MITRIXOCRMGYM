@@ -63,7 +63,7 @@ async function compressImage(file: File): Promise<Blob> {
 
 export default function MemberProfile({ client, onNavigate }: { client: Client | null; onNavigate?: (tab: string) => void }) {
   const { currentUser, changeMyPassword } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, themeLocked } = useTheme();
 
   // Basic Info Form State
   const [name, setName] = useState(client?.name || '');
@@ -492,7 +492,7 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
           <span className="text-xs font-semibold">
             Currently using <span className="text-primary font-bold capitalize">{theme}</span> mode
           </span>
-          <Button variant="outline" size="sm" onClick={toggleTheme} className="h-9 px-4 font-bold border-primary/20 hover:border-primary/40">
+          <Button variant="outline" size="sm" onClick={toggleTheme} disabled={themeLocked} className="h-9 px-4 font-bold border-primary/20 hover:border-primary/40">
             Switch Theme
           </Button>
         </CardContent>

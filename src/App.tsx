@@ -77,7 +77,7 @@ function AppContent() {
     (authUser?.email || currentUser?.email || '').toLowerCase().includes('inzan') ||
     effectiveRole === 'admin' ||
     effectiveRole === 'crm_admin';
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, themeLocked } = useTheme();
   const { t, language, toggleLanguage, isRtl } = useLanguage();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
   const [isCheckinMode, setIsCheckinMode] = React.useState(window.location.pathname === '/checkin');
@@ -278,7 +278,7 @@ function AppContent() {
               <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{currentUser.role}</p>
             </div>
 
-            <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8" title={t('common.toggle_theme')}>
+            <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} className="h-8 w-8" title={t('common.toggle_theme')}>
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
             <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8 text-destructive hover:bg-destructive/10" title={t('common.logout')}>
@@ -879,7 +879,7 @@ function AppContent() {
             <div className={`flex items-center justify-between border-t border-border/50 pt-2 transition-all duration-300 ${
               isSidebarCollapsed ? 'flex-col gap-2' : 'flex-row'
             }`}>
-              <Button variant="ghost" size="icon" onClick={toggleTheme} title={t('common.toggle_theme')} className="h-8 w-8">
+              <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} title={t('common.toggle_theme')} className="h-8 w-8">
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               
@@ -1000,7 +1000,7 @@ function AppContent() {
             <div className="flex flex-col gap-2 pt-2 border-t mt-2">
 
               <div className="flex items-center justify-between">
-                <Button variant="outline" size="sm" onClick={toggleTheme} className="flex-1 me-2 gap-2 h-9">
+                <Button variant="outline" size="sm" onClick={toggleTheme} disabled={themeLocked} className="flex-1 me-2 gap-2 h-9">
                   {theme === 'dark' ? (
                     <>
                       <Sun className="h-4 w-4" />

@@ -1,104 +1,66 @@
 import { PDFDocument } from 'pdf-lib';
-import { Client } from '../types';
-import { safeFormatDate } from './dateUtils';
+import type { Client, Payment } from '../types';
+import { activeConfig, getTenantId } from '../firebase';
+import { safeFormatDate, toValidDate } from './dateUtils';
+import { downloadFile } from './download';
+import { contractTemplates } from '../config/contractTemplates';
 
-export const generateClientContract = async (client: Client, paymentAmount?: number, paymentMethod?: string): Promise<Blob | null> => {
+export interface ContractContext {
+  payment?: Payment;
+  printedBy?: string;
+}
+
+export async function buildClientContract(templateBytes: ArrayBuffer | Uint8Array, tenantId: string, client: Client, context: ContractContext = {}): Promise<Uint8Array> {
+  const template = contractTemplates[tenantId];
+  if (!template) throw new Error('No contract template is configured for this tenant.');
+  const payment = context.payment;
+  const packages = [...(client.packages || [])].sort((a, b) =>
+    (toValidDate(b.startDate)?.getTime() || 0) - (toValidDate(a.startDate)?.getTime() || 0));
+  const selectedPackage = payment?.packageType
+    ? packages.find(p => p.packageName === payment.packageType)
+    : packages.find(p => p.status === 'Active' || p.status === 'Hold') || packages[0];
+  const packageName = selectedPackage?.packageName || payment?.packageType || client.packageType || '';
+  const useLegacyDates = !selectedPackage && packageName === client.packageType;
+  const date = (value: unknown) => safeFormatDate(value, 'dd/MM/yyyy', '');
+  const paid = payment?.amount_paid ?? payment?.amount;
+  const values: Record<string, string> = {
+    name: client.name || '', phone: client.phone || '', memberId: client.memberId || client.id,
+    gender: client.gender || '', nationality: client.nationality || '', birthday: date(client.dateOfBirth),
+    package: packageName,
+    startDate: date(selectedPackage?.startDate || (useLegacyDates ? client.startDate : undefined)),
+    endDate: date(selectedPackage?.endDate || (useLegacyDates ? client.membershipExpiry : undefined)),
+    amount: typeof paid === 'number' && Number.isFinite(paid) ? String(paid) : '',
+    paymentMethod: payment?.method || '',
+    paymentDetails: payment ? [payment.method, date(payment.date), payment.receiptSerial].filter(Boolean).join(' / ') : '',
+    printedAt: safeFormatDate(new Date(), 'dd/MM/yyyy HH:mm', ''), printedBy: context.printedBy || '',
+  };
+  const pdf = await PDFDocument.load(templateBytes);
+  const form = pdf.getForm();
+  // A broken mapping must fail visibly, never produce a partially filled contract.
+  for (const [key, fieldName] of Object.entries(template.fields)) {
+    const field = form.getTextField(fieldName);
+    field.setText(values[key] || '');
+    field.setFontSize(0);
+  }
+  return pdf.save();
+}
+
+export async function generateClientContract(client: Client, context: ContractContext = {}): Promise<Blob | null> {
   try {
-    // 1. Fetch the existing PDF from the public folder
-    const url = '/MITRIXOGYMCRM Client Contract form.pdf';
-    const existingPdfBytes = await fetch(url).then(res => {
-      if (!res.ok) throw new Error("Could not find PDF file");
-      return res.arrayBuffer();
-    });
-
-    // 2. Load the document into pdf-lib
-    const pdfDoc = await PDFDocument.load(existingPdfBytes);
-    const form = pdfDoc.getForm();
-
-    // Map exact fields based on coordinate mapping
-    const setFieldSafely = (fieldName: string, value: string) => {
-      try {
-        const field = form.getTextField(fieldName);
-        if (field) {
-          field.setText(value || '');
-        }
-      } catch (e) {
-        console.warn(`Could not set field ${fieldName}`);
-      }
-    };
-
-    // Mapping based on Y and X coordinates from PDF
-    // text_1ecyo -> Name
-    setFieldSafely('text_1ecyo', client.name || '');
-    
-    // text_2dukr -> Number (Phone)
-    setFieldSafely('text_2dukr', client.phone || '');
-    
-    // text_3pbmr -> Amount
-    if (paymentAmount !== undefined) {
-      setFieldSafely('text_3pbmr', paymentAmount.toString());
-    }
-    
-    // text_4venp -> Type of payment
-    if (paymentMethod) {
-      setFieldSafely('text_4venp', paymentMethod);
-    }
-    
-    // text_5inc -> Start Date
-    setFieldSafely('text_5inc', client.startDate ? safeFormatDate(client.startDate, 'dd/MM/yyyy') : safeFormatDate(new Date(), 'dd/MM/yyyy'));
-    
-    // text_6lmen -> Exp. Date
-    setFieldSafely('text_6lmen', client.membershipExpiry ? safeFormatDate(client.membershipExpiry, 'dd/MM/yyyy') : '');
-    
-    // text_7acxg -> Package
-    setFieldSafely('text_7acxg', client.packageType || '');
-
-    // Optional: Flatten the form so it's no longer editable
-    // form.flatten();
-
-    // 4. Serialize the PDFDocument to bytes
-    const pdfBytes = await pdfDoc.save();
-
-    const fileName = `Contract_${client.name.replace(/\s+/g, '_')}.pdf`;
-    const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
-
-    // 5. Prefer the native Web Share API (mobile browsers / WebViews) so sales
-    // staff can share the contract directly to WhatsApp or file storage.
-    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.share) {
-      try {
-        const file = new File([blob], fileName, { type: 'application/pdf' });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: `Contract - ${client.name}`,
-            text: `Membership contract for ${client.name}`,
-          });
-          return blob;
-        }
-      } catch (shareError: any) {
-        // User dismissed the share sheet — keep the flow silent.
-        if (shareError?.name === 'AbortError') {
-          return blob;
-        }
-        console.warn('Web Share API failed, falling back to download:', shareError);
-      }
-    }
-
-    // 6. Fallback: standard Blob download link.
-    const downloadUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(downloadUrl);
-
+    // Match the database configuration before considering local development overrides.
+    const tenantId = (activeConfig as { tenantId?: string }).tenantId || getTenantId();
+    const template = contractTemplates[tenantId];
+    if (!template) throw new Error('No contract template is configured for this tenant.');
+    const response = await fetch(template.url);
+    if (!response.ok) throw new Error('The tenant contract template could not be loaded.');
+    const bytes = await buildClientContract(await response.arrayBuffer(), tenantId, client, context);
+    const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
+    const name = (client.name || client.memberId || client.id).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/\s+/g, '_');
+    downloadFile(blob, `Contract_${name}.pdf`);
     return blob;
-
   } catch (error) {
     console.error('Error generating contract:', error);
-    alert('Failed to generate contract. Please make sure "MITRIXOGYMCRM Client Contract formFILLABLE.pdf" exists in the public folder.');
+    alert(`Failed to generate contract. ${error instanceof Error ? error.message : 'Please try again.'}`);
     return null;
   }
-};
+}

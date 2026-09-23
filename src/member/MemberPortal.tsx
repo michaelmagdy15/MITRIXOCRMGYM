@@ -86,7 +86,7 @@ const formatSwitcherLabel = (client: Client, primaryClient?: Client | null): str
 export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchToStore, initialTab }: MemberPortalProps = {}) {
   const { currentUser, logout } = useAuth();
   const { branding, features } = useSettings();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, toggleTheme, themeLocked } = useTheme();
 
   const isStrike = useMemo(() => {
     const tenantId = getTenantId();
@@ -640,7 +640,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
           <MemberNotificationBell clientId={activeClient?.id} onNavigate={handleNavigate} />
 
-          <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} className="h-8 w-8 text-muted-foreground hover:text-foreground">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 

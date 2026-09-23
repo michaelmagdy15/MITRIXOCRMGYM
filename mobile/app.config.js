@@ -89,6 +89,7 @@ module.exports = ({ config }) => {
 
   return {
     ...baseConfig.expo,
+    ...(tenantKey === 'inzanathletics' ? { userInterfaceStyle: 'dark', backgroundColor: '#000000', androidStatusBar: { barStyle: 'light-content', backgroundColor: '#000000' }, androidNavigationBar: { barStyle: 'light-content', backgroundColor: '#000000' } } : {}),
     name: appName,
     slug: appSlug,
     scheme: appScheme,
@@ -103,11 +104,13 @@ module.exports = ({ config }) => {
       adaptiveIcon: {
         ...baseConfig.expo.android?.adaptiveIcon,
         foregroundImage: resolvedForeground,
+        ...(tenantKey === 'inzanathletics' ? { backgroundColor: '#000000' } : {}),
       },
     },
     splash: {
       ...baseConfig.expo.splash,
       image: resolvedSplash,
+      ...(tenantKey === 'inzanathletics' ? { backgroundColor: '#000000' } : {}),
     },
     extra: {
       ...baseConfig.expo.extra,

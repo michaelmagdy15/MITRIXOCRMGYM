@@ -1,0 +1,73 @@
+/* Inzan-only palette. Portalled dialogs inherit these root tokens too. */
+html[data-tenant-theme="inzanathletics"] {
+  color-scheme: dark;
+  --background: #000000;
+  --foreground: #f5f5f5;
+  --card: #1a1a1a;
+  --card-foreground: #f5f5f5;
+  --popover: #1a1a1a;
+  --popover-foreground: #f5f5f5;
+  --primary: #f5f5f5;
+  --primary-foreground: #000000;
+  --secondary: #2b2b2b;
+  --secondary-foreground: #f5f5f5;
+  --muted: #2b2b2b;
+  --muted-foreground: #bdbdbd;
+  --accent: #2b2b2b;
+  --accent-foreground: #ffffff;
+  --border: #444444;
+  --input: #444444;
+  --ring: #d4d4d4;
+  --sidebar: #1a1a1a;
+  --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #f5f5f5;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #2b2b2b;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #444444;
+  --sidebar-ring: #d4d4d4;
+  --chrome: linear-gradient(135deg, #2b2b2b, #1a1a1a, #000000);
+  --chrome-deep: #2b2b2b;
+  --chrome-shine: #ffffff26;
+  --strike-warm: #1a1a1a;
+  --brand-accent: #2b2b2b !important;
+  --brand-accent-muted: #2b2b2b !important;
+  --color-zinc-950: #000000;
+  --color-zinc-900: #1a1a1a;
+  --color-zinc-800: #2b2b2b;
+  --color-neutral-950: #000000;
+  --color-neutral-900: #1a1a1a;
+  --color-neutral-800: #2b2b2b;
+}
+html[data-tenant-theme="inzanathletics"] body {
+  background: #000000;
+}
+/* Legacy surfaces which predate semantic tokens. Keep QR canvases/SVGs intact. */
+html[data-tenant-theme="inzanathletics"] :is(.bg-white, .bg-zinc-50, .bg-gray-50, .bg-slate-50, .bg-neutral-50) {
+  background-color: #1a1a1a;
+  color: #f5f5f5;
+}
+html[data-tenant-theme="inzanathletics"] :is(.bg-zinc-100, .bg-gray-100, .bg-slate-100, .bg-neutral-100) {
+  background-color: #2b2b2b;
+}
+html[data-tenant-theme="inzanathletics"] :is(.text-black, .text-zinc-900, .text-gray-900, .text-slate-900, .text-neutral-900, .text-zinc-800, .text-zinc-700, .text-gray-700) {
+  color: #f5f5f5;
+}
+html[data-tenant-theme="inzanathletics"] :is(.text-zinc-500, .text-zinc-600, .text-gray-500, .text-gray-600) {
+  color: #bdbdbd;
+}
+html[data-tenant-theme="inzanathletics"] img[src="/inzanlogo.png"] { filter: invert(1); }
+html[data-tenant-theme="inzanathletics"] #mobile-splash { background: #000000; }
+html[data-tenant-theme="inzanathletics"] :is(.mobile-splash-bg, .mobile-splash-overlay) { background: #000000; }
+@media print {
+  html[data-tenant-theme="inzanathletics"] body { background: white; color: black; }
+}
+html[data-tenant-theme="inzanathletics"] [data-slot="button"].bg-primary,
+html[data-tenant-theme="inzanathletics"] [data-slot="button"][class*="bg-gradient-"] {
+  background: #2b2b2b;
+  color: #ffffff;
+  border-color: #666666;
+}
+html[data-tenant-theme="inzanathletics"] [data-slot="button"].bg-primary:hover { background: #1a1a1a; }
+html[data-tenant-theme="inzanathletics"] .mobile-splash-glow { background: radial-gradient(circle, #2b2b2b, transparent); }
+html[data-tenant-theme="inzanathletics"] .mobile-splash-bar-fill { background: #ffffff; }

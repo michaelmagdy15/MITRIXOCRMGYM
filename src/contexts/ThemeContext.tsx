@@ -1,9 +1,15 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
+import { activeConfig, getTenantId } from '../firebase';
+
+const tenantId = (activeConfig as { tenantId?: string }).tenantId || getTenantId();
+const themeLocked = tenantId === 'inzanathletics';
+
 type Theme = 'light' | 'dark';
 
 interface ThemeContextType {
   theme: Theme;
+  themeLocked: boolean;
   toggleTheme: () => void;
 }
 
@@ -12,6 +18,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const STORAGE_KEY = 'crm_theme';
 
 function getInitialTheme(): Theme {
+  if (themeLocked) return 'dark';
   // Check localStorage first
   const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
   if (stored === 'dark' || stored === 'light') {
@@ -23,8 +30,9 @@ function getInitialTheme(): Theme {
 }
 
 function applyTheme(theme: Theme) {
+  document.documentElement.dataset.tenantTheme = tenantId;
   document.documentElement.classList.toggle('dark', theme === 'dark');
-  localStorage.setItem(STORAGE_KEY, theme);
+  if (!themeLocked) localStorage.setItem(STORAGE_KEY, theme);
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -35,11 +43,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   const toggleTheme = () => {
+    if (themeLocked) return;
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, themeLocked }}>
       {children}
     </ThemeContext.Provider>
   );

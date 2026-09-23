@@ -39,4 +39,7 @@ backups/
 **/bin/
 **/obj/
 *.user
-*.suo
+*.suo
+
+# Local contract/theme verification artifacts
+tmp/
