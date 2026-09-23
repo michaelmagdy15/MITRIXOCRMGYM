@@ -119,7 +119,20 @@ async function runTests() {
   if (inzanInfo.config.firestoreDatabaseId !== 'db-inzanathletics') {
     throw new Error(`Inzan must use db-inzanathletics, got ${inzanInfo.config.firestoreDatabaseId}`);
   }
-  console.log('✔ Tenant resolution correctly isolates Strike and Inzan databases.\n');
+
+  const inzanAdminInfo = await getTenantInfoForHost('admin.inzanathletics.com');
+  if (inzanAdminInfo.config.tenantId !== 'inzanathletics' || inzanAdminInfo.status !== 'active') {
+    throw new Error(`admin.inzanathletics.com resolution failed: expected active inzanathletics, got ${JSON.stringify(inzanAdminInfo)}`);
+  }
+  if (inzanAdminInfo.config.firestoreDatabaseId !== 'db-inzanathletics') {
+    throw new Error(`admin.inzanathletics.com must use db-inzanathletics, got ${inzanAdminInfo.config.firestoreDatabaseId}`);
+  }
+
+  const inzanLandingInfo = await getTenantInfoForHost('inzanathletics.com');
+  if (inzanLandingInfo.status !== 'landing_page') {
+    throw new Error(`inzanathletics.com should resolve to landing_page status, got ${inzanLandingInfo.status}`);
+  }
+  console.log('✔ Tenant resolution correctly isolates Strike, Inzan admin, and Inzan landing page.\n');
 
   // Test 2: Set up Express test app with testDb injection
   const mockDb = new MockFirestore();

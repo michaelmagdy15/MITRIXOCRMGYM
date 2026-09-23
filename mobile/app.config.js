@@ -22,7 +22,7 @@ const TENANT_PROFILES = {
     APP_SLUG: 'inzanathletics',
     SCHEME: 'inzanathletics',
     BUNDLE_ID: 'com.inzanathletics.crm',
-    PRODUCTION_URL: 'https://inzanathletics.com/',
+    PRODUCTION_URL: 'https://admin.inzanathletics.com/',
     ICON: './assets/inzan/icon.png',
     SPLASH: './assets/inzan/splash-icon.png',
     ADAPTIVE_FOREGROUND: './assets/inzan/android-icon-foreground.png',

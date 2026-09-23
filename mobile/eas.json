@@ -34,7 +34,7 @@
         "APP_TENANT": "inzanathletics",
         "GYM_SUBDOMAIN": "inzanathletics",
         "APP_NAME": "INZAN Athletics",
-        "PRODUCTION_URL": "https://inzanathletics.com"
+        "PRODUCTION_URL": "https://admin.inzanathletics.com"
       }
     },
     "preview-inzanathletics": {
@@ -49,7 +49,7 @@
         "APP_TENANT": "inzanathletics",
         "GYM_SUBDOMAIN": "inzanathletics",
         "APP_NAME": "INZAN Athletics",
-        "PRODUCTION_URL": "https://inzanathletics.com"
+        "PRODUCTION_URL": "https://admin.inzanathletics.com"
       }
     }
   },

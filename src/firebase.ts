@@ -14,33 +14,33 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Support dynamic tenant configurations loaded based on subdomain or query param
 const getActiveConfig = () => {
   const dynamicConfig = (window as any).__FIREBASE_CONFIG__;
-  if (dynamicConfig) {
+  if (dynamicConfig && dynamicConfig.tenantId) {
     return dynamicConfig;
   }
 
-  // Fallback for standalone Vite dev or direct localhost testing
+  // Fallback for standalone Vite dev, direct localhost testing, or incomplete server injection
   try {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const t = (params.get('tenant') || '').toLowerCase();
       const host = window.location.hostname.toLowerCase();
-      if (t === 'inzan' || t === 'inzanathletics' || host.includes('inzan')) {
+      if (t === 'inzan' || t === 'inzanathletics' || host.includes('inzanathletics') || host.includes('inzan')) {
         return {
-          ...firebaseConfig,
+          ...(dynamicConfig || firebaseConfig),
           firestoreDatabaseId: 'db-inzanathletics',
           tenantId: 'inzanathletics'
         };
       }
       if (t === 'strike' || t === 'strikeboxing' || host.includes('strike')) {
         return {
-          ...firebaseConfig,
+          ...(dynamicConfig || firebaseConfig),
           tenantId: 'strike'
         };
       }
     }
   } catch {}
 
-  return firebaseConfig;
+  return dynamicConfig || firebaseConfig;
 };
 
 export const activeConfig = getActiveConfig();
@@ -48,7 +48,7 @@ export const activeConfig = getActiveConfig();
 /**
  * Extracts the tenant identifier from the current subdomain, query param, or config.
  * Used to namespace member emails and prevent Auth collisions between gyms.
- * Examples: "strike" from strike.mitrixo.com, "inzanathletics" from inzanathletics.mitrixo.com
+ * Examples: "strike" from strike.mitrixo.com, "inzanathletics" from admin.inzanathletics.com
  * Falls back to "default" if no subdomain or on localhost.
  */
 export const getTenantId = (): string => {
@@ -67,13 +67,18 @@ export const getTenantId = (): string => {
   const configTenantId = (activeConfig as any).tenantId;
   if (configTenantId) return configTenantId;
 
-  // 3. Extract from subdomain or hostname
+  // 3. Extract from domain / hostname
   try {
     const hostname = window.location.hostname.toLowerCase();
+    
+    // Direct domain matching first to avoid misidentifying generic subdomains (e.g. admin.inzanathletics.com)
+    if (hostname.includes('inzanathletics') || hostname.includes('inzan')) return 'inzanathletics';
+    if (hostname.includes('strike-egy') || hostname.includes('strikeboxing') || hostname.startsWith('strike.')) return 'strike';
+
     const parts = hostname.split('.');
     // e.g. "strike.mitrixo.com" → parts = ["strike", "mitrixo", "com"]
     // e.g. "inzanathletics.localhost" → parts = ["inzanathletics", "localhost"]
-    if (parts.length >= 3 && parts[0] !== 'www') {
+    if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'admin' && parts[0] !== 'app' && parts[0] !== 'portal') {
       const sub = parts[0]!;
       if (sub === 'inzan' || sub === 'inzanathletics') return 'inzanathletics';
       if (sub === 'strike') return 'strike';
@@ -85,8 +90,6 @@ export const getTenantId = (): string => {
       if (sub === 'strike') return 'strike';
       return sub;
     }
-    if (hostname.includes('inzan')) return 'inzanathletics';
-    if (hostname.includes('strike')) return 'strike';
 
     // 4. Custom domains: check the config's databaseId for a hint
     const dbId = (activeConfig as any).firestoreDatabaseId;

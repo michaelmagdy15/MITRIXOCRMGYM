@@ -31,9 +31,10 @@
 ### 2. Inzan Athletics (inzanathletics)
 
 **Domains:**
+- `admin.inzanathletics.com` (Primary CRM Dashboard)
 - `inzanathletics.mitrixo.com`
-- `inzanathletics.com`
-- `www.inzanathletics.com`
+- `inzanathletics.com` (Reserved for public website landing page; does NOT route to CRM dashboard)
+- `www.inzanathletics.com` (Reserved for public website landing page)
 
 **Firestore Database:** `db-inzanathletics`
 
@@ -43,7 +44,7 @@
 - Default company name: Inzan Athletics
 - No special email branding override
 
-**Notes:** This is the Inzan Athletics fitness tenant.
+**Notes:** This is the Inzan Athletics fitness tenant. The CRM dashboard is hosted on `admin.inzanathletics.com`, while `inzanathletics.com` serves the gym's public website landing page.
 
 ---
 

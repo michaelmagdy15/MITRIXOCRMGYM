@@ -15,9 +15,11 @@ interface TenantInitScreenProps {
 
 function getTenantLabel(): string {
   try {
-    const hostname = window.location.hostname;
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname.includes('inzanathletics') || hostname.includes('inzan')) return 'Inzan Athletics';
+    if (hostname.includes('strike-egy') || hostname.includes('strikeboxing') || hostname.startsWith('strike.')) return 'Strike';
     const parts = hostname.split('.');
-    if (parts.length >= 3 && parts[0] !== 'www') {
+    if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'admin' && parts[0] !== 'app') {
       // Capitalize and clean up: "strike" → "Strike", "golds-gym" → "Golds Gym"
       return (parts[0] ?? '')
         .split('-')

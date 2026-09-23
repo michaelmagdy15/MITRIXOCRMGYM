@@ -35,14 +35,13 @@ window.addEventListener('pageshow', (event) => {
   }
 });
 
+import { getTenantId } from './firebase';
+
 // ── Guard 3: Tenant change detection ──────────────────────────────────────
-// If the user navigates from strike.mitrixo.com → golds.mitrixo.com in the
-// same browser session, detect the switch and reload once to get a clean
-// Firebase state (no cached module singletons from the previous gym).
+// If the user navigates between gyms in the same browser session,
+// detect the switch and reload once to get a clean Firebase state.
 try {
-  const hostname = window.location.hostname;
-  const parts = hostname.split('.');
-  const currentTenant = parts.length >= 3 && parts[0] !== 'www' ? (parts[0] ?? 'default') : 'default';
+  const currentTenant = getTenantId();
   const lastTenant = sessionStorage.getItem('_mitrixo_tenant');
 
   if (lastTenant && lastTenant !== currentTenant) {

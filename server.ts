@@ -226,12 +226,156 @@ const SUSPENDED_HTML = `
 </html>
 `;
 
+const INZAN_LANDING_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inzan Athletics | Performance & Fitness</title>
+  <link rel="icon" type="image/png" href="/inzan-favicon.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: #000000;
+      color: #ffffff;
+      font-family: 'Montserrat', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+      overflow-x: hidden;
+      position: relative;
+    }
+    .background-glow {
+      position: absolute;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0) 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .content {
+      position: relative;
+      z-index: 2;
+      max-width: 680px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 28px;
+    }
+    .logo {
+      height: 90px;
+      width: auto;
+      filter: invert(1);
+      margin-bottom: 8px;
+    }
+    h1 {
+      font-size: 2.75rem;
+      font-weight: 900;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      line-height: 1.15;
+    }
+    .tagline {
+      font-size: 1.15rem;
+      color: #a3a3a3;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 500;
+      line-height: 1.6;
+    }
+    .portal-box {
+      margin-top: 16px;
+      padding: 24px 32px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+    }
+    .portal-label {
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      color: #737373;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .portal-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #ffffff;
+      color: #000000;
+      font-weight: 700;
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-decoration: none;
+      padding: 14px 28px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+    .portal-btn:hover {
+      background: #e5e5e5;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(255,255,255,0.15);
+    }
+    .footer {
+      position: absolute;
+      bottom: 24px;
+      font-size: 0.75rem;
+      color: #525252;
+      letter-spacing: 0.05em;
+      z-index: 2;
+    }
+  </style>
+</head>
+<body>
+  <div class="background-glow"></div>
+  <div class="content">
+    <img src="/inzanlogo.png" alt="Inzan Athletics Logo" class="logo" />
+    <h1>Inzan Athletics</h1>
+    <p class="tagline">Performance Training & Athletic Conditioning. Our new official website is launching soon.</p>
+    <div class="portal-box">
+      <span class="portal-label">Athletes, Members & Staff Portal</span>
+      <a href="https://admin.inzanathletics.com" class="portal-btn">
+        Enter Inzan CRM Dashboard &rarr;
+      </a>
+    </div>
+  </div>
+  <div class="footer">&copy; Inzan Athletics. All rights reserved.</div>
+</body>
+</html>
+`;
+
 async function injectFirebaseConfig(html: string, hostname: string): Promise<string> {
-  const { config } = await getTenantInfoForHost(hostname);
+  const normalizedHost = hostname.toLowerCase();
+  let { config } = await getTenantInfoForHost(normalizedHost);
+  
+  // Safeguard: Ensure inzan tenant info is never empty or pointing to default
+  const isTenantInzan = config?.tenantId === 'inzanathletics' || normalizedHost.includes('inzan');
+  if (isTenantInzan && (!config || config.tenantId !== 'inzanathletics' || !config.firestoreDatabaseId)) {
+    config = {
+      ...defaultFirebaseConfig,
+      firestoreDatabaseId: 'db-inzanathletics',
+      tenantId: 'inzanathletics',
+    };
+  }
+
   const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(config)};</script>`;
   let updatedHtml = html.replace("<!-- FIREBASE_CONFIG_PLACEHOLDER -->", scriptTag);
   
-  const isTenantInzan = config?.tenantId === 'inzanathletics' || hostname.toLowerCase().includes('inzan');
   const tenantName = isTenantInzan ? 'INZAN ATHLETICS' : 'STRIKE';
   const tenantFullTitle = isTenantInzan ? 'INZAN ATHLETICS' : 'Strike Boxing Club';
   const tenantDesc = isTenantInzan 
@@ -242,12 +386,9 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
   const splashLogo = isTenantInzan ? '/inzanlogo.png' : '/strikelogo_white.png';
   
   // Prefer the exact public custom domain if accessed, otherwise construct from hostname
-  const normalizedHost = hostname.toLowerCase();
-  const hostDomain = normalizedHost.includes('inzanathletics.com')
-    ? 'https://inzanathletics.com'
-    : (normalizedHost.includes('inzanathletics.mitrixo.com')
-        ? 'https://inzanathletics.mitrixo.com'
-        : (hostname.includes('localhost') ? `http://${hostname}` : `https://${hostname}`));
+  const hostDomain = normalizedHost.includes('inzan')
+    ? 'https://admin.inzanathletics.com'
+    : (hostname.includes('localhost') ? `http://${hostname}` : `https://${hostname}`);
   
   const ogImage = isTenantInzan ? `${hostDomain}/inzan-og.png` : `https://strike-egy.com/pwa-icon.png`;
 
@@ -264,7 +405,7 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
   // Update OpenGraph / Social Metadata
   updatedHtml = updatedHtml.replace(/content="Strike Boxing Club"/g, `content="${tenantFullTitle}"`);
   updatedHtml = updatedHtml.replace(/content="Official Member Portal & Gym Management Platform"/g, `content="${tenantDesc}"`);
-  updatedHtml = updatedHtml.replace(/content="https:\/\/strike-egy\.com\/pwa-icon\.png"/g, `content="${ogImage}"`);
+  updatedHtml = updatedHtml.replace(/https:\/\/strike-egy\.com\/pwa-icon\.png/g, ogImage);
 
   // Update initial static splash screen assets in HTML for non-JS / crawler requests
   if (isTenantInzan) {
@@ -3180,8 +3321,15 @@ async function startServer() {
 
     app.get("*", async (req, res, next) => {
       const hostname = getRequestHostname(req);
+      const rawHost = ((req.get('host') || '').split(':')[0] || '').toLowerCase();
+      if (rawHost === 'inzanathletics.com' || rawHost === 'www.inzanathletics.com' || hostname === 'inzanathletics.com' || hostname === 'www.inzanathletics.com') {
+        return res.status(200).set({ "Content-Type": "text/html" }).end(INZAN_LANDING_HTML);
+      }
       try {
         const { status } = await getTenantInfoForHost(hostname);
+        if (status === 'landing_page') {
+          return res.status(200).set({ "Content-Type": "text/html" }).end(INZAN_LANDING_HTML);
+        }
         if (status === 'suspended') {
           return res.status(402).set({ "Content-Type": "text/html" }).end(SUSPENDED_HTML);
         }
@@ -3231,8 +3379,15 @@ async function startServer() {
     
     app.get("*", async (req, res) => {
       const hostname = getRequestHostname(req);
+      const rawHost = ((req.get('host') || '').split(':')[0] || '').toLowerCase();
+      if (rawHost === 'inzanathletics.com' || rawHost === 'www.inzanathletics.com' || hostname === 'inzanathletics.com' || hostname === 'www.inzanathletics.com') {
+        return res.status(200).set({ "Content-Type": "text/html" }).end(INZAN_LANDING_HTML);
+      }
       try {
         const { status } = await getTenantInfoForHost(hostname);
+        if (status === 'landing_page') {
+          return res.status(200).set({ "Content-Type": "text/html" }).end(INZAN_LANDING_HTML);
+        }
         if (status === 'suspended') {
           return res.status(402).set({ "Content-Type": "text/html" }).end(SUSPENDED_HTML);
         }

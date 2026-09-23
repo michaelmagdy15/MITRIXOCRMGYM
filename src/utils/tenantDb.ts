@@ -35,10 +35,15 @@ export const tenantConfigs: Record<string, any> = {
   'dashboard.strikeboxing-eg.pro': strikeCrmConfig, // no firestoreDatabaseId, defaults to (default)
   'strike-egy.com': strikeCrmConfig,
   'www.strike-egy.com': strikeCrmConfig,
+  'admin.strike-egy.com': strikeCrmConfig,
+  'app.strike-egy.com': strikeCrmConfig,
   'strike.localhost': strikeCrmConfig,
   'inzanathletics.mitrixo.com': inzanConfig,
-  'inzanathletics.com': inzanConfig,
-  'www.inzanathletics.com': inzanConfig,
+  'admin.inzanathletics.com': inzanConfig,
+  'app.inzanathletics.com': inzanConfig,
+  'portal.inzanathletics.com': inzanConfig,
+  'crm.inzanathletics.com': inzanConfig,
+  'members.inzanathletics.com': inzanConfig,
   'inzanathletics.localhost': inzanConfig,
   'inzan.localhost': inzanConfig,
   'inzanathletics.local': inzanConfig,
@@ -77,13 +82,32 @@ export async function getTenantInfoForHost(hostname: string): Promise<{ config: 
     return { config: registryConfig, status: 'active' };
   }
 
-  // 2. Check in-memory Cache
+  // 2. Distinguish public marketing/landing domains from the CRM dashboard
+  if (normalizedHost === 'inzanathletics.com' || normalizedHost === 'www.inzanathletics.com') {
+    return { config: inzanConfig, status: 'landing_page' };
+  }
+
+  // 3. Direct fast-path for known tenant domains & subdomains
+  if (
+    normalizedHost === 'admin.inzanathletics.com' ||
+    normalizedHost.startsWith('admin.inzan') ||
+    normalizedHost === 'inzanathletics.mitrixo.com' ||
+    normalizedHost.includes('inzanathletics') ||
+    normalizedHost.includes('inzan')
+  ) {
+    return { config: inzanConfig, status: 'active' };
+  }
+  if (normalizedHost.includes('strike-egy') || normalizedHost.includes('strikeboxing') || normalizedHost.startsWith('strike.')) {
+    return { config: strikeCrmConfig, status: 'active' };
+  }
+
+  // 3. Check in-memory Cache
   const cached = cache[normalizedHost];
   if (cached && Date.now() < cached.expiresAt) {
     return { config: cached.config, status: cached.status };
   }
 
-  // 3. Fallbacks for localhost & static configs
+  // 4. Fallbacks for localhost & static configs
   if (tenantConfigs[normalizedHost]) {
     return { config: tenantConfigs[normalizedHost], status: 'active' };
   }
@@ -91,12 +115,21 @@ export async function getTenantInfoForHost(hostname: string): Promise<{ config: 
   try {
     const centralDb = getFirestore('db-registry-2');
 
-    // A. Search by customDomain
-    const customQuery = await centralDb
+    // A. Search by customDomain (exact match, or apex match for subdomains like admin.gym.com)
+    let customQuery = await centralDb
       .collection('tenants')
       .where('customDomain', '==', normalizedHost)
       .limit(1)
       .get();
+
+    if (customQuery.empty && hostParts.length > 2) {
+      const rootDomain = hostParts.slice(-2).join('.');
+      customQuery = await centralDb
+        .collection('tenants')
+        .where('customDomain', '==', rootDomain)
+        .limit(1)
+        .get();
+    }
 
     if (!customQuery.empty) {
       const docSnap = customQuery.docs[0];
@@ -154,7 +187,7 @@ export function getRequestHostname(req: Request): string {
   // 1. Explicit query parameter (e.g. ?tenant=inzan)
   if (req.query?.tenant) {
     const t = String(req.query.tenant).toLowerCase();
-    if (t === 'inzan' || t === 'inzanathletics') return 'inzanathletics.mitrixo.com';
+    if (t === 'inzan' || t === 'inzanathletics') return 'admin.inzanathletics.com';
     if (t === 'strike' || t === 'strikeboxing') return 'strike.mitrixo.com';
   }
 
@@ -164,7 +197,7 @@ export function getRequestHostname(req: Request): string {
     (req.body && typeof req.body === 'object' && req.body.tenantId) ||
     ''
   ).toLowerCase();
-  if (headerOrBodyTenant === 'inzan' || headerOrBodyTenant === 'inzanathletics') return 'inzanathletics.mitrixo.com';
+  if (headerOrBodyTenant === 'inzan' || headerOrBodyTenant === 'inzanathletics') return 'admin.inzanathletics.com';
   if (headerOrBodyTenant === 'strike' || headerOrBodyTenant === 'strikeboxing') return 'strike.mitrixo.com';
 
   // 3. Referer header (when called from local dev browser like http://localhost:3000/?tenant=inzan)
@@ -173,12 +206,12 @@ export function getRequestHostname(req: Request): string {
     try {
       const refUrl = new URL(referer);
       const refTenant = refUrl.searchParams.get('tenant')?.toLowerCase();
-      if (refTenant === 'inzan' || refTenant === 'inzanathletics') return 'inzanathletics.mitrixo.com';
+      if (refTenant === 'inzan' || refTenant === 'inzanathletics') return 'admin.inzanathletics.com';
       if (refTenant === 'strike' || refTenant === 'strikeboxing') return 'strike.mitrixo.com';
       if (refUrl.hostname && (refUrl.hostname.includes('inzanathletics') || refUrl.hostname.includes('inzan'))) {
-        return 'inzanathletics.mitrixo.com';
+        return refUrl.hostname.toLowerCase();
       }
-      if (refUrl.hostname && refUrl.hostname.includes('strike')) return 'strike.mitrixo.com';
+      if (refUrl.hostname && refUrl.hostname.includes('strike')) return refUrl.hostname.toLowerCase();
     } catch {}
   }
 
@@ -188,20 +221,14 @@ export function getRequestHostname(req: Request): string {
     : (Array.isArray(req.headers?.['x-forwarded-host']) ? (req.headers['x-forwarded-host'][0] || '') : '');
   const forwardedHost = ((rawForwarded.split(',')[0] || '').trim().split(':')[0] || '').toLowerCase();
   if (forwardedHost && forwardedHost !== 'localhost') {
-    if (forwardedHost.includes('inzanathletics') || forwardedHost.includes('inzan')) {
-      return 'inzanathletics.mitrixo.com';
-    }
-    if (forwardedHost.includes('strike')) {
-      return 'strike.mitrixo.com';
-    }
     return forwardedHost;
   }
 
   // 5. Hostname
   if (req.hostname && req.hostname !== 'localhost') {
-    return req.hostname;
+    return req.hostname.toLowerCase();
   }
-  return ((req.get('host') || 'localhost').split(':')[0] as string);
+  return ((req.get('host') || 'localhost').split(':')[0] as string).toLowerCase();
 }
 
 export async function getDbForRequest(req: Request): Promise<Firestore> {

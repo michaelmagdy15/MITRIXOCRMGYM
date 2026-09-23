@@ -1,7 +1,7 @@
 # INZAN Athletics — Tenant Implementation & PRD Compliance Specification
 
 **Tenant Identifier:** `inzanathletics`  
-**Production Domains:** `inzanathletics.mitrixo.com`, `inzanathletics.com`, `www.inzanathletics.com`  
+**Production Domains:** `admin.inzanathletics.com` (CRM Dashboard), `inzanathletics.mitrixo.com`, `inzanathletics.com` (Website Landing Page)  
 **Dedicated Database:** Firestore `db-inzanathletics`  
 **PRD Verification Score:** **100% (21 / 21 Passing)**  
 **Zero-Crossover Isolation Status:** **Strictly Isolated (0 crossover with Strike Gym)**  
