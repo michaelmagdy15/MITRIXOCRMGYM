@@ -1928,6 +1928,274 @@ async function startServer() {
     }
   });
 
+  // ─── ATOMIC ATTENDANCE CHECK-IN & AUDIT TRAIL ENDPOINT ───
+  // Transactional session credit deduction + AttendanceRecord insertion + roster status update
+  const handleAttendanceCheckIn = async (req: express.Request, res: express.Response) => {
+    try {
+      const {
+        memberId,
+        clientId,
+        sessionId,
+        classId,
+        packageId,
+        sessionTitle,
+        branchId,
+        branchName,
+        sessionDate,
+        sessionTime,
+        status = 'ATTENDED',
+        checkedInBy,
+        deductCredit = true
+      } = req.body;
+
+      const targetMemberId = memberId || clientId;
+      const targetSessionId = sessionId || classId;
+
+      if (!targetMemberId) {
+        return res.status(400).json({ error: "Missing memberId or clientId parameter" });
+      }
+
+      const db = await getDbForRequest(req);
+
+      // Resolve staff user name for audit log
+      let staffName = checkedInBy || 'Staff';
+      if (!checkedInBy && req.user?.uid) {
+        try {
+          const userDoc = await db.collection('users').doc(req.user.uid).get();
+          if (userDoc.exists) {
+            staffName = userDoc.data()?.name || userDoc.data()?.email || 'Staff';
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // Initial read to locate member doc reference
+      let clientRef = db.collection('clients').doc(targetMemberId);
+      let clientDoc = await clientRef.get();
+      if (!clientDoc.exists) {
+        const byMemberSnap = await db.collection('clients').where('memberId', '==', targetMemberId).limit(1).get();
+        if (!byMemberSnap.empty) {
+          clientDoc = byMemberSnap.docs[0]!;
+          clientRef = clientDoc.ref;
+        } else {
+          const byPhoneSnap = await db.collection('clients').where('phone', '==', targetMemberId).limit(1).get();
+          if (!byPhoneSnap.empty) {
+            clientDoc = byPhoneSnap.docs[0]!;
+            clientRef = clientDoc.ref;
+          }
+        }
+      }
+
+      if (!clientDoc.exists) {
+        return res.status(404).json({ error: "Member not found" });
+      }
+
+      const canonicalClientId = clientDoc.id;
+
+      // References for session and booking if provided
+      const sessionRef = targetSessionId ? db.collection('classSchedules').doc(targetSessionId) : null;
+      const bookingRef = targetSessionId ? db.collection('classBookings').doc(`${targetSessionId}_${canonicalClientId}`) : null;
+
+      const result = await db.runTransaction(async (transaction) => {
+        // === 1. ALL READS FIRST ===
+        const currentClientSnap = await transaction.get(clientRef);
+        if (!currentClientSnap.exists) {
+          throw new Error("Client record not found during transaction");
+        }
+        const clientData = currentClientSnap.data() || {};
+
+        let sessionSnap: any = null;
+        if (sessionRef) {
+          sessionSnap = await transaction.get(sessionRef);
+        }
+
+        let bookingSnap: any = null;
+        if (bookingRef) {
+          bookingSnap = await transaction.get(bookingRef);
+        }
+
+        // === 2. LOGIC & GUARDS ===
+        const sessionData = sessionSnap?.exists ? sessionSnap.data() : null;
+
+        // Check active package & credits
+        const packages: any[] = Array.isArray(clientData.packages) ? [...clientData.packages] : [];
+        let targetPkg: any = null;
+        let targetPkgIdx = -1;
+
+        if (packageId) {
+          targetPkgIdx = packages.findIndex(p => p.id === packageId);
+          if (targetPkgIdx !== -1) targetPkg = packages[targetPkgIdx];
+        }
+
+        if (!targetPkg) {
+          // Find first active non-PT package with remaining credits
+          targetPkgIdx = packages.findIndex(p => {
+            const isPt = p.type === 'pt' || p.isPT === true ||
+                         (p.name || '').toLowerCase().includes('pt') ||
+                         (p.packageName || '').toLowerCase().includes('pt');
+            if (isPt) return false;
+            const hasCredits = (typeof p.creditsLeft === 'number' && p.creditsLeft > 0) ||
+                               (typeof p.sessionsRemaining === 'number' && p.sessionsRemaining > 0) ||
+                               p.sessionsTotal === 'unlimited';
+            const isActive = p.status !== 'Expired' && p.status !== 'Inactive';
+            return isActive && hasCredits;
+          });
+          if (targetPkgIdx !== -1) targetPkg = packages[targetPkgIdx];
+        }
+
+        const isUnlimited = clientData.isUnlimited === true || 
+                            clientData.membershipType === 'unlimited' || 
+                            targetPkg?.sessionsTotal === 'unlimited';
+
+        const rawRemaining = typeof targetPkg?.creditsLeft === 'number'
+          ? targetPkg.creditsLeft
+          : typeof targetPkg?.sessionsRemaining === 'number'
+            ? targetPkg.sessionsRemaining
+            : typeof clientData.sessionsRemaining === 'number'
+              ? clientData.sessionsRemaining
+              : 0;
+
+        let remainingCreditsAfter = rawRemaining;
+        const willDeduct = deductCredit === true || deductCredit === 'true';
+
+        if (willDeduct && !isUnlimited) {
+          if (rawRemaining <= 0) {
+            throw new Error("Cannot check in: Member has 0 credits remaining on their package.");
+          }
+          remainingCreditsAfter = Math.max(0, rawRemaining - 1);
+
+          if (targetPkgIdx !== -1) {
+            const updatedPkg = { ...packages[targetPkgIdx] };
+            if (typeof updatedPkg.creditsLeft === 'number') {
+              updatedPkg.creditsLeft = Math.max(0, updatedPkg.creditsLeft - 1);
+            }
+            if (typeof updatedPkg.sessionsRemaining === 'number') {
+              updatedPkg.sessionsRemaining = Math.max(0, updatedPkg.sessionsRemaining - 1);
+            }
+            updatedPkg.usedSessions = (updatedPkg.usedSessions || 0) + 1;
+            packages[targetPkgIdx] = updatedPkg;
+          }
+        }
+
+        const newUsedSessions = (clientData.usedSessions || 0) + (willDeduct ? 1 : 0);
+        const newClientRemaining = isUnlimited ? clientData.sessionsRemaining : (willDeduct ? remainingCreditsAfter : clientData.sessionsRemaining);
+
+        const nowIso = new Date().toISOString();
+        const recordId = `att_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        const resolvedBranchName = branchName || sessionData?.branch || clientData.branch || 'Maxim Compound';
+        const resolvedBranchId = branchId || sessionData?.branch_id || sessionData?.branchId || toCanonicalBranchId(resolvedBranchName) || 'strike_maxim';
+        const resolvedSessionTitle = sessionTitle || sessionData?.name || sessionData?.title || sessionData?.className || 'Class Session';
+        const resolvedSessionDate = sessionDate || sessionData?.date || (sessionData?.startTime ? sessionData.startTime.substring(0, 10) : nowIso.substring(0, 10));
+        const resolvedSessionTime = sessionTime || sessionData?.time || (sessionData?.startTime ? `${sessionData.startTime.substring(11, 16)} - ${sessionData.endTime ? sessionData.endTime.substring(11, 16) : ''}` : 'Class');
+
+        const attendanceRecord = {
+          id: recordId,
+          memberId: canonicalClientId,
+          clientId: canonicalClientId,
+          packageId: targetPkg?.id || clientData.packageId || '',
+          sessionId: targetSessionId || '',
+          sessionTitle: resolvedSessionTitle,
+          branchId: resolvedBranchId,
+          branchName: resolvedBranchName,
+          sessionDate: resolvedSessionDate,
+          sessionTime: resolvedSessionTime,
+          checkedInAt: nowIso,
+          checkedInBy: staffName,
+          status: String(status).toUpperCase() as 'ATTENDED' | 'NO_SHOW' | 'CANCELLED',
+          remainingCreditsAfter: typeof remainingCreditsAfter === 'number' ? remainingCreditsAfter : 0,
+          createdAt: nowIso
+        };
+
+        // === 3. ALL WRITES LAST ===
+        // Update client document if credits were deducted
+        if (willDeduct) {
+          transaction.update(clientRef, {
+            packages,
+            sessionsRemaining: newClientRemaining,
+            usedSessions: newUsedSessions,
+            updatedAt: nowIso
+          });
+        }
+
+        // Subcollection writes: members/{memberId}/attendance_history and clients/{clientId}/attendance_history
+        const memberHistoryRef = db.collection('members').doc(canonicalClientId).collection('attendance_history').doc(recordId);
+        transaction.set(memberHistoryRef, attendanceRecord);
+
+        const clientHistoryRef = db.collection('clients').doc(canonicalClientId).collection('attendance_history').doc(recordId);
+        transaction.set(clientHistoryRef, attendanceRecord);
+
+        // Top-level collection write: attendance_logs
+        const logRef = db.collection('attendance_logs').doc(recordId);
+        transaction.set(logRef, attendanceRecord);
+
+        // Legacy attendance collection write for backward compatibility
+        const legacyRef = db.collection('attendance').doc(recordId);
+        transaction.set(legacyRef, {
+          id: recordId,
+          clientId: canonicalClientId,
+          memberId: canonicalClientId,
+          branch: resolvedBranchName,
+          date: nowIso,
+          recordedBy: staffName,
+          packageName: targetPkg?.packageName || targetPkg?.name || clientData.packageType || '',
+          sessionTitle: resolvedSessionTitle,
+          status: attendanceRecord.status,
+          remainingCreditsAfter: attendanceRecord.remainingCreditsAfter
+        });
+
+        // Update class schedule session attendees if session exists
+        if (sessionRef && sessionSnap?.exists) {
+          const currentCheckedIn: string[] = sessionData?.checkedIn || [];
+          const currentNoShows: string[] = sessionData?.noShows || [];
+          const currentAttendees: string[] = sessionData?.attendees || [];
+
+          if (attendanceRecord.status === 'ATTENDED') {
+            const nextCheckedIn = currentCheckedIn.includes(canonicalClientId) ? currentCheckedIn : [...currentCheckedIn, canonicalClientId];
+            const nextNoShows = currentNoShows.filter(id => id !== canonicalClientId);
+            const nextAttendees = currentAttendees.includes(canonicalClientId) ? currentAttendees : [...currentAttendees, canonicalClientId];
+            transaction.update(sessionRef, {
+              checkedIn: nextCheckedIn,
+              noShows: nextNoShows,
+              attendees: nextAttendees,
+              updatedAt: nowIso
+            });
+          } else if (attendanceRecord.status === 'NO_SHOW') {
+            const nextNoShows = currentNoShows.includes(canonicalClientId) ? currentNoShows : [...currentNoShows, canonicalClientId];
+            const nextCheckedIn = currentCheckedIn.filter(id => id !== canonicalClientId);
+            transaction.update(sessionRef, {
+              noShows: nextNoShows,
+              checkedIn: nextCheckedIn,
+              updatedAt: nowIso
+            });
+          }
+        }
+
+        // Update classBookings document if present
+        if (bookingRef) {
+          transaction.set(bookingRef, {
+            classId: targetSessionId,
+            clientId: canonicalClientId,
+            status: attendanceRecord.status === 'ATTENDED' ? 'attended' : attendanceRecord.status === 'NO_SHOW' ? 'no-show' : 'cancelled',
+            checkedInAt: attendanceRecord.status === 'ATTENDED' ? nowIso : null,
+            updatedAt: nowIso
+          }, { merge: true });
+        }
+
+        return attendanceRecord;
+      });
+
+      console.log(`[Attendance CheckIn] Successfully processed for member ${canonicalClientId}:`, result.id);
+      return res.json({ success: true, record: result });
+    } catch (err: any) {
+      console.error("[Attendance CheckIn] Transaction Error:", err);
+      return res.status(400).json({ error: err.message || "Failed to process check-in" });
+    }
+  };
+
+  app.post("/api/v1/attendance/check-in", requireAuth, handleAttendanceCheckIn);
+  app.post("/api/attendance/check-in", requireAuth, handleAttendanceCheckIn);
+
   // Server-authoritative endpoint for class booking
   // Handles capacity checks, waitlist promotion, package session deduction, points award, and prevents double-booking
   app.post("/api/classes/book", requireAuth, async (req, res) => {

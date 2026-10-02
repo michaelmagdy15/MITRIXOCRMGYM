@@ -392,28 +392,27 @@ export default function StrikeWeeklyScheduleView({
                     const isMaximOffFriday = selectedBranch === 'maxim' && dayOfWeek === 5;
                     const isOffDay = isImpactOffThursday || isMaximOffFriday;
 
-                    const slot = currentSchedule.slots.find(
-                      s => s.dayOfWeek === dayOfWeek && s.timeDisplay === time
+                    const matchingSlots = currentSchedule.slots.filter(
+                      s => s.dayOfWeek === dayOfWeek && s.timeDisplay === time &&
+                           (categoryFilter === 'ALL' || s.category === categoryFilter)
                     );
-
-                    const isMatch = slot && (categoryFilter === 'ALL' || slot.category === categoryFilter);
 
                     if (isOffDay) {
                       return (
                         <div
                           key={label}
-                          className="flex items-center justify-center bg-muted/20 border border-dashed border-border/40 rounded-xl text-muted-foreground/60 font-bold text-xs uppercase"
+                          className="flex items-center justify-center bg-muted/20 border border-dashed border-border/40 rounded-xl text-muted-foreground/60 font-bold text-xs uppercase min-h-[80px]"
                         >
                           OFF
                         </div>
                       );
                     }
 
-                    if (!slot || !isMatch) {
+                    if (matchingSlots.length === 0) {
                       return (
                         <div
                           key={label}
-                          className="flex items-center justify-center bg-muted/10 border border-border/30 rounded-xl text-muted-foreground/40 text-xs font-mono"
+                          className="flex items-center justify-center bg-muted/10 border border-border/30 rounded-xl text-muted-foreground/40 text-xs font-mono min-h-[80px]"
                         >
                           —
                         </div>
@@ -421,28 +420,32 @@ export default function StrikeWeeklyScheduleView({
                     }
 
                     return (
-                      <div
-                        key={label}
-                        onClick={() => onSelectSlot?.(slot, currentSchedule.branchName)}
-                        className={`flex flex-col justify-between p-2 rounded-xl border transition-all ${getCategoryBadgeClass(slot.category)} ${
-                          onSelectSlot ? 'cursor-pointer hover:shadow-xs hover:scale-[1.02] active:scale-95' : ''
-                        }`}
-                      >
-                        <div>
-                          <div className="text-[11px] font-black tracking-tight leading-tight uppercase line-clamp-2 text-foreground">
-                            {slot.className}
-                          </div>
-                          <div className="text-[9px] opacity-80 mt-1 font-semibold">
-                            {slot.tier}
-                          </div>
-                        </div>
+                      <div key={label} className="flex flex-col gap-1.5 justify-start">
+                        {matchingSlots.map((slot, idx) => (
+                          <div
+                            key={`${slot.className}-${slot.tier}-${idx}`}
+                            onClick={() => onSelectSlot?.(slot, currentSchedule.branchName)}
+                            className={`flex flex-col justify-between p-2 rounded-xl border transition-all ${getCategoryBadgeClass(slot.category)} ${
+                              onSelectSlot ? 'cursor-pointer hover:shadow-xs hover:scale-[1.02] active:scale-95' : ''
+                            }`}
+                          >
+                            <div>
+                              <div className="text-[11px] font-black tracking-tight leading-tight uppercase line-clamp-2 text-foreground">
+                                {slot.className}
+                              </div>
+                              <div className="text-[9px] opacity-80 mt-0.5 font-semibold">
+                                {slot.tier}
+                              </div>
+                            </div>
 
-                        <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40 text-[9px] opacity-80">
-                          <span>Cap: {slot.capacity}</span>
-                          {onSelectSlot && (
-                            <span className="font-bold text-primary hover:underline">Book →</span>
-                          )}
-                        </div>
+                            <div className="flex items-center justify-between mt-1.5 pt-1 border-t border-border/40 text-[9px] opacity-80">
+                              <span>Cap: {slot.capacity}</span>
+                              {onSelectSlot && (
+                                <span className="font-bold text-primary hover:underline">Book →</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     );
                   })}

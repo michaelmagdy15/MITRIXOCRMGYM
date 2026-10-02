@@ -21,6 +21,7 @@ export type InteractionOutcome = 'Interested' | 'Not Answered' | 'Scheduled Tria
 import { PaymentCategory } from './utils/paymentCategories';
 export * from './types/payout';
 export * from './types/approval';
+export * from './types/attendance';
 
 export type Branch = string;
 

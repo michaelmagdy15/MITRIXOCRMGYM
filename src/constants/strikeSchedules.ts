@@ -2,7 +2,10 @@
  * Strike Gym Official Weekly Schedules
  * Source of truth for Maxim, Mivida, and Impact branches.
  * Strictly isolated for the Strike gym tenant.
+ * Split into independent sessions for regular vs. pro tiers (15 spots each).
  */
+
+import { toCanonicalTier, CanonicalTier } from '../utils/memberCategories.js';
 
 export interface StrikeScheduleSlot {
   dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
@@ -33,40 +36,52 @@ export const STRIKE_SCHEDULES: Record<'maxim' | 'mivida' | 'impact', StrikeBranc
     displayName: 'Maxim Branch',
     slots: [
       // ── Sunday (0) ──
-      { dayOfWeek: 0, dayName: 'SUN', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids / Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro', 'Kids Only'], capacity: 15, category: 'Kids' },
-      { dayOfWeek: 0, dayName: 'SUN', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors / Advanced Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced', 'Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 0, dayName: 'SUN', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Boxing', tier: 'Kids Only', allowedTiers: ['Kids Only'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 0, dayName: 'SUN', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 0, dayName: 'SUN', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors Boxing', tier: 'Junior Only', allowedTiers: ['Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 0, dayName: 'SUN', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors Pro Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced'], capacity: 15, category: 'Juniors' },
       { dayOfWeek: 0, dayName: 'SUN', startTime: '20:00', endTime: '21:00', timeDisplay: '8:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
       { dayOfWeek: 0, dayName: 'SUN', startTime: '21:00', endTime: '22:00', timeDisplay: '9:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
 
       // ── Monday (1) ──
-      { dayOfWeek: 1, dayName: 'MON', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids / Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro', 'Kids Only'], capacity: 15, category: 'Kids' },
-      { dayOfWeek: 1, dayName: 'MON', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors / Advanced Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced', 'Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 1, dayName: 'MON', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids Boxing', tier: 'Kids Only', allowedTiers: ['Kids Only'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 1, dayName: 'MON', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 1, dayName: 'MON', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors Boxing', tier: 'Junior Only', allowedTiers: ['Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 1, dayName: 'MON', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors Pro Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced'], capacity: 15, category: 'Juniors' },
       { dayOfWeek: 1, dayName: 'MON', startTime: '20:00', endTime: '21:00', timeDisplay: '8:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
       { dayOfWeek: 1, dayName: 'MON', startTime: '21:00', endTime: '22:00', timeDisplay: '9:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
 
       // ── Tuesday (2) ──
-      { dayOfWeek: 2, dayName: 'TUE', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids / Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro', 'Kids Only'], capacity: 15, category: 'Kids' },
-      { dayOfWeek: 2, dayName: 'TUE', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors / Advanced Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced', 'Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 2, dayName: 'TUE', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Boxing', tier: 'Kids Only', allowedTiers: ['Kids Only'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 2, dayName: 'TUE', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 2, dayName: 'TUE', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors Boxing', tier: 'Junior Only', allowedTiers: ['Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 2, dayName: 'TUE', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors Pro Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced'], capacity: 15, category: 'Juniors' },
       { dayOfWeek: 2, dayName: 'TUE', startTime: '20:00', endTime: '21:00', timeDisplay: '8:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
       { dayOfWeek: 2, dayName: 'TUE', startTime: '21:00', endTime: '22:00', timeDisplay: '9:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
 
       // ── Wednesday (3) ──
-      { dayOfWeek: 3, dayName: 'WED', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids / Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro', 'Kids Only'], capacity: 15, category: 'Kids' },
-      { dayOfWeek: 3, dayName: 'WED', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors / Advanced Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced', 'Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 3, dayName: 'WED', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids Boxing', tier: 'Kids Only', allowedTiers: ['Kids Only'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 3, dayName: 'WED', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 3, dayName: 'WED', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors Boxing', tier: 'Junior Only', allowedTiers: ['Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 3, dayName: 'WED', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors Pro Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced'], capacity: 15, category: 'Juniors' },
       { dayOfWeek: 3, dayName: 'WED', startTime: '20:00', endTime: '21:00', timeDisplay: '8:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
       { dayOfWeek: 3, dayName: 'WED', startTime: '21:00', endTime: '22:00', timeDisplay: '9:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
 
       // ── Thursday (4) ──
-      { dayOfWeek: 4, dayName: 'THU', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids / Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro', 'Kids Only'], capacity: 15, category: 'Kids' },
-      { dayOfWeek: 4, dayName: 'THU', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors / Advanced Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced', 'Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 4, dayName: 'THU', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Boxing', tier: 'Kids Only', allowedTiers: ['Kids Only'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 4, dayName: 'THU', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 4, dayName: 'THU', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors Boxing', tier: 'Junior Only', allowedTiers: ['Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 4, dayName: 'THU', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Juniors Pro Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced'], capacity: 15, category: 'Juniors' },
       { dayOfWeek: 4, dayName: 'THU', startTime: '20:00', endTime: '21:00', timeDisplay: '8:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
       { dayOfWeek: 4, dayName: 'THU', startTime: '21:00', endTime: '22:00', timeDisplay: '9:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
 
       // Friday (5): OFF
 
       // ── Saturday (6) ──
-      { dayOfWeek: 6, dayName: 'SAT', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids / Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro', 'Kids Only'], capacity: 15, category: 'Kids' },
-      { dayOfWeek: 6, dayName: 'SAT', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors / Advanced Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced', 'Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 6, dayName: 'SAT', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids Boxing', tier: 'Kids Only', allowedTiers: ['Kids Only'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 6, dayName: 'SAT', startTime: '18:00', endTime: '19:00', timeDisplay: '6:00 PM', className: 'Kids Pro Boxing', tier: 'Kids Pro', allowedTiers: ['Kids Pro'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 6, dayName: 'SAT', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors Boxing', tier: 'Junior Only', allowedTiers: ['Junior Only'], capacity: 15, category: 'Juniors' },
+      { dayOfWeek: 6, dayName: 'SAT', startTime: '19:00', endTime: '20:00', timeDisplay: '7:00 PM', className: 'Juniors Pro Boxing', tier: 'Junior Advanced', allowedTiers: ['Junior Advanced'], capacity: 15, category: 'Juniors' },
       { dayOfWeek: 6, dayName: 'SAT', startTime: '20:00', endTime: '21:00', timeDisplay: '8:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
       { dayOfWeek: 6, dayName: 'SAT', startTime: '21:00', endTime: '22:00', timeDisplay: '9:00 PM', className: 'Adult Boxing & Conditioning', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' }
     ]
@@ -113,11 +128,13 @@ export const STRIKE_SCHEDULES: Record<'maxim' | 'mivida' | 'impact', StrikeBranc
     displayName: 'Mivida Branch',
     slots: [
       // ── Wednesday (3) ──
-      { dayOfWeek: 3, dayName: 'WED', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Boxing (Mivida)', tier: 'Kids Only', allowedTiers: ['Kids Only', 'Kids Pro'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 3, dayName: 'WED', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Boxing (Mivida)', tier: 'Kids Only', allowedTiers: ['Kids Only'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 3, dayName: 'WED', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Pro Boxing (Mivida)', tier: 'Kids Pro', allowedTiers: ['Kids Pro'], capacity: 15, category: 'Kids' },
       { dayOfWeek: 3, dayName: 'WED', startTime: '20:00', endTime: '21:00', timeDisplay: '8:00 PM', className: 'Adult Boxing (Mivida)', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
 
       // ── Saturday (6) ──
-      { dayOfWeek: 6, dayName: 'SAT', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Boxing (Mivida)', tier: 'Kids Only', allowedTiers: ['Kids Only', 'Kids Pro'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 6, dayName: 'SAT', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Boxing (Mivida)', tier: 'Kids Only', allowedTiers: ['Kids Only'], capacity: 15, category: 'Kids' },
+      { dayOfWeek: 6, dayName: 'SAT', startTime: '17:00', endTime: '18:00', timeDisplay: '5:00 PM', className: 'Kids Pro Boxing (Mivida)', tier: 'Kids Pro', allowedTiers: ['Kids Pro'], capacity: 15, category: 'Kids' },
 
       // ── Sunday (0) ──
       { dayOfWeek: 0, dayName: 'SUN', startTime: '20:00', endTime: '21:00', timeDisplay: '8:00 PM', className: 'Adult Boxing (Mivida)', tier: 'Adults', allowedTiers: ['Adults'], capacity: 20, category: 'Adults' },
@@ -133,6 +150,7 @@ export const STRIKE_SCHEDULES: Record<'maxim' | 'mivida' | 'impact', StrikeBranc
 
 /**
  * Generates concrete class schedule objects for a given date range (e.g. next 60 days).
+ * Deterministically generates independent sessions with dedicated 15-capacity pools.
  */
 export function generateStrikeClassesForDateRange(
   startDate: Date,
@@ -160,24 +178,32 @@ export function generateStrikeClassesForDateRange(
       for (const slot of matchingSlots) {
         const startIso = `${dateStr}T${slot.startTime}:00`;
         const endIso = `${dateStr}T${slot.endTime}:00`;
-        // Deterministic ID so repeated generations are idempotent
-        const id = `strike_${key}_${dateStr}_${slot.startTime.replace(':', '')}`;
+        // Deterministic ID includes tier slug to prevent collisions between concurrent sessions
+        const tierSlug = (slot.tier || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const id = `strike_${key}_${dateStr}_${slot.startTime.replace(':', '')}_${tierSlug}`;
+
+        const canonicalTiers: CanonicalTier[] = slot.allowedTiers.map(toCanonicalTier);
 
         generated.push({
           id,
           name: slot.className,
+          title: slot.className,
+          className: slot.className,
           branch: branchSchedule.branchName,
           branch_id: key === 'impact' ? 'impact' : key === 'mivida' ? 'strike_mivida' : 'strike_maxim',
+          branchId: key === 'impact' ? 'impact' : key === 'mivida' ? 'strike_mivida' : 'strike_maxim',
           date: dateStr,
           time: `${slot.timeDisplay} - ${slot.endTime.startsWith('22') ? '10:00 PM' : slot.endTime.startsWith('21') ? '9:00 PM' : slot.endTime.startsWith('20') ? '8:00 PM' : slot.endTime.startsWith('19') ? '7:00 PM' : '6:00 PM'}`,
           startTime: startIso,
           endTime: endIso,
           tier: slot.tier,
           allowedTiers: slot.allowedTiers,
+          allowed_tiers: canonicalTiers,
           category: slot.category,
           type: 'Class',
           status: 'active',
           capacity: slot.capacity,
+          bookedSpots: 0,
           cutoffMinutes: 120,
           attendees: [],
           waitlist: [],

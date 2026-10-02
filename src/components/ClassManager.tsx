@@ -392,19 +392,54 @@ export const ClassManager: React.FC = () => {
         await updateDoc(classRef, {
           checkedIn: arrayRemove(attendeeId)
         });
+        const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${attendeeId}`);
+        await updateDoc(bookingDocRef, {
+          status: 'booked',
+          checkedInAt: null
+        }).catch(() => {});
       } else {
-        await updateDoc(classRef, {
-          checkedIn: arrayUnion(attendeeId),
-          noShows: arrayRemove(attendeeId)
-        });
-      }
+        // Invoke atomic server check-in endpoint to create attendance audit record
+        let calledServer = false;
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          const res = await fetch('/api/v1/attendance/check-in', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
+              memberId: attendeeId,
+              sessionId: rosterClass.id,
+              sessionTitle: rosterClass.name,
+              branchId: rosterClass.branch_id || (rosterClass as any).branchId || '',
+              branchName: rosterClass.branch,
+              sessionDate: rosterClass.date,
+              sessionTime: rosterClass.time,
+              status: 'ATTENDED',
+              checkedInBy: currentUser?.name || currentUser?.email || 'Staff',
+              deductCredit: false // Already enrolled/admitted on class roster
+            })
+          });
+          if (res.ok) {
+            calledServer = true;
+          }
+        } catch {
+          // fallback to direct client update below
+        }
 
-      // Sync booking doc if exists
-      const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${attendeeId}`);
-      await updateDoc(bookingDocRef, {
-        status: isCurrentlyCheckedIn ? 'booked' : 'attended',
-        checkedInAt: isCurrentlyCheckedIn ? null : new Date().toISOString()
-      }).catch(() => {});
+        if (!calledServer) {
+          await updateDoc(classRef, {
+            checkedIn: arrayUnion(attendeeId),
+            noShows: arrayRemove(attendeeId)
+          });
+          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${attendeeId}`);
+          await updateDoc(bookingDocRef, {
+            status: 'attended',
+            checkedInAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+      }
     } catch (err) {
       console.error("Error toggling check-in:", err);
       alert("Failed to update check-in status.");

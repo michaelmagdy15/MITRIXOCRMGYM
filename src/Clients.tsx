@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Minus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity, X, Maximize2, Minimize2, TrendingUp, RotateCcw, ArrowLeft } from 'lucide-react';
+import { FileText, Trash2, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Gift, Phone, Calendar, Download, Plus, Minus, Search, ArrowUpDown, QrCode, RefreshCw, User, Users, UserPlus, Copy, MessageSquare, Activity, X, Maximize2, Minimize2, TrendingUp, RotateCcw, ArrowLeft, History } from 'lucide-react';
 import { Client, InteractionType, InteractionOutcome, ClientPackage } from './types';
 import { format, parseISO, isValid, isAfter, isBefore, addDays, subDays, differenceInDays } from 'date-fns';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -37,6 +37,7 @@ import { resolvePaymentCategory } from './utils/paymentCategories';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { InzanMemberShow } from './components/InzanMemberShow';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
+import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
 
@@ -2324,6 +2325,7 @@ export default function Clients() {
                 <TabsList className="bg-transparent p-0 h-auto gap-1 rounded-none border-none shadow-none flex flex-row whitespace-nowrap min-w-max">
                   {[
                     { value: 'overview', label: 'Overview', icon: <User className="h-3.5 w-3.5" /> },
+                    { value: 'attendance-history', label: 'Attendance & Session History', icon: <History className="h-3.5 w-3.5" /> },
                     { value: 'activity', label: 'Activity', icon: <MessageSquare className="h-3.5 w-3.5" /> },
                     { value: 'history', label: 'History', icon: <FileText className="h-3.5 w-3.5" /> },
                     { value: 'referrals', label: 'Referrals', icon: <Users className="h-3.5 w-3.5" /> },
@@ -3204,6 +3206,11 @@ export default function Clients() {
                       </div>
                     </div>
                   </div>
+                </TabsContent>
+
+                {/* ── ATTENDANCE & SESSION HISTORY TAB ── */}
+                <TabsContent value="attendance-history" className="mt-0 outline-none p-5 text-left">
+                  <MemberAttendanceHistoryTab client={activeClient} />
                 </TabsContent>
 
                 {/* ── HISTORY TAB ── */}
