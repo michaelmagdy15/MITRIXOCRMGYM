@@ -183,11 +183,16 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
       }
       const userDoc = await memberDb.collection('users').doc(decodedToken.uid).get();
       if (!userDoc.exists) {
-        console.warn(
-          `[Auth] User ${decodedToken.uid} is not a member of tenant "${resolvedTenantId}" (host: ${hostname}) — denying access`
-        );
-        res.status(403).json({ error: 'Forbidden: User is not a member of this tenant' });
-        return;
+        const isMemberOnboardingPath = req.path.startsWith('/api/member/create-profile') || 
+                                       req.path.startsWith('/api/member/link-profile') ||
+                                       req.path.startsWith('/api/member/search-profile');
+        if (!isMemberOnboardingPath) {
+          console.warn(
+            `[Auth] User ${decodedToken.uid} is not a member of tenant "${resolvedTenantId}" (host: ${hostname}) — denying access`
+          );
+          res.status(403).json({ error: 'Forbidden: User is not a member of this tenant' });
+          return;
+        }
       }
     }
 
@@ -3019,6 +3024,268 @@ async function startServer() {
     } catch (err: any) {
       console.error('[API /api/auth/switch-profile] Error:', err);
       return res.status(500).json({ error: err.message || 'Switch profile failed' });
+    }
+  });
+
+  // ===============================================================
+  // Member Portal: Search Client Profile (POST /api/member/search-profile)
+  // ===============================================================
+  app.post("/api/member/search-profile", requireAuth, async (req: any, res: any) => {
+    try {
+      const searchTerm = (req.body?.searchTerm || req.body?.term || "").toString().trim();
+      if (!searchTerm) {
+        return res.status(400).json({ error: "Search term is required" });
+      }
+
+      const db = await getDbForRequest(req);
+      const rawTerm = searchTerm.toLowerCase();
+      const cleanDigits = rawTerm.replace(/\D/g, "");
+      const clean9 = cleanDigits.slice(-9);
+      const normalizedPhone = normalizeEgyptPhone(searchTerm);
+      const phoneVariants = getEgyptPhoneVariants(searchTerm);
+
+      const snap = await db.collection("clients").get();
+      const callerUid = req.user?.uid;
+      let matchedDoc: any = null;
+      let isAlreadyLinkedToOther = false;
+
+      for (const doc of snap.docs) {
+        const data = doc.data();
+        const memberId = (data.memberId || doc.id || "").toString().toLowerCase();
+        const cleanMemberId = memberId.replace(/^mem-/, "");
+        const docPhone = (data.phone || "").toString();
+        const docNormPhone = data.normalized_phone || normalizeEgyptPhone(docPhone);
+        const docPhoneDigits = docPhone.replace(/\D/g, "");
+        const clientEmail = (data.email || "").toLowerCase();
+        const nationalId = (data.nationalId || "").toString().toLowerCase();
+
+        const matches = 
+          memberId === rawTerm ||
+          memberId === `mem-${rawTerm}` ||
+          cleanMemberId === rawTerm.replace(/^mem-/, "") ||
+          (Boolean(normalizedPhone) && Boolean(docNormPhone) && docNormPhone === normalizedPhone) ||
+          phoneVariants.includes(docPhone) ||
+          (Boolean(clean9) && docPhoneDigits.slice(-9) === clean9) ||
+          (Boolean(clientEmail) && clientEmail === rawTerm) ||
+          (Boolean(nationalId) && nationalId === rawTerm);
+
+        if (matches) {
+          if (data.portalUserId && data.portalUserId !== callerUid) {
+            isAlreadyLinkedToOther = true;
+          } else {
+            matchedDoc = doc;
+            break;
+          }
+        }
+      }
+
+      if (isAlreadyLinkedToOther && !matchedDoc) {
+        return res.status(409).json({
+          error: "This member profile is already linked to another account. Please contact reception."
+        });
+      }
+
+      if (!matchedDoc) {
+        return res.json({
+          success: true,
+          found: false,
+          message: "No matching member profile found. You can create a new pass or ask reception."
+        });
+      }
+
+      const clientData = matchedDoc.data();
+      return res.json({
+        success: true,
+        found: true,
+        client: {
+          id: matchedDoc.id,
+          memberId: clientData.memberId || matchedDoc.id,
+          name: clientData.name || "Member",
+          phone: clientData.phone || "",
+          email: clientData.email || "",
+          status: getEffectiveStatus(clientData) || clientData.status || "Active",
+          branch: clientData.branch || clientData.homeBranch || "Maxim Compound",
+          tier: toCanonicalTier(clientData.tier || clientData.memberCategory || clientData.category),
+        }
+      });
+    } catch (err: any) {
+      console.error("[API /api/member/search-profile] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to search member profile" });
+    }
+  });
+
+  // ===============================================================
+  // Member Portal: Link Client Profile (POST /api/member/link-profile)
+  // ===============================================================
+  app.post("/api/member/link-profile", requireAuth, async (req: any, res: any) => {
+    try {
+      const clientId = (req.body?.clientId || "").toString().trim();
+      const memberId = (req.body?.memberId || "").toString().trim();
+      if (!clientId && !memberId) {
+        return res.status(400).json({ error: "clientId or memberId is required" });
+      }
+
+      const db = await getDbForRequest(req);
+      const tenantId = await getTenantIdForRequest(req);
+      const callerUid = req.user?.uid;
+
+      let clientDoc: any = null;
+      if (clientId) {
+        const docSnap = await db.collection("clients").doc(clientId).get();
+        if (docSnap.exists) {
+          clientDoc = docSnap;
+        }
+      }
+
+      if (!clientDoc && memberId) {
+        const snap = await db.collection("clients").where("memberId", "==", memberId).limit(1).get();
+        if (!snap.empty) {
+          clientDoc = snap.docs[0];
+        }
+      }
+
+      if (!clientDoc || !clientDoc.exists) {
+        return res.status(404).json({ error: "Member profile not found" });
+      }
+
+      const clientData = clientDoc.data()!;
+      if (clientData.portalUserId && clientData.portalUserId !== callerUid) {
+        return res.status(409).json({ error: "This profile is already linked to another member account." });
+      }
+
+      const nowIso = new Date().toISOString();
+      const effectiveMemberId = clientData.memberId || clientDoc.id;
+
+      // 1. Update client document with portalUserId
+      await clientDoc.ref.update({
+        portalUserId: callerUid,
+        authEmail: req.user?.email || clientData.email || "",
+        updatedAt: nowIso
+      });
+
+      // 2. Ensure user document in tenant's users collection is updated
+      await db.collection("users").doc(callerUid).set({
+        uid: callerUid,
+        name: clientData.name || req.user?.name || "Member",
+        phone: clientData.phone || req.user?.phone_number || "",
+        email: req.user?.email || clientData.email || "",
+        role: "client",
+        clientRecordId: effectiveMemberId,
+        clientDocId: clientDoc.id,
+        tenantId,
+        updatedAt: nowIso
+      }, { merge: true });
+
+      // Invalidate cache
+      clientsCache.delete(tenantId);
+      clientsFetchPromises.delete(tenantId);
+
+      return res.json({
+        success: true,
+        client: {
+          id: clientDoc.id,
+          ...clientData,
+          portalUserId: callerUid,
+          status: getEffectiveStatus(clientData) || clientData.status || "Active"
+        }
+      });
+    } catch (err: any) {
+      console.error("[API /api/member/link-profile] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to link member profile" });
+    }
+  });
+
+  // ===============================================================
+  // Member Portal: Create Client Profile (POST /api/member/create-profile)
+  // ===============================================================
+  app.post("/api/member/create-profile", requireAuth, async (req: any, res: any) => {
+    try {
+      const name = (req.body?.name || "").toString().trim();
+      const phone = (req.body?.phone || req.user?.phone_number || "").toString().trim();
+      const branch = (req.body?.branch || "").toString().trim();
+
+      if (!name) {
+        return res.status(400).json({ error: "Full Name is required" });
+      }
+
+      const db = await getDbForRequest(req);
+      const tenantId = await getTenantIdForRequest(req);
+      const callerUid = req.user?.uid;
+
+      // Generate atomic member ID via counters collection
+      let newMemberId = "";
+      try {
+        const counterRef = db.collection("counters").doc("memberIds");
+        const nextId = await db.runTransaction(async (transaction: any) => {
+          const counterDoc = await transaction.get(counterRef);
+          let next = 1000;
+          if (counterDoc.exists) {
+            next = (counterDoc.data()?.lastId || 999) + 1;
+          }
+          transaction.set(counterRef, { lastId: next }, { merge: true });
+          return next;
+        });
+        newMemberId = `MEM-${nextId}`;
+      } catch (err) {
+        console.warn("[API /api/member/create-profile] Counter generation fallback:", err);
+        newMemberId = `MEM-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      const nowIso = new Date().toISOString();
+      const joinDate = nowIso.split("T")[0];
+      const normalizedPhone = normalizeEgyptPhone(phone) || phone.replace(/\D/g, "");
+
+      const newClientData: any = {
+        name,
+        memberId: newMemberId,
+        phone: phone || "",
+        normalized_phone: normalizedPhone || "",
+        email: req.user?.email || "",
+        status: "Active",
+        joinDate,
+        startDate: joinDate,
+        branch: branch || "Maxim Compound",
+        homeBranch: branch || "Maxim Compound",
+        portalUserId: callerUid,
+        points: 0,
+        packages: [],
+        source: "Member Portal Self-Registration",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      // Add to clients collection
+      const clientDocRef = await db.collection("clients").add(newClientData);
+
+      // Create / update user document in users collection
+      await db.collection("users").doc(callerUid).set({
+        uid: callerUid,
+        name,
+        phone: phone || "",
+        email: req.user?.email || "",
+        role: "client",
+        clientRecordId: newMemberId,
+        clientDocId: clientDocRef.id,
+        tenantId,
+        updatedAt: nowIso,
+      }, { merge: true });
+
+      // Invalidate cache
+      clientsCache.delete(tenantId);
+      clientsFetchPromises.delete(tenantId);
+
+      console.log(`[API /api/member/create-profile] Created member pass ${newMemberId} (${clientDocRef.id}) for user ${callerUid} on tenant ${tenantId}`);
+
+      return res.json({
+        success: true,
+        client: {
+          id: clientDocRef.id,
+          ...newClientData,
+        }
+      });
+    } catch (err: any) {
+      console.error("[API /api/member/create-profile] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to create member profile" });
     }
   });
 

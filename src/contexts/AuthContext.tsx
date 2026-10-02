@@ -495,7 +495,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser?.id, currentUser?.role]);
 
   const logout = async () => { await logOut(); };
-  const refreshUserData = async () => {};
+  const refreshUserData = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as User;
+        userData.id = user.uid as UserId;
+        setCurrentUser(userData);
+      }
+    } catch (err) {
+      console.warn("Could not refresh user data:", err);
+    }
+  };
   const updateBranding = async (_updates: Partial<BrandingSettings>) => {};
 
   const loginWithEmailFn = async (email: string, password: string) => {

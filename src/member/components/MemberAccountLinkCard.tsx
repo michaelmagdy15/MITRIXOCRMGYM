@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
-import { db, getTenantId } from '../../firebase';
-import { collection, getDocs, doc, updateDoc, setDoc, addDoc } from 'firebase/firestore';
+import { auth, getTenantId } from '../../firebase';
 import { Client } from '../../types';
-import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../../utils/phoneUtils';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +20,7 @@ interface MemberAccountLinkCardProps {
 }
 
 export const MemberAccountLinkCard: React.FC<MemberAccountLinkCardProps> = ({ onClientLinked }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, refreshUserData } = useAuth();
   const { branding, branches } = useSettings();
 
   const [activeTab, setActiveTab] = useState<'link' | 'create'>('link');
@@ -38,13 +36,13 @@ export const MemberAccountLinkCard: React.FC<MemberAccountLinkCardProps> = ({ on
   // Create new state
   const [newName, setNewName] = useState(currentUser?.name && currentUser.name !== 'New User' ? currentUser.name : '');
   const [newPhone, setNewPhone] = useState(currentUser?.phone || '');
-  const [newBranch, setNewBranch] = useState(branches?.[0] || 'Main Branch');
+  const [newBranch, setNewBranch] = useState(branches?.[0] || 'Maxim Compound');
   const [isCreating, setIsCreating] = useState(false);
 
-  // Search for existing client in clients collection
+  // Search for existing client via secure server endpoint
   const handleSearchClient = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const term = searchTerm.trim().toLowerCase();
+    const term = searchTerm.trim();
     if (!term) {
       setSearchError('Please enter a Member ID, phone number, or email.');
       return;
@@ -55,131 +53,121 @@ export const MemberAccountLinkCard: React.FC<MemberAccountLinkCardProps> = ({ on
     setFoundClient(null);
 
     try {
-      const snap = await getDocs(collection(db, 'clients'));
-      const cleanSearchDigits = term.replace(/\D/g, '').slice(-9);
-      const normalizedSearchPhone = normalizeEgyptPhone(term);
-      const searchPhoneVariants = getEgyptPhoneVariants(term);
-
-      const match = snap.docs.find(d => {
-        const data = d.data();
-        const memberId = (data.memberId || d.id || '').toLowerCase();
-        const docPhone = (data.phone || '').toString();
-        const docNormPhone = data.normalized_phone || normalizeEgyptPhone(docPhone);
-        const clientEmail = (data.email || '').toLowerCase();
-        const nationalId = (data.nationalId || '').toLowerCase();
-
-        if (memberId === term || memberId === `mem-${term}`) return true;
-        if (normalizedSearchPhone && docNormPhone && docNormPhone === normalizedSearchPhone) return true;
-        if (searchPhoneVariants.includes(docPhone)) return true;
-        if (cleanSearchDigits && docPhone.replace(/\D/g, '').slice(-9) === cleanSearchDigits) return true;
-        if (clientEmail && clientEmail === term) return true;
-        if (nationalId && nationalId === term) return true;
-        return false;
+      const token = await auth.currentUser?.getIdToken();
+      const tenantId = getTenantId();
+      const res = await fetch('/api/member/search-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ searchTerm: term, tenantId })
       });
 
-      if (match) {
-        setFoundClient({ ...match.data(), id: match.id } as Client);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to search member records.');
+      }
+
+      if (data.found && data.client) {
+        setFoundClient(data.client as Client);
       } else {
-        setSearchError('No matching member profile found. You can create a new profile or ask reception.');
+        setSearchError(data.message || 'No matching member profile found. You can create a new profile or ask reception.');
       }
     } catch (err: any) {
       console.error('Error searching clients:', err);
-      setSearchError('Failed to search member records. Please try again.');
+      setSearchError(err.message || 'Failed to search member records. Please try again.');
     } finally {
       setIsSearching(false);
     }
   };
 
-  // Link account to found client
+  // Link account to found client via secure server endpoint
   const handleConfirmLink = async () => {
-    if (!foundClient || !currentUser?.id) return;
+    if (!foundClient || (!currentUser?.id && !auth.currentUser?.uid)) return;
     setIsLinking(true);
     setSearchError(null);
 
     try {
-      const userId = currentUser.id;
-      const clientDocId = foundClient.id;
-      const memberId = foundClient.memberId || foundClient.id;
-
-      // 1. Update user document
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        clientRecordId: memberId,
-        clientDocId: clientDocId,
-        name: foundClient.name || currentUser.name || 'Member',
-        phone: foundClient.phone || currentUser.phone || '',
+      const token = await auth.currentUser?.getIdToken();
+      const tenantId = getTenantId();
+      const res = await fetch('/api/member/link-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          clientId: foundClient.id,
+          memberId: foundClient.memberId,
+          tenantId
+        })
       });
 
-      // 2. Update client document with portalUserId
-      const clientRef = doc(db, 'clients', clientDocId);
-      await updateDoc(clientRef, {
-        portalUserId: userId,
-      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to link account.');
+      }
+
+      await refreshUserData?.();
 
       setLinkSuccess(true);
       setTimeout(() => {
-        onClientLinked(foundClient);
+        onClientLinked(data.client || foundClient);
       }, 600);
     } catch (err: any) {
       console.error('Error linking account:', err);
-      setSearchError(`Failed to link account: ${err.message || 'Please try again.'}`);
+      setSearchError(err.message || 'Failed to link account. Please try again.');
       setIsLinking(false);
     }
   };
 
-  // Create new client and link
+  // Create new client and link via secure server endpoint
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) {
       setSearchError('Please enter your full name.');
       return;
     }
-    if (!currentUser?.id) return;
+    if (!currentUser?.id && !auth.currentUser?.uid) return;
 
     setIsCreating(true);
     setSearchError(null);
 
     try {
-      const userId = currentUser.id;
-      const genId = `MEM-${Math.floor(1000 + Math.random() * 9000)}`;
-      const nowIso = new Date().toISOString();
-      const joinDate = nowIso.split('T')[0];
-
-      const newClientData: Partial<Client> & Record<string, any> = {
-        name: newName.trim(),
-        memberId: genId,
-        phone: newPhone.trim() || currentUser.phone || '',
-        email: currentUser.email || '',
-        status: 'Active',
-        joinDate: joinDate,
-        branch: newBranch || 'Main Branch',
-        portalUserId: userId,
-        points: 0,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-
-      // Add to clients collection
-      const clientDocRef = await addDoc(collection(db, 'clients'), newClientData);
-      const createdClient = { ...newClientData, id: clientDocRef.id } as Client;
-
-      // Update user doc
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        clientRecordId: genId,
-        clientDocId: clientDocRef.id,
-        name: newName.trim(),
-        phone: newPhone.trim() || currentUser.phone || '',
-        role: 'client'
+      const token = await auth.currentUser?.getIdToken();
+      const tenantId = getTenantId();
+      const res = await fetch('/api/member/create-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId,
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+          phone: newPhone.trim() || currentUser?.phone || '',
+          branch: newBranch || (branches?.[0] || 'Maxim Compound'),
+          tenantId
+        })
       });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create profile.');
+      }
+
+      await refreshUserData?.();
 
       setLinkSuccess(true);
       setTimeout(() => {
-        onClientLinked(createdClient);
+        onClientLinked(data.client);
       }, 600);
     } catch (err: any) {
       console.error('Error creating client profile:', err);
-      setSearchError(`Failed to create profile: ${err.message || 'Please try again.'}`);
+      setSearchError(err.message || 'Failed to create profile. Please try again.');
       setIsCreating(false);
     }
   };

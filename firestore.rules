@@ -80,7 +80,12 @@ service cloud.firestore {
     // USERS (Staff and client portal accounts)
     match /users/{userId} {
       allow read: if isOwner(userId) || isManager();
-      allow write: if isManager(); // Self-registration usually done via Cloud Functions or Admin SDK
+      allow create: if isOwner(userId) && (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == 'client');
+      allow update: if isManager() || (
+        isOwner(userId) && 
+        (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == resource.data.role)
+      );
+      allow delete: if isManager();
     }
     
     // SETTINGS (Tenant configuration)
