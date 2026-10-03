@@ -4,6 +4,7 @@ import path from 'path';
 import type { Request } from 'express';
 import admin from 'firebase-admin';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
+import { isStandaloneMode, getStandaloneTenantId } from '../config/environment.js';
 
 // Initialize Firebase Admin SDK if not already initialized
 if (admin.apps.length === 0) {
@@ -70,6 +71,16 @@ const cache: Record<string, CacheEntry> = {};
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
 
 export async function getTenantInfoForHost(hostname: string): Promise<{ config: any; status: string }> {
+  // Fast path: In standalone deployment, route directly to local standalone config
+  if (isStandaloneMode()) {
+    const standaloneConfig = {
+      ...defaultFirebaseConfig,
+      tenantId: getStandaloneTenantId(),
+    };
+    delete (standaloneConfig as any).firestoreDatabaseId;
+    return { config: standaloneConfig, status: 'active' };
+  }
+
   const normalizedHost = hostname.toLowerCase().trim();
 
   // 1. Intercept superadmin subdomains to route them directly to the registry database

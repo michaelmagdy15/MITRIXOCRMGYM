@@ -10,10 +10,17 @@ import {
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
+import { isStandaloneMode, getStandaloneTenantId } from './config/environment';
 
 // Support dynamic tenant configurations loaded based on subdomain or query param
 const getActiveConfig = () => {
   const dynamicConfig = (window as any).__FIREBASE_CONFIG__;
+  if (isStandaloneMode()) {
+    return {
+      ...(dynamicConfig || firebaseConfig),
+      tenantId: getStandaloneTenantId(),
+    };
+  }
   if (dynamicConfig && dynamicConfig.tenantId) {
     return dynamicConfig;
   }
@@ -52,6 +59,11 @@ export const activeConfig = getActiveConfig();
  * Falls back to "default" if no subdomain or on localhost.
  */
 export const getTenantId = (): string => {
+  // 0. Standalone deployment mode
+  if (isStandaloneMode()) {
+    return getStandaloneTenantId();
+  }
+
   // 1. Explicit query parameter override (e.g. ?tenant=inzan or ?tenant=strike)
   try {
     if (typeof window !== 'undefined' && window.location?.search) {

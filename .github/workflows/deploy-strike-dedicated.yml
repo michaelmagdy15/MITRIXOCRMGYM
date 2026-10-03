@@ -1,0 +1,76 @@
+name: Deploy Strike Gym Dedicated Updates
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - '.gitignore'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-strike-dedicated
+  cancel-in-progress: true
+
+jobs:
+  validate-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Build & Lint Verification Gate
+        run: |
+          npm run build
+          npm run lint
+
+      # Authenticate to Strike's Google Cloud Project
+      - name: Authenticate to Strike Google Cloud
+        if: env.HAS_STRIKE_SECRET == 'true'
+        uses: google-github-actions/auth@v2
+        env:
+          HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
+        with:
+          credentials_json: ${{ secrets.STRIKE_GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        if: env.HAS_STRIKE_SECRET == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+        env:
+          HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
+
+      # Build and deploy container directly to Strike's Cloud Run service
+      - name: Deploy to Cloud Run
+        if: env.HAS_STRIKE_SECRET == 'true'
+        env:
+          HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
+          PROJECT_ID: ${{ secrets.STRIKE_GCP_PROJECT_ID }}
+          REGION: europe-west1
+        run: |
+          gcloud run deploy strike-crm-platform \
+            --source . \
+            --project $PROJECT_ID \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "NODE_ENV=production,STANDALONE_MODE=true,STANDALONE_TENANT_ID=strike"
+
+      # Deploy updated firestore-tenant.rules and indexes
+      - name: Deploy Security Rules & Indexes to Strike Firebase
+        if: env.HAS_STRIKE_SECRET == 'true'
+        env:
+          HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
+          PROJECT_ID: ${{ secrets.STRIKE_GCP_PROJECT_ID }}
+        run: |
+          npx firebase deploy --config firebase.standalone.json --only firestore:rules,firestore:indexes,storage --project $PROJECT_ID

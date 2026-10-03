@@ -1,4 +1,5 @@
 import { getFirestore } from 'firebase-admin/firestore';
+import { isStandaloneMode } from '../config/environment.js';
 
 /**
  * Safely parses any date value to milliseconds, extending date-only strings
@@ -317,10 +318,12 @@ export async function runMembershipExpirationWorker(db: FirebaseFirestore.Firest
  */
 export async function runAllTenantsExpirationScan() {
   const results = [];
-  const databases = [
-    getFirestore(),                   // Default DB (Strike)
-    getFirestore('db-inzanathletics') // Inzan DB
-  ];
+  const databases = isStandaloneMode()
+    ? [getFirestore()]
+    : [
+        getFirestore(),                   // Default DB (Strike)
+        getFirestore('db-inzanathletics') // Inzan DB
+      ];
 
   for (const db of databases) {
     try {

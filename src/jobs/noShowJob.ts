@@ -1,15 +1,16 @@
 import { getFirestore } from 'firebase-admin/firestore';
+import { isStandaloneMode } from '../config/environment.js';
 
-// Runs every 15 minutes to flag no-shows for classes that have finished
-export function startNoShowJob() {
-  setInterval(async () => {
-    try {
-      console.log('[Cron] Running No-Show job for all tenants...');
-      
-      const databases = [
-        getFirestore(), // Default DB (Strike)
-        getFirestore('db-inzanathletics') // Inzan DB
-      ];
+export async function runNoShowScan() {
+  try {
+    console.log('[Cron] Running No-Show job...');
+    
+    const databases = isStandaloneMode()
+      ? [getFirestore()]
+      : [
+          getFirestore(), // Default DB (Strike)
+          getFirestore('db-inzanathletics') // Inzan DB
+        ];
 
       for (const db of databases) {
         try {
@@ -74,8 +75,15 @@ export function startNoShowJob() {
           console.error('[Cron] Error processing a database for no-shows:', dbError);
         }
       }
-    } catch (error) {
-      console.error('[Cron] Error running No-Show job:', error);
-    }
+  } catch (error) {
+    console.error('[Cron] Error running No-Show job:', error);
+  }
+}
+
+// Runs every 15 minutes to flag no-shows for classes that have finished
+export function startNoShowJob() {
+  setInterval(async () => {
+    await runNoShowScan();
   }, 15 * 60 * 1000); // 15 minutes
 }
+

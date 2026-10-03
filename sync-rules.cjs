@@ -8,11 +8,6 @@ const FILENAME = 'firestore.rules';
 // We define both absolute and relative path paths to support different environments.
 const projectDefinitions = [
   {
-    name: 'Strike CRM',
-    absolute: 'C:/Users/Mi5a/MitrixoGYMCRMPlatform',
-    relative: '.'
-  },
-  {
     name: 'ATPL Vector',
     absolute: 'C:/Users/Mi5a/atplvector',
     relative: '../atplvector'

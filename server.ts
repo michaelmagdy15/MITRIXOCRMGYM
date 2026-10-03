@@ -6,8 +6,9 @@ import fs from "fs";
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
-import { startNoShowJob } from './src/jobs/noShowJob.js';
+import { startNoShowJob, runNoShowScan } from './src/jobs/noShowJob.js';
 import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus, getEffectiveStatus, toEndOfDayMs } from './src/jobs/membershipExpirationJob.js';
+import { isStandaloneMode } from './src/config/environment.js';
 import {
   isSessionTierAllowed,
   isSessionBranchAllowed,
@@ -458,9 +459,50 @@ async function startServer() {
   // Desktop sync router for Windows Offline Desktop apps (Strike & Inzan Athletics)
   app.use('/api/desktop', desktopSyncRouter);
 
-  // API routes go here
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+  // Dedicated Cloud Run health check probe
+  app.get("/api/health", async (req, res) => {
+    try {
+      const mode = isStandaloneMode() ? "standalone" : "multi-tenant";
+      res.json({
+        status: "ok",
+        mode,
+        timestamp: new Date().toISOString()
+      });
+    } catch (err: any) {
+      res.status(500).json({ status: "error", error: err.message });
+    }
+  });
+
+  // Authenticated Cloud Scheduler cron trigger for Membership Expiration
+  app.post("/api/cron/membership-expiration", async (req, res) => {
+    try {
+      const cronSecret = process.env.CRON_SECRET;
+      if (cronSecret && req.headers['x-cron-secret'] !== cronSecret) {
+        res.status(401).json({ error: "Unauthorized cron trigger" });
+        return;
+      }
+      const results = await runAllTenantsExpirationScan();
+      res.json({ status: "success", results });
+    } catch (err: any) {
+      console.error("[Cron API] Error running membership expiration:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Authenticated Cloud Scheduler cron trigger for No-Show processing
+  app.post("/api/cron/no-show-check", async (req, res) => {
+    try {
+      const cronSecret = process.env.CRON_SECRET;
+      if (cronSecret && req.headers['x-cron-secret'] !== cronSecret) {
+        res.status(401).json({ error: "Unauthorized cron trigger" });
+        return;
+      }
+      await runNoShowScan();
+      res.json({ status: "success", message: "No-show scan completed" });
+    } catch (err: any) {
+      console.error("[Cron API] Error running no-show scan:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Fetch all clients (members) via memory cache

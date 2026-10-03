@@ -1,53 +1,43 @@
-# Use a multi-stage build for efficiency
-# Stage 1: Build stage
-FROM node:20-slim AS builder
+# ==============================================================================
+# Multi-Stage Production Dockerfile for Strike Gym Dedicated Cloud Run
+# ==============================================================================
 
+# Stage 1: Build Assets
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Copy package files first for better caching
 COPY package*.json ./
+RUN npm ci
 
-# Install all dependencies (including devDependencies needed for build)
-# Using npm ci with retries to mitigate ECONNRESET network issues in Cloud Build
-RUN npm config set fetch-retry-maxtimeout 6000000 && npm config set fetch-retry-mintimeout 10000 && npm ci || npm ci
-
-# Copy the rest of the application code
 COPY . .
+RUN npm run build
 
-# Build argument for Gemini API Key (needed for Vite build)
-ARG GEMINI_API_KEY
-ENV GEMINI_API_KEY=$GEMINI_API_KEY
-
-# Build arguments for version tracking
-ARG VITE_BUILD_COMMIT=unknown
-ARG VITE_BUILD_TIMESTAMP
-ENV VITE_BUILD_COMMIT=$VITE_BUILD_COMMIT
-ENV VITE_BUILD_TIMESTAMP=$VITE_BUILD_TIMESTAMP
-
-# Run the build script
-# This produces dist/assets (frontend) and dist/server.cjs (backend)
-RUN VITE_BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ") npm run build
-
-# Stage 2: Runtime stage
-FROM node:20-slim
-
+# Stage 2: Minimal Production Runtime
+FROM node:20-alpine AS runner
 WORKDIR /app
 
-# Copy the production output from the builder stage
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/dist-server ./dist-server
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/firebase-applet-config.json ./
-COPY --from=builder /app/root.crt ./
-
-# Install only production dependencies cleanly and ignore postinstall scripts that fail
-RUN npm ci --omit=dev --ignore-scripts
-
-# The server listens on the port defined by the Cloud Run environment
 ENV NODE_ENV=production
+ENV STANDALONE_MODE=true
+ENV STANDALONE_TENANT_ID=strike
 ENV PORT=8080
 
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy compiled assets from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/dist-server ./dist-server
+COPY --from=builder /app/firebase.standalone.json ./firebase.json
+COPY --from=builder /app/firestore-tenant.rules ./firestore.rules
+COPY --from=builder /app/firestore.indexes.json ./firestore.indexes.json
+COPY --from=builder /app/storage.rules ./storage.rules
+COPY --from=builder /app/firebase-applet-config.json ./firebase-applet-config.json
+
+# Cloud Run defaults to port 8080
 EXPOSE 8080
 
-# Run the bundled server
+# Health check probe
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/health || exit 1
+
 CMD ["node", "dist-server/server.cjs"]
