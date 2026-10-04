@@ -46,16 +46,29 @@ async function runDeltaSync() {
   let syncedCount = 0;
 
   for (const colName of HIGH_VELOCITY_COLLECTIONS) {
-    const sourceSnap = await sourceDb.collection(colName).get();
+    const [sourceSnap, targetSnap] = await Promise.all([
+      sourceDb.collection(colName).get(),
+      targetDb.collection(colName).get()
+    ]);
+
+    const targetMap = new Map();
+    targetSnap.docs.forEach(doc => {
+      targetMap.set(doc.id, JSON.stringify(doc.data()));
+    });
+
     let batch = targetDb.batch();
     let countInBatch = 0;
+    let colSynced = 0;
 
     for (const doc of sourceSnap.docs) {
-      const targetDoc = await targetDb.collection(colName).doc(doc.id).get();
+      const sourceStr = JSON.stringify(doc.data());
+      const targetStr = targetMap.get(doc.id);
+
       // If target doesn't exist or data is different, upsert
-      if (!targetDoc.exists || JSON.stringify(targetDoc.data()) !== JSON.stringify(doc.data())) {
+      if (!targetStr || targetStr !== sourceStr) {
         batch.set(targetDb.collection(colName).doc(doc.id), doc.data());
         countInBatch++;
+        colSynced++;
         syncedCount++;
 
         if (countInBatch >= 400) {
@@ -69,7 +82,7 @@ async function runDeltaSync() {
     if (countInBatch > 0) {
       await batch.commit();
     }
-    console.log(`✓ Delta check complete for: ${colName}`);
+    console.log(`✓ Delta check complete for: ${colName.padEnd(20)} (${colSynced} new/updated docs synced)`);
   }
 
   console.log(`\n🎉 Delta-Sync Finished: ${syncedCount} updated/new documents synced.`);
