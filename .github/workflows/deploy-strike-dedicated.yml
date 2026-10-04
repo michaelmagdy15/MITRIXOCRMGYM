@@ -50,23 +50,7 @@ jobs:
         env:
           HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
 
-      # Build and deploy container directly to Strike's Cloud Run service
-      - name: Deploy to Cloud Run
-        if: env.HAS_STRIKE_SECRET == 'true'
-        env:
-          HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
-          PROJECT_ID: ${{ secrets.STRIKE_GCP_PROJECT_ID }}
-          REGION: europe-west1
-        run: |
-          gcloud run deploy strike-crm-platform \
-            --source . \
-            --project $PROJECT_ID \
-            --region $REGION \
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars "NODE_ENV=production,STANDALONE_MODE=true,STANDALONE_TENANT_ID=strike"
-
-      # Deploy updated firestore-tenant.rules, indexes, storage rules, and hosting web app
+      # Deploy updated firestore-tenant.rules, indexes, storage rules, and hosting web app to Strike Firebase
       - name: Deploy Rules, Indexes, Storage & Hosting to Strike Firebase
         if: env.HAS_STRIKE_SECRET == 'true'
         env:
@@ -74,3 +58,4 @@ jobs:
           PROJECT_ID: ${{ secrets.STRIKE_GCP_PROJECT_ID || 'strike-production-f5242' }}
         run: |
           npx firebase deploy --config firebase.standalone.json --only firestore:rules,firestore:indexes,storage,hosting --project $PROJECT_ID
+
