@@ -63,7 +63,10 @@ const BLACKLISTED_COLLECTIONS = [
   'match_profiles',
   'match_tasks',
   'match_users',
-  'tenants'
+  'tenants',
+  'vbt_camp',
+  'vbt_camp_announcements',
+  'vbt_push_tokens'
 ];
 
 async function runVerification() {

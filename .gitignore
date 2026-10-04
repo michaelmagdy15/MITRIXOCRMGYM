@@ -8,6 +8,7 @@ coverage/
 !.env.example
 .netlify/
 .gemini/
+.firebase/
 *service-account.json
 dist-server/
 scratch/
@@ -17,6 +18,9 @@ src/sdk/
 # Secrets / sensitive data (never commit)
 auth_export.json
 users.json
+*-adminsdk-*.json
+*-sa-key.json
+strike-sa-key.json
 scripts/migration/*.json
 strike_crm_backup_*.json
 Copy of Michael mitry (1).pdf

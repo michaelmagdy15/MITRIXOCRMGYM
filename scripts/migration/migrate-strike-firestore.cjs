@@ -79,10 +79,7 @@ const STRIKE_COLLECTIONS = [
   'bookingRequests',
   'calendarEvents',
   'badgeDefinitions',
-  'memberBadges',
-  'vbt_camp',
-  'vbt_camp_announcements',
-  'vbt_push_tokens'
+  'memberBadges'
 ];
 
 const BATCH_SIZE = 400; // Safe threshold under Firestore 500 limit

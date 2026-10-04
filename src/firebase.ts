@@ -11,13 +11,15 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 import { isStandaloneMode, getStandaloneTenantId } from './config/environment';
+import { strikeDedicatedFirebaseConfig } from './config/strikeDedicatedConfig';
 
 // Support dynamic tenant configurations loaded based on subdomain or query param
 const getActiveConfig = () => {
   const dynamicConfig = (window as any).__FIREBASE_CONFIG__;
   if (isStandaloneMode()) {
     return {
-      ...(dynamicConfig || firebaseConfig),
+      ...strikeDedicatedFirebaseConfig,
+      ...(dynamicConfig || {}),
       tenantId: getStandaloneTenantId(),
     };
   }
@@ -31,6 +33,20 @@ const getActiveConfig = () => {
       const params = new URLSearchParams(window.location.search);
       const t = (params.get('tenant') || '').toLowerCase();
       const host = window.location.hostname.toLowerCase();
+
+      // Check if accessing via dedicated Strike domain or project hosting
+      if (
+        host.includes('strike-production-f5242') ||
+        host.includes('strikeboxing-eg.pro') ||
+        host.includes('strike-egy.com')
+      ) {
+        return {
+          ...strikeDedicatedFirebaseConfig,
+          ...(dynamicConfig || {}),
+          tenantId: 'strike'
+        };
+      }
+
       if (t === 'inzan' || t === 'inzanathletics' || host.includes('inzanathletics') || host.includes('inzan')) {
         return {
           ...(dynamicConfig || firebaseConfig),
