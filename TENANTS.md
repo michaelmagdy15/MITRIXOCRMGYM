@@ -6,25 +6,31 @@
 
 ## Active Tenants
 
-### 1. Strike (strike)
+### 1. Strike (strike) — Dedicated Standalone Project
+
+**Dedicated GCP & Firebase Project:** `strike-production-f5242`
+**Ownership:** Client-owned GCP account (100% data, privacy, and billing ownership).
 
 **Domains:**
-- `strike.mitrixo.com`
-- `strikeboxing.mitrixo.com`
-- `dashboard.strikeboxing-eg.pro`
-- `strike-egy.com`
-- `www.strike-egy.com`
+- `strike-egy.com` (Primary production domain — live on Firebase Hosting)
+- `www.strike-egy.com` (Redirects to strike-egy.com)
+- `strike-production-f5242.web.app` (Firebase default hosting URL)
+- `dashboard.strikeboxing-eg.pro` (Secondary custom domain)
+- `strike.mitrixo.com` (Legacy central subdomain fallback)
 
-**Firestore Database:** Default (no specific database ID — uses `(default)`)
+**Firestore Database:** `(default)` in project `strike-production-f5242` (location: `eur3` Europe multi-region).
+**Cloud Storage:** `gs://strike-production-f5242.firebasestorage.app`
+**Authentication:** Dedicated Firebase Auth (`1,152` members, `33` staff/coaches with SCRYPT hashes).
+**CI/CD Pipeline:** Automated continuous deployment from unified `master` via `.github/workflows/deploy-strike-dedicated.yml`.
 
 **Tenant ID:** `strike`
 
 **Branding:**
-- Default company name: Strike
+- Default company name: STRIKE
 - Email branding fallback: "STRIKE" (see mailer.ts)
-- Logo: tenant uploads their own
+- Logo & Splash: Uploaded in Cloud Storage `branding/`
 
-**Notes:** This is the primary Strike boxing gym tenant.
+**Notes:** Strike Boxing Club is 100% isolated in its dedicated GCP environment while continuously receiving all platform upgrades and fixes directly from this codebase.
 
 ---
 

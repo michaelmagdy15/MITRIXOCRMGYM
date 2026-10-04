@@ -8,22 +8,80 @@
 
 **MitrixoGYM** — a multi-tenant Firebase CRM platform for fitness gyms and fitness studios. Mission: comprehensive member management, staff management, payments, packages, attendance tracking, and guest management for multiple gym brands under a single platform.
 
-**Current state:** v1.12 — Full desktop CRM parity (Strike & Inzan standalone portable executables with local SQLite databases and outbox sync engine), Strike brand purity ("STRIKE HAS NO ORANGE"), and complete Inzan Athletics feature specifications closure (Nutrition Module, 1-Click Calendar Sync, Notification Templates & Member Preferences, Explicit Payment Status & Maker-Checker Refund Workflow, No-Show Strike Lockout). Strict multi-tenant isolation maintained: Strike `(default)` and Inzan Athletics (`db-inzanathletics`).
+**Current state:** v1.13 — Strike Boxing Club Dedicated Tenant Separation & Decoupled Continuous Delivery Architecture. Strike has been fully decoupled from the central multi-tenant project (`faa-test-guide-v2`) into an independent, client-owned GCP & Firebase project (`strike-production-f5242`). All 13,205 gym documents, 1,152 members, and 33 staff/admins/coaches were migrated with intact SCRYPT password hashes (zero resets). All VBT Camp items (`vbt_camp`, `vbt_camp_announcements`, `vbt_push_tokens`, `vbt_events/`) were completely purged. Dedicated Storage (`strike-production-f5242.firebasestorage.app`) and Firebase Hosting (`https://strike-production-f5242.web.app` and `strike-egy.com`) are live. Continuous automated updates are pushed from the unified repository (`master`) via GitHub Actions without maintaining two separate codebases.
 
-**Active session (2026-09-18):**
-- **Native Windows Desktop CRM Overhaul**: Built and published portable .NET 9 executables for Strike Boxing Club (`MitrixoGym.Strike.Desktop.exe`) and Inzan Athletics (`MitrixoGym.Inzan.Desktop.exe`) with 100% full CRM parity, offline local SQLite engine (`strike_local.db`, `inzan_local.db`), 6 full modules (Dashboard, Clients Directory, Attendance Kiosk, Payments & POS, Schedules, Outbox Sync), and authoritative database snapshots loaded (1,081 Strike members, 5,852 Inzan members).
-- **Strike Desktop Theme Alignment**: Strict enforcement of "STRIKE HAS NO ORANGE" — pure white canvas (`#FFFFFF`), light gray borders (`#E5E7EB`), matte black pills (`#000000`), and emerald green stat highlights (`#10B981`) matching the live web CRM.
-- **Inzan Desktop Theme Alignment**: Deep charcoal dark mode (`#0B0F17` / `#1E293B`) with crimson rose accents (`#E11D48`).
-- **Inzan Athletics Nutrition Module (PRD §11)**: Full admin workspace (`src/NutritionModule.tsx`), real-time Firestore hooks (`src/hooks/useNutrition.ts`), member portal booking & consultation tracker (`src/member/MemberNutrition.tsx`), gated navigation in `src/App.tsx` and `src/member/MemberPortal.tsx`.
-- **1-Click Calendar Sync (PRD §6.3, Classes PRD §2.A)**: RFC 5545 `.ics` generator and Google Calendar URL builder (`src/utils/calendarSync.ts`), dropdown component (`src/components/CalendarSyncButton.tsx`), embedded on booked class cards and upcoming PT sessions.
-- **Notification Templates & Member Preferences (PRD §15)**: Admin template editor (`src/components/NotificationTemplateSettings.tsx`) in `src/Settings.tsx` with dynamic variable interpolation; toggle switches in `src/member/MemberProfile.tsx` for Push Notifications, Class Reminders, and Session Updates.
-- **Payment Status & Maker-Checker Refund Workflow (PRD §17, §20)**: Explicit statuses (`paid`, `pending`, `refunded`, `failed`) on `Payment`, status badges and "Request Refund" dialog in `src/Payments.tsx`, approval execution in `src/admin/AdminRequests.tsx` and `src/services/approvalService.ts` with session restoration, entitlement cancellation, and coach earnings exclusion.
-- **Configurable No-Show Penalties & Strike Lockout (Classes PRD §3.C)**: Pre-booking lockout validation in `server.ts` and automated 7-day lockout job in `functions/src/classes/noShowJob.ts` triggered on 3 strikes.
-- **Multi-Tenant Isolation & Quality Gate**: `npm run lint` $\rightarrow$ 0 errors; `npm run build` $\rightarrow$ 0 errors; `dotnet test` $\rightarrow$ 23/23 tests green; cloud functions build clean.
+**Active session (2026-10-04):**
+- **Dedicated Project Separation**: Strike Boxing Club provisioned into its own client-owned GCP & Firebase project (`strike-production-f5242`), ensuring 100% client data and billing ownership while isolating all ATPL Vector, Gamén, and Matchmaking intellectual property.
+- **Untangled Rules & Configuration**: Created `firebase.standalone.json` binding exclusively to `firestore-tenant.rules` (sanitized gym CRM ruleset) and `storage.rules`. Removed Strike from `sync-rules.cjs`.
+- **Zero-Password-Reset Auth Migration**: 1,152 members + 33 staff/admins/coaches migrated with exact production SCRYPT cipher parameters (`base64_signer_key`, `base64_salt_separator`, `rounds: 8`, `mem_cost: 14`).
+- **Complete VBT Camp Purge**: Purged all 183 VBT documents (`vbt_camp`, `vbt_camp_announcements`, `vbt_push_tokens`) from Firestore and excluded `vbt_events/` from Cloud Storage. Updated migration whitelist and added VBT collections to assertion blacklist.
+- **Dedicated Cloud Storage & Security**: Initialized default bucket `gs://strike-production-f5242.firebasestorage.app`, deployed `storage.rules`, and synced gym branding (`branding/`) and member avatars (`avatars/`).
+- **Automated Continuous Delivery Pipeline**: Added GitHub Actions workflow `.github/workflows/deploy-strike-dedicated.yml` deploying pre-built hosting SPA and security rules on every commit to `master`. Dual-mode client config in `src/config/strikeDedicatedConfig.ts` and `src/firebase.ts` dynamically routes Strike traffic to `strike-production-f5242`.
+- **Domain Cutover**: Switched `strike-egy.com` DNS A record (`199.36.158.100`) and TXT verification record (`hosting-site=strike-production-f5242`) in Cloudflare to dedicated project. Verified 100% parity across all 3 verification gates.
+- **Mobile App Zero-Rebuild Compatibility**: The iOS/Android App Store mobile apps load `https://strike-egy.com/`. With DNS switched to `strike-production-f5242`, all mobile users automatically connect to the new standalone backend without an App Store update.
 
 ---
 
-## 8. Live Session Log — 2026-09-18 (most recent)
+## 8. Live Session Log — 2026-10-04 (most recent)
+
+### Comprehensive Scope: Strike Dedicated Tenant Separation & Continuous Delivery Architecture
+
+#### Problem & Business Context
+Strike Boxing Club required separation from the central multi-project account (`faa-test-guide-v2`) into an independent, client-owned GCP & Firebase account (`strike-production-f5242`) so that:
+1. The client has 100% data, privacy, and billing ownership.
+2. The core engineering team can continuously ship updates to Strike from the main codebase (`master`) without maintaining two separate repositories or running manual deployments.
+3. No cross-venture data, rules, or accounts from ATPL Vector, Gamén, or Matchmaking could ever leak into Strike.
+4. Member and staff passwords must remain 100% unbroken (zero password resets).
+5. All legacy VBT Camp items had to be completely purged.
+
+#### Key Engineering Deliverables
+
+1. **Security Rules Untangled**:
+   - Strike was completely decoupled from `sync-rules.cjs` (which was generating monolithic rules commingling ATPL and Gamén collections).
+   - Created [`firebase.standalone.json`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/firebase.standalone.json) binding directly to [`firestore-tenant.rules`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/firestore-tenant.rules) and [`storage.rules`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/storage.rules).
+   - Deployed sanitized rules and [`firestore.indexes.json`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/firestore.indexes.json) to `strike-production-f5242`.
+
+2. **Dual-Mode Codebase & Client-Side Dynamic Routing**:
+   - Added `STANDALONE_MODE` in [`src/config/environment.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/config/environment.ts) and [`server.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/server.ts).
+   - Created [`src/config/strikeDedicatedConfig.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/config/strikeDedicatedConfig.ts) containing official Firebase Web App credentials (`1:987099056588:web:578b142da9960d202f3569`).
+   - Updated [`src/firebase.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/firebase.ts): automatically routes standalone builds and dedicated domains (`strike-production-f5242.web.app`, `strike-egy.com`, `strikeboxing-eg.pro`) to `strikeDedicatedFirebaseConfig` while preserving multi-tenant routing for central tenants (`inzanathletics`, etc.).
+
+3. **Firestore Database Migration & VBT Camp Purge**:
+   - Migrated all 13,205 documents across 30 Strike gym collections via [`scripts/migration/migrate-strike-firestore.cjs`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/scripts/migration/migrate-strike-firestore.cjs) using 400-document atomic batches with exponential backoff retries.
+   - Purged all 183 VBT Camp documents (`vbt_camp`, `vbt_camp_announcements`, `vbt_push_tokens`) from `strike-production-f5242` via [`scripts/migration/purge-vbt-items.cjs`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/scripts/migration/purge-vbt-items.cjs).
+   - Scanned all packages, settings, classes, tasks, and notifications — verified 0 references to VBT/camp.
+   - Removed `vbt_*` from the migration whitelist and added to assertion blacklist in [`scripts/migration/verify-migration-parity.cjs`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/scripts/migration/verify-migration-parity.cjs).
+   - Built optimized snapshot-parallelized [`scripts/migration/delta-sync-firestore.cjs`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/scripts/migration/delta-sync-firestore.cjs) (runs in ~8 seconds).
+
+4. **Auth Migration (Zero Password Resets)**:
+   - Exported 1,434 accounts from `faa-test-guide-v2`.
+   - Filtered and imported 1,152 Strike members + 33 staff/admins/coaches (`magd.gallab@gmail.com`, `shadyyoussef305@gmail.com`, `atefstrike@gmail.com`, `admin@strike.eg`, etc.) using SCRYPT parameters:
+     - `algorithm: SCRYPT`
+     - `base64_signer_key: dILNnAWy9/KEz0IclucIE3UftXIK5zhg4r1egrPknMdVCFgrtyyzIqlkchejiP6eNKSV7ym2D6KQadp48oZNLg==`
+     - `base64_salt_separator: Bw==`
+     - `rounds: 8`
+     - `mem_cost: 14`
+   - Verified 100% staff login readiness in `strike-production-f5242`.
+
+5. **Cloud Storage Sync**:
+   - Initialized default bucket `gs://strike-production-f5242.firebasestorage.app`.
+   - Deployed `storage.rules` (avatars, member photos, branding assets).
+   - Synced `branding/` (6 assets) and `avatars/` while strictly excluding `vbt_events/`.
+
+6. **Continuous Delivery without Separate Codebases**:
+   - Workflow: [`.github/workflows/deploy-strike-dedicated.yml`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/.github/workflows/deploy-strike-dedicated.yml).
+   - How it works: On every `git push` to `master`, GitHub Actions builds the unified SPA, runs TypeScript lint checks, and automatically deploys the latest frontend, security rules, and storage rules to `strike-production-f5242` via Firebase CLI using repository secret `STRIKE_GCP_SA_KEY`.
+   - Zero branching drift, zero dual-maintenance overhead.
+
+7. **Domain & Mobile Cutover**:
+   - Configured `strike-egy.com` in Firebase Hosting under `strike-production-f5242`.
+   - Cloudflare DNS updated: A record `199.36.158.100` (DNS only), TXT `hosting-site=strike-production-f5242`.
+   - Domain successfully verified in Firebase Console; SSL certificate issued.
+   - iOS/Android mobile WebView loads `https://strike-egy.com/` — automatically targets the dedicated backend with zero App Store rebuilds needed.
+
+---
+
+## 9. Live Session Log — 2026-09-18
 
 ### Comprehensive Scope & Detailed Breakdown
 
