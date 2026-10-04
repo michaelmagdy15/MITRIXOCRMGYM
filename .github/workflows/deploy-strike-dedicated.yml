@@ -17,6 +17,9 @@ concurrency:
 jobs:
   validate-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
+      PROJECT_ID: ${{ secrets.STRIKE_GCP_PROJECT_ID || 'strike-production-f5242' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -39,23 +42,13 @@ jobs:
       - name: Authenticate to Strike Google Cloud
         if: env.HAS_STRIKE_SECRET == 'true'
         uses: google-github-actions/auth@v2
-        env:
-          HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
         with:
           credentials_json: ${{ secrets.STRIKE_GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        if: env.HAS_STRIKE_SECRET == 'true'
-        uses: google-github-actions/setup-gcloud@v2
-        env:
-          HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
 
       # Deploy updated firestore-tenant.rules, indexes, storage rules, and hosting web app to Strike Firebase
       - name: Deploy Rules, Indexes, Storage & Hosting to Strike Firebase
         if: env.HAS_STRIKE_SECRET == 'true'
-        env:
-          HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}
-          PROJECT_ID: ${{ secrets.STRIKE_GCP_PROJECT_ID || 'strike-production-f5242' }}
         run: |
-          npx firebase deploy --config firebase.standalone.json --only firestore:rules,firestore:indexes,storage,hosting --project $PROJECT_ID
+          npx --yes firebase-tools deploy --config firebase.standalone.json --only firestore:rules,firestore:indexes,storage,hosting --project $PROJECT_ID --non-interactive
+
 
