@@ -70,7 +70,9 @@ Strike Boxing Club required separation from the central multi-project account (`
 
 6. **Continuous Delivery without Separate Codebases**:
    - Workflow: [`.github/workflows/deploy-strike-dedicated.yml`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/.github/workflows/deploy-strike-dedicated.yml).
-   - How it works: On every `git push` to `master`, GitHub Actions builds the unified SPA, runs TypeScript lint checks, and automatically deploys the latest frontend, security rules, and storage rules to `strike-production-f5242` via Firebase CLI using repository secret `STRIKE_GCP_SA_KEY`.
+   - How it works: On every `git push` to `master`, GitHub Actions builds the unified SPA (`npm run build`), runs verification lint checks, authenticates via `google-github-actions/auth@v2` using repository secret `STRIKE_GCP_SA_KEY`, and deploys the latest frontend, security rules, indexes, and storage rules to `strike-production-f5242` via `npx --yes firebase-tools deploy`.
+   - Dedicated Service Account IAM roles: `roles/firebase.admin`, `roles/serviceusage.serviceUsageConsumer`, `roles/firebase.sdkAdminServiceAgent`, `roles/storage.admin`.
+   - Verified live in GitHub Actions run `#37199965485` (100% green checkmark, deployed in 1m33s, live at `strike-egy.com`).
    - Zero branching drift, zero dual-maintenance overhead.
 
 7. **Domain & Mobile Cutover**:
