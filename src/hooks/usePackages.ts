@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { db, auth } from '../firebase';
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { Package } from '../types';
 import { cleanData } from '../utils';
 import { addAuditLog } from '../services/auditService';
@@ -40,13 +40,33 @@ export const usePackages = () => {
     await addAuditLog('UPDATE', 'CLIENT', id, `Updated package: ${pkgName}`, currentUser?.name);
   };
 
-  const deletePackage = async (id: string) => {
-    const pkgName = packages.find(p => p.id === id)?.name || id;
-    await deleteDoc(doc(db, 'packages', id));
-    await addAuditLog('DELETE', 'CLIENT', id, `Deleted package: ${pkgName}`, currentUser?.name);
+  const archivePackage = async (id: string, reason?: string) => {
+    const pkg = packages.find(p => p.id === id);
+    const pkgName = pkg?.name || id;
+    await updateDoc(doc(db, 'packages', id), cleanData({
+      isActive: false,
+      is_active: false,
+      archivedAt: new Date().toISOString(),
+      archivedBy: currentUser?.id,
+      archivedReason: reason || 'Archived by staff'
+    }));
+    await addAuditLog('UPDATE', 'CLIENT', id, `Archived package: ${pkgName}${reason ? ` (${reason})` : ''}`, currentUser?.name);
+  };
+
+  const restorePackage = async (id: string) => {
+    const pkg = packages.find(p => p.id === id);
+    const pkgName = pkg?.name || id;
+    await updateDoc(doc(db, 'packages', id), cleanData({
+      isActive: true,
+      is_active: true,
+      archivedAt: null,
+      archivedBy: null,
+      archivedReason: null
+    }));
+    await addAuditLog('UPDATE', 'CLIENT', id, `Restored package: ${pkgName}`, currentUser?.name);
   };
 
   const recalculateAllPackages = async () => {};
 
-  return { packages, loading, addPackage, updatePackage, deletePackage, recalculateAllPackages };
-};
+  return { packages, loading, addPackage, updatePackage, deletePackage: archivePackage, restorePackage, recalculateAllPackages };
+}

@@ -97,9 +97,12 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
     onBranchChange?.(newBranch);
   };
 
+  const isPackageActive = (pkg: Package) => pkg.isActive !== false && pkg.is_active !== false && !pkg.archivedAt;
+
   // Filter packages dynamically based on Step 1, Step 2, and PT toggle using SQL RBAC parity
   const filteredPackages = useMemo(() => {
     return packages.filter((pkg) => {
+      if (!isPackageActive(pkg)) return false;
       if (!isPackageMatchingFilter(pkg, category, branch, packageTypeFilter === 'PT' || isPtSelected)) {
         return false;
       }

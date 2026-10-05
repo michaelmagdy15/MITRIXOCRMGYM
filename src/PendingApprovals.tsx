@@ -27,9 +27,11 @@ export default function PendingApprovals() {
       });
   }, [clients, search]);
 
+  const activePackages = packages.filter(p => p.isActive !== false && p.is_active !== false && !p.archivedAt);
+
   const handleActivate = async (clientId: string) => {
     const pkgId = selectedPackages[clientId];
-    const pkg = packages.find(p => p.id === pkgId);
+    const pkg = activePackages.find(p => p.id === pkgId);
     setActivatingId(clientId);
     try {
       const now = new Date();
@@ -111,7 +113,7 @@ export default function PendingApprovals() {
                       <SelectValue placeholder="Activate without package" />
                     </SelectTrigger>
                     <SelectContent>
-                      {packages.map(pkg => (
+                      {activePackages.map(pkg => (
                         <SelectItem key={pkg.id} value={pkg.id}>
                           {pkg.name} · {pkg.sessions} sessions · {pkg.price} LE
                         </SelectItem>

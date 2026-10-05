@@ -59,7 +59,10 @@ export default function Payments() {
     can,
   } = useAppContext();
   const visiblePackages = React.useMemo(() => {
-    return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
+    return packages.filter(p => {
+      const active = p.isActive !== false && p.is_active !== false && !p.archivedAt;
+      return active && (features?.ptPackages !== false || p.type !== 'Private');
+    });
   }, [packages, features]);
   const [isNewPaymentOpen, setIsNewPaymentOpen] = useState(false);
 

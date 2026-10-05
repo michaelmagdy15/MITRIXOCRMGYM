@@ -339,12 +339,13 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   // Primary branch for display
   const primaryBranch = branches[0] || 'Main Branch';
 
-  // Public packages: strictly exclude corporate and group company packages
+  // Public packages: strictly exclude corporate and group company packages, and archived packages
   const publicPackages = useMemo(() => {
     return packages.filter(p => {
+      const archived = p.isActive === false || p.is_active === false || !!p.archivedAt;
       const n = (p.name || '').toLowerCase();
       const isCorporate = n.includes('corporate') || n.includes('company') || p.type === 'Group';
-      return !isCorporate;
+      return !archived && !isCorporate;
     });
   }, [packages]);
 

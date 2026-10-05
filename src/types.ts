@@ -39,6 +39,10 @@ export interface Package {
   is_all_branches?: boolean;
   is_active?: boolean;
   isActive?: boolean;
+  /** Soft-archive fields. archivedAt set => archived. */
+  archivedAt?: string;
+  archivedBy?: string;
+  archivedReason?: string;
   type: 'Private' | 'Group' | 'Other';
   imageUrl?: string;
 }

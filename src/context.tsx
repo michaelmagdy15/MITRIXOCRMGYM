@@ -103,6 +103,7 @@ export interface AppContextType {
   addPackage: (pkg: Omit<Package, 'id'>) => Promise<void>;
   updatePackage: (id: string, updates: Partial<Package>) => Promise<void>;
   deletePackage: (id: string) => Promise<void>;
+  restorePackage: (id: string) => Promise<void>;
   addCoach: (coach: Omit<Coach, 'id'>) => Promise<void>;
   updateCoach: (id: string, updates: Partial<Coach>) => Promise<void>;
   deleteCoach: (id: string) => Promise<void>;
@@ -225,6 +226,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addPackage, 
     updatePackage, 
     deletePackage,
+    restorePackage,
     recalculateAllPackages
   } = usePackages();
 
@@ -571,6 +573,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addPackage,
     updatePackage,
     deletePackage,
+    restorePackage,
     addCoach,
     updateCoach,
     deleteCoach,

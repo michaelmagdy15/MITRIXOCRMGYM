@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Package, Branch } from './types';
-import { Plus, Edit, Trash2, Upload, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Upload, X, Archive, RotateCcw } from 'lucide-react';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { storage } from './firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -17,11 +17,12 @@ import ImageCropperDialog from './components/ImageCropperDialog';
 
 export default function Packages() {
   const { currentUser, branches, features } = useAppContext();
-  const { packages, addPackage, updatePackage, deletePackage } = usePackages();
+  const { packages, addPackage, updatePackage, deletePackage, restorePackage } = usePackages();
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [packageToDelete, setPackageToDelete] = useState<string | null>(null);
+  const [archiveReason, setArchiveReason] = useState('');
   const [editingPackage, setEditingPackage] = useState<Package | null>(null);
 
   const [name, setName] = useState('');
@@ -108,16 +109,26 @@ export default function Packages() {
     }
   };
 
+  const isArchived = (pkg: Package) => {
+    return pkg.archivedAt !== undefined || pkg.isActive === false || pkg.is_active === false;
+  };
+
   const handleDelete = async (id: string) => {
     setPackageToDelete(id);
+    setArchiveReason('');
     setIsConfirmDeleteOpen(true);
   };
 
   const confirmDelete = async () => {
     if (packageToDelete) {
-      await deletePackage(packageToDelete);
+      await deletePackage(packageToDelete, archiveReason || undefined);
       setPackageToDelete(null);
+      setArchiveReason('');
     }
+  };
+
+  const handleRestore = async (id: string) => {
+    await restorePackage(id);
   };
 
   const openEdit = (pkg: Package) => {
@@ -283,27 +294,45 @@ export default function Packages() {
             <TableBody>
               {packages
                 .filter(pkg => features?.ptPackages !== false || pkg.type !== 'Private')
-                .map(pkg => (
-                <TableRow key={pkg.id}>
-                  <TableCell className="font-medium">{pkg.name}</TableCell>
-                  <TableCell>
-                    {pkg.sessions === 0
-                      ? <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">∞ Unlimited</span>
-                      : pkg.sessions}
-                  </TableCell>
-                  <TableCell>{pkg.price.toLocaleString()} LE</TableCell>
-                  <TableCell>{pkg.expiryDays} days</TableCell>
-                  <TableCell>{pkg.branch}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(pkg)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(pkg.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                .map(pkg => {
+                  const archived = isArchived(pkg);
+                  return (
+                    <TableRow key={pkg.id} className={archived ? 'opacity-60 bg-muted/30' : undefined}>
+                      <TableCell className="font-medium">
+                        {pkg.name}
+                        {archived && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            Archived
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {pkg.sessions === 0
+                          ? <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">∞ Unlimited</span>
+                          : pkg.sessions}
+                      </TableCell>
+                      <TableCell>{pkg.price.toLocaleString()} LE</TableCell>
+                      <TableCell>{pkg.expiryDays} days</TableCell>
+                      <TableCell>{pkg.branch}</TableCell>
+                      <TableCell className="text-right">
+                        {!archived && (
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(pkg)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {archived ? (
+                          <Button variant="ghost" size="icon" onClick={() => handleRestore(pkg.id)} title="Restore package">
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(pkg.id)} title="Archive package">
+                            <Archive className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               {packages.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
@@ -432,11 +461,19 @@ export default function Packages() {
       <ConfirmDialog 
         isOpen={isConfirmDeleteOpen}
         onOpenChange={setIsConfirmDeleteOpen}
-        title="Delete Package"
-        description="Are you sure you want to delete this package? This action cannot be undone."
+        title="Archive Package"
+        description={
+          <div className="space-y-3">
+            <p>Archiving hides the package from new sales. Existing members keep their entitlements.</p>
+            <div className="space-y-1">
+              <Label>Reason (optional)</Label>
+              <Input value={archiveReason} onChange={e => setArchiveReason(e.target.value)} placeholder="e.g. Seasonal offer ended" />
+            </div>
+          </div>
+        }
         onConfirm={confirmDelete}
         variant="destructive"
-        confirmText="Delete"
+        confirmText="Archive"
       />
 
       <ImageCropperDialog

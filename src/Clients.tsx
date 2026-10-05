@@ -86,7 +86,10 @@ export default function Clients() {
   const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can } = useAppContext();
   const { packages } = usePackages();
   const visiblePackages = React.useMemo(() => {
-    return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
+    return packages.filter(p => {
+      const active = p.isActive !== false && p.is_active !== false && !p.archivedAt;
+      return active && (features?.ptPackages !== false || p.type !== 'Private');
+    });
   }, [packages, features]);
   const activeClient = activeClientId ? clients.find(c => c.id === activeClientId) : null;
 

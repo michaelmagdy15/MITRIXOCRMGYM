@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAppContext } from '../context';
 import { useCoaches } from '../hooks/useCoaches';
 import { usePackages } from '../hooks/usePackages';
@@ -27,6 +27,7 @@ export default function RenewalPipeline() {
   } = useAppContext();
   const { coaches } = useCoaches();
   const { packages } = usePackages();
+  const activePackages = useMemo(() => packages.filter(p => p.isActive !== false && p.is_active !== false && !p.archivedAt), [packages]);
 
   // Dialog states
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -97,7 +98,7 @@ export default function RenewalPipeline() {
 
   const handlePackageChange = (val: string) => {
     setPackageType(val);
-    const pkg = packages.find(p => p.name === val);
+    const pkg = activePackages.find(p => p.name === val);
     if (pkg) {
       setAmount(pkg.price.toString());
     }
@@ -335,7 +336,7 @@ export default function RenewalPipeline() {
                   <SelectValue placeholder="Select package" />
                 </SelectTrigger>
                 <SelectContent>
-                  {packages.map((pkg) => (
+                  {activePackages.map((pkg) => (
                     <SelectItem key={pkg.id} value={pkg.name}>
                       {pkg.name} ({pkg.price} {branding.currencySymbol || 'LE'})
                     </SelectItem>
