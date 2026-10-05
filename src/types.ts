@@ -308,6 +308,8 @@ export interface Payment {
   memberId?: string;
   amount: number;
   amount_paid: number;
+  /** Original catalogue/gross amount before discount (additive; legacy records may omit). */
+  originalAmount?: number;
   date: string; // ISO string
   method: 'Cash' | 'Credit Card' | 'Bank Transfer' | 'Instapay' | 'Other';
   status?: 'paid' | 'pending' | 'refunded' | 'failed';

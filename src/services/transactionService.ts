@@ -35,6 +35,8 @@ export interface PaymentTransactionParams {
   clientPackages?: any[];
 
   amount: number;
+  /** Original catalogue/gross amount before discount (for audit/receipts). */
+  originalAmount?: number;
   method: Payment['method'];
   instapayRef?: string;
 
@@ -70,6 +72,7 @@ export interface PaymentTransactionParams {
 }
 
 export const processPaymentTransaction = async (params: PaymentTransactionParams): Promise<void> => {
+  const actualAmountPaid = params.amount_paid !== undefined ? params.amount_paid : params.amount;
   const isGuestClient = params.isGuest || !params.clientId || params.clientId === 'WALK-IN-GUEST' || params.clientId === 'GUEST' || params.clientId === 'GUEST-LEAD';
 
   const rawBranch = params.branch || params.clientBranch || '';
@@ -79,7 +82,6 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
 
   if (isGuestClient) {
     const paymentRef = doc(collection(db, 'payments'));
-    const actualAmountPaid = params.amount_paid !== undefined ? params.amount_paid : params.amount;
     const clientNameVal = params.clientName || 'Walk-in Guest';
     const paymentData: Partial<Payment> = {
       id: paymentRef.id,
@@ -88,6 +90,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       clientName: clientNameVal,
       guestName: clientNameVal,
       amount: params.amount,
+      originalAmount: params.originalAmount,
       amount_paid: actualAmountPaid,
       method: params.method,
       date: safeIsoDate(params.paymentDate, true),
@@ -158,7 +161,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     const legacyStartDate = clientData.startDate || params.startDate;
 
     // Fetch wallet details inside transaction before any writes to satisfy Firestore rules
-    const pointsEarned = Math.floor(params.amount / 100);
+    const pointsEarned = Math.floor(actualAmountPaid / 100);
     const walletRef = doc(db, 'pointsWallets', params.clientId);
     let walletSnap: any = null;
     if (pointsEarned > 0) {
@@ -211,13 +214,13 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
 
     // C. Create New Payment Document
     const paymentRef = doc(collection(db, 'payments'));
-    const actualAmountPaid = params.amount_paid !== undefined ? params.amount_paid : params.amount;
     const paymentData: Partial<Payment> = {
       id: paymentRef.id,
       clientId: params.clientId,
       client_name: params.clientName,
       clientName: params.clientName,
       amount: params.amount,
+      originalAmount: params.originalAmount,
       amount_paid: actualAmountPaid,
       method: params.method,
       date: safeIsoDate(params.paymentDate, true),
@@ -328,7 +331,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       clientUpdate.stage = 'Converted';
     }
 
-    // Award points on package purchase! (1 Point per 100 LE/EGP spent)
+    // Award points on actual money collected (1 Point per 100 LE/EGP spent)
     if (pointsEarned > 0 && walletSnap) {
       const currentPoints = clientData.points || 0;
       clientUpdate.points = currentPoints + pointsEarned;
@@ -375,14 +378,14 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     let commentMsg = '';
     const formattedStartDate = safeFormatDate(validPkgStart, 'd MMM yyyy');
     if (params.isRenewal) {
-      commentMsg = `Package renewed: "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${params.amount.toLocaleString()} LE.`;
+      commentMsg = `Package renewed: "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${actualAmountPaid.toLocaleString()} LE.`;
     } else if (params.previousPackageName && params.isUpgradePayment) {
-      commentMsg = `Package upgraded: "${params.previousPackageName}" → "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${params.amount.toLocaleString()} LE.`;
+      commentMsg = `Package upgraded: "${params.previousPackageName}" → "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${actualAmountPaid.toLocaleString()} LE.`;
       if (transferredPaymentsCount > 0) {
         commentMsg += ` Transferred ${transferredPaymentsCount} previous payment(s) from "${params.previousPackageName}" to the new package.`;
       }
     } else {
-      commentMsg = `Payment recorded: "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${params.amount.toLocaleString()} LE.`;
+      commentMsg = `Payment recorded: "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${actualAmountPaid.toLocaleString()} LE.`;
     }
     transaction.set(commentRef, {
       text: commentMsg,
@@ -413,10 +416,10 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
   // Log audit entry for payment creation/upgrade/renewal
   const logAction = params.isRenewal ? 'UPDATE' : params.isUpgradePayment ? 'UPDATE' : 'CREATE';
   const logDetails = params.isRenewal
-    ? `Renewed package "${params.packageType}" for ${params.clientName} (+${params.amount.toLocaleString()} LE)`
+    ? `Renewed package "${params.packageType}" for ${params.clientName} (+${actualAmountPaid.toLocaleString()} LE)`
     : params.isUpgradePayment
-    ? `Upgraded "${params.previousPackageName}" → "${params.packageType}" for ${params.clientName} (+${params.amount.toLocaleString()} LE)`
-    : `Recorded payment of ${params.amount.toLocaleString()} LE for ${params.clientName} (${params.packageType})`;
+    ? `Upgraded "${params.previousPackageName}" → "${params.packageType}" for ${params.clientName} (+${actualAmountPaid.toLocaleString()} LE)`
+    : `Recorded payment of ${actualAmountPaid.toLocaleString()} LE for ${params.clientName} (${params.packageType})`;
 
   await addAuditLog(logAction as 'CREATE' | 'UPDATE' | 'DELETE', 'PAYMENT', params.clientId, logDetails, params.recordedByName);
 };

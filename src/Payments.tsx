@@ -14,6 +14,7 @@ import { format, parseISO, addDays } from 'date-fns';
 import { safeFormatDate, safeAddDays, toValidDate, safeIsoDate } from './utils/dateUtils';
 import { Payment, Client, RefundDetails } from './types';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
+import { calculatePricing, formatCurrencyAmount } from './utils/pricing';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
 import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt, RotateCcw } from 'lucide-react';
@@ -55,6 +56,7 @@ export default function Payments() {
     fetchExpiredMembers,
     expiredLoaded,
     loadingExpired,
+    can,
   } = useAppContext();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
@@ -158,6 +160,7 @@ export default function Payments() {
   const [discountType, setDiscountType] = useState<'percentage' | 'amount' | ''>('');
   const [discountValue, setDiscountValue] = useState('');
   const [discountedAmount, setDiscountedAmount] = useState('');
+  const [amountPaid, setAmountPaid] = useState('');
   const [paymentCategory, setPaymentCategory] = useState<PaymentCategory>('Memberships');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [isMemberOnHold, setIsMemberOnHold] = useState(false);
@@ -180,7 +183,7 @@ export default function Payments() {
   const itemsPerPage = 50;
 
   // Warn before navigating away when the new-payment form has unsaved data
-  const isFormDirty = isNewPaymentOpen && (clientSearch.trim() !== '' || amount.trim() !== '');
+  const isFormDirty = isNewPaymentOpen && (clientSearch.trim() !== '' || amount.trim() !== '' || amountPaid.trim() !== '');
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -279,24 +282,21 @@ export default function Payments() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const canApplyDiscount = can('payments.apply_discount');
+  const pricingBreakdown = calculatePricing({
+    grossAmount: amount ? Number(amount) : 0,
+    discountType: discountType || 'none',
+    discountValue: discountValue ? Number(discountValue) : undefined,
+    amountPaid: amountPaid ? Number(amountPaid) : undefined,
+  });
+
   useEffect(() => {
-    if (amount && discountType && discountValue) {
-      const baseAmount = parseFloat(amount);
-      let finalAmount = baseAmount;
-
-      if (discountType === 'percentage') {
-        const discountPercent = Math.min(Math.max(parseFloat(discountValue), 0), 100);
-        finalAmount = baseAmount * (1 - discountPercent / 100);
-      } else if (discountType === 'amount') {
-        const discountAmt = parseFloat(discountValue);
-        finalAmount = Math.max(baseAmount - discountAmt, 0);
-      }
-
-      setDiscountedAmount(finalAmount.toFixed(2));
+    if (pricingBreakdown.valid) {
+      setDiscountedAmount(pricingBreakdown.netAmount.toFixed(2));
     } else {
       setDiscountedAmount('');
     }
-  }, [amount, discountType, discountValue]);
+  }, [pricingBreakdown.netAmount, pricingBreakdown.valid]);
 
   const handleCreateNewClient = async () => {
     if (!newClientName.trim() || !newClientPhone.trim()) return;
@@ -453,7 +453,21 @@ export default function Payments() {
       return;
     }
 
-    const finalAmount = discountedAmount ? parseFloat(discountedAmount) : parseFloat(amount);
+    if (!pricingBreakdown.valid) {
+      setAlertTitle('Invalid Pricing');
+      setAlertDescription(pricingBreakdown.error || 'Please check the discount and amount values.');
+      setAlertOpen(true);
+      return;
+    }
+
+    if (discountType && !canApplyDiscount) {
+      setAlertTitle('Not Authorised');
+      setAlertDescription('You do not have permission to apply a discount.');
+      setAlertOpen(true);
+      return;
+    }
+
+    const finalAmount = pricingBreakdown.netAmount;
 
     const salesRepUser = users.find(u => {
       const name = u.name || u.email || u.id;
@@ -484,6 +498,8 @@ export default function Payments() {
         clientPackages: selectedClient?.packages,
         isGuest,
         amount: finalAmount,
+        originalAmount: parseFloat(amount),
+        amount_paid: pricingBreakdown.amountPaid,
         method,
         instapayRef: method === 'Instapay' ? instapayRef : undefined,
         packageType: finalPackageType,
@@ -500,7 +516,7 @@ export default function Payments() {
         endDate: endDate ? safeIsoDate(endDate) : undefined,
         discountType: discountType ? (discountType as 'percentage' | 'amount') : undefined,
         discountValue: discountValue ? parseFloat(discountValue) : undefined,
-        discountedAmount: discountedAmount ? parseFloat(discountedAmount) : undefined,
+        discountedAmount: finalAmount,
         isMemberOnHold,
         systemPackage: pkg,
         isRenewal: isRenewalPayment,
@@ -544,6 +560,7 @@ export default function Payments() {
       setDiscountType('');
       setDiscountValue('');
       setDiscountedAmount('');
+      setAmountPaid('');
       setPaymentCategory('Memberships');
       setReceiptNumber('');
       setIsMemberOnHold(false);
@@ -1462,11 +1479,12 @@ export default function Payments() {
                 <div className="space-y-3">
                   <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.discount')}</Label>
                   <div className="flex gap-2">
-                    <Select value={discountType || 'none'} onValueChange={(v) => {
+                    <Select value={discountType || 'none'} disabled={!canApplyDiscount} onValueChange={(v) => {
                       if (v === 'none') {
                         setDiscountType('');
                         setDiscountValue('');
                         setDiscountedAmount('');
+                        setAmountPaid('');
                       } else {
                         setDiscountType(v as 'percentage' | 'amount');
                       }
@@ -1487,14 +1505,36 @@ export default function Payments() {
                           placeholder={discountType === 'percentage' ? "e.g. 15" : "e.g. 500"} 
                           className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-bold text-amber-500"
                           value={discountValue} 
+                          disabled={!canApplyDiscount}
                           onChange={(e) => setDiscountValue(e.target.value)} 
                         />
                       </div>
                     )}
                   </div>
                   {discountedAmount && (
-                    <p className="text-xs font-semibold text-emerald-500 ml-1">Final Total: {discountedAmount} LE</p>
+                    <div className="text-xs space-y-1 ml-1">
+                      <p className="font-semibold text-emerald-500">Net Due: {discountedAmount} LE</p>
+                      {pricingBreakdown.discountAmount > 0 && (
+                        <p className="text-rose-500">Discount: {pricingBreakdown.discountAmount.toLocaleString()} LE</p>
+                      )}
+                    </div>
                   )}
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Amount Paid Now (LE)</Label>
+                    <Input
+                      type="number"
+                      placeholder={pricingBreakdown.netAmount.toFixed(2)}
+                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-bold font-mono"
+                      value={amountPaid}
+                      onChange={(e) => setAmountPaid(e.target.value)}
+                    />
+                    {amountPaid && pricingBreakdown.remainingBalance > 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 ml-1">
+                        Partial payment — remaining balance: {formatCurrencyAmount(pricingBreakdown.remainingBalance)}
+                      </p>
+                    )}
+                  </div>
 
                   {isInzan && discountType && (
                     <div className="space-y-2 pt-2 border-t border-border/30">

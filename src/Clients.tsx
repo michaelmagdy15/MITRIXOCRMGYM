@@ -36,6 +36,8 @@ import { downloadFile } from './utils/download';
 import { resolvePaymentCategory } from './utils/paymentCategories';
 import { matchesPhoneSearch } from './utils/phoneUtils';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
+import { calculatePricing, DiscountType, DiscountReason, formatCurrencyAmount } from './utils/pricing';
+import PricingDiscountControls, { PricingControlsState, DEFAULT_PRICING_STATE } from './components/PricingDiscountControls';
 import { InzanMemberShow } from './components/InzanMemberShow';
 import { AdjustPackageDatesDialog, canOverridePackageDates } from './components/AdjustPackageDatesDialog';
 import { addAuditLog } from './services/auditService';
@@ -81,7 +83,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded } = useAppContext();
+  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can } = useAppContext();
   const { packages } = usePackages();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
@@ -225,6 +227,8 @@ export default function Clients() {
   const [enrollCoachName, setEnrollCoachName] = useState('');
   const [enrollReceiptSerial, setEnrollReceiptSerial] = useState('');
   const [enrollNotes, setEnrollNotes] = useState('');
+  const [enrollPricing, setEnrollPricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
+  const canApplyDiscount = can('payments.apply_discount');
 
   const [upgradeDialogClientId, setUpgradeDialogClientId] = useState<string | null>(null);
   const [upgradePkgName, setUpgradePkgName] = useState('');
@@ -232,6 +236,7 @@ export default function Clients() {
   const [upgradePaymentMethod, setUpgradePaymentMethod] = useState('Cash');
   const [upgradeInstapayRef, setUpgradeInstapayRef] = useState('');
   const [upgradeSalesRep, setUpgradeSalesRep] = useState('unassigned');
+  const [upgradePricing, setUpgradePricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
 
   const [renewDialogClientId, setRenewDialogClientId] = useState<string | null>(null);
   const [renewPkgName, setRenewPkgName] = useState('');
@@ -239,6 +244,7 @@ export default function Clients() {
   const [renewPaymentMethod, setRenewPaymentMethod] = useState('Cash');
   const [renewInstapayRef, setRenewInstapayRef] = useState('');
   const [renewSalesRep, setRenewSalesRep] = useState('unassigned');
+  const [renewPricing, setRenewPricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
 
   // Add Package & Record Payment dialog for existing members
   const [addPackageDialogClientId, setAddPackageDialogClientId] = useState<string | null>(null);
@@ -251,6 +257,7 @@ export default function Clients() {
   const [addPackageCoachName, setAddPackageCoachName] = useState('');
   const [addPackageNotes, setAddPackageNotes] = useState('');
   const [addPackageRecordPayment, setAddPackageRecordPayment] = useState(true);
+  const [addPackagePricing, setAddPackagePricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [searchMode, setSearchMode] = useState<'general' | 'id'>('general');
@@ -360,7 +367,16 @@ export default function Clients() {
 
       if (enrollInPackage && targetClientId) {
         const pkg = packages.find(p => p.name === enrollPackageName);
-        const amt = enrollAmount ? parseFloat(enrollAmount) : (pkg ? pkg.price : 0);
+        const grossAmount = enrollAmount ? parseFloat(enrollAmount) : (pkg ? pkg.price : 0);
+        const enrollPricingResult = calculatePricing({
+          grossAmount,
+          discountType: enrollPricing.discountType,
+          discountValue: enrollPricing.discountValue ? Number(enrollPricing.discountValue) : undefined,
+          amountPaid: enrollPricing.amountPaid ? Number(enrollPricing.amountPaid) : undefined,
+        });
+        if (!enrollPricingResult.valid) {
+          throw new Error(enrollPricingResult.error || 'Invalid pricing');
+        }
         const repId = newMemberAssignedTo !== 'unassigned' && newMemberAssignedTo ? newMemberAssignedTo : (currentUser?.id || '');
         const repName = users.find(u => u.id === repId)?.name || '';
 
@@ -369,7 +385,9 @@ export default function Clients() {
           clientName: newMemberName,
           clientBranch: newMemberBranch,
           clientStatus: 'Active',
-          amount: amt,
+          amount: enrollPricingResult.netAmount,
+          originalAmount: grossAmount,
+          amount_paid: enrollPricingResult.amountPaid,
           method: enrollPaymentMethod as any,
           instapayRef: enrollPaymentMethod === 'Instapay' ? enrollInstapayRef : undefined,
           packageType: enrollPackageName,
@@ -385,7 +403,11 @@ export default function Clients() {
           startDate: safeIsoDate(enrollStartDate, true),
           systemPackage: pkg,
           isUpgradePayment: false,
-          isRenewal: false
+          isRenewal: false,
+          discountType: enrollPricing.discountType === 'none' ? undefined : enrollPricing.discountType,
+          discountValue: enrollPricing.discountType === 'none' ? undefined : Number(enrollPricing.discountValue),
+          discountedAmount: enrollPricingResult.netAmount,
+          discountReason: enrollPricing.discountReason !== 'Standard' ? enrollPricing.discountReason : undefined,
         });
       }
 
@@ -406,6 +428,7 @@ export default function Clients() {
       setEnrollCoachName('');
       setEnrollReceiptSerial('');
       setEnrollNotes('');
+      setEnrollPricing(DEFAULT_PRICING_STATE);
     } catch (err: any) {
       console.error('Error creating member with package:', err);
       alert(err?.message || 'Failed to create member profile.');
@@ -450,8 +473,8 @@ export default function Clients() {
     
     const prevActive = (client.packages || []).find(p => p.status === 'Active');
     const prevSysPkg = prevActive ? packages.find(p => p.name === prevActive.packageName) : null;
-    const priceDiff = prevSysPkg ? pkg.price - prevSysPkg.price : pkg.price;
-    const amountToPay = Math.max(0, priceDiff);
+    const upgradeCredit = prevSysPkg ? prevSysPkg.price : 0;
+    const grossAmount = pkg.price;
 
     const repId = upgradeSalesRep !== 'unassigned' ? upgradeSalesRep : (currentUser?.id || '');
     const repName = users.find(u => u.id === repId)?.name || '';
@@ -462,13 +485,26 @@ export default function Clients() {
     }
 
     try {
+      const upgradePricingResult = calculatePricing({
+        grossAmount,
+        upgradeCredit,
+        discountType: upgradePricing.discountType,
+        discountValue: upgradePricing.discountValue ? Number(upgradePricing.discountValue) : undefined,
+        amountPaid: upgradePricing.amountPaid ? Number(upgradePricing.amountPaid) : undefined,
+      });
+      if (!upgradePricingResult.valid) {
+        throw new Error(upgradePricingResult.error || 'Invalid pricing');
+      }
+
       await processPaymentTransaction({
         clientId: client.id,
         clientName: client.name,
         clientBranch: client.branch,
         clientStatus: client.status,
         clientPackages: client.packages,
-        amount: amountToPay,
+        amount: upgradePricingResult.netAmount,
+        originalAmount: grossAmount,
+        amount_paid: upgradePricingResult.amountPaid,
         method: upgradePaymentMethod as any,
         instapayRef: upgradePaymentMethod === 'Instapay' ? upgradeInstapayRef : undefined,
         packageType: pkg.name,
@@ -481,7 +517,11 @@ export default function Clients() {
         startDate: safeIsoDate(upgradeStartDate, true),
         systemPackage: pkg,
         previousPackageName: prevActive?.packageName || client.packageType,
-        isUpgradePayment: true
+        isUpgradePayment: true,
+        discountType: upgradePricing.discountType === 'none' ? undefined : upgradePricing.discountType,
+        discountValue: upgradePricing.discountType === 'none' ? undefined : Number(upgradePricing.discountValue),
+        discountedAmount: upgradePricingResult.netAmount,
+        discountReason: upgradePricing.discountReason !== 'Standard' ? upgradePricing.discountReason : undefined,
       });
     } catch (error) {
       console.error("Error during upgrade transaction:", error);
@@ -493,6 +533,7 @@ export default function Clients() {
       setUpgradePaymentMethod('Cash');
       setUpgradeInstapayRef('');
       setUpgradeSalesRep('unassigned');
+      setUpgradePricing(DEFAULT_PRICING_STATE);
     }
   };
 
@@ -509,7 +550,7 @@ export default function Clients() {
       return;
     }
     
-    const amountToPay = pkg.price; // Full price for renewal!
+    const grossAmount = pkg.price;
 
     const repId = renewSalesRep !== 'unassigned' ? renewSalesRep : (currentUser?.id || '');
     const repName = users.find(u => u.id === repId)?.name || '';
@@ -520,13 +561,25 @@ export default function Clients() {
     }
 
     try {
+      const renewPricingResult = calculatePricing({
+        grossAmount,
+        discountType: renewPricing.discountType,
+        discountValue: renewPricing.discountValue ? Number(renewPricing.discountValue) : undefined,
+        amountPaid: renewPricing.amountPaid ? Number(renewPricing.amountPaid) : undefined,
+      });
+      if (!renewPricingResult.valid) {
+        throw new Error(renewPricingResult.error || 'Invalid pricing');
+      }
+
       await processPaymentTransaction({
         clientId: client.id,
         clientName: client.name,
         clientBranch: client.branch,
         clientStatus: client.status,
         clientPackages: client.packages,
-        amount: amountToPay,
+        amount: renewPricingResult.netAmount,
+        originalAmount: grossAmount,
+        amount_paid: renewPricingResult.amountPaid,
         method: renewPaymentMethod as any,
         instapayRef: renewPaymentMethod === 'Instapay' ? renewInstapayRef : undefined,
         packageType: pkg.name,
@@ -540,7 +593,11 @@ export default function Clients() {
         systemPackage: pkg,
         previousPackageName: pkg.name,
         isRenewal: true,
-        isUpgradePayment: false
+        isUpgradePayment: false,
+        discountType: renewPricing.discountType === 'none' ? undefined : renewPricing.discountType,
+        discountValue: renewPricing.discountType === 'none' ? undefined : Number(renewPricing.discountValue),
+        discountedAmount: renewPricingResult.netAmount,
+        discountReason: renewPricing.discountReason !== 'Standard' ? renewPricing.discountReason : undefined,
       });
     } catch (error) {
       console.error("Error during renewal transaction:", error);
@@ -552,6 +609,7 @@ export default function Clients() {
       setRenewPaymentMethod('Cash');
       setRenewInstapayRef('');
       setRenewSalesRep('unassigned');
+      setRenewPricing(DEFAULT_PRICING_STATE);
     }
   };
 
@@ -575,20 +633,32 @@ export default function Clients() {
 
     const repId = addPackageSalesRep !== 'unassigned' ? addPackageSalesRep : (currentUser?.id || '');
     const repName = users.find(u => u.id === repId)?.name || '';
-    const amountToPay = addPackageAmount ? parseFloat(addPackageAmount) : pkg.price;
+    const grossAmount = addPackageAmount ? parseFloat(addPackageAmount) : pkg.price;
 
     // Check if client already has an active package of this type -> treat as renewal
     const isAlreadyActive = (client.packages || []).some(p => p.status === 'Active' && p.packageName === pkg.name);
 
     try {
       if (addPackageRecordPayment) {
+        const addPackagePricingResult = calculatePricing({
+          grossAmount,
+          discountType: addPackagePricing.discountType,
+          discountValue: addPackagePricing.discountValue ? Number(addPackagePricing.discountValue) : undefined,
+          amountPaid: addPackagePricing.amountPaid ? Number(addPackagePricing.amountPaid) : undefined,
+        });
+        if (!addPackagePricingResult.valid) {
+          throw new Error(addPackagePricingResult.error || 'Invalid pricing');
+        }
+
         await processPaymentTransaction({
           clientId: client.id,
           clientName: client.name,
           clientBranch: client.branch,
           clientStatus: client.status,
           clientPackages: client.packages,
-          amount: amountToPay,
+          amount: addPackagePricingResult.netAmount,
+          originalAmount: grossAmount,
+          amount_paid: addPackagePricingResult.amountPaid,
           method: addPackageMethod as any,
           instapayRef: addPackageMethod === 'Instapay' ? addPackageInstapayRef : undefined,
           packageType: pkg.name,
@@ -604,7 +674,11 @@ export default function Clients() {
           systemPackage: pkg,
           previousPackageName: isAlreadyActive ? pkg.name : undefined,
           isRenewal: isAlreadyActive,
-          isUpgradePayment: false
+          isUpgradePayment: false,
+          discountType: addPackagePricing.discountType === 'none' ? undefined : addPackagePricing.discountType,
+          discountValue: addPackagePricing.discountType === 'none' ? undefined : Number(addPackagePricing.discountValue),
+          discountedAmount: addPackagePricingResult.netAmount,
+          discountReason: addPackagePricing.discountReason !== 'Standard' ? addPackagePricing.discountReason : undefined,
         });
       } else {
         // Complimentary / non-payment package addition
@@ -640,6 +714,7 @@ export default function Clients() {
       setAddPackageCoachName('');
       setAddPackageNotes('');
       setAddPackageRecordPayment(true);
+      setAddPackagePricing(DEFAULT_PRICING_STATE);
     }
   };
 
@@ -1831,7 +1906,7 @@ export default function Clients() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Amount Paid (LE) *</Label>
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Applicable Charge (LE) *</Label>
                         <Input
                           type="number"
                           placeholder="Amount in LE"
@@ -1839,6 +1914,7 @@ export default function Clients() {
                           value={enrollAmount}
                           onChange={(e) => setEnrollAmount(e.target.value)}
                         />
+                        <p className="text-[10px] text-muted-foreground">Base price before discount. Defaults to the selected package price.</p>
                       </div>
 
                       <div className="space-y-2">
@@ -1886,6 +1962,18 @@ export default function Clients() {
                           </SelectContent>
                         </Select>
                       </div>
+                    )}
+
+                    {enrollInPackage && (
+                      <PricingDiscountControls
+                        grossAmount={enrollAmount ? Number(enrollAmount) : (packages.find(p => p.name === enrollPackageName)?.price || 0)}
+                        value={enrollPricing}
+                        onChange={setEnrollPricing}
+                        canApplyDiscount={canApplyDiscount}
+                        showAmountPaid
+                        showReason
+                        idPrefix="enroll"
+                      />
                     )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3875,7 +3963,7 @@ export default function Clients() {
       </div>
     )}
       
-      <Dialog open={!!upgradeDialogClientId} onOpenChange={(open) => { if (!open) { setUpgradeDialogClientId(null); setUpgradePkgName(''); setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd')); } }}>
+      <Dialog open={!!upgradeDialogClientId} onOpenChange={(open) => { if (!open) { setUpgradeDialogClientId(null); setUpgradePkgName(''); setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd')); setUpgradePaymentMethod('Cash'); setUpgradeInstapayRef(''); setUpgradeSalesRep('unassigned'); setUpgradePricing(DEFAULT_PRICING_STATE); } }}>
         <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle className="text-xl md:text-2xl font-bold flex items-center gap-2.5">
@@ -4010,6 +4098,26 @@ export default function Clients() {
                             </SelectContent>
                           </Select>
                         </div>
+
+                        <PricingDiscountControls
+                          grossAmount={(() => {
+                            const pkg = packages.find(p => p.name === upgradePkgName);
+                            return pkg?.price || 0;
+                          })()}
+                          upgradeCredit={(() => {
+                            const pkg = packages.find(p => p.name === upgradePkgName);
+                            const upgradeClient = upgradeDialogClientId ? clients.find(c => c.id === upgradeDialogClientId) : null;
+                            const currentActivePkg = upgradeClient?.packages?.find(p => p.status === 'Active');
+                            const currentSysPkg = currentActivePkg ? packages.find(p => p.name === currentActivePkg.packageName) : null;
+                            return currentSysPkg ? currentSysPkg.price : 0;
+                          })()}
+                          value={upgradePricing}
+                          onChange={setUpgradePricing}
+                          canApplyDiscount={canApplyDiscount}
+                          showAmountPaid
+                          showReason
+                          idPrefix="upgrade"
+                        />
                       </div>
                     );
                   }
@@ -4028,7 +4136,9 @@ export default function Clients() {
                 setUpgradePkgName('');
                 setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd'));
                 setUpgradePaymentMethod('Cash');
+                setUpgradeInstapayRef('');
                 setUpgradeSalesRep('unassigned');
+                setUpgradePricing(DEFAULT_PRICING_STATE);
               }}
             >
               Cancel
@@ -4044,7 +4154,7 @@ export default function Clients() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!renewDialogClientId} onOpenChange={(open) => { if (!open) { setRenewDialogClientId(null); setRenewPkgName(''); setRenewStartDate(format(new Date(), 'yyyy-MM-dd')); } }}>
+      <Dialog open={!!renewDialogClientId} onOpenChange={(open) => { if (!open) { setRenewDialogClientId(null); setRenewPkgName(''); setRenewStartDate(format(new Date(), 'yyyy-MM-dd')); setRenewPaymentMethod('Cash'); setRenewInstapayRef(''); setRenewSalesRep('unassigned'); setRenewPricing(DEFAULT_PRICING_STATE); } }}>
         <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle className="text-xl md:text-2xl font-bold flex items-center gap-2.5">
@@ -4169,6 +4279,19 @@ export default function Clients() {
                       </Select>
                     </div>
 
+                    <PricingDiscountControls
+                      grossAmount={(() => {
+                        const pkg = packages.find(p => p.name === renewPkgName);
+                        return pkg?.price || 0;
+                      })()}
+                      value={renewPricing}
+                      onChange={setRenewPricing}
+                      canApplyDiscount={canApplyDiscount}
+                      showAmountPaid
+                      showReason
+                      idPrefix="renew"
+                    />
+
                     <div className="p-3 bg-muted/20 border border-border/40 rounded-xl text-xs text-muted-foreground leading-relaxed">
                       ℹ️ Renewal registers a new package and a corresponding payment record for the client.
                     </div>
@@ -4188,6 +4311,7 @@ export default function Clients() {
                 setRenewStartDate(format(new Date(), 'yyyy-MM-dd'));
                 setRenewPaymentMethod('Cash');
                 setRenewSalesRep('unassigned');
+                setRenewPricing(DEFAULT_PRICING_STATE);
               }}
             >
               Cancel
@@ -4215,6 +4339,7 @@ export default function Clients() {
           setAddPackageCoachName('');
           setAddPackageNotes('');
           setAddPackageRecordPayment(true);
+          setAddPackagePricing(DEFAULT_PRICING_STATE);
         } 
       }}>
         <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
@@ -4304,7 +4429,7 @@ export default function Clients() {
                 })()}
 
                 <div className="space-y-1.5">
-                  <Label className="text-sm font-semibold">Amount to Collect (LE)</Label>
+                  <Label className="text-sm font-semibold">Applicable Charge (LE)</Label>
                   <Input
                     type="number"
                     placeholder="Amount in LE"
@@ -4312,7 +4437,20 @@ export default function Clients() {
                     value={addPackageAmount}
                     onChange={e => setAddPackageAmount(e.target.value)}
                   />
+                  <p className="text-[10px] text-muted-foreground">Base price before discount. Defaults to the selected package price.</p>
                 </div>
+
+                {addPackageRecordPayment && (
+                  <PricingDiscountControls
+                    grossAmount={addPackageAmount ? Number(addPackageAmount) : (packages.find(p => p.name === addPackageName)?.price || 0)}
+                    value={addPackagePricing}
+                    onChange={setAddPackagePricing}
+                    canApplyDiscount={canApplyDiscount}
+                    showAmountPaid
+                    showReason
+                    idPrefix="add-package"
+                  />
+                )}
               </div>
 
               {/* Right Column: Coach assignment & Payment settlement */}
@@ -4417,6 +4555,7 @@ export default function Clients() {
                 setAddPackageAmount('');
                 setAddPackageMethod('Cash'); 
                 setAddPackageSalesRep('unassigned'); 
+                setAddPackagePricing(DEFAULT_PRICING_STATE);
               }}
             >
               Cancel

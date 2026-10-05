@@ -28,34 +28,22 @@ export const usePackages = () => {
   }, [currentUser]);
 
   const addPackage = async (pkg: Omit<Package, 'id'>) => {
-    try {
-      const docRef = doc(collection(db, 'packages'));
-      const docId = docRef.id;
-      await setDoc(docRef, cleanData(pkg));
-      await addAuditLog('CREATE', 'CLIENT', docId, `Created package: ${pkg.name}`, currentUser?.name);
-    } catch (error) {
-      console.error('Failed to add package:', error);
-    }
+    const docRef = doc(collection(db, 'packages'));
+    const docId = docRef.id;
+    await setDoc(docRef, cleanData(pkg));
+    await addAuditLog('CREATE', 'CLIENT', docId, `Created package: ${pkg.name}`, currentUser?.name);
   };
 
   const updatePackage = async (id: string, updates: Partial<Package>) => {
-    try {
-      await updateDoc(doc(db, 'packages', id), cleanData(updates));
-      const pkgName = packages.find(p => p.id === id)?.name || id;
-      await addAuditLog('UPDATE', 'CLIENT', id, `Updated package: ${pkgName}`, currentUser?.name);
-    } catch (error) {
-      console.error('Failed to update package:', error);
-    }
+    await updateDoc(doc(db, 'packages', id), cleanData(updates));
+    const pkgName = packages.find(p => p.id === id)?.name || id;
+    await addAuditLog('UPDATE', 'CLIENT', id, `Updated package: ${pkgName}`, currentUser?.name);
   };
 
   const deletePackage = async (id: string) => {
-    try {
-      const pkgName = packages.find(p => p.id === id)?.name || id;
-      await deleteDoc(doc(db, 'packages', id));
-      await addAuditLog('DELETE', 'CLIENT', id, `Deleted package: ${pkgName}`, currentUser?.name);
-    } catch (error) {
-      console.error('Failed to delete package:', error);
-    }
+    const pkgName = packages.find(p => p.id === id)?.name || id;
+    await deleteDoc(doc(db, 'packages', id));
+    await addAuditLog('DELETE', 'CLIENT', id, `Deleted package: ${pkgName}`, currentUser?.name);
   };
 
   const recalculateAllPackages = async () => {};

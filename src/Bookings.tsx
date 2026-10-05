@@ -51,6 +51,8 @@ import { Package, Branch } from './types';
 import { ClassBooking, BookingStatus } from './types/class';
 import { PaymentCategory, resolvePaymentCategory } from './utils/paymentCategories';
 import { resolveAttendee } from './utils/attendeeUtils';
+import { calculatePricing, formatCurrencyAmount } from './utils/pricing';
+import PricingDiscountControls, { PricingControlsState, DEFAULT_PRICING_STATE } from './components/PricingDiscountControls';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { format, isToday, isTomorrow, isThisWeek, parseISO } from 'date-fns';
 
@@ -101,7 +103,7 @@ interface PTSessionRecord {
 }
 
 export default function Bookings() {
-  const { currentUser, users, packages, branches, clients, setActiveTab, setActiveClientId } = useAppContext();
+  const { currentUser, users, packages, branches, clients, setActiveTab, setActiveClientId, can } = useAppContext();
 
   // Active Hub Tab: 'classes' | 'pt' | 'store'
   const [hubTab, setHubTab] = useState<'classes' | 'pt' | 'store'>('classes');
@@ -210,6 +212,7 @@ export default function Bookings() {
   const [clientBranch, setClientBranch] = useState<Branch | ''>('');
   const [clientGender, setClientGender] = useState('Prefer not to say');
   const [salesRepId, setSalesRepId] = useState('');
+  const [bookingPricing, setBookingPricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
   const [processingAccept, setProcessingAccept] = useState(false);
   const [acceptError, setAcceptError] = useState('');
 
@@ -289,6 +292,7 @@ export default function Bookings() {
       setClientBranch('');
       setClientGender('Prefer not to say');
       setSalesRepId('');
+      setBookingPricing(DEFAULT_PRICING_STATE);
     }
   }, [selectedRequest, clients]);
 
@@ -476,6 +480,19 @@ export default function Bookings() {
       const assignedRep = users.find(u => u.id === salesRepId);
       const repName = assignedRep?.name || 'Unassigned';
 
+      const totalGross = selectedRequest.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      const pricing = calculatePricing({
+        grossAmount: totalGross,
+        discountType: bookingPricing.discountType,
+        discountValue: bookingPricing.discountValue ? Number(bookingPricing.discountValue) : undefined,
+        amountPaid: bookingPricing.amountPaid ? Number(bookingPricing.amountPaid) : undefined,
+      });
+      if (!pricing.valid) {
+        setAcceptError(pricing.error || 'Invalid pricing');
+        setProcessingAccept(false);
+        return;
+      }
+
       // 1. Update the client's profile details on the spot
       if (selectedRequest.clientId && selectedRequest.clientId !== 'GUEST-LEAD') {
         await updateDoc(doc(db, 'clients', selectedRequest.clientId), {
@@ -499,12 +516,33 @@ export default function Bookings() {
           return;
         }
 
+        const itemGross = item.price * item.quantity;
+        let itemNet = itemGross;
+        let itemDiscountValue: number | undefined;
+        if (pricing.discountType === 'percentage') {
+          itemNet = Math.round(itemGross * (1 - pricing.discountValue / 100) * 100) / 100;
+          itemDiscountValue = pricing.discountValue;
+        } else if (pricing.discountType === 'amount' && totalGross > 0) {
+          const allocatedDiscount = Math.round((itemGross / totalGross) * pricing.discountAmount * 100) / 100;
+          itemNet = Math.max(0, itemGross - allocatedDiscount);
+          itemDiscountValue = allocatedDiscount;
+        }
+
+        let itemPaid = itemNet;
+        if (pricing.netAmount > 0) {
+          itemPaid = Math.round(itemNet * (pricing.amountPaid / pricing.netAmount) * 100) / 100;
+        } else if (pricing.netAmount === 0) {
+          itemPaid = 0;
+        }
+
         await processPaymentTransaction({
           clientId: selectedRequest.clientId,
           clientName: clientName,
           clientBranch: clientBranch,
           clientStatus: 'Active',
-          amount: item.price * item.quantity,
+          amount: itemNet,
+          originalAmount: itemGross,
+          amount_paid: itemPaid,
           method: selectedRequest.paymentMethod as any,
           instapayRef: selectedRequest.instapayRef || undefined,
           packageType: item.packageName,
@@ -516,6 +554,9 @@ export default function Bookings() {
           paymentDate: new Date().toISOString(),
           startDate: new Date().toISOString(),
           systemPackage: sysPkg,
+          discountType: pricing.discountType === 'none' ? undefined : pricing.discountType,
+          discountValue: itemDiscountValue,
+          discountedAmount: itemNet,
           notes: `Storefront booking request approved. Method: ${selectedRequest.paymentMethod}`
         });
       }
@@ -1643,6 +1684,17 @@ export default function Bookings() {
                 </div>
               )}
             </div>
+
+            <PricingDiscountControls
+              grossAmount={selectedRequest?.totalPrice || 0}
+              value={bookingPricing}
+              onChange={setBookingPricing}
+              canApplyDiscount={can('payments.apply_discount')}
+              showAmountPaid
+              showReason
+              currency="EGP"
+              idPrefix="booking"
+            />
           </div>
 
           <DialogFooter className="gap-2">
