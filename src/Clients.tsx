@@ -3,6 +3,7 @@ import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { ASSIGNABLE_ROLES, toCanonical } from './constants';
 import { usePackages } from './hooks/usePackages';
+import { useOperationId } from './hooks/useOperationId';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -262,6 +263,17 @@ export default function Clients() {
   const [addPackageRecordPayment, setAddPackageRecordPayment] = useState(true);
   const [addPackagePricing, setAddPackagePricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
 
+  // Stable operation ids for payment flows (reset when each dialog opens)
+  const { operationId: newMemberOperationId, resetOperationId: resetNewMemberOperationId } = useOperationId();
+  const { operationId: upgradeOperationId, resetOperationId: resetUpgradeOperationId } = useOperationId();
+  const { operationId: renewOperationId, resetOperationId: resetRenewOperationId } = useOperationId();
+  const { operationId: addPackageOperationId, resetOperationId: resetAddPackageOperationId } = useOperationId();
+
+  React.useEffect(() => { if (isNewMemberOpen) resetNewMemberOperationId(); }, [isNewMemberOpen, resetNewMemberOperationId]);
+  React.useEffect(() => { if (upgradeDialogClientId) resetUpgradeOperationId(); }, [upgradeDialogClientId, resetUpgradeOperationId]);
+  React.useEffect(() => { if (renewDialogClientId) resetRenewOperationId(); }, [renewDialogClientId, resetRenewOperationId]);
+  React.useEffect(() => { if (addPackageDialogClientId) resetAddPackageOperationId(); }, [addPackageDialogClientId, resetAddPackageOperationId]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [searchMode, setSearchMode] = useState<'general' | 'id'>('general');
   const [fullPageView, setFullPageView] = useState(false);
@@ -411,6 +423,7 @@ export default function Clients() {
           discountValue: enrollPricing.discountType === 'none' ? undefined : Number(enrollPricing.discountValue),
           discountedAmount: enrollPricingResult.netAmount,
           discountReason: enrollPricing.discountReason !== 'Standard' ? enrollPricing.discountReason : undefined,
+          operationId: newMemberOperationId,
         });
       }
 
@@ -525,6 +538,7 @@ export default function Clients() {
         discountValue: upgradePricing.discountType === 'none' ? undefined : Number(upgradePricing.discountValue),
         discountedAmount: upgradePricingResult.netAmount,
         discountReason: upgradePricing.discountReason !== 'Standard' ? upgradePricing.discountReason : undefined,
+        operationId: upgradeOperationId,
       });
     } catch (error) {
       console.error("Error during upgrade transaction:", error);
@@ -601,6 +615,7 @@ export default function Clients() {
         discountValue: renewPricing.discountType === 'none' ? undefined : Number(renewPricing.discountValue),
         discountedAmount: renewPricingResult.netAmount,
         discountReason: renewPricing.discountReason !== 'Standard' ? renewPricing.discountReason : undefined,
+        operationId: renewOperationId,
       });
     } catch (error) {
       console.error("Error during renewal transaction:", error);
@@ -682,6 +697,7 @@ export default function Clients() {
           discountValue: addPackagePricing.discountType === 'none' ? undefined : Number(addPackagePricing.discountValue),
           discountedAmount: addPackagePricingResult.netAmount,
           discountReason: addPackagePricing.discountReason !== 'Standard' ? addPackagePricing.discountReason : undefined,
+          operationId: addPackageOperationId,
         });
       } else {
         // Complimentary / non-payment package addition

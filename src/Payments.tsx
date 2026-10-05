@@ -30,6 +30,7 @@ import { isTenantInzan, isValidNationalIdOrPassport, isValidEgyptianMobile } fro
 import { getTenantId, storage } from './firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addAuditLog } from './services/auditService';
+import { useOperationId } from './hooks/useOperationId';
 import { ShieldAlert, Paperclip } from 'lucide-react';
 
 export default function Payments() {
@@ -184,6 +185,13 @@ export default function Payments() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+
+  // Stable operation ids for payment flows (reset when each dialog opens)
+  const { operationId: newPaymentOperationId, resetOperationId: resetNewPaymentOperationId } = useOperationId();
+  const { operationId: upgradeOperationId, resetOperationId: resetUpgradeOperationId } = useOperationId();
+
+  useEffect(() => { if (isNewPaymentOpen) resetNewPaymentOperationId(); }, [isNewPaymentOpen, resetNewPaymentOperationId]);
+  useEffect(() => { if (isUpgradeDialogOpen) resetUpgradeOperationId(); }, [isUpgradeDialogOpen, resetUpgradeOperationId]);
 
   // Warn before navigating away when the new-payment form has unsaved data
   const isFormDirty = isNewPaymentOpen && (clientSearch.trim() !== '' || amount.trim() !== '' || amountPaid.trim() !== '');
@@ -525,7 +533,8 @@ export default function Payments() {
         isRenewal: isRenewalPayment,
         previousPackageName: isRenewalPayment ? finalPackageType : undefined,
         corporateProofUrl: discountReason === 'Corporate' ? corporateProofUrl : undefined,
-        discountReason: discountReason !== 'Standard' ? discountReason : undefined
+        discountReason: discountReason !== 'Standard' ? discountReason : undefined,
+        operationId: newPaymentOperationId
       });
       if (isInzan && !isGuest && clientId && discountReason === 'Corporate' && corporateProofUrl) {
         await updateClient(clientId, { corporateProofUrl } as Partial<Client>);
@@ -677,7 +686,8 @@ export default function Payments() {
         startDate: safeIsoDate(upgradeStartDate, true),
         systemPackage: pkg,
         previousPackageName: prevActive?.packageName || payment.packageType,
-        isUpgradePayment: true
+        isUpgradePayment: true,
+        operationId: upgradeOperationId
       });
 
       setIsUpgradeDialogOpen(false);

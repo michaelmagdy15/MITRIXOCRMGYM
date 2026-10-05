@@ -47,6 +47,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { processPaymentTransaction } from './services/transactionService';
+import { useOperationId } from './hooks/useOperationId';
 import { Package, Branch } from './types';
 import { ClassBooking, BookingStatus } from './types/class';
 import { PaymentCategory, resolvePaymentCategory } from './utils/paymentCategories';
@@ -206,6 +207,9 @@ export default function Bookings() {
   // Accept Dialog State
   const [selectedRequest, setSelectedRequest] = useState<BookingRequest | null>(null);
   const [isAcceptOpen, setIsAcceptOpen] = useState(false);
+
+  const { operationId: acceptOperationId, resetOperationId: resetAcceptOperationId } = useOperationId();
+  useEffect(() => { if (isAcceptOpen && selectedRequest) resetAcceptOperationId(); }, [isAcceptOpen, selectedRequest, resetAcceptOperationId]);
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [clientEmail, setClientEmail] = useState('');
@@ -557,7 +561,8 @@ export default function Bookings() {
           discountType: pricing.discountType === 'none' ? undefined : pricing.discountType,
           discountValue: itemDiscountValue,
           discountedAmount: itemNet,
-          notes: `Storefront booking request approved. Method: ${selectedRequest.paymentMethod}`
+          notes: `Storefront booking request approved. Method: ${selectedRequest.paymentMethod}`,
+          operationId: acceptOperationId
         });
       }
 
