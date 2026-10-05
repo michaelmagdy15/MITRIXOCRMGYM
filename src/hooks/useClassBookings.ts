@@ -3,8 +3,11 @@ import { collection, query, onSnapshot, doc, setDoc, updateDoc, where } from 'fi
 import { db } from '../firebase';
 import { ClassBooking, BookingStatus } from '../types/class';
 import { isBookingCutoffExceeded, AppError } from '../utils/bookingCutoff';
+import { addAuditLog } from '../services/auditService';
+import { useAuth } from '../contexts/AuthContext';
 
 export function useClassBookings(classId?: string) {
+  const { currentUser } = useAuth();
   const [bookings, setBookings] = useState<ClassBooking[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -54,6 +57,7 @@ export function useClassBookings(classId?: string) {
         ...bookingData,
         bookedAt: new Date().toISOString()
       });
+      await addAuditLog('CREATE', 'CLASS', newBookingRef.id, `Class booking created for ${bookingData.memberName || bookingData.clientId || 'member'} on ${bookingData.className || bookingData.classId}`, currentUser?.name);
       return newBookingRef.id;
     } catch (error) {
       console.error("Error booking class:", error);
@@ -65,6 +69,8 @@ export function useClassBookings(classId?: string) {
     try {
       const bookingRef = doc(db, 'classBookings', id);
       await updateDoc(bookingRef, { status });
+      const booking = bookings.find(b => b.id === id);
+      await addAuditLog('UPDATE', 'CLASS', id, `Class booking status updated to ${status} for ${booking?.memberName || booking?.clientId || 'member'}`, currentUser?.name);
       // TODO: Waitlist promotion logic should ideally be triggered by a Cloud Function
       // or server endpoint here instead of purely client-side to ensure atomicity.
     } catch (error) {
@@ -84,7 +90,9 @@ export function useClassBookings(classId?: string) {
       }
 
       const bookingRef = doc(db, 'classBookings', id);
+      const booking = bookings.find(b => b.id === id);
       await updateDoc(bookingRef, { status: 'cancelled' });
+      await addAuditLog('UPDATE', 'CLASS', id, `Class booking cancelled for ${booking?.memberName || booking?.clientId || 'member'}`, currentUser?.name);
     } catch (error) {
       console.error("Error cancelling booking:", error);
       throw error;

@@ -275,8 +275,8 @@ export interface AuditLog {
   id: string;
   userId: string;
   userName?: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'APPROVE' | 'REJECT' | 'OVERRIDE' | 'ADJUSTMENT';
-  entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION' | 'PAYOUT' | 'ASSESSMENT' | 'SHIFT_HANDOVER' | 'USER' | 'SETTINGS';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'EXPORT' | 'APPROVE' | 'REJECT' | 'OVERRIDE' | 'ADJUSTMENT' | 'CANCEL_CLASS';
+  entityType: 'CLIENT' | 'PAYMENT' | 'PACKAGE_RECORD' | 'LEAD' | 'TARGET' | 'ATTENDANCE' | 'COACH' | 'SYSTEM' | 'BRANCH' | 'SESSION' | 'PAYOUT' | 'ASSESSMENT' | 'SHIFT_HANDOVER' | 'USER' | 'SETTINGS' | 'CLASS';
   entityId: string;
   details: string;
   diff?: AuditDiff[];

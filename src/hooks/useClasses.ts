@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { ClassSchedule } from '../types/class';
+import { addAuditLog } from '../services/auditService';
+import { useAuth } from '../contexts/AuthContext';
 
 export function useClasses() {
+  const { currentUser } = useAuth();
   const [classes, setClasses] = useState<ClassSchedule[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,6 +50,7 @@ export function useClasses() {
         createdAt: now,
         updatedAt: now
       });
+      await addAuditLog('CREATE', 'CLASS', newClassRef.id, `Created class schedule: ${classData.name || scheduleDate} ${scheduleTime}`, currentUser?.name);
       return newClassRef.id;
     } catch (error) {
       console.error("Error adding class:", error);
@@ -61,6 +65,8 @@ export function useClasses() {
         ...updates,
         updatedAt: new Date().toISOString()
       });
+      const className = classes.find(c => c.id === id)?.name || id;
+      await addAuditLog('UPDATE', 'CLASS', id, `Updated class schedule: ${className}. Changes: ${Object.keys(updates).join(', ')}`, currentUser?.name);
     } catch (error) {
       console.error("Error updating class:", error);
       throw error;
@@ -90,19 +96,23 @@ export function useClasses() {
       console.error("Error cancelling class via server endpoint:", error);
       // Fallback: update status directly in Firestore if server endpoint is offline
       const classRef = doc(db, 'classSchedules', id);
+      const className = classes.find(c => c.id === id)?.name || id;
       await updateDoc(classRef, {
         status: 'cancelled',
         cancelReason: reason || 'Class cancelled by gym',
         cancelledAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+      await addAuditLog('CANCEL_CLASS', 'CLASS', id, `Cancelled class schedule (fallback): ${className}. Reason: ${reason || 'Class cancelled by gym'}`, currentUser?.name);
       return { success: true, fallback: true };
     }
   };
 
   const deleteClass = async (id: string) => {
     try {
+      const className = classes.find(c => c.id === id)?.name || id;
       await deleteDoc(doc(db, 'classSchedules', id));
+      await addAuditLog('DELETE', 'CLASS', id, `Deleted class schedule: ${className}`, currentUser?.name);
     } catch (error) {
       console.error("Error deleting class:", error);
       throw error;
