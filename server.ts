@@ -2324,6 +2324,197 @@ async function startServer() {
   app.post("/api/v1/attendance/check-in", requireAuth, handleAttendanceCheckIn);
   app.post("/api/attendance/check-in", requireAuth, handleAttendanceCheckIn);
 
+  const getAuthorizedInzanCallCenterDb = async (req: express.Request, res: express.Response) => {
+    const tenantId = await getTenantIdForRequest(req);
+    if (tenantId !== 'inzanathletics') {
+      res.status(404).json({ error: 'Call Center workflow is only available for Inzan Athletics.' });
+      return null;
+    }
+
+    const db = await getDbForRequest(req);
+    const userId = req.user?.uid;
+    const userDoc = userId ? await db.collection('users').doc(userId).get() : null;
+    const user = userDoc?.data() || {};
+    const role = String(user.role || '').toLowerCase();
+    if (!userDoc?.exists || !['manager', 'admin', 'rep', 'super_admin', 'crm_admin'].includes(role)) {
+      res.status(403).json({ error: 'You do not have permission to access the Inzan Call Center.' });
+      return null;
+    }
+
+    if (role !== 'super_admin' && role !== 'crm_admin') {
+      let callCenterAllowed = user.customPermissions?.['operations.call_center'] !== false;
+      if (callCenterAllowed && user.permissionTemplateId) {
+        const templateDoc = await db.collection('permission_templates').doc(String(user.permissionTemplateId)).get();
+        const templatePermission = templateDoc.data()?.permissions?.['operations.call_center'];
+        if (templatePermission === false) callCenterAllowed = false;
+      }
+      if (!callCenterAllowed) {
+        res.status(403).json({ error: 'Call Center permission is disabled for this account.' });
+        return null;
+      }
+    }
+
+    return { db, userId: userId as string, user };
+  };
+
+  app.get('/api/call-center/logs', requireAuth, async (req, res) => {
+    try {
+      const access = await getAuthorizedInzanCallCenterDb(req, res);
+      if (!access) return;
+
+      const logsQuery = String(access.user.role || '').toLowerCase() === 'rep'
+        ? access.db.collection('callCenterLog').where('createdBy', '==', access.userId).limit(1000)
+        : access.db.collection('callCenterLog').orderBy('createdAt', 'desc').limit(1000);
+      const snapshot = await logsQuery.get();
+      return res.json({ logs: snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id })) });
+    } catch (error: any) {
+      console.error('[API] Failed to load Inzan call center logs:', error);
+      return res.status(500).json({ error: 'Failed to load call history.' });
+    }
+  });
+
+  app.post('/api/call-center/logs', requireAuth, async (req, res) => {
+    try {
+      const access = await getAuthorizedInzanCallCenterDb(req, res);
+      if (!access) return;
+
+      const { clientDocId, callType, comment, reminderDate } = req.body || {};
+      const allowedCallTypes = new Set(['Answer', 'Not Interested', 'No Answer', 'Interested', 'Social Media', 'Follow Up', 'Call Later']);
+      if (typeof clientDocId !== 'string' || !clientDocId.trim() || !allowedCallTypes.has(callType) || typeof comment !== 'string' || !comment.trim()) {
+        return res.status(400).json({ error: 'A contact, valid call outcome, and call note are required.' });
+      }
+
+      const normalizedReminderDate = typeof reminderDate === 'string' ? reminderDate.trim() : '';
+      if (callType === 'Call Later') {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedReminderDate)) {
+          return res.status(400).json({ error: 'Choose a valid reminder date for Call Later.' });
+        }
+        const parsedReminderDate = Date.parse(`${normalizedReminderDate}T12:00:00.000Z`);
+        if (!Number.isFinite(parsedReminderDate) || normalizedReminderDate < new Date().toISOString().slice(0, 10)) {
+          return res.status(400).json({ error: 'The reminder date cannot be in the past.' });
+        }
+      }
+
+      const { db, userId, user } = access;
+      const clientRef = db.collection('clients').doc(clientDocId.trim());
+      const cooldownRef = db.collection('callCenterCooldowns').doc(clientDocId.trim());
+      const callLogRef = db.collection('callCenterLog').doc();
+      const reminderTaskRef = callType === 'Call Later' ? db.collection('tasks').doc() : null;
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const nowMs = now.getTime();
+      const cooldownLengthMs = 15 * 24 * 60 * 60 * 1000;
+
+      const savedLog = await db.runTransaction(async (transaction) => {
+        const clientSnapshot = await transaction.get(clientRef);
+        if (!clientSnapshot.exists) {
+          const error: any = new Error('Contact not found. Refresh the Call Center list and try again.');
+          error.statusCode = 404;
+          throw error;
+        }
+
+        const client = clientSnapshot.data() || {};
+        if (String(user.role || '').toLowerCase() === 'rep') {
+          const userName = String(user.name || '').trim().toLowerCase();
+          const assignments = [client.assignedTo, client.salesRep, client.salesName]
+            .filter((value) => typeof value === 'string' && value.trim())
+            .map((value) => String(value).trim().toLowerCase());
+          if (!assignments.includes(userId.toLowerCase()) && (!userName || !assignments.includes(userName))) {
+            const error: any = new Error('This contact is not assigned to your sales account. Ask a manager to assign it before logging the call.');
+            error.statusCode = 403;
+            throw error;
+          }
+        }
+        const memberId = String(client.memberId || clientDocId).trim();
+        const cooldownSnapshot = await transaction.get(cooldownRef);
+        const memberCallLogsSnapshot = await transaction.get(db.collection('callCenterLog').where('memberId', '==', memberId));
+        const previousFollowUps = memberCallLogsSnapshot.docs.filter((callLog) => {
+          const data = callLog.data();
+          return data.callType === 'Call Later' && data.reminderDate && data.reminderStatus !== 'completed';
+        });
+        const previousTaskSnapshots = await Promise.all(previousFollowUps
+          .map((callLog) => callLog.data().reminderTaskId)
+          .filter((taskId): taskId is string => typeof taskId === 'string' && taskId.length > 0)
+          .map((taskId) => transaction.get(db.collection('tasks').doc(taskId))));
+        let latestCooldownUntil = Date.parse(String(cooldownSnapshot.data()?.cooldownUntil || '')) || 0;
+        for (const callLog of memberCallLogsSnapshot.docs) {
+          const data = callLog.data();
+          if (data.callType !== 'Not Interested') continue;
+          const createdAt = Date.parse(String(data.createdAt || ''));
+          if (Number.isFinite(createdAt)) latestCooldownUntil = Math.max(latestCooldownUntil, createdAt + cooldownLengthMs);
+        }
+
+        if (latestCooldownUntil > nowMs) {
+          const error: any = new Error(`This contact is in a 15-day cooldown until ${new Date(latestCooldownUntil).toLocaleDateString('en-GB')}.`);
+          error.statusCode = 409;
+          throw error;
+        }
+
+        const cooldownUntil = callType === 'Not Interested'
+          ? new Date(nowMs + cooldownLengthMs).toISOString()
+          : (cooldownSnapshot.data()?.cooldownUntil || undefined);
+        const logData = {
+          id: callLogRef.id,
+          clientDocId: clientDocId.trim(),
+          memberId,
+          memberName: String(client.name || ''),
+          memberPhone: String(client.phone || ''),
+          memberStatus: String(client.status || ''),
+          packageData: String(client.packageType || ''),
+          callType,
+          comment: comment.trim(),
+          source: String(client.source || ''),
+          createdBy: userId,
+          createdByName: String(user.name || user.email || ''),
+          createdAt: nowIso,
+          branch: String(client.branch || ''),
+          ...(cooldownUntil ? { cooldownUntil } : {}),
+          ...(callType === 'Call Later' ? { reminderDate: normalizedReminderDate, reminderStatus: 'pending' as const } : {}),
+          ...(reminderTaskRef ? { reminderTaskId: reminderTaskRef.id } : {}),
+        };
+
+        for (const previousLog of previousFollowUps) {
+          transaction.update(previousLog.ref, { reminderStatus: 'completed', reminderCompletedAt: nowIso });
+        }
+        for (const taskSnapshot of previousTaskSnapshots) {
+          if (taskSnapshot.exists) transaction.update(taskSnapshot.ref, { status: 'Completed' });
+        }
+
+        transaction.set(callLogRef, logData);
+        transaction.set(cooldownRef, {
+          clientDocId: clientDocId.trim(),
+          memberId,
+          lastCallAt: nowIso,
+          ...(cooldownUntil ? { cooldownUntil } : {}),
+        }, { merge: true });
+
+        if (reminderTaskRef) {
+          transaction.set(reminderTaskRef, {
+            title: `Call reminder: ${String(client.name || memberId)}`,
+            description: `Call Later follow-up. ${comment.trim()}`,
+            dueDate: normalizedReminderDate,
+            status: 'Pending',
+            priority: 'Medium',
+            clientId: clientDocId.trim(),
+            assignedTo: userId,
+            createdBy: userId,
+            createdAt: nowIso,
+          });
+        }
+
+        return logData;
+      });
+
+      return res.status(201).json({ log: savedLog });
+    } catch (error: any) {
+      if (error?.statusCode === 403 || error?.statusCode === 404 || error?.statusCode === 409) {
+        return res.status(error.statusCode).json({ error: error.message });
+      }
+      console.error('[API] Failed to save Inzan call center log:', error);
+      return res.status(500).json({ error: 'Failed to save call log. Please try again.' });
+    }
+  });
+
   // Server-authoritative endpoint for class booking
   // Handles capacity checks, waitlist promotion, package session deduction, points award, and prevents double-booking
   app.post("/api/classes/book", requireAuth, async (req, res) => {

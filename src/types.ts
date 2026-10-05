@@ -637,18 +637,24 @@ export interface FeatureFlags {
 
 export interface CallCenterLog {
   id: string;
+  clientDocId?: string;
   memberId: string;
   memberName: string;
   memberPhone: string;
   memberStatus: string;
   packageData?: string;
-  callType: 'Answer' | 'Not Interested' | 'No Answer' | 'Interested' | 'Social Media' | 'Follow Up';
+  callType: 'Answer' | 'Not Interested' | 'No Answer' | 'Interested' | 'Social Media' | 'Follow Up' | 'Call Later';
   comment: string;
   source?: string;
   createdBy: string;
   createdByName?: string;
   createdAt: string;
   branch?: string;
+  cooldownUntil?: string;
+  reminderDate?: string;
+  reminderTaskId?: string;
+  reminderStatus?: 'pending' | 'completed';
+  reminderCompletedAt?: string;
 }
 
 export interface LostFoundCategory {

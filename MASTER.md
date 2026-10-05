@@ -8,14 +8,19 @@
 
 **MitrixoGYM** — a multi-tenant Firebase CRM platform for fitness gyms and fitness studios. Mission: comprehensive member management, staff management, payments, packages, attendance tracking, and guest management for multiple gym brands under a single platform.
 
-**Current state:** v1.14 — Live Production Gym Stabilization, Member Access Recovery, Universal Phone Search & Authoritative Class Cancellation Refund Engine. Operational on dedicated GCP & Firebase project (`strike-production-f5242`) serving `https://strike-egy.com`. All 1,152 members have verified login access, universal multi-format Egyptian phone matching connects Reception & Record Payment searches seamlessly with Spotlight (Ctrl+K), and Class Manager now features automated 100% session token refunds accompanied by chic, high-priority push notifications upon class cancellation.
+**Current state:** v1.15 — Live Production Gym Stabilization, Strike Payment Permissions Recovery, and Inzan Athletics Comprehensive Tenant Release. Operational on dedicated GCP & Firebase project (`strike-production-f5242`) serving `https://strike-egy.com`, and multi-tenant project `faa-test-guide-v2` (`db-inzanathletics`). All 1,152 Strike members have verified login access, universal multi-format Egyptian phone matching connects Reception & Record Payment searches seamlessly with Spotlight (Ctrl+K), Class Manager features automated 100% session token refunds, and Strike live payment permissions have been completely restored. For Inzan Athletics, POS package segmentation, commission integrity locking, destructive deletion safeguards, administrative date override audit engine, pre-payment data gate (National ID + corporate proof), 360° lead-to-member unified profile, and streamlined sidebar ergonomics are fully implemented and verified.
 
 **Active session (2026-10-05):**
-- **Member Access Recovery & Global Password Reset**: Auth passwords reset to `12345678` across all members in `strike-production-f5242`, eliminating mobile login lockout, case-sensitivity issues, and phone-lookup failures. Staff accounts preserved without interruption.
-- **Push Notification & FCM Token Fix**: Audited device registrations, patched `firestore-tenant.rules` for client device token writes, and updated `pushService.ts` to capture member session tokens across iOS/Android.
-- **Universal Phone Number Search Unification**: Implemented `src/utils/phoneUtils.ts` with Eastern Arabic numeral translation and leading-zero stripping, unifying member search across Ctrl+K Spotlight, Record Payment (`Payments.tsx`), and Members Directory (`Clients.tsx`). Integrated automatic background loading of expired members.
-- **Authoritative Class Cancellation & Token Refund Engine**: Added `POST /api/classes/cancel` in `server.ts` restoring 100% of session tokens across entitlements and packages, updating bookings, recording audit trails, and dispatching elegant Expo push notifications. Added staff cancellation dialog in `ClassManager.tsx` and cancellation apology banner in `MemberClasses.tsx`.
-- **Production Build & Deploy**: Zero build errors, deployed live to `strike-production-f5242` (`strike-egy.com`).
+- **Strike Live Payment Permissions Emergency Hotfix**: Resolved production blocker on `strike-production-f5242` where front desk received `"Missing or insufficient permissions"` on `Complete Transaction`. Patched `firestore-tenant.rules` to include missing `pointsWallets`, `pointsTransactions`, and `entitlements` security rules, relaxed `sales_rep_id` requirement in `isValidPaymentCreate`, and deployed ruleset live to `strike-production-f5242` immediately.
+- **Inzan Athletics Comprehensive Tenant Release**:
+  - **POS Package Segmentation**: Categorized tab selector (`[ All Packages ]` | `[ Gym Memberships ]` | `[ Personal Training (PT) ]` | `[ Drop-in / Day Pass ]`) in POS and payment modals, isolating package types cleanly.
+  - **Destructive Deletion Safeguards**: Added mandatory confirmation dialog (`ConfirmDialog`) across all package deletions with audit logging.
+  - **Commission Integrity & Sales Rep Lock**: Fixed sales rep dropdown in New Lead modal; locked sales rep attribution against staff modification during checkout and profile updates. Admin re-assignment requires explicit confirmation modal and logs to `auditLogs`.
+  - **Package Date Lock & Admin Override Engine**: Start and end date inputs locked against regular staff changes. Implemented `AdjustPackageDatesDialog` requiring admin role, minimum 5-character reason, validation, and immutable audit log entry.
+  - **Pre-Payment Data Gate & Validation**: Blocked `Complete Transaction` when mandatory Inzan client details are missing (Full name, Egyptian mobile `+201XXXXXXXXX`, 14-digit National ID or Passport, Corporate proof document upload for corporate discounts).
+  - **Unified 360° Lead-to-Member Profile & Lifecycle Tabs**: Leads and members integrated into a single unified directory on Inzan with segmented lifecycle tabs (`[ All Accounts ]` | `[ Active Members ]` | `[ Leads & Prospects ]` | `[ Expired / Inactive ]` | `[ On Hold ]`). Added prominent `[View Account]` button from Leads table and lead-to-member conversion CTA.
+  - **Sidebar Ergonomics & Simple English Copy**: Tactile button containers, active link indicators, and direct terminology (`Members`, `Check-in`, `New Member`) across Inzan views.
+- **Zero Regressions & Full Build Verification**: `npm run build` and `npm run lint` passed with 0 errors. Strike Gym workflows remain 100% isolated and unaffected.
 
 ---
 
@@ -102,6 +107,50 @@
 - **Root Cause**: In minified production code, `searchTerm` was renamed to `Jr`. A `useEffect` hook referencing `searchTerm` was placed at line 206 before `const [searchTerm, setSearchTerm] = useState('')` was declared at line 258, causing a runtime Temporal Dead Zone (TDZ) `ReferenceError`.
 - **Fix**: Restructured the top of `Clients.tsx`, ensuring all `useState` hooks are initialized first, and all `useEffect` hooks are placed strictly after all state declarations and deferred values.
 - **Deployment**: Production build re-verified (`npm run build` -> 0 errors) and re-deployed immediately to `strike-production-f5242`. Fully operational.
+
+#### 8. Production Hotfix: Strike Live Payment Permissions Recovery
+- **Symptom**: Strike Gym front desk encountered `"Missing or insufficient permissions"` error modal when clicking `Complete Transaction` in `Payments.tsx` on production (`https://strike-egy.com`).
+- **Root Cause**:
+  - Live `firestore-tenant.rules` on `strike-production-f5242` lacked security rules for `pointsWallets`, `pointsTransactions`, and `entitlements`.
+  - When `processPaymentTransaction` executed inside a Firestore transaction, `transaction.get(walletRef)` failed permission checks.
+  - Furthermore, `isValidPaymentCreate` strictly required `data.sales_rep_id is string`, which rejected legitimate walk-in transactions where no sales rep was assigned.
+- **Fix & Deployment**:
+  - Updated `firestore-tenant.rules` with complete rule coverage for `pointsWallets`, `pointsTransactions`, and `entitlements` collections.
+  - Relaxed `isValidPaymentCreate` to allow optional `sales_rep_id` (`(!('sales_rep_id' in data) || data.sales_rep_id is string)`), optional `amount` alias, and expanded staff role assertions (`staff`, `manager`, `admin`, `cashier`, `receptionist`).
+  - Compiled and released the ruleset directly to `strike-production-f5242` via `admin.securityRules().releaseFirestoreRulesetFromSource()` (Released ruleset: `d357c8a9-cd81-47d4-b516-81521fa62263`).
+  - Live payments on Strike production immediately succeeded.
+
+#### 9. Inzan Athletics Comprehensive Tenant Release: Ergonomics, Security & Lifecycle Unification
+- **Scope & Tenant Isolation**: All modifications are strictly isolated to `db-inzanathletics` / `inzanathletics` tenant via `isInzanTenant` / `isTenantInzan()` checks so Strike Gym and other tenants remain 100% unaltered.
+- **Module Breakdown**:
+  1. **Sidebar Visual Ergonomics & Tactile Button Styling** (`src/App.tsx`):
+     - Redesigned navigation bar for Inzan: elevated button containers (`bg-neutral-900/60`, `border-neutral-800`, `hover:bg-neutral-800/80`), generous spacing (`space-y-1.5`, `px-3 py-2.5`), high-contrast amber active indicator bar (`w-1 h-5 bg-amber-400 rounded-full`).
+     - Replaced non-standard terminology with clear, direct English: `Members` (was Clients), `Check-in` (was Entrance/Access), `New Member`, `Payments`.
+  2. **POS Package Categorization** (`src/Payments.tsx`, `src/components/CascadingPackageSelector.tsx`):
+     - Added segmented tab selector: `[ All Packages ]` | `[ Gym Memberships ]` | `[ Personal Training (PT) ]` | `[ Drop-in / Day Pass ]`.
+     - Filtered package display dynamically so staff can instantly distinguish primary memberships from PT sessions without cognitive load.
+  3. **Destructive Package Deletion Safeguards** (`src/Clients.tsx`, `src/components/InzanMemberShow.tsx`):
+     - Intercepted all package deletions with a mandatory `ConfirmDialog` (`variant="destructive"`).
+     - Staff or Admins must explicitly confirm package removal; records audit log (`action: 'PACKAGE_DELETED'`) with client and package details.
+  4. **Sales Rep Commission Integrity & Attribution Lock** (`src/Leads.tsx`, `src/Payments.tsx`):
+     - Fixed `NewLeadModal` sales rep select trigger (`SelectValue` accurately displays the assigned staff member's name instead of blank or ID).
+     - In POS checkout, sales rep selector is disabled for regular staff. Only admins can reassign sales reps; reassignment triggers a confirmation prompt and writes to `auditLogs` (`action: 'SALES_REP_REASSIGNED'`).
+  5. **Package Date Lock & Administrative Override Engine** (`src/Clients.tsx`, `src/components/InzanMemberShow.tsx`, `src/components/AdjustPackageDatesDialog.tsx`):
+     - Direct editing of package start/end date inputs is locked for staff (`disabled={isInzanTenant}`).
+     - Introduced `AdjustPackageDatesDialog`: available exclusively to admins (`canOverridePackageDates`), requires a mandatory justification reason (min 5 chars), enforces `endDate >= startDate`, previews date changes, and records an immutable audit log (`action: 'PACKAGE_DATES_OVERRIDDEN'`).
+  6. **Pre-Payment Mandatory Data Gate** (`src/Payments.tsx`, `src/utils/inzanOrg.ts`):
+     - Blocked `Complete Transaction` if mandatory Inzan client profile fields are missing:
+       - Full Name (min 2 words)
+       - Valid Egyptian Mobile (`+2010...`, `010...`, `011...`, `012...`, `015...` validated via `isValidEgyptianMobile`)
+       - National ID (14 digits) or Passport Number
+       - Corporate Proof Document (upload required when Corporate discount category is selected)
+     - Added dedicated upload button and storage path `corporate_proofs/{clientId}_{timestamp}_{filename}` with real-time preview and document attachment.
+  7. **Unified 360° Lead-to-Member Profile & Directory** (`src/Clients.tsx`, `src/Leads.tsx`, `src/components/InzanMemberShow.tsx`):
+     - Unified database view: Inzan directory displays both leads and members with segmented filter tabs: `[ All Accounts ]` | `[ Active Members ]` | `[ Leads & Prospects ]` | `[ Expired / Inactive ]` | `[ On Hold ]`.
+     - Prominent `[View Account]` button on Leads table and cards navigating directly to full member profile (`setActiveClientId(lead.id)`).
+     - Automatic redirect to newly created account overview upon saving a new lead.
+     - Profile view features high-visibility `Lead / Prospect` status banner with direct `[Convert to Member / Buy Package]` CTA.
+- **Verification**: Clean compilation (`npm run build` and `npm run lint` -> 0 errors).
 
 ---
 

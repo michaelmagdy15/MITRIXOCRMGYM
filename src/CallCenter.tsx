@@ -8,14 +8,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
 import { useLanguage } from './contexts/LanguageContext';
-import { db, auth } from './firebase';
+import { db, auth, getTenantId } from './firebase';
 import { collection, query, onSnapshot, orderBy, getDocs, setDoc, doc } from 'firebase/firestore';
 import { Client, CallCenterLog } from './types';
 import { downloadFile } from './utils/download';
-import { format, parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import {
   Phone, Search, Download, Star, User, MessageSquare,
-  PhoneCall, PhoneOff, PhoneMissed, ThumbsUp, ThumbsDown, Users, X, Loader2
+  PhoneCall, PhoneOff, PhoneMissed, ThumbsUp, ThumbsDown, Users, X, Loader2, CalendarDays
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -28,6 +28,7 @@ const CALL_TYPES = [
   'Interested',
   'Social Media',
   'Follow Up',
+  'Call Later',
 ] as const;
 
 type CallType = (typeof CALL_TYPES)[number];
@@ -71,6 +72,12 @@ const CALL_TYPE_STYLES: Record<
     active: 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/25',
     icon: <Star className="h-4 w-4" />,
     badge: 'bg-amber-500/15 text-amber-600 border-amber-500/30',
+  },
+  'Call Later': {
+    base: 'bg-violet-500/10 text-violet-600 border-violet-500/30 hover:bg-violet-500/20',
+    active: 'bg-violet-500 text-white border-violet-500 shadow-lg shadow-violet-500/25',
+    icon: <CalendarDays className="h-4 w-4" />,
+    badge: 'bg-violet-500/15 text-violet-600 border-violet-500/30',
   },
 };
 
@@ -131,9 +138,10 @@ function formatDateTime(iso: string | undefined): string {
 /* ─────────────────────── Component ─────────────────────── */
 
 export default function CallCenter() {
-  const { clients, currentUser, users, payments } = useAppContext();
+  const { clients, currentUser, users, payments, attendances } = useAppContext();
   const { branches } = useSettings();
   const { isRtl } = useLanguage();
+  const isInzan = getTenantId() === 'inzanathletics';
 
   /* ── State ── */
   const [searchById, setSearchById] = useState('');
@@ -149,12 +157,30 @@ export default function CallCenter() {
   const [filterBranch, setFilterBranch] = useState('All');
   const [searchResults, setSearchResults] = useState<Client[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [reminderDate, setReminderDate] = useState('');
+  const [targetSegment, setTargetSegment] = useState<'Active' | 'Expired' | 'Last Seen' | 'Leads'>('Active');
+  const [targetDateFrom, setTargetDateFrom] = useState('');
+  const [targetDateTo, setTargetDateTo] = useState('');
 
-  /* ── Fetch call logs from SQL ── */
+  const availableCallTypes = isInzan ? CALL_TYPES : CALL_TYPES.filter((type) => type !== 'Call Later');
+
+  /* ── Fetch tenant call logs ── */
   const fetchCallLogs = useCallback(async () => {
     try {
-      const snap = await getDocs(query(collection(db, 'callCenterLog')));
-      const logs = snap.docs.map((d) => ({ ...d.data(), id: d.id } as CallCenterLog));
+      let logs: CallCenterLog[];
+      if (isInzan) {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) throw new Error('Your session expired. Please sign in again.');
+        const response = await fetch('/api/call-center/logs', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to load call history.');
+        logs = Array.isArray(result.logs) ? result.logs as CallCenterLog[] : [];
+      } else {
+        const snap = await getDocs(query(collection(db, 'callCenterLog')));
+        logs = snap.docs.map((d) => ({ ...d.data(), id: d.id } as CallCenterLog));
+      }
       // Sort by createdAt desc locally (if missing index)
       logs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       setCallLogs(logs);
@@ -162,11 +188,22 @@ export default function CallCenter() {
       console.error('Error fetching call logs:', error);
       toast.error('Failed to load call logs');
     }
-  }, []);
+  }, [isInzan]);
 
   useEffect(() => {
     fetchCallLogs();
   }, [fetchCallLogs]);
+
+  useEffect(() => {
+    if (!isInzan) return;
+    const refreshLogs = () => { void fetchCallLogs(); };
+    const intervalId = window.setInterval(refreshLogs, 60_000);
+    window.addEventListener('focus', refreshLogs);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshLogs);
+    };
+  }, [fetchCallLogs, isInzan]);
 
   /* ── Unpaid amount for selected client ── */
   const unpaidAmount = useMemo(() => {
@@ -178,6 +215,78 @@ export default function CallCenter() {
       .reduce((sum: number, p: any) => sum + ((p.amount || 0) - (p.amount_paid || 0)), 0);
   }, [selectedClient, payments]);
 
+  const getCooldownUntil = useCallback((client: Client): number => {
+    const memberId = client.memberId || client.id;
+    return callLogs.reduce((latestUntil, log) => {
+      const belongsToClient = log.clientDocId === client.id || log.memberId === memberId;
+      if (!belongsToClient) return latestUntil;
+      const savedUntil = Date.parse(log.cooldownUntil || '');
+      if (Number.isFinite(savedUntil)) return Math.max(latestUntil, savedUntil);
+      if (log.callType === 'Not Interested') {
+        const loggedAt = Date.parse(log.createdAt || '');
+        if (Number.isFinite(loggedAt)) return Math.max(latestUntil, loggedAt + 15 * 24 * 60 * 60 * 1000);
+      }
+      return latestUntil;
+    }, 0);
+  }, [callLogs]);
+
+  const lastAttendanceByClient = useMemo(() => {
+    const latestByClient = new Map<string, string>();
+    for (const attendance of attendances) {
+      const day = String(attendance.date || '').slice(0, 10);
+      if (!day) continue;
+      const existing = latestByClient.get(attendance.clientId);
+      if (!existing || day > existing) latestByClient.set(attendance.clientId, day);
+    }
+    return latestByClient;
+  }, [attendances]);
+
+  const callTargets = useMemo(() => {
+    if (!isInzan) return [];
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const lastSeenFrom = targetDateFrom || format(addDays(new Date(), -30), 'yyyy-MM-dd');
+    const lastSeenTo = targetDateTo || today;
+    if (lastSeenFrom > lastSeenTo) return [];
+
+    return clients.filter((client) => {
+      if (getCooldownUntil(client) > Date.now()) return false;
+      const status = String(client.status || '').toLowerCase();
+      if (targetSegment === 'Active' && status !== 'active' && status !== 'nearly expired') return false;
+      if (targetSegment === 'Expired' && status !== 'expired' && !(client.membershipExpiry && client.membershipExpiry.slice(0, 10) < today)) return false;
+      if (targetSegment === 'Leads' && status !== 'lead') return false;
+
+      if (targetSegment === 'Last Seen') {
+        if (status === 'lead' || status === 'hold') return false;
+        const lastSeen = lastAttendanceByClient.get(client.id);
+        return !lastSeen || lastSeen < lastSeenFrom || lastSeen > lastSeenTo;
+      }
+
+      const targetDate = targetSegment === 'Leads'
+        ? String(client.createdAt || '').slice(0, 10)
+        : String(client.membershipExpiry || '').slice(0, 10);
+      if (targetDateFrom && (!targetDate || targetDate < targetDateFrom)) return false;
+      if (targetDateTo && (!targetDate || targetDate > targetDateTo)) return false;
+      return true;
+    }).slice(0, 100);
+  }, [clients, getCooldownUntil, isInzan, lastAttendanceByClient, targetDateFrom, targetDateTo, targetSegment]);
+
+  const pendingFollowUps = useMemo(() => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    return callLogs
+      .filter((log) => log.callType === 'Call Later' && log.reminderDate && log.reminderStatus !== 'completed')
+      .sort((a, b) => String(a.reminderDate).localeCompare(String(b.reminderDate)))
+      .filter((log) => String(log.reminderDate) <= today)
+      .slice(0, 10);
+  }, [callLogs]);
+
+  const targetDateRangeFrom = targetSegment === 'Last Seen'
+    ? targetDateFrom || format(addDays(new Date(), -30), 'yyyy-MM-dd')
+    : targetDateFrom;
+  const targetDateRangeTo = targetSegment === 'Last Seen'
+    ? targetDateTo || format(new Date(), 'yyyy-MM-dd')
+    : targetDateTo;
+  const targetDateRangeInvalid = Boolean(targetDateRangeFrom && targetDateRangeTo && targetDateRangeFrom > targetDateRangeTo);
+
   /* ── Search handlers ── */
   const handleSearchById = useCallback(() => {
     if (!searchById.trim()) {
@@ -187,7 +296,7 @@ export default function CallCenter() {
     }
     const term = searchById.trim().toLowerCase();
     const results = clients.filter(
-      (c) => c.memberId?.toLowerCase() === term,
+      (c) => c.memberId?.toLowerCase() === term || c.id.toLowerCase() === term,
     );
     if (results.length === 1) {
       setSelectedClient(results[0] ?? null);
@@ -235,12 +344,14 @@ export default function CallCenter() {
     setSearchByName('');
     setCallType('');
     setComment('');
+    setReminderDate('');
   }, []);
 
   const clearSelection = useCallback(() => {
     setSelectedClient(null);
     setCallType('');
     setComment('');
+    setReminderDate('');
   }, []);
 
   /* ── Save call log ── */
@@ -257,40 +368,79 @@ export default function CallCenter() {
       toast.error('Please add a comment');
       return;
     }
+    if (isInzan && getCooldownUntil(selectedClient) > Date.now()) {
+      toast.error(`This contact is in a 15-day cooldown until ${new Date(getCooldownUntil(selectedClient)).toLocaleDateString()}.`);
+      return;
+    }
+    if (isInzan && callType === 'Call Later' && !reminderDate) {
+      toast.error('Choose a reminder date for Call Later.');
+      return;
+    }
 
     setIsSaving(true);
     try {
-      const newId = crypto.randomUUID();
-      const logEntry: CallCenterLog = {
-        id: newId,
-        memberId: selectedClient.memberId || selectedClient.id,
-        memberName: selectedClient.name || '',
-        memberPhone: selectedClient.phone || '',
-        memberStatus: selectedClient.status || '',
-        packageData: selectedClient.packageType || '',
-        callType: callType as CallCenterLog['callType'],
-        comment: comment.trim(),
-        source: selectedClient.source || '',
-        createdBy: currentUser?.id || '',
-        createdByName: currentUser?.name || '',
-        createdAt: new Date().toISOString(),
-        branch: selectedClient.branch || '',
-      };
-
-      await setDoc(doc(db, 'callCenterLog', logEntry.id), logEntry);
+      let logEntry: CallCenterLog;
+      if (isInzan) {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) throw new Error('Your session expired. Please sign in again.');
+        const response = await fetch('/api/call-center/logs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            clientDocId: selectedClient.id,
+            callType,
+            comment: comment.trim(),
+            reminderDate: callType === 'Call Later' ? reminderDate : undefined,
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to save call log.');
+        logEntry = result.log as CallCenterLog;
+      } else {
+        const newId = crypto.randomUUID();
+        logEntry = {
+          id: newId,
+          memberId: selectedClient.memberId || selectedClient.id,
+          memberName: selectedClient.name || '',
+          memberPhone: selectedClient.phone || '',
+          memberStatus: selectedClient.status || '',
+          packageData: selectedClient.packageType || '',
+          callType: callType as CallCenterLog['callType'],
+          comment: comment.trim(),
+          source: selectedClient.source || '',
+          createdBy: currentUser?.id || '',
+          createdByName: currentUser?.name || '',
+          createdAt: new Date().toISOString(),
+          branch: selectedClient.branch || '',
+        };
+        await setDoc(doc(db, 'callCenterLog', logEntry.id), logEntry);
+      }
       
       // Update local state immediately
-      setCallLogs(prev => [logEntry, ...prev]);
+      setCallLogs((previousLogs) => [
+        logEntry,
+        ...previousLogs.map((log) => {
+          const sameClient = log.clientDocId === selectedClient.id || log.memberId === (selectedClient.memberId || selectedClient.id);
+          if (isInzan && sameClient && log.callType === 'Call Later' && log.reminderStatus !== 'completed') {
+            return { ...log, reminderStatus: 'completed' as const, reminderCompletedAt: new Date().toISOString() };
+          }
+          return log;
+        }),
+      ]);
       toast.success('Call log saved successfully');
       setCallType('');
       setComment('');
+      setReminderDate('');
     } catch (error) {
       console.error('Error saving call log:', error);
-      toast.error('Failed to save call log');
+      toast.error(error instanceof Error ? error.message : 'Failed to save call log');
     } finally {
       setIsSaving(false);
     }
-  }, [selectedClient, callType, comment, currentUser]);
+  }, [selectedClient, callType, comment, currentUser, getCooldownUntil, isInzan, reminderDate]);
 
   /* ── Filtered logs ── */
   const filteredLogs = useMemo(() => {
@@ -329,7 +479,7 @@ export default function CallCenter() {
   const memberLogs = useMemo(() => {
     if (!selectedClient) return [];
     const targetId = selectedClient.memberId || selectedClient.id;
-    return callLogs.filter((l) => l.memberId === targetId).slice(0, 10);
+    return callLogs.filter((l) => l.clientDocId === selectedClient.id || l.memberId === targetId).slice(0, 10);
   }, [selectedClient, callLogs]);
 
   /* ────────────────────── RENDER ────────────────────── */
@@ -353,6 +503,125 @@ export default function CallCenter() {
           {callLogs.length} Total Logs
         </Badge>
       </div>
+
+      {isInzan && (
+        <>
+          <Card className="border-amber-500/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Users className="h-5 w-5 text-amber-500" />
+                Call Target List
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Contacts in a 15-day Not Interested cooldown are automatically excluded.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Contact group</label>
+                  <Select value={targetSegment} onValueChange={(value) => value && setTargetSegment(value as typeof targetSegment)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Active Members</SelectItem>
+                      <SelectItem value="Expired">Expired Members</SelectItem>
+                      <SelectItem value="Last Seen">Non-Attendees (Last Seen)</SelectItem>
+                      <SelectItem value="Leads">Leads</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                    {targetSegment === 'Last Seen' ? 'No-attendance window from' : 'Relevant date from'}
+                  </label>
+                  <Input type="date" value={targetDateFrom} onChange={(e) => setTargetDateFrom(e.target.value)} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                    {targetSegment === 'Last Seen' ? 'No-attendance window to' : 'Relevant date to'}
+                  </label>
+                  <Input type="date" value={targetDateTo} onChange={(e) => setTargetDateTo(e.target.value)} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {targetSegment === 'Last Seen'
+                  ? 'Shows members with no check-in during the selected window. If dates are blank, the last 30 days are used.'
+                  : targetSegment === 'Leads'
+                    ? 'Date filters apply to lead creation date.'
+                    : 'Date filters apply to membership expiry date.'}
+              </p>
+              {targetDateRangeInvalid ? (
+                <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">The start date must be on or before the end date.</p>
+              ) : callTargets.length === 0 ? (
+                <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">No eligible contacts match this list.</p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto rounded-lg border">
+                  {callTargets.map((client) => (
+                    <button
+                      key={client.id}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 border-b p-3 text-left last:border-b-0 hover:bg-muted/40"
+                      onClick={() => selectClient(client)}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold">{client.name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {client.memberId || client.id} · {client.phone || 'No phone'} · {client.branch || 'No branch'}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-right text-xs text-muted-foreground">
+                        {targetSegment === 'Last Seen'
+                          ? `Last seen: ${lastAttendanceByClient.get(client.id) || 'Never'}`
+                          : targetSegment === 'Leads'
+                            ? `Created: ${formatDate(client.createdAt)}`
+                            : `Expires: ${formatDate(client.membershipExpiry)}`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">Showing up to 100 contacts.</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CalendarDays className="h-5 w-5 text-violet-500" />
+                Follow-ups Due / Overdue ({pendingFollowUps.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {pendingFollowUps.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No follow-up reminders are due today.</p>
+              ) : (
+                <div className="space-y-2">
+                  {pendingFollowUps.map((log) => {
+                    const client = clients.find((candidate) =>
+                      candidate.id === log.clientDocId ||
+                      candidate.memberId === log.memberId ||
+                      candidate.id === log.memberId
+                    );
+                    return (
+                      <div key={log.id} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold">{log.memberName}</p>
+                          <p className="text-xs text-muted-foreground">Due {log.reminderDate} · {log.memberPhone}</p>
+                        </div>
+                        {client && (
+                          <Button size="sm" variant="outline" onClick={() => selectClient(client)}>
+                            <PhoneCall className="mr-1.5 h-3.5 w-3.5" /> Call
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* ── Search Section ── */}
       <Card>
@@ -507,13 +776,19 @@ export default function CallCenter() {
               />
             </div>
 
+            {isInzan && getCooldownUntil(selectedClient) > Date.now() && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+                This contact cannot be called until {new Date(getCooldownUntil(selectedClient)).toLocaleDateString()} because of the 15-day Not Interested cooldown.
+              </div>
+            )}
+
             {/* Call Status Buttons */}
             <div>
               <label className="mb-2 block text-sm font-medium text-muted-foreground">
                 Call Status
               </label>
               <div className="flex flex-wrap gap-2">
-                {CALL_TYPES.map((type) => {
+                {availableCallTypes.map((type) => {
                   const style = CALL_TYPE_STYLES[type];
                   const isActive = callType === type;
                   return (
@@ -521,10 +796,16 @@ export default function CallCenter() {
                       key={type}
                       variant="outline"
                       size="sm"
+                      disabled={isInzan && getCooldownUntil(selectedClient) > Date.now()}
                       className={`gap-1.5 transition-all duration-200 ${
                         isActive ? style.active : style.base
                       }`}
-                      onClick={() => setCallType(isActive ? '' : type)}
+                      onClick={() => {
+                        setCallType(isActive ? '' : type);
+                        if (!isActive && type === 'Call Later' && !reminderDate) {
+                          setReminderDate(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
+                        }
+                      }}
                     >
                       {style.icon}
                       {type}
@@ -533,6 +814,22 @@ export default function CallCenter() {
                 })}
               </div>
             </div>
+
+            {isInzan && callType === 'Call Later' && (
+              <div className="max-w-xs space-y-1.5">
+                <label htmlFor="call-reminder-date" className="block text-sm font-medium text-muted-foreground">
+                  Reminder date
+                </label>
+                <Input
+                  id="call-reminder-date"
+                  type="date"
+                  min={format(new Date(), 'yyyy-MM-dd')}
+                  value={reminderDate}
+                  onChange={(event) => setReminderDate(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">A due task will be assigned to you for this date.</p>
+              </div>
+            )}
 
             {/* Comment + Save */}
             <div className="space-y-3">
@@ -551,7 +848,7 @@ export default function CallCenter() {
                 </p>
                 <Button
                   onClick={handleSave}
-                  disabled={isSaving || !callType || !comment.trim()}
+                  disabled={isSaving || !callType || !comment.trim() || (isInzan && getCooldownUntil(selectedClient) > Date.now()) || (isInzan && callType === 'Call Later' && !reminderDate)}
                   className="min-w-[140px] bg-amber-500 text-white hover:bg-amber-600"
                 >
                   {isSaving ? (
@@ -673,7 +970,7 @@ export default function CallCenter() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="All">All Types</SelectItem>
-                  {CALL_TYPES.map((t) => (
+                  {availableCallTypes.map((t) => (
                     <SelectItem key={t} value={t}>
                       {t}
                     </SelectItem>

@@ -1,6 +1,32 @@
-# GAPS.md â€” MitrixoGYM CRM Gap Analysis & What's Remaining
+# GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-09-23 (Inzan PT & Classes System Audit, Unbroken Payment-Package Mirroring, Zero Invalid Time Value Hardening)
+Updated: 2026-10-05 (Strike Live Payment Permissions Emergency Fix & Inzan Athletics Comprehensive Tenant Release)
+
+---
+
+## RECENT WORK - 2026-10-05 (STRIKE.HOTFIX.1 / INZAN.RELEASE.1)
+
+### Strike Dedicated Tenant (strike-production-f5242)
+- **STRIKE.HOTFIX.1 Live Payment Permissions**: Resolved `"Missing or insufficient permissions"` error on `Complete Transaction`. Added security rules for `pointsWallets`, `pointsTransactions`, and `entitlements` to `firestore-tenant.rules`, relaxed `sales_rep_id` in `isValidPaymentCreate`, and deployed live ruleset (`d357c8a9-cd81-47d4-b516-81521fa62263`). Live transactions verified.
+
+### Inzan Athletics Tenant (db-inzanathletics)
+- **INZAN.POS.1 Package Segmentation**: Segmented package selection tabs (`Gym Memberships`, `Personal Training (PT)`, `Drop-in / Day Pass`) in POS and payment modals.
+- **INZAN.SAFE.1 Destructive Deletion Safeguards**: Mandatory confirmation dialogs (`ConfirmDialog`) on package removals across Admin and member profile views with audit logging.
+- **INZAN.COMM.1 Sales Rep Attribution & Locking**: Fixed sales rep dropdown display in `NewLeadModal`; locked sales attribution against staff modification during checkout. Admin re-assignment requires explicit confirmation modal and logs to `auditLogs`.
+- **INZAN.DATE.1 Date Modification Locks & Admin Override Engine**: Start/end dates locked for staff; `AdjustPackageDatesDialog` provides admin-only override with mandatory reason and immutable audit trail.
+- **INZAN.GATE.1 Pre-Payment Data Gate**: Blocks transaction completion if mandatory client details (Full name, Egyptian mobile `+201XXXXXXXXX`, National ID / Passport, Corporate proof document upload) are missing.
+- **INZAN.360.1 Unified 360° Lead-to-Member Profile**: Integrated Leads into the members directory with lifecycle filter tabs, direct `[View Account]` navigation, automatic profile routing after lead creation, and status badges with `[Convert to Member]` CTA.
+- **INZAN.UX.1 Ergonomics & Copy Standardization**: Elevated button containers with tactile hover states in sidebar, and standardized plain English (`Members`, `Check-in`, `New Member`).
+- **Proof**: `npm run build` and `npm run lint` pass with 0 errors. All changes strictly gated to Inzan. Strike Gym remains 100% unaffected.
+
+---
+
+## RECENT WORK - 2026-10-05 (INZAN.CALL.1)
+
+- Added Inzan-only call target lists for Active, Expired, Non-Attendees/Last Seen, and Leads, with relevant date filters and 15-day cooldown exclusions.
+- Added authenticated server-side call logging with tenant, role, call-center permission, and sales-assignment checks. The server transaction enforces Not Interested cooldowns against existing history and persists future cooldown state.
+- Added Call Later reminders that create assigned Tasks and appear in the Call Center due/overdue list. A later call completes the pending reminder and its task.
+- **Proof**: `npm run lint` and `npm run build` pass. Authenticated Firestore smoke testing remains blocked: the provided local browser screenshot reports that `db-inzanathletics` is not found in its Firebase project. No deployment performed.
 
 ---
 
