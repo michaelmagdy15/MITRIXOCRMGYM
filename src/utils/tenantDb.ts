@@ -6,6 +6,7 @@ import admin from 'firebase-admin';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { isStandaloneMode, getStandaloneTenantId } from '../config/environment.js';
 import { strikeDedicatedFirebaseConfig } from '../config/strikeDedicatedConfig.js';
+import { inzanFirebaseConfig } from '../config/inzanFirebaseConfig.js';
 
 // Initialize Firebase Admin SDK if not already initialized
 if (admin.apps.length === 0) {
@@ -39,11 +40,7 @@ export const strikeCrmConfig = {
 };
 delete (strikeCrmConfig as any).firestoreDatabaseId;
 
-export const inzanConfig = {
-  ...defaultFirebaseConfig,
-  firestoreDatabaseId: 'db-inzanathletics',
-  tenantId: 'inzanathletics',
-};
+export const inzanConfig = inzanFirebaseConfig;
 
 export const tenantConfigs: Record<string, any> = {
   'localhost': defaultFirebaseConfig, // has firestoreDatabaseId: "db-test"
@@ -89,6 +86,9 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache TTL
 export async function getTenantInfoForHost(hostname: string): Promise<{ config: any; status: string }> {
   // Fast path: In standalone deployment, route directly to local standalone config
   if (isStandaloneMode()) {
+    if (hostname.toLowerCase().includes('inzan')) {
+      throw new Error('[API] Inzan requires the central deployment; this server is configured for Strike standalone mode.');
+    }
     const standaloneConfig = {
       ...strikeDedicatedFirebaseConfig,
       tenantId: getStandaloneTenantId(),

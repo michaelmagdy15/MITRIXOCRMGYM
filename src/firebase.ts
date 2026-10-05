@@ -12,11 +12,15 @@ import { getStorage } from 'firebase/storage';
 import firebaseConfig from '../firebase-applet-config.json';
 import { isStandaloneMode, getStandaloneTenantId } from './config/environment';
 import { strikeDedicatedFirebaseConfig } from './config/strikeDedicatedConfig';
+import { inzanFirebaseConfig } from './config/inzanFirebaseConfig';
 
 // Support dynamic tenant configurations loaded based on subdomain or query param
 const getActiveConfig = () => {
   const dynamicConfig = (window as any).__FIREBASE_CONFIG__;
   if (isStandaloneMode()) {
+    if (dynamicConfig?.tenantId === inzanFirebaseConfig.tenantId || window.location.hostname.toLowerCase().includes('inzan')) {
+      throw new Error('Inzan cannot use the Strike standalone deployment. Check the tenant hosting configuration.');
+    }
     return {
       ...strikeDedicatedFirebaseConfig,
       ...(dynamicConfig || {}),
@@ -24,6 +28,9 @@ const getActiveConfig = () => {
     };
   }
   if (dynamicConfig && dynamicConfig.tenantId) {
+    if (dynamicConfig.tenantId === inzanFirebaseConfig.tenantId) {
+      return inzanFirebaseConfig;
+    }
     return dynamicConfig;
   }
 
@@ -48,11 +55,7 @@ const getActiveConfig = () => {
       }
 
       if (t === 'inzan' || t === 'inzanathletics' || host.includes('inzanathletics') || host.includes('inzan')) {
-        return {
-          ...(dynamicConfig || firebaseConfig),
-          firestoreDatabaseId: 'db-inzanathletics',
-          tenantId: 'inzanathletics'
-        };
+        return inzanFirebaseConfig;
       }
       if (t === 'strike' || t === 'strikeboxing' || host.includes('strike')) {
         return {

@@ -42,7 +42,9 @@
 - `inzanathletics.com` (Reserved for public website landing page; does NOT route to CRM dashboard)
 - `www.inzanathletics.com` (Reserved for public website landing page)
 
-**Firestore Database:** `db-inzanathletics`
+**Firebase Project:** `faa-test-guide-v2` (our central project; Inzan is not standalone).
+**Firestore Database:** `db-inzanathletics` (location: `europe-west1`).
+**Deployment:** Central mode (`STANDALONE_MODE=false`) in the central project. Auth, Storage, and Firestore must all use the central Firebase configuration. Strike's existing GitHub pipeline continues delivering core system updates to its separate standalone project.
 
 **Tenant ID:** `inzanathletics`
 

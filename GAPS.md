@@ -4,6 +4,17 @@ Updated: 2026-10-05 (Strike Live Payment Permissions Emergency Fix & Inzan Athle
 
 ---
 
+## RECENT WORK - 2026-10-05 (INZAN.AUTH.CONFIG.1)
+
+- Confirmed live `admin.inzanathletics.com` injects `strike-production-f5242` with `db-inzanathletics`. Read-only Cloud Firestore lookup confirms the database exists in `faa-test-guide-v2`, `europe-west1`.
+- Removed the shared Docker image's implicit Strike standalone default. Inzan uses an explicit central Firebase configuration in browser and server; mixed injected project/database pairs are corrected. Strike standalone rejects Inzan hostnames.
+- Preserved Strike's existing GitHub core-update pipeline and explicit standalone deployment settings. Strike remains the only standalone tenant; Inzan remains in our central Firebase project.
+- Verification: build/lint pass with existing build warnings; regression checks cover central Inzan and Strike routing, standalone rejection, and browser Auth/Firestore project selection with and without the bad injection.
+- Decision: retain the existing separate projects and databases; do not create/migrate databases or redirect Inzan into Strike.
+- **Release pending under hard limits:** deploy the corrected central runtime in `faa-test-guide-v2` with `STANDALONE_MODE=false`, verify Inzan's domain targets it, and smoke-test an authenticated Inzan login. Production was not changed; the live error remains until deployment. No push because `master` automatically publishes to Strike. `requirements.md` is absent from this checkout.
+
+---
+
 ## RECENT WORK - 2026-10-05 (STRIKE.HOTFIX.1 / INZAN.RELEASE.1)
 
 ### Strike Dedicated Tenant (strike-production-f5242)

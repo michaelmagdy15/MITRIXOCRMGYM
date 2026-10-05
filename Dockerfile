@@ -1,5 +1,5 @@
 # ==============================================================================
-# Multi-Stage Production Dockerfile for Strike Gym Dedicated Cloud Run
+# Multi-Stage Production Dockerfile for tenant-aware Cloud Run deployments
 # ==============================================================================
 
 # Stage 1: Build Assets
@@ -17,8 +17,8 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV STANDALONE_MODE=true
-ENV STANDALONE_TENANT_ID=strike
+# Dedicated deployments explicitly set STANDALONE_MODE and STANDALONE_TENANT_ID.
+# The shared image must not silently route central tenants into Strike's project.
 ENV PORT=8080
 
 COPY package*.json ./

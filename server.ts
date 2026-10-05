@@ -387,11 +387,7 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
   // Safeguard: Ensure inzan tenant info is never empty or pointing to default
   const isTenantInzan = config?.tenantId === 'inzanathletics' || normalizedHost.includes('inzan');
   if (isTenantInzan && (!config || config.tenantId !== 'inzanathletics' || !config.firestoreDatabaseId)) {
-    config = {
-      ...defaultFirebaseConfig,
-      firestoreDatabaseId: 'db-inzanathletics',
-      tenantId: 'inzanathletics',
-    };
+    config = inzanConfig;
   }
 
   const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(config)};</script>`;
