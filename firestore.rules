@@ -133,12 +133,12 @@ service cloud.firestore {
     
     // ENTITLEMENTS (Service Entitlements)
     match /entitlements/{entitlementId} {
-      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.memberId));
       allow write: if isStaff();
     }
 
     match /entitlements/{entitlementId}/adjustments/{adjustmentId} {
-      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(get(/databases/$(database)/documents/entitlements/$(entitlementId)).data.clientId));
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(get(/databases/$(database)/documents/entitlements/$(entitlementId)).data.memberId));
       allow write: if isStaff();
     }
     

@@ -76,16 +76,13 @@ export const onBookingCancelled = onDocumentUpdated(
             return;
           }
 
-          // Query waitlist in classBookings
-          const waitlistQuery = tenantDb.collection("classBookings")
-            .where("classId", "==", scheduleId);
+          // Query waitlist in classBookings by scheduleId (authoritative) and classId (legacy)
+          const waitlistBySchedule = tenantDb.collection("classBookings")
+            .where("scheduleId", "==", scheduleId)
+            .where("status", "in", ["waitlist", "waitlisted"]);
 
-          const waitlistDocs = await transaction.get(waitlistQuery);
+          const waitlistDocs = await transaction.get(waitlistBySchedule);
           const eligibleWaitlist = waitlistDocs.docs
-            .filter(d => {
-              const st = d.data().status;
-              return st === 'waitlist' || st === 'waitlisted';
-            })
             .sort((a, b) => {
               const aTime = a.data().bookedAt || a.data().createdAt || '';
               const bTime = b.data().bookedAt || b.data().createdAt || '';
@@ -104,6 +101,24 @@ export const onBookingCancelled = onDocumentUpdated(
           const firstWaitlistDoc = eligibleWaitlist[0];
           const promotedUser = firstWaitlistDoc.data();
           const promotedUserId = promotedUser.clientId || promotedUser.memberId || promotedUser.userId;
+
+          // Eligibility: verify member still exists and is not expired/frozen/suspended
+          if (promotedUserId) {
+            const promotedClientRef = tenantDb.collection("clients").doc(promotedUserId);
+            const promotedClientSnap = await transaction.get(promotedClientRef);
+            if (promotedClientSnap.exists) {
+              const promotedClientData = promotedClientSnap.data() || {};
+              const statusLower = (promotedClientData.status || '').toLowerCase();
+              if (statusLower === 'expired' || statusLower === 'frozen' || statusLower === 'suspended') {
+                logger.info(`[waitlist] Promoted user ${promotedUserId} is ${statusLower}; skipping promotion.`);
+                transaction.update(scheduleRef, {
+                  attendees,
+                  updatedAt: new Date().toISOString()
+                });
+                return;
+              }
+            }
+          }
 
           logger.info(`Promoting user ${promotedUserId} from waitlist to booked for schedule ${scheduleId}.`);
 
@@ -127,6 +142,25 @@ export const onBookingCancelled = onDocumentUpdated(
             attendees,
             waitlist,
             updatedAt: new Date().toISOString()
+          });
+
+          // Notify staff about the promotion
+          const notificationRef = tenantDb.collection("systemNotifications").doc();
+          transaction.set(notificationRef, {
+            type: 'waitlist_promotion',
+            title: 'Waitlist promotion',
+            body: `${promotedUser.memberName || promotedUser.clientName || 'A member'} was promoted from the waitlist to booked for ${scheduleData.name || 'a class'}.`,
+            severity: 'info',
+            data: {
+              classId: scheduleId,
+              scheduleId,
+              clientId: promotedUserId,
+              bookingId: firstWaitlistDoc.id,
+              status: 'booked',
+              branch: scheduleData.branch || ''
+            },
+            createdAt: new Date().toISOString(),
+            read: false
           });
         });
       } catch (error) {

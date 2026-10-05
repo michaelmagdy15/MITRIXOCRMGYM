@@ -2563,7 +2563,7 @@ async function startServer() {
 
         // Entitlements read upfront (used for both join deductions and leave refunds)
         const entQuery = db.collection("entitlements")
-          .where("clientId", "==", canonicalClientId)
+          .where("memberId", "==", canonicalClientId)
           .where("status", "==", "active");
         const entSnap = await transaction.get(entQuery);
 
@@ -3060,7 +3060,7 @@ async function startServer() {
           // Refund session token:
           // 1. Check active entitlements
           const entSnap = await db.collection("entitlements")
-            .where("clientId", "==", cDoc.id)
+            .where("memberId", "==", cDoc.id)
             .where("status", "==", "active")
             .get();
 
@@ -3895,7 +3895,7 @@ async function startServer() {
         
         // -- ENTITLEMENT ENGINE INTEGRATION --
         const entQuery = db.collection("entitlements")
-          .where("clientId", "==", sessionData.clientId)
+          .where("memberId", "==", sessionData.clientId)
           .where("status", "==", "active");
         
         const entSnap = await transaction.get(entQuery);
