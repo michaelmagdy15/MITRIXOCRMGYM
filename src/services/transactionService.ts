@@ -78,6 +78,30 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
   const actualAmountPaid = params.amount_paid !== undefined ? params.amount_paid : params.amount;
   const isGuestClient = params.isGuest || !params.clientId || params.clientId === 'WALK-IN-GUEST' || params.clientId === 'GUEST' || params.clientId === 'GUEST-LEAD';
 
+  // Fuzzy duplicate guard for non-guest payments without an explicit operationId.
+  // Catches accidental double-submits within a short window without requiring UI wiring.
+  if (!params.operationId && !isGuestClient) {
+    const cutoff = new Date(Date.now() - 3000).toISOString();
+    const dupQuery = query(
+      collection(db, 'payments'),
+      where('clientId', '==', params.clientId),
+      where('created_at', '>=', cutoff)
+    );
+    const dupSnap = await getDocs(dupQuery);
+    for (const d of dupSnap.docs) {
+      const p = d.data() as Payment;
+      if (
+        p.packageType === params.packageType &&
+        p.amount === params.amount &&
+        p.amount_paid === actualAmountPaid &&
+        p.recordedBy === params.recordedBy
+      ) {
+        console.warn(`[processPaymentTransaction] Recent duplicate payment detected within 3s window; skipping. Existing payment: ${p.id}`);
+        return;
+      }
+    }
+  }
+
   // Idempotency: skip duplicate transactions when the caller provides an operationId
   if (params.operationId) {
     const existingQuery = query(
