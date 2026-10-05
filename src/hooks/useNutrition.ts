@@ -8,6 +8,7 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  getDoc,
   where,
   orderBy
 } from 'firebase/firestore';
@@ -20,6 +21,56 @@ import {
   BodyMetrics
 } from '../types/nutrition';
 import { addAuditLog } from '../services/auditService';
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * Validates a nutritionist slot before booking/updating.
+ * Enforces: nutritionist active, day enabled, time within working hours, and no overlapping appointment.
+ */
+async function validateNutritionSlot(
+  db: any,
+  nutritionistId: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+  excludeAppointmentId?: string
+): Promise<void> {
+  const profileRef = doc(db, 'nutritionistProfiles', nutritionistId);
+  const profileSnap = await getDoc(profileRef);
+  if (!profileSnap.exists()) {
+    throw new Error('Nutritionist profile not found.');
+  }
+  const profile = profileSnap.data() as NutritionistProfile;
+  if (profile.active === false) {
+    throw new Error('Selected nutritionist is not currently active.');
+  }
+
+  const dayName = DAYS[new Date(date + 'T00:00:00').getDay()] || 'Sunday';
+  const daySchedule = profile.schedule?.[dayName];
+  if (!daySchedule || !daySchedule.enabled) {
+    throw new Error(`Nutritionist is not available on ${dayName}s.`);
+  }
+  if (startTime < daySchedule.startTime || endTime > daySchedule.endTime) {
+    throw new Error(`Selected time is outside ${profile.name}'s working hours (${daySchedule.startTime} - ${daySchedule.endTime}).`);
+  }
+
+  const existingQuery = query(
+    collection(db, 'nutritionAppointments'),
+    where('nutritionistId', '==', nutritionistId),
+    where('date', '==', date),
+    where('status', 'not-in', ['Cancelled', 'No-show'])
+  );
+  const existingSnap = await getDocs(existingQuery);
+  for (const d of existingSnap.docs) {
+    if (excludeAppointmentId && d.id === excludeAppointmentId) continue;
+    const appt = d.data() as NutritionAppointment;
+    // Overlap: existing start < new end AND existing end > new start
+    if (appt.startTime < endTime && appt.endTime > startTime) {
+      throw new Error(`Time slot conflicts with an existing appointment (${appt.startTime} - ${appt.endTime}).`);
+    }
+  }
+}
 
 // Real-time hook for nutrition appointments
 export function useNutritionAppointments() {
@@ -90,6 +141,8 @@ export async function bookAppointment(
   data: Omit<NutritionAppointment, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<string> {
   try {
+    await validateNutritionSlot(db, data.nutritionistId, data.date, data.startTime, data.endTime);
+
     const newRef = doc(collection(db, 'nutritionAppointments'));
     const now = new Date().toISOString();
     const appointmentData: NutritionAppointment = {
@@ -312,6 +365,20 @@ export function useNutrition() {
   const updateAppointment = useCallback(async (id: string, updates: Partial<NutritionAppointment>) => {
     try {
       const ref = doc(db, 'nutritionAppointments', id);
+
+      // Validate slot if reschedule changes time, date, or nutritionist
+      if (updates.date || updates.startTime || updates.endTime || updates.nutritionistId) {
+        const currentSnap = await getDoc(ref);
+        const current = currentSnap.exists() ? (currentSnap.data() as NutritionAppointment) : null;
+        const nutritionistId = updates.nutritionistId || current?.nutritionistId || '';
+        const date = updates.date || current?.date || '';
+        const startTime = updates.startTime || current?.startTime || '';
+        const endTime = updates.endTime || current?.endTime || '';
+        if (nutritionistId && date && startTime && endTime) {
+          await validateNutritionSlot(db, nutritionistId, date, startTime, endTime, id);
+        }
+      }
+
       await updateDoc(ref, {
         ...updates,
         updatedAt: new Date().toISOString()
