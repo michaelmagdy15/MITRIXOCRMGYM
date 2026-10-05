@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
 import { addAuditLog } from './auditService';
+import { buildEntitlementPayload } from './entitlementService';
 import { PaymentCategory, resolvePaymentCategory } from '../utils/paymentCategories';
 import { toCanonicalBranchId } from '../utils/memberCategories';
 import { normalizeBranchName } from '../utils/branchUtils';
@@ -69,11 +70,31 @@ export interface PaymentTransactionParams {
   previousPackageName?: string;
   corporateProofUrl?: string;
   discountReason?: string;
+  /** Idempotency key. If a payment already exists with this key, the transaction is skipped. */
+  operationId?: string;
 }
 
 export const processPaymentTransaction = async (params: PaymentTransactionParams): Promise<void> => {
   const actualAmountPaid = params.amount_paid !== undefined ? params.amount_paid : params.amount;
   const isGuestClient = params.isGuest || !params.clientId || params.clientId === 'WALK-IN-GUEST' || params.clientId === 'GUEST' || params.clientId === 'GUEST-LEAD';
+
+  // Idempotency: skip duplicate transactions when the caller provides an operationId
+  if (params.operationId) {
+    const existingQuery = query(
+      collection(db, 'payments'),
+      where('operationId', '==', params.operationId),
+      where('clientId', '==', params.clientId || 'WALK-IN-GUEST')
+    );
+    const existingSnap = await getDocs(existingQuery);
+    if (!existingSnap.empty) {
+      const [existingDoc] = existingSnap.docs;
+      if (existingDoc) {
+        const existing = existingDoc.data() as Payment;
+        console.warn(`[processPaymentTransaction] Duplicate operationId ${params.operationId} detected; skipping. Existing payment: ${existing.id}`);
+        return;
+      }
+    }
+  }
 
   const rawBranch = params.branch || params.clientBranch || '';
   const effectiveBranch = normalizeBranchName(rawBranch);
@@ -116,6 +137,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       holdReason: params.isMemberOnHold ? (params.notes || 'Placed on hold at payment checkout') : undefined,
       holdDate: params.isMemberOnHold ? new Date().toISOString() : undefined,
       heldBy: params.isMemberOnHold ? params.recordedBy : undefined,
+      operationId: params.operationId,
       created_at: new Date().toISOString(),
       deleted_at: null
     };
@@ -150,7 +172,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
   }
 
   // 2. Run Firestore transaction for write atomicity and read consistency
-  const txnResult = await runTransaction(db, async (transaction) => {
+  await runTransaction(db, async (transaction) => {
     // Fetch client details inside transaction to guarantee data integrity
     const clientSnap = await transaction.get(clientRef);
     if (!clientSnap.exists()) {
@@ -212,8 +234,18 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       transferredPaymentsCount = filteredPayments.length;
     }
 
-    // C. Create New Payment Document
+    // C. Resolve package dates before creating documents
+    const validPkgStart = toValidDate(params.startDate) || new Date();
+    const resolvedStartDateIso = validPkgStart.toISOString();
+    let resolvedEndDate = params.endDate ? safeIsoDate(params.endDate) : undefined;
+    if (!resolvedEndDate && params.systemPackage) {
+       const end = safeAddDays(validPkgStart, params.systemPackage.expiryDays);
+       resolvedEndDate = end.toISOString();
+    }
+
+    // D. Create Payment and Entitlement documents atomically
     const paymentRef = doc(collection(db, 'payments'));
+    const entitlementRef = params.systemPackage ? doc(collection(db, 'entitlements')) : null;
     const paymentData: Partial<Payment> = {
       id: paymentRef.id,
       clientId: params.clientId,
@@ -247,19 +279,27 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       holdReason: params.isMemberOnHold ? (params.notes || 'Placed on hold at payment checkout') : undefined,
       holdDate: params.isMemberOnHold ? new Date().toISOString() : undefined,
       heldBy: params.isMemberOnHold ? params.recordedBy : undefined,
+      operationId: params.operationId,
+      linkedEntitlementId: entitlementRef?.id,
       created_at: new Date().toISOString(),
       deleted_at: null
     };
     transaction.set(paymentRef, cleanData(paymentData));
 
-    // D. Client Upgrade/Renewal Logic
-    const validPkgStart = toValidDate(params.startDate) || new Date();
-    const resolvedStartDateIso = validPkgStart.toISOString();
-    let resolvedEndDate = params.endDate ? safeIsoDate(params.endDate) : undefined;
-    if (!resolvedEndDate && params.systemPackage) {
-       const end = safeAddDays(validPkgStart, params.systemPackage.expiryDays);
-       resolvedEndDate = end.toISOString();
+    if (entitlementRef && params.systemPackage) {
+      const entitlement = buildEntitlementPayload(
+        entitlementRef.id,
+        params.clientId,
+        params.systemPackage,
+        paymentRef.id,
+        resolvedStartDateIso,
+        resolvedEndDate,
+        'active'
+      );
+      transaction.set(entitlementRef, cleanData(entitlement));
     }
+
+    // E. Client Upgrade/Renewal Logic
 
     // Expire previous active package if renewing the same package or upgrading from previous package
     const updatedPkgs = clientPackages.map((p: any) => {
@@ -373,7 +413,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
 
     transaction.update(clientRef, cleanData(clientUpdate));
 
-    // E. Comment Document
+    // F. Comment Document
     const commentRef = doc(collection(db, 'clients', params.clientId, 'comments'));
     let commentMsg = '';
     const formattedStartDate = safeFormatDate(validPkgStart, 'd MMM yyyy');
@@ -392,26 +432,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       date: new Date().toISOString(),
       author: params.recordedByName || 'System'
     });
-    
-    return { resolvedStartDateIso, resolvedEndDate, paymentId: paymentRef.id };
   });
-
-  // F. Create Entitlement
-  if (params.systemPackage) {
-    try {
-      const { createEntitlement, activateEntitlement } = await import('./entitlementService');
-      const ent = await createEntitlement(
-        params.clientId,
-        params.systemPackage,
-        txnResult.paymentId,
-        txnResult.resolvedStartDateIso,
-        txnResult.resolvedEndDate
-      );
-      await activateEntitlement(ent.id);
-    } catch (err) {
-      console.error("Failed to create entitlement:", err);
-    }
-  }
 
   // Log audit entry for payment creation/upgrade/renewal
   const logAction = params.isRenewal ? 'UPDATE' : params.isUpgradePayment ? 'UPDATE' : 'CREATE';

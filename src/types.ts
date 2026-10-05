@@ -352,6 +352,8 @@ export interface Payment {
   linkedEntitlementId?: string; // Link to an entitlement record
   corporateProofUrl?: string; // Attachment URL for corporate discount verification
   discountReason?: string; // Reason or category of discount (Corporate, Referral, Promotional)
+  /** Client-generated idempotency key. If a payment with this key exists, the transaction is not re-run. */
+  operationId?: string;
 }
 
 export type Gender = 'Male' | 'Female' | 'Other' | 'Prefer not to say';

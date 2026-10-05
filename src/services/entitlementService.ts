@@ -6,6 +6,45 @@ import { addAuditLog } from './auditService';
 import { toValidDate, safeAddDays, safeParseExpiryToEndOfDay } from '../utils/dateUtils';
 import { getTenantId } from '../firebase';
 
+const inferEntitlementType = (pkgName: string): Entitlement['type'] => {
+  const name = pkgName.toLowerCase();
+  if (name.includes('pt') || name.includes('personal training')) return 'pt';
+  if (name.includes('class') || name.includes('group')) return 'class';
+  if (name.includes('nutrition')) return 'nutrition';
+  return 'membership';
+};
+
+/**
+ * Builds an entitlement payload without writing to Firestore.
+ * Useful when the entitlement must be written inside a parent transaction.
+ */
+export const buildEntitlementPayload = (
+  id: string,
+  memberId: string,
+  pkg: Package,
+  paymentId: string,
+  startDateIso: string,
+  endDateIso?: string,
+  status: EntitlementStatus = 'active'
+): Entitlement => {
+  const isUnlimited = pkg.sessions === 0;
+  return {
+    id,
+    memberId,
+    productId: pkg.id,
+    productName: pkg.name,
+    type: inferEntitlementType(pkg.name),
+    status,
+    sessionsTotal: isUnlimited ? 'unlimited' : pkg.sessions,
+    sessionsUsed: 0,
+    validFrom: startDateIso,
+    validUntil: endDateIso,
+    paymentId,
+    createdAt: new Date().toISOString(),
+    tenantId: getTenantId()
+  };
+};
+
 /**
  * Creates a new entitlement upon package purchase.
  */
@@ -17,32 +56,7 @@ export const createEntitlement = async (
   endDateIso?: string
 ): Promise<Entitlement> => {
   const entitlementRef = doc(collection(db, 'entitlements'));
-  
-  // Determine entitlement type from package category
-  let type: Entitlement['type'] = 'membership';
-  const pkgName = pkg.name.toLowerCase();
-  if (pkgName.includes('pt') || pkgName.includes('personal training')) type = 'pt';
-  else if (pkgName.includes('class') || pkgName.includes('group')) type = 'class';
-  else if (pkgName.includes('nutrition')) type = 'nutrition';
-
-  const isUnlimited = pkg.sessions === 0;
-
-  const entitlement: Entitlement = {
-    id: entitlementRef.id,
-    memberId,
-    productId: pkg.id,
-    productName: pkg.name,
-    type,
-    status: 'pending', // Starts pending until payment is confirmed active
-    sessionsTotal: isUnlimited ? 'unlimited' : pkg.sessions,
-    sessionsUsed: 0,
-    validFrom: startDateIso,
-    validUntil: endDateIso,
-    paymentId,
-    createdAt: new Date().toISOString(),
-    tenantId: getTenantId()
-  };
-
+  const entitlement = buildEntitlementPayload(entitlementRef.id, memberId, pkg, paymentId, startDateIso, endDateIso, 'pending');
   await setDoc(entitlementRef, entitlement);
   return entitlement;
 };
