@@ -50,20 +50,29 @@ service cloud.firestore {
 
     function isTenantAdmin() {
       return isPlatformSuperAdmin() || (
-        isAuthenticated() && userExists() &&
-        getUserRole() in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager']
+        isAuthenticated() && (
+          (request.auth.token.keys().hasAny(['role']) && request.auth.token.role in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'owner']) ||
+          (userExists() && getUserRole() in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'owner'])
+        )
       );
     }
 
     function isTenantSuperAdmin() {
       return isPlatformSuperAdmin() || (
-        isAuthenticated() && userExists() &&
-        getUserRole() in ['super_admin', 'crm_admin']
+        isAuthenticated() && (
+          (request.auth.token.keys().hasAny(['role']) && request.auth.token.role in ['super_admin', 'crm_admin']) ||
+          (userExists() && getUserRole() in ['super_admin', 'crm_admin'])
+        )
       );
     }
 
     function isTenantStaff() {
-      return isTenantAdmin() || (userExists() && getUserRole() in ['rep', 'sales_rep', 'coach']);
+      return isTenantAdmin() || (
+        isAuthenticated() && (
+          (request.auth.token.keys().hasAny(['role']) && request.auth.token.role in ['rep', 'sales_rep', 'coach', 'staff', 'sales', 'frontdesk', 'receptionist']) ||
+          (userExists() && getUserRole() in ['rep', 'sales_rep', 'coach', 'staff', 'sales', 'frontdesk', 'receptionist'])
+        )
+      );
     }
 
     function isOwnClientRecord(clientId) {
@@ -183,8 +192,9 @@ service cloud.firestore {
 
     function isValidPaymentCreate(data) {
       return data.clientId is string &&
-             data.amount_paid is number && data.amount_paid >= 0 &&
-             data.sales_rep_id is string;
+             (!('amount_paid' in data) || data.amount_paid == null || (data.amount_paid is number && data.amount_paid >= 0)) &&
+             (!('amount' in data) || data.amount == null || (data.amount is number && data.amount >= 0)) &&
+             (!('sales_rep_id' in data) || data.sales_rep_id == null || data.sales_rep_id is string);
     }
 
     function paymentImmutableFieldsUnchanged() {
@@ -249,7 +259,7 @@ service cloud.firestore {
 
     function isValidAuditLog(data) {
       return isNonEmptyString(data.userId) &&
-             data.action in ['CREATE', 'UPDATE', 'DELETE'] &&
+             data.action in ['CREATE', 'UPDATE', 'DELETE', 'OVERRIDE', 'ADJUSTMENT', 'LOGIN', 'LOGOUT', 'RESTORE'] &&
              data.entityType in ['CLIENT', 'PAYMENT', 'PACKAGE_RECORD', 'LEAD',
                                  'TARGET', 'ATTENDANCE', 'COACH', 'SYSTEM', 'BRANCH', 'SESSION'] &&
              isNonEmptyString(data.entityId) &&
@@ -384,6 +394,28 @@ service cloud.firestore {
       allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
       allow create: if isTenantStaff();
       allow update, delete: if isTenantStaff();
+    }
+
+    match /pointsWallets/{walletId} {
+      allow read, write: if isTenantStaff() || isOwnClientRecord(walletId);
+    }
+
+    match /pointsTransactions/{txnId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if isTenantStaff();
+      allow update, delete: if isTenantStaff();
+    }
+
+    match /entitlements/{entitlementId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && (
+        (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId)) ||
+        (resource.data.memberId != null && isOwnClientRecord(resource.data.memberId))
+      ));
+      allow write: if isTenantStaff();
+    }
+
+    match /entitlements/{entitlementId}/adjustments/{adjustmentId} {
+      allow read, write: if isTenantStaff();
     }
 
     match /rewardRedemptions/{redemptionId} {
