@@ -209,6 +209,15 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   }, [expiredLoaded, loadingExpired]);
 
 
+  // Automatically fetch expired members in the background once active members have loaded,
+  // ensuring all gym members are immediately searchable everywhere (payments, attendance, search bars).
+  useEffect(() => {
+    if (!currentUser || effectiveRole === 'client') return;
+    if (!loading && membersList.length > 0 && !expiredLoaded && !loadingExpired) {
+      fetchExpiredMembers();
+    }
+  }, [currentUser, effectiveRole, loading, membersList.length, expiredLoaded, loadingExpired, fetchExpiredMembers]);
+
   // Trigger expired fetch if a search query is entered (so search results find expired members)
   useEffect(() => {
     if (searchTerm && searchTerm.trim().length >= 2 && !expiredLoaded && !loadingExpired) {

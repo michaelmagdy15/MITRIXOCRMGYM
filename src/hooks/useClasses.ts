@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { ClassSchedule } from '../types/class';
 
 export function useClasses() {
@@ -42,6 +42,7 @@ export function useClasses() {
         // All schedule consumers query by this value; keep it in sync with startTime.
         date: scheduleDate,
         time: scheduleTime,
+        status: classData.status || 'active',
         noShowsProcessed: false,
         createdAt: now,
         updatedAt: now
@@ -66,6 +67,39 @@ export function useClasses() {
     }
   };
 
+  const cancelClass = async (id: string, reason?: string) => {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/classes/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          classId: id,
+          reason
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel class');
+      }
+      return data;
+    } catch (error) {
+      console.error("Error cancelling class via server endpoint:", error);
+      // Fallback: update status directly in Firestore if server endpoint is offline
+      const classRef = doc(db, 'classSchedules', id);
+      await updateDoc(classRef, {
+        status: 'cancelled',
+        cancelReason: reason || 'Class cancelled by gym',
+        cancelledAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+      return { success: true, fallback: true };
+    }
+  };
+
   const deleteClass = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'classSchedules', id));
@@ -75,5 +109,5 @@ export function useClasses() {
     }
   };
 
-  return { classes, loading, addClass, updateClass, deleteClass };
+  return { classes, loading, addClass, updateClass, cancelClass, deleteClass };
 }

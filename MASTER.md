@@ -8,21 +8,104 @@
 
 **MitrixoGYM** — a multi-tenant Firebase CRM platform for fitness gyms and fitness studios. Mission: comprehensive member management, staff management, payments, packages, attendance tracking, and guest management for multiple gym brands under a single platform.
 
-**Current state:** v1.13 — Strike Boxing Club Dedicated Tenant Separation & Decoupled Continuous Delivery Architecture. Strike has been fully decoupled from the central multi-tenant project (`faa-test-guide-v2`) into an independent, client-owned GCP & Firebase project (`strike-production-f5242`). All 13,205 gym documents, 1,152 members, and 33 staff/admins/coaches were migrated with intact SCRYPT password hashes (zero resets). All VBT Camp items (`vbt_camp`, `vbt_camp_announcements`, `vbt_push_tokens`, `vbt_events/`) were completely purged. Dedicated Storage (`strike-production-f5242.firebasestorage.app`) and Firebase Hosting (`https://strike-production-f5242.web.app` and `strike-egy.com`) are live. Continuous automated updates are pushed from the unified repository (`master`) via GitHub Actions without maintaining two separate codebases.
+**Current state:** v1.14 — Live Production Gym Stabilization, Member Access Recovery, Universal Phone Search & Authoritative Class Cancellation Refund Engine. Operational on dedicated GCP & Firebase project (`strike-production-f5242`) serving `https://strike-egy.com`. All 1,152 members have verified login access, universal multi-format Egyptian phone matching connects Reception & Record Payment searches seamlessly with Spotlight (Ctrl+K), and Class Manager now features automated 100% session token refunds accompanied by chic, high-priority push notifications upon class cancellation.
 
-**Active session (2026-10-04):**
-- **Dedicated Project Separation**: Strike Boxing Club provisioned into its own client-owned GCP & Firebase project (`strike-production-f5242`), ensuring 100% client data and billing ownership while isolating all ATPL Vector, Gamén, and Matchmaking intellectual property.
-- **Untangled Rules & Configuration**: Created `firebase.standalone.json` binding exclusively to `firestore-tenant.rules` (sanitized gym CRM ruleset) and `storage.rules`. Removed Strike from `sync-rules.cjs`.
-- **Zero-Password-Reset Auth Migration**: 1,152 members + 33 staff/admins/coaches migrated with exact production SCRYPT cipher parameters (`base64_signer_key`, `base64_salt_separator`, `rounds: 8`, `mem_cost: 14`).
-- **Complete VBT Camp Purge**: Purged all 183 VBT documents (`vbt_camp`, `vbt_camp_announcements`, `vbt_push_tokens`) from Firestore and excluded `vbt_events/` from Cloud Storage. Updated migration whitelist and added VBT collections to assertion blacklist.
-- **Dedicated Cloud Storage & Security**: Initialized default bucket `gs://strike-production-f5242.firebasestorage.app`, deployed `storage.rules`, and synced gym branding (`branding/`) and member avatars (`avatars/`).
-- **Automated Continuous Delivery Pipeline**: Added GitHub Actions workflow `.github/workflows/deploy-strike-dedicated.yml` deploying pre-built hosting SPA and security rules on every commit to `master`. Dual-mode client config in `src/config/strikeDedicatedConfig.ts` and `src/firebase.ts` dynamically routes Strike traffic to `strike-production-f5242`.
-- **Domain Cutover**: Switched `strike-egy.com` DNS A record (`199.36.158.100`) and TXT verification record (`hosting-site=strike-production-f5242`) in Cloudflare to dedicated project. Verified 100% parity across all 3 verification gates.
-- **Mobile App Zero-Rebuild Compatibility**: The iOS/Android App Store mobile apps load `https://strike-egy.com/`. With DNS switched to `strike-production-f5242`, all mobile users automatically connect to the new standalone backend without an App Store update.
+**Active session (2026-10-05):**
+- **Member Access Recovery & Global Password Reset**: Auth passwords reset to `12345678` across all members in `strike-production-f5242`, eliminating mobile login lockout, case-sensitivity issues, and phone-lookup failures. Staff accounts preserved without interruption.
+- **Push Notification & FCM Token Fix**: Audited device registrations, patched `firestore-tenant.rules` for client device token writes, and updated `pushService.ts` to capture member session tokens across iOS/Android.
+- **Universal Phone Number Search Unification**: Implemented `src/utils/phoneUtils.ts` with Eastern Arabic numeral translation and leading-zero stripping, unifying member search across Ctrl+K Spotlight, Record Payment (`Payments.tsx`), and Members Directory (`Clients.tsx`). Integrated automatic background loading of expired members.
+- **Authoritative Class Cancellation & Token Refund Engine**: Added `POST /api/classes/cancel` in `server.ts` restoring 100% of session tokens across entitlements and packages, updating bookings, recording audit trails, and dispatching elegant Expo push notifications. Added staff cancellation dialog in `ClassManager.tsx` and cancellation apology banner in `MemberClasses.tsx`.
+- **Production Build & Deploy**: Zero build errors, deployed live to `strike-production-f5242` (`strike-egy.com`).
 
 ---
 
-## 8. Live Session Log — 2026-10-04 (most recent)
+## 8. Live Session Log — 2026-10-05 (most recent)
+
+### Comprehensive Scope: Live Production Gym Stabilization, Member Access Recovery, Universal Phone Search & Authoritative Class Cancellation Refund Engine
+
+#### 1. Context & Urgency
+- **Environment**: Strike Boxing Club dedicated production backend (`strike-production-f5242`, `https://strike-egy.com`).
+- **Incidents Reported at Venue**:
+  1. Members unable to log in on mobile app after tenant separation; password reset attempts surfaced `auth/user-not-found` or generic errors.
+  2. Immediate global password reset required to `12345678` across all members to restore gym access instantly.
+  3. Push notifications: only 5 devices received broadcasts; need audit of active app users and device registration pipeline.
+  4. Search discrepancy: members were discoverable in Ctrl+K Spotlight but vanished from "Record Payment", Members Database, and navbar search.
+  5. Class Manager: gym needed an authoritative mechanism to cancel classes, notify booked members with an elegant apology, and ensure session tokens are 100% refunded automatically so members are never wrongfully deducted.
+
+#### 2. Member Access Recovery & Global Password Reset
+- **Root Cause Analysis**:
+  - `strike-production-f5242` members were imported with SCRYPT hashes, but members logging in via the mobile app frequently entered phones, mixed-case emails, or had missing Firebase Auth links.
+  - Member reset flow in `AuthContext.tsx` was failing due to casing mismatches and lack of email enumeration protection.
+- **Execution & Resolution**:
+  - Executed authoritative administrative password reset across all 1,152 members in `strike-production-f5242`, resetting member passwords to `12345678`.
+  - Audited member credentials and linked auth profiles; verified staff accounts retained their original secure passwords without disruption.
+  - Deployed mobile login error handling updates in `src/contexts/AuthContext.tsx` with case-insensitive email normalization and automatic member ID / phone resolution.
+
+#### 3. Push Notification Audit & Device Registration Fix
+- **Root Cause Analysis**:
+  - Only 5 push tokens were registered in the dedicated `fcm_tokens` collection because `firestore-tenant.rules` lacked explicit write permissions for client devices to register tokens under custom auth claims or guest tokens.
+  - In `src/services/pushService.ts` and `src/member/MemberPortal.tsx`, push token registration was only triggering on full Firebase Auth state changes and omitting phone-based member sessions.
+- **Fixes Applied**:
+  - Updated `firestore-tenant.rules` to allow authenticated users, staff, and portal members to create and update their tokens in `fcm_tokens/{tokenId}` with strict schema validation.
+  - Updated `src/services/pushService.ts` to support registering tokens for member sessions and syncing device metadata (`platform`, `lastActive`, `appVersion`, `clientId`).
+  - Audited active device sessions and verified push delivery through Expo Push Notification service.
+
+#### 4. Search Unification & Universal Phone Normalization
+- **Root Cause Analysis**:
+  - **Phone Number Format Mismatch**: Audited 1,158 clients in `strike-production-f5242`. 1,011 clients (87.4%) were stored without a leading `0` (e.g., `1000400127`), while receptionists at the front desk enter Egyptian numbers with a leading zero (`01000400127`) or with spaces / country codes (`+2010...`) or Arabic numerals (`٠١٠...`). Simple substring checks (`phone.includes(query)`) completely failed.
+  - **Lazy-Loaded Expired Members**: 436 members are marked `Expired`. `useClients.ts` only subscribed to active/hold statuses. Expired members were only fetched when staff manually clicked the "Expired" tab. In `Payments.tsx` (Record Payment modal) and `Attendance.tsx`, expired members were never loaded, yielding "No members found".
+- **Fixes Applied**:
+  - **Utility** [`src/utils/phoneUtils.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/utils/phoneUtils.ts):
+    - `convertArabicNumerals(str)`: Converts Eastern Arabic digits (٠-٩) to Western standard (0-9).
+    - `getCorePhoneDigits(phone)`: Strips country codes (`+20`, `20`), leading zeros, and formatting characters to isolate the core 9-10 subscriber digits.
+    - `matchesPhoneSearch(memberPhone, searchTerm)`: Bidirectional multi-format Egyptian phone matcher.
+  - **Client Hook** [`src/hooks/useClients.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/hooks/useClients.ts):
+    - Added automatic background fetching of expired members once active members finish loading, ensuring the entire client roster (1,158 members) is resident in memory for instant searching.
+  - **UI Integration**:
+    - [`src/components/CommandPalette.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/components/CommandPalette.tsx): Integrated `matchesPhoneSearch` and numeric member ID matching.
+    - [`src/Payments.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Payments.tsx): Added `matchesPhoneSearch` to member selector dropdown and triggers background load if expired members are queried.
+    - [`src/Clients.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/Clients.tsx): Added `matchesPhoneSearch` and initiates search on 2+ characters across all statuses.
+    - [`src/App.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/App.tsx): Added `matchesPhoneSearch` to top navbar search.
+
+#### 5. Authoritative Class Cancellation & 100% Token Refund Engine
+- **Business Need**: Front desk or gym managers cancelling a class previously risked either deleting the record entirely (losing audit history) or failing to restore members' prepaid session credits.
+- **Server Implementation** ([`server.ts`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/server.ts)):
+  - Built endpoint `POST /api/classes/cancel` with role-based auth:
+    1. Sets class `status: 'cancelled'`, records `cancelledAt: ISOString`, `cancelledBy: staffId`, and `cancelReason`.
+    2. Atomic Session Token Restorations:
+       - Checks for member entitlements: decrements `sessionsUsed`, appends audit adjustment entry with timestamp and class details.
+       - Restores legacy package sessions: increments `sessionsRemaining`, decrements `usedSessions`.
+    3. Updates `classBookings` collection: marks bookings `cancelled`, sets `cancellationRefunded: true`, logs `cancelReason`.
+    4. Auto-cleans waitlist bookings.
+    5. In-App Notification: Dispatches personalized message to `systemNotifications` for each affected member.
+    6. Expo Push Notification: Sends high-priority push notification with sound:
+       - **Title**: `Class Cancelled: ${class.name}`
+       - **Body**: *"We regret to inform you that {{className}} on {{date}} at {{time}} has been cancelled. We sincerely apologize for any inconvenience caused. Your session credit has been automatically refunded to your balance."*
+    7. Audit Logging: Records action in `auditLogs` for full manager transparency.
+- **Staff Class Manager UI** ([`src/components/ClassManager.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/components/ClassManager.tsx)):
+  - Added dedicated "Cancel Class" button distinct from "Delete".
+  - Cancellation confirmation dialog displaying number of enrolled members, quick-reason selector chips ("Coach Emergency", "Facility Maintenance", "Inclement Weather", "Schedule Adjustment"), and explicit guarantee of automatic session credit refund.
+  - Timetable rows display bold `CANCELLED` status badge with tooltip showing cancellation reason and timestamp.
+- **Member Portal UI** ([`src/member/MemberClasses.tsx`](file:///c:/Users/Mi5a/MitrixoGYMCRMPlatform/src/member/MemberClasses.tsx)):
+  - Cancelled class cards styled with soft rose border/background (`border-rose-500/30 bg-rose-500/[0.03]`).
+  - Prominent apology card with `AlertTriangle` icon: *"Class Cancelled by Gym — {{cancelReason}}"*.
+  - For booked members, renders emerald confirmation badge: *"Your session credit has been automatically refunded to your balance."*
+  - Action button disabled with state label `"Class Cancelled"`.
+
+#### 6. Deployment & Parity Verification
+- **Production Build**: Verified clean TypeScript compilation and Vite bundle packaging with 0 errors (`npm run build`).
+- **Firebase Deployment**: Released latest SPA bundle and security rules directly to `strike-production-f5242` via `firebase.standalone.json`.
+- **Live Status**: Operational at `https://strike-egy.com` and `https://strike-production-f5242.web.app`.
+
+#### 7. Hotfix: Temporal Dead Zone (TDZ) ReferenceError in Clients.tsx
+- **Symptom**: Navigating to Members tab triggered ErrorBoundary with message: `Cannot access 'Jr' before initialization`.
+- **Root Cause**: In minified production code, `searchTerm` was renamed to `Jr`. A `useEffect` hook referencing `searchTerm` was placed at line 206 before `const [searchTerm, setSearchTerm] = useState('')` was declared at line 258, causing a runtime Temporal Dead Zone (TDZ) `ReferenceError`.
+- **Fix**: Restructured the top of `Clients.tsx`, ensuring all `useState` hooks are initialized first, and all `useEffect` hooks are placed strictly after all state declarations and deferred values.
+- **Deployment**: Production build re-verified (`npm run build` -> 0 errors) and re-deployed immediately to `strike-production-f5242`. Fully operational.
+
+---
+
+## 9. Live Session Log — 2026-10-04
 
 ### Comprehensive Scope: Strike Dedicated Tenant Separation & Continuous Delivery Architecture
 

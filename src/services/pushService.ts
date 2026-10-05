@@ -1,5 +1,5 @@
 import { db, getTenantId, auth } from '../firebase';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 /**
  * Returns the current user's Firebase ID token, or null if unavailable.
@@ -57,20 +57,20 @@ export async function saveExpoPushToken(userId: string, token: string, clientRec
   try {
     // 1. Save to users collection
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
+    await setDoc(userRef, {
       expoPushToken: token,
       fcmToken: token,
       lastTokenUpdate: new Date().toISOString()
-    });
+    }, { merge: true });
     console.log('[Push Service] Token saved to user profile:', token);
 
     // 2. Save to clients collection if clientRecordId is provided
     if (clientRecordId) {
       const clientRef = doc(db, 'clients', clientRecordId);
-      await updateDoc(clientRef, {
+      await setDoc(clientRef, {
         expoPushToken: token,
         fcmToken: token
-      });
+      }, { merge: true });
       console.log('[Push Service] Token saved to client profile:', token);
     }
   } catch (err) {

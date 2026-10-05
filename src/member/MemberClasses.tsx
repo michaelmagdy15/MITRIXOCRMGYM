@@ -610,6 +610,7 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
               filteredClasses.map(gymClass => {
                 const cutoffMinutes = getBookingCutoffMinutes(gymClass, bookingWindow);
                 const isCutoff = isBookingCutoffExceeded(gymClass, cutoffMinutes);
+                const isCancelled = gymClass.status === 'cancelled';
 
                 const isBooked = client ? (
                   (gymClass.attendees || []).includes(client.id) ||
@@ -626,7 +627,9 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
 
                 return (
                   <Card key={gymClass.id} className={`border rounded-2xl shadow-xs transition-all ${
-                    isBooked
+                    isCancelled
+                      ? 'border-rose-500/30 bg-rose-500/[0.03]'
+                      : isBooked
                       ? 'border-primary/40 bg-primary/5'
                       : isWaitlisted
                       ? 'border-amber-500/40 bg-amber-500/5'
@@ -652,7 +655,12 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                             }`}>
                               {gymClass.branch}
                             </span>
-                            {isCutoff && !isBooked && !isWaitlisted && (
+                            {isCancelled && (
+                              <Badge variant="destructive" className="text-[9px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/30">
+                                Class Cancelled
+                              </Badge>
+                            )}
+                            {!isCancelled && isCutoff && !isBooked && !isWaitlisted && (
                               <Badge variant="outline" className="text-[9px] font-bold text-destructive bg-destructive/10 border-destructive/30">
                                 Registration Closed
                               </Badge>
@@ -673,6 +681,24 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                           </div>
                         </div>
                       </div>
+
+                      {isCancelled && (
+                        <div className="p-3.5 bg-rose-500/[0.08] border border-rose-500/20 rounded-2xl space-y-1.5 animate-in fade-in duration-200">
+                          <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-xs">
+                            <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
+                            <span>Class Cancelled by Gym</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            {(gymClass as any).cancelReason || "We regret to inform you that this session has been cancelled. We sincerely apologize for any inconvenience caused."}
+                          </p>
+                          {isBooked && (
+                            <div className="pt-1 flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold border-t border-rose-500/20 mt-1">
+                              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                              <span>Your session credit has been automatically refunded to your balance.</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {(gymClass as any).description && (
                         <p className="text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-xl border border-border/40 leading-relaxed">
@@ -696,7 +722,16 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                           )}
                         </div>
 
-                        {isBooked || isWaitlisted ? (
+                        {isCancelled ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 text-xs font-semibold rounded-xl px-3.5 opacity-60 cursor-not-allowed text-muted-foreground bg-muted/60"
+                            disabled={true}
+                          >
+                            Class Cancelled
+                          </Button>
+                        ) : isBooked || isWaitlisted ? (
                           <div className="flex items-center gap-2">
                             {isBooked && (
                               <CalendarSyncButton

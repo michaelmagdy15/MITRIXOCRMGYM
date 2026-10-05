@@ -4,6 +4,42 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover" />
 
+    <!-- Clean legacy IndexedDB Firestore cache & unregister stale service workers -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <script>
+      (function() {
+        var CACHE_KEY = 'strike_clean_v9_live';
+        if (localStorage.getItem('strike_sw_cleanup_version') !== CACHE_KEY) {
+          try {
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                regs.forEach(function(r) { r.unregister(); });
+              }).catch(function() {});
+            }
+            if ('caches' in window) {
+              caches.keys().then(function(keys) {
+                keys.forEach(function(k) { caches.delete(k); });
+              }).catch(function() {});
+            }
+            if (window.indexedDB && window.indexedDB.databases) {
+              window.indexedDB.databases().then(function(dbs) {
+                if (Array.isArray(dbs)) {
+                  dbs.forEach(function(db) {
+                    if (db.name && db.name.indexOf('firestore') !== -1) {
+                      try { window.indexedDB.deleteDatabase(db.name); } catch(e) {}
+                    }
+                  });
+                }
+              }).catch(function() {});
+            }
+            localStorage.setItem('strike_sw_cleanup_version', CACHE_KEY);
+          } catch(e) {}
+        }
+      })();
+    </script>
+
     <!-- Disable pinch-to-zoom & double-tap zoom on iOS & mobile browsers -->
     <script>
       (function() {

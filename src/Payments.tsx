@@ -23,6 +23,7 @@ import { PaymentCategory, PAYMENT_CATEGORIES, resolvePaymentCategory } from './u
 import { createApprovalRequest } from './services/approvalService';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
 import { resolvePaymentBranch, normalizeBranchName } from './utils/branchUtils';
+import { matchesPhoneSearch } from './utils/phoneUtils';
 import { toCanonicalBranchId } from './utils/memberCategories';
 
 export default function Payments() {
@@ -46,6 +47,9 @@ export default function Payments() {
     addPayment,
     deletePayment,
     updatePayment,
+    fetchExpiredMembers,
+    expiredLoaded,
+    loadingExpired,
   } = useAppContext();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
@@ -90,8 +94,14 @@ export default function Payments() {
   const [paymentBranch, setPaymentBranch] = useState('');
 
   useEffect(() => {
+    if (!expiredLoaded && !loadingExpired && fetchExpiredMembers) {
+      fetchExpiredMembers();
+    }
+  }, [expiredLoaded, loadingExpired, fetchExpiredMembers]);
+
+  useEffect(() => {
     if (!pendingNewPhone) return;
-    const found = clients.find(c => c.phone === pendingNewPhone);
+    const found = clients.find(c => c.phone === pendingNewPhone || matchesPhoneSearch(c.phone, pendingNewPhone));
     if (found) {
       setClientId(found.id);
       setClientSearch(`${found.name}${found.phone ? ` (${found.phone})` : ''}`);
@@ -1207,8 +1217,14 @@ export default function Payments() {
                               {clients
                                 .filter(c => {
                                   if (!clientSearch) return true;
-                                  const t = clientSearch.toLowerCase();
-                                  return c.name?.toLowerCase().includes(t) || c.phone?.includes(t) || c.memberId?.toString().includes(t);
+                                  const t = clientSearch.toLowerCase().trim();
+                                  const cleanId = t.replace(/^#/, '');
+                                  return (
+                                    c.name?.toLowerCase().includes(t) || 
+                                    matchesPhoneSearch(c.phone, t) || 
+                                    matchesPhoneSearch((c as any).parentPhone, t) ||
+                                    (c.memberId && c.memberId.toString().includes(cleanId))
+                                  );
                                 })
                                 .slice(0, 50)
                                 .map(client => (
@@ -1231,8 +1247,14 @@ export default function Payments() {
                                 ))}
                               {clients.filter(c => {
                                 if (!clientSearch) return true;
-                                const t = clientSearch.toLowerCase();
-                                  return c.name?.toLowerCase().includes(t) || c.phone?.includes(t) || c.memberId?.toString().includes(t);
+                                const t = clientSearch.toLowerCase().trim();
+                                const cleanId = t.replace(/^#/, '');
+                                return (
+                                  c.name?.toLowerCase().includes(t) || 
+                                  matchesPhoneSearch(c.phone, t) || 
+                                  matchesPhoneSearch((c as any).parentPhone, t) ||
+                                  (c.memberId && c.memberId.toString().includes(cleanId))
+                                );
                               }).length === 0 && (
                                 <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('members.no_members')}</div>
                               )}

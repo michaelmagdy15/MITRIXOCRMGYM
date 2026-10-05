@@ -34,6 +34,7 @@ import { cleanData } from './utils';
 import { generateClientContract } from './utils/pdfGenerator';
 import { downloadFile } from './utils/download';
 import { resolvePaymentCategory } from './utils/paymentCategories';
+import { matchesPhoneSearch } from './utils/phoneUtils';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { InzanMemberShow } from './components/InzanMemberShow';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
@@ -197,16 +198,6 @@ export default function Clients() {
     }
   }, [activeClientId, clients, packages]);
 
-  React.useEffect(() => {
-    setFullPageView(false);
-  }, [activeClientId]);
-
-  React.useEffect(() => {
-    if (activeTab === 'expired') {
-      fetchExpiredMembers();
-    }
-  }, [activeTab, fetchExpiredMembers]);
-
   const [isNewMemberOpen, setIsNewMemberOpen] = useState(false);
   const [isRecalculateConfirmOpen, setIsRecalculateConfirmOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -306,6 +297,16 @@ export default function Clients() {
   const deferredFilterGender = useDeferredValue(filterGender);
   const deferredFilterCategory = useDeferredValue(filterCategory);
   const deferredFilterCoach = useDeferredValue(filterCoach);
+
+  React.useEffect(() => {
+    setFullPageView(false);
+  }, [activeClientId]);
+
+  React.useEffect(() => {
+    if (activeTab === 'expired' || searchTerm.trim().length >= 2) {
+      fetchExpiredMembers();
+    }
+  }, [activeTab, searchTerm, fetchExpiredMembers]);
 
   const handleAddMember = async () => {
     if (!newMemberName || newMemberName.trim().length < 2) {
@@ -1101,18 +1102,12 @@ export default function Clients() {
         const idTerm = term.replace(/^#/, '');
         filtered = filtered.filter(m => m.memberId && m.memberId.toString().includes(idTerm));
       } else {
-        const cleanDigits = term.replace(/[^0-9]/g, '');
+        const cleanId = term.replace(/^#/, '');
         filtered = filtered.filter(m => {
           if (m.name.toLowerCase().includes(term)) return true;
-          if (m.memberId && m.memberId.toString().toLowerCase().includes(term)) return true;
-          if (cleanDigits.length >= 4) {
-            const mPhoneDigits = (m.phone || '').replace(/[^0-9]/g, '');
-            const mParentPhoneDigits = ((m as any).parentPhone || '').replace(/[^0-9]/g, '');
-            if (mPhoneDigits.includes(cleanDigits) || mParentPhoneDigits.includes(cleanDigits)) return true;
-          } else {
-            if (m.phone && m.phone.toLowerCase().includes(term)) return true;
-            if ((m as any).parentPhone && (m as any).parentPhone.toLowerCase().includes(term)) return true;
-          }
+          if (m.memberId && m.memberId.toString().toLowerCase().includes(cleanId)) return true;
+          if (matchesPhoneSearch(m.phone, term)) return true;
+          if (matchesPhoneSearch((m as any).parentPhone, term)) return true;
           return false;
         });
       }

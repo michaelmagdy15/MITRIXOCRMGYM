@@ -29,6 +29,8 @@ import {
   CheckCircle2, 
   Edit, 
   AlertCircle,
+  AlertTriangle,
+  XCircle,
   Check,
   X,
   Phone,
@@ -70,7 +72,7 @@ export const BASE_CATEGORIES = [
 ];
 
 export const ClassManager: React.FC = () => {
-  const { classes, loading, addClass, updateClass, deleteClass } = useClasses();
+  const { classes, loading, addClass, updateClass, cancelClass, deleteClass } = useClasses();
   const { currentUser } = useAuth();
   const { branches, branding } = useSettings();
   const { clients, setActiveTab, setActiveClientId } = useAppContext();
@@ -103,9 +105,10 @@ export const ClassManager: React.FC = () => {
   
   // Cancel/Delete Dialog State
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
-  const [cancelClassId, setCancelClassId] = useState('');
-  const [cancelClassName, setCancelClassName] = useState('');
-  const [cancelReason, setCancelReason] = useState('');
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [targetClass, setTargetClass] = useState<ClassSchedule | null>(null);
+  const [cancelReason, setCancelReason] = useState('Coach unavailable due to emergency');
+  const [isProcessingCancel, setIsProcessingCancel] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Attendees Roster Modal State
@@ -360,21 +363,45 @@ export const ClassManager: React.FC = () => {
     }
   };
 
-  const handleDelete = (id: string, className: string) => {
-    setCancelClassId(id);
-    setCancelClassName(className);
-    setCancelReason('');
+  const handleOpenCancelDialog = (cls: ClassSchedule) => {
+    setTargetClass(cls);
+    setCancelReason('Coach unavailable due to emergency');
     setIsCancelDialogOpen(true);
   };
 
-  const handleConfirmCancel = async () => {
-    if (!cancelClassId) return;
+  const handleOpenDeleteDialog = (cls: ClassSchedule) => {
+    setTargetClass(cls);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleConfirmCancelClass = async () => {
+    if (!targetClass) return;
+    setIsProcessingCancel(true);
     try {
-      await deleteClass(cancelClassId);
+      const res = await cancelClass(targetClass.id, cancelReason);
+      toast.success(`Class "${targetClass.name}" has been cancelled.`, {
+        description: `Enrolled members (${(targetClass.attendees || []).length}) have been refunded their session token and notified.`
+      });
       setIsCancelDialogOpen(false);
-      setCancelClassId('');
-    } catch (err) {
+      setTargetClass(null);
+    } catch (err: any) {
       console.error("Error cancelling class:", err);
+      toast.error(err.message || "Failed to cancel class.");
+    } finally {
+      setIsProcessingCancel(false);
+    }
+  };
+
+  const handleConfirmDeleteClass = async () => {
+    if (!targetClass) return;
+    try {
+      await deleteClass(targetClass.id);
+      toast.success(`Class "${targetClass.name}" was permanently removed.`);
+      setIsDeleteDialogOpen(false);
+      setTargetClass(null);
+    } catch (err: any) {
+      console.error("Error deleting class:", err);
+      toast.error("Failed to delete class.");
     }
   };
 
@@ -886,10 +913,22 @@ export const ClassManager: React.FC = () => {
                         const isFull = attendeesCount >= cls.capacity;
 
                         return (
-                          <tr key={cls.id} className="transition-colors hover:bg-muted/40">
+                          <tr key={cls.id} className={`transition-colors hover:bg-muted/40 ${cls.status === 'cancelled' ? 'bg-rose-500/[0.03] opacity-85' : ''}`}>
                             {/* Class name & Tiers */}
                             <td className="p-4 align-middle">
-                              <p className="font-extrabold text-xs text-foreground uppercase">{cls.name}</p>
+                              <div className="flex items-center gap-2">
+                                <p className={`font-extrabold text-xs uppercase ${cls.status === 'cancelled' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>{cls.name}</p>
+                                {cls.status === 'cancelled' && (
+                                  <Badge variant="destructive" className="bg-rose-500/10 text-rose-500 border border-rose-500/30 text-[9px] px-1.5 py-0 h-4 font-bold">
+                                    CANCELLED
+                                  </Badge>
+                                )}
+                              </div>
+                              {cls.status === 'cancelled' && cls.cancelReason && (
+                                <p className="text-[10px] text-rose-500/80 italic mt-0.5">
+                                  Reason: {cls.cancelReason}
+                                </p>
+                              )}
                               <div className="flex flex-wrap items-center gap-1 mt-1">
                                 {cls.category && (
                                   <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-bold border-primary/30 text-primary">
@@ -997,15 +1036,32 @@ export const ClassManager: React.FC = () => {
                                   className="h-8 w-8 p-0"
                                   onClick={() => openEditDialog(cls)}
                                   title="Edit Class Schedule"
+                                  disabled={cls.status === 'cancelled'}
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
+                                {cls.status !== 'cancelled' ? (
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    className="h-8 px-2 text-xs font-semibold gap-1 text-amber-500 hover:text-amber-700 hover:bg-amber-500/10"
+                                    onClick={() => handleOpenCancelDialog(cls)}
+                                    title="Cancel Class, Refund Member Tokens & Notify Attendees"
+                                  >
+                                    <XCircle className="h-4 w-4 text-amber-500" />
+                                    <span className="hidden sm:inline">Cancel</span>
+                                  </Button>
+                                ) : (
+                                  <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-rose-500 text-[10px] font-bold py-1">
+                                    Cancelled
+                                  </Badge>
+                                )}
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
                                   className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-500/10"
-                                  onClick={() => handleDelete(cls.id, cls.name)}
-                                  title="Delete Class"
+                                  onClick={() => handleOpenDeleteDialog(cls)}
+                                  title="Delete Class Permanently"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -1653,30 +1709,113 @@ export const ClassManager: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Chic Class Cancellation Dialog */}
       <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-base font-black uppercase text-rose-500">Cancel / Remove Class</DialogTitle>
-            <DialogDescription className="text-xs">
-              Are you sure you want to remove <strong>{cancelClassName}</strong>? This will cancel bookings and notify enrolled members.
+        <DialogContent className="sm:max-w-md bg-card border rounded-2xl shadow-2xl p-6">
+          <DialogHeader className="space-y-2">
+            <div className="h-12 w-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center mb-1">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-lg font-black uppercase tracking-tight text-foreground">
+              Cancel Class Session
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to cancel <strong>{targetClass?.name}</strong> on {safeFormatDate(targetClass?.startTime, 'EEE, MMM d, yyyy')}?
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label className="text-xs font-bold uppercase text-muted-foreground">Cancellation Reason (Optional)</Label>
-            <Input
-              placeholder="e.g. Coach sick leave, maintenance"
-              value={cancelReason}
-              onChange={e => setCancelReason(e.target.value)}
-              className="h-9 text-xs"
-            />
+
+          <div className="space-y-4 py-3">
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-3.5 space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-muted-foreground">Enrolled Members:</span>
+                <span className="font-bold text-foreground">{(targetClass?.attendees || []).length} members</span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-muted-foreground">Session Token Refund:</span>
+                <span className="font-bold text-emerald-500">100% Automatic Refund</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                ✨ Each enrolled member will have their session token immediately restored to their balance, and an audible push notification with gym apologies will be dispatched to their devices.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Cancellation Reason (sent to members)
+              </Label>
+              <Input
+                placeholder="e.g. Coach emergency, Studio maintenance, Weather conditions"
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                className="h-10 text-xs rounded-xl bg-background"
+              />
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[
+                  'Coach unavailable due to emergency',
+                  'Facility / studio maintenance',
+                  'Severe weather conditions',
+                  'Schedule reorganization'
+                ].map(quickReason => (
+                  <button
+                    key={quickReason}
+                    type="button"
+                    onClick={() => setCancelReason(quickReason)}
+                    className="text-[10px] px-2 py-0.5 rounded-md bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/40 transition-colors"
+                  >
+                    {quickReason}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setIsCancelDialogOpen(false)}>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="rounded-xl"
+              onClick={() => setIsCancelDialogOpen(false)}
+              disabled={isProcessingCancel}
+            >
               Keep Class
             </Button>
-            <Button variant="destructive" size="sm" onClick={handleConfirmCancel} className="font-bold">
-              Confirm Delete
+            <Button 
+              variant="destructive" 
+              size="sm" 
+              className="rounded-xl font-bold bg-rose-600 hover:bg-rose-700 text-white"
+              onClick={handleConfirmCancelClass}
+              disabled={isProcessingCancel}
+            >
+              {isProcessingCancel ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                  Cancelling & Refunding...
+                </span>
+              ) : (
+                `Confirm Cancellation (${(targetClass?.attendees || []).length} Refunds)`
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permanent Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-card border rounded-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black uppercase text-foreground flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-500" /> Permanently Delete Class
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Are you sure you want to permanently remove <strong>{targetClass?.name}</strong> from the database? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" size="sm" className="rounded-xl font-bold" onClick={handleConfirmDeleteClass}>
+              Delete Permanently
             </Button>
           </DialogFooter>
         </DialogContent>

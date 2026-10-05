@@ -1,3 +1,4 @@
+import { matchesPhoneSearch } from './utils/phoneUtils';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -147,11 +148,13 @@ function AppContent() {
   const handleSearchSubmit = () => {
     if (!searchQuery.trim()) return;
     const q = searchQuery.toLowerCase().trim();
+    const cleanId = q.replace(/^#/, '');
     
     const matches = clients.filter(c => 
       c.name.toLowerCase().includes(q) || 
-      c.phone.includes(q) || 
-      (c.memberId && c.memberId.toLowerCase().includes(q)) ||
+      matchesPhoneSearch(c.phone, q) ||
+      matchesPhoneSearch((c as any).parentPhone, q) ||
+      (c.memberId && c.memberId.toString().toLowerCase().includes(cleanId)) ||
       (c.startDate && c.startDate.includes(q)) ||
       (c.membershipExpiry && c.membershipExpiry.includes(q))
     );

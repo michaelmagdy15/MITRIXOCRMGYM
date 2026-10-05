@@ -5,20 +5,36 @@ import type { Request } from 'express';
 import admin from 'firebase-admin';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { isStandaloneMode, getStandaloneTenantId } from '../config/environment.js';
+import { strikeDedicatedFirebaseConfig } from '../config/strikeDedicatedConfig.js';
 
 // Initialize Firebase Admin SDK if not already initialized
 if (admin.apps.length === 0) {
-  admin.initializeApp();
+  const adminOptions: admin.AppOptions = {};
+  const saEnvPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (saEnvPath && fs.existsSync(saEnvPath)) {
+    try {
+      const saKey = JSON.parse(fs.readFileSync(saEnvPath, 'utf8'));
+      adminOptions.credential = admin.credential.cert(saKey);
+    } catch (e) {
+      console.error('Failed to parse service account key in tenantDb.ts:', e);
+    }
+  }
+  if (isStandaloneMode()) {
+    adminOptions.projectId = 'strike-production-f5242';
+  } else if (process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT) {
+    adminOptions.projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+  }
+  admin.initializeApp(adminOptions);
 }
 
 // Load the default credentials to use as a fallback / local config
-export const defaultFirebaseConfig = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8')
-);
+export const defaultFirebaseConfig = isStandaloneMode()
+  ? strikeDedicatedFirebaseConfig
+  : JSON.parse(fs.readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
 
 // Map hostnames to their respective database configurations.
 export const strikeCrmConfig = {
-  ...defaultFirebaseConfig,
+  ...strikeDedicatedFirebaseConfig,
   tenantId: 'strike',
 };
 delete (strikeCrmConfig as any).firestoreDatabaseId;
@@ -74,7 +90,7 @@ export async function getTenantInfoForHost(hostname: string): Promise<{ config: 
   // Fast path: In standalone deployment, route directly to local standalone config
   if (isStandaloneMode()) {
     const standaloneConfig = {
-      ...defaultFirebaseConfig,
+      ...strikeDedicatedFirebaseConfig,
       tenantId: getStandaloneTenantId(),
     };
     delete (standaloneConfig as any).firestoreDatabaseId;

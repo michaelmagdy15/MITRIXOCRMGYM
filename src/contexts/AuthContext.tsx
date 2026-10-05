@@ -563,17 +563,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     let wrongPasswordEncountered = false;
 
-    // Only try deterministic email patterns if no specific child profile is requested
-    if (!selectedMemberId) {
+    const isPhoneNumber = /^(\+?20|0)?1[0125][0-9]{8}$/.test(cleanId) || (cleanId.length >= 10 && /^\d+$/.test(cleanId));
+
+    // Only try deterministic email patterns if it's NOT a phone number and no specific child profile is requested
+    if (!selectedMemberId && !isPhoneNumber) {
       const candidateEmails = [
         getMemberEmail(cleanId),
         `member-${cleanId}@${tenantId}-member.local`,
         `member-${cleanId}@${tenantId}.mitrixo-member.local`,
         `member-${cleanId}@strike-member.local`,
-        `member-${cleanId}@inzan-member.local`,
-        `member-${cleanId}@inzanathletics-member.local`,
-        `member-${cleanId}@mitrixogymcrm-member.local`,
-        `member-${cleanId}@default.mitrixo-member.local`
+        `member-${cleanId}@strike.mitrixo-member.local`,
       ];
       const uniqueCandidates = [...new Set(candidateEmails)];
 
@@ -582,7 +581,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await signInWithEmail(email, password);
           return { success: true };
         } catch (err: any) {
-          if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+          if (err?.code === 'auth/wrong-password') {
             wrongPasswordEncountered = true;
           }
         }
@@ -834,7 +833,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fbUpdatePassword(user, newPassword);
     // Force token refresh so Firestore gets the new token before we write
     await user.getIdToken(true);
-    await updateDoc(doc(db, 'users', user.uid), { mustChangePassword: false });
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        mustChangePassword: false,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (dbErr: any) {
+      console.warn('[Auth] Direct updateDoc failed, trying setDoc merge:', dbErr);
+      try {
+        await setDoc(doc(db, 'users', user.uid), {
+          mustChangePassword: false,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (dbErr2) {
+        console.warn('[Auth] setDoc merge also failed:', dbErr2);
+      }
+    }
     setCurrentUser(prev => prev ? { ...prev, mustChangePassword: false } : prev);
   };
 

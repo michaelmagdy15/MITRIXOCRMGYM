@@ -4,6 +4,7 @@ import { GoogleAuth } from 'google-auth-library';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import nodemailer from 'nodemailer';
+import { isStandaloneMode } from './src/config/environment.js';
 
 // ===============================================================
 // Reserved tenant IDs — these can NEVER be provisioned
@@ -38,8 +39,8 @@ const TIER_FEATURES: Record<string, Record<string, boolean>> = {
 
 // Get default project ID from config
 const defaultConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
-let defaultProjectId = 'faa-test-guide-v2';
-if (fs.existsSync(defaultConfigPath)) {
+let defaultProjectId = isStandaloneMode() ? 'strike-production-f5242' : 'faa-test-guide-v2';
+if (!isStandaloneMode() && fs.existsSync(defaultConfigPath)) {
   try {
     const config = JSON.parse(fs.readFileSync(defaultConfigPath, 'utf8'));
     if (config.projectId) {
@@ -51,24 +52,39 @@ if (fs.existsSync(defaultConfigPath)) {
 }
 
 // Override Cloud Run host project environment variables to target our Firestore/Auth project
-process.env.GOOGLE_CLOUD_PROJECT = defaultProjectId;
-process.env.GCP_PROJECT = defaultProjectId;
+if (isStandaloneMode()) {
+  process.env.GOOGLE_CLOUD_PROJECT = 'strike-production-f5242';
+  process.env.GCLOUD_PROJECT = 'strike-production-f5242';
+  process.env.GCP_PROJECT = 'strike-production-f5242';
+} else if (!process.env.GOOGLE_CLOUD_PROJECT) {
+  process.env.GOOGLE_CLOUD_PROJECT = defaultProjectId;
+  process.env.GCP_PROJECT = defaultProjectId;
+}
 
 // Initialize firebase-admin
-// Automatically picks up Application Default Credentials (ADC) in Cloud Run,
-// or uses service-account.json if present in the working directory for local testing.
-const serviceAccountPath = path.join(process.cwd(), 'service-account.json');
-if (fs.existsSync(serviceAccountPath)) {
-  if (admin.apps.length === 0) {
+// Automatically picks up service account key if mounted, or ADC in Cloud Run,
+// or service-account.json if present in the working directory for local testing.
+const saEnvPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+const serviceAccountPath = (saEnvPath && fs.existsSync(saEnvPath))
+  ? saEnvPath
+  : path.join(process.cwd(), 'service-account.json');
+
+if (admin.apps.length === 0) {
+  const effectiveProjectId = isStandaloneMode() ? 'strike-production-f5242' : (process.env.GOOGLE_CLOUD_PROJECT || defaultProjectId);
+  if (fs.existsSync(serviceAccountPath)) {
+    try {
+      const saKey = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
+      admin.initializeApp({
+        credential: admin.credential.cert(saKey),
+        projectId: effectiveProjectId,
+      });
+    } catch (e) {
+      console.error('Failed to parse service account key in provisioning:', e);
+      admin.initializeApp({ projectId: effectiveProjectId });
+    }
+  } else {
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccountPath),
-    });
-  }
-} else {
-  if (admin.apps.length === 0) {
-    // Fallback to Application Default Credentials (ADC)
-    admin.initializeApp({
-      projectId: defaultProjectId
+      projectId: effectiveProjectId,
     });
   }
 }

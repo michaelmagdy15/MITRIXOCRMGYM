@@ -28,6 +28,9 @@ export interface ClassSchedule {
   time?: string;
   cutoffMinutes?: number;
   allowWalkInsViaAdminOnly?: boolean;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelReason?: string;
 }
 
 export type BookingStatus = 'booked' | 'waitlisted' | 'waitlist' | 'cancelled' | 'no-show' | 'attended';

@@ -91,7 +91,7 @@ service cloud.firestore {
     }
 
     function isSafeClientSelfEdit() {
-      let allowed = ['name', 'phone', 'portalUserId', 'photoURL'];
+      let allowed = ['name', 'phone', 'portalUserId', 'photoURL', 'expoPushToken', 'fcmToken', 'updatedAt'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
              (!('portalUserId' in request.resource.data) || request.resource.data.portalUserId == request.auth.uid) &&
              (!('portalUserId' in resource.data) || resource.data.portalUserId == request.auth.uid);
@@ -152,8 +152,9 @@ service cloud.firestore {
     }
 
     function isSafeUserSelfEdit() {
-      let allowed = ['name', 'lastSeen', 'photoURL', 'clientDocId', 'dismissedNotifications', 'expoPushToken'];
+      let allowed = ['name', 'lastSeen', 'photoURL', 'clientDocId', 'dismissedNotifications', 'expoPushToken', 'fcmToken', 'lastTokenUpdate', 'mustChangePassword', 'updatedAt'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
+             (!('mustChangePassword' in request.resource.data) || request.resource.data.mustChangePassword is bool) &&
              (!('clientDocId' in request.resource.data) || 
               (
                 exists(/databases/$(database)/documents/clients/$(request.resource.data.clientDocId)) &&
@@ -417,10 +418,16 @@ service cloud.firestore {
       allow write: if isOwner(coachId) || isTenantAdmin();
     }
 
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if isTenantStaff();
+    }
+
     match /sessions/{sessionId} {
-      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow get: if isTenantStaff() || (isAuthenticated() && (resource.data.clientId == null || isOwnClientRecord(resource.data.clientId)));
+      allow list: if isTenantStaff() || isAuthenticated();
       allow create: if isTenantStaff();
-      allow update: if isTenantStaff();
+      allow update: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
       allow delete: if isTenantAdmin();
     }
 
@@ -573,6 +580,11 @@ service cloud.firestore {
       allow read: if isTenantStaff();
       allow create, update: if isOwnClientRecord(clientId) && request.resource.data.clientId == clientId;
       allow delete: if isTenantStaff();
+    }
+
+    match /permission_templates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
     }
 
     // ===============================================================

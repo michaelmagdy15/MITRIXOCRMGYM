@@ -257,12 +257,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [permissionTemplates, setPermissionTemplates] = useState<PermissionTemplate[]>([]);
 
   React.useEffect(() => {
-    if (!isAuthReady) return;
+    if (!isAuthReady || !currentUser) {
+      setPermissionTemplates([]);
+      return;
+    }
     const unsubscribe = subscribePermissionTemplates((templates) => {
       setPermissionTemplates(templates);
     });
     return () => unsubscribe();
-  }, [isAuthReady]);
+  }, [isAuthReady, currentUser]);
 
   const permissionTemplatesMap = useMemo(() => {
     const map: Record<string, PermissionTemplate> = {};

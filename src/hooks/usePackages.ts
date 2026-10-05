@@ -12,6 +12,11 @@ export const usePackages = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!currentUser) {
+      setPackages([]);
+      setLoading(false);
+      return;
+    }
     const unsub = onSnapshot(collection(db, 'packages'), (snapshot) => {
       setPackages(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Package)));
       setLoading(false);
@@ -20,7 +25,7 @@ export const usePackages = () => {
       setLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [currentUser]);
 
   const addPackage = async (pkg: Omit<Package, 'id'>) => {
     try {

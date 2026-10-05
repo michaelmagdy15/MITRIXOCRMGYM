@@ -51,4 +51,22 @@ jobs:
         run: |
           npx --yes firebase-tools deploy --config firebase.standalone.json --only firestore:rules,firestore:indexes,storage,hosting --project $PROJECT_ID --non-interactive
 
+      # Set up Google Cloud SDK
+      - name: Set up Cloud SDK
+        if: env.HAS_STRIKE_SECRET == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+
+      # Deploy Cloud Run API backend service
+      - name: Deploy Cloud Run API Service
+        if: env.HAS_STRIKE_SECRET == 'true'
+        run: |
+          gcloud run deploy strike-crm-platform \
+            --source . \
+            --region europe-west1 \
+            --project $PROJECT_ID \
+            --allow-unauthenticated \
+            --set-env-vars NODE_ENV=production,STANDALONE_MODE=true,STANDALONE_TENANT_ID=strike,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCLOUD_PROJECT=$PROJECT_ID \
+            --service-account=firebase-adminsdk-fbsvc@$PROJECT_ID.iam.gserviceaccount.com
+
+
 

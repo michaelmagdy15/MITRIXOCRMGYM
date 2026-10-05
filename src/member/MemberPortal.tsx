@@ -503,7 +503,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   // Member app presence heartbeat for admin live-member visibility.
   useEffect(() => {
-    if (!activeClient?.id || !currentUser?.id) return;
+    if (isGuest || !activeClient?.id || !currentUser?.id) return;
 
     const presenceRef = doc(db, 'memberPresence', activeClient.id);
     const writePresence = async (online: boolean = true) => {

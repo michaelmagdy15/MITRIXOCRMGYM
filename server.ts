@@ -53,7 +53,22 @@ declare global {
 
 // Initialize Firebase Admin SDK
 if (admin.apps.length === 0) {
-  admin.initializeApp();
+  const adminOptions: admin.AppOptions = {};
+  const saEnvPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  if (saEnvPath && fs.existsSync(saEnvPath)) {
+    try {
+      const saKey = JSON.parse(fs.readFileSync(saEnvPath, 'utf8'));
+      adminOptions.credential = admin.credential.cert(saKey);
+    } catch (e) {
+      console.error('Failed to parse service account key in server.ts:', e);
+    }
+  }
+  if (isStandaloneMode()) {
+    adminOptions.projectId = 'strike-production-f5242';
+  } else if (process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT) {
+    adminOptions.projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+  }
+  admin.initializeApp(adminOptions);
 }
 
 // ===============================================================
@@ -470,6 +485,35 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ status: "error", error: err.message });
+    }
+  });
+
+  app.get("/api/debug-trace", async (req, res) => {
+    const trace: any = {};
+    try {
+      trace.env = {
+        STANDALONE_MODE: process.env.STANDALONE_MODE,
+        GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
+        saKeyExists: process.env.GOOGLE_APPLICATION_CREDENTIALS ? fs.existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS) : false,
+      };
+      trace.isStandalone = isStandaloneMode();
+      trace.hostname = getRequestHostname(req);
+      const tenantInfo = await getTenantInfoForHost(trace.hostname);
+      trace.tenantInfo = tenantInfo;
+      const db = await getDbForRequest(req);
+      trace.gotDb = true;
+      const snap = await db.collection("clients").limit(1).get();
+      trace.firestoreOk = true;
+      trace.sampleDoc = snap.docs.length > 0 ? snap.docs[0]!.id : 'none';
+      const authList = await admin.auth().listUsers(1);
+      trace.authOk = true;
+      trace.sampleUser = authList.users.length > 0 ? authList.users[0]!.email : 'none';
+      res.json({ success: true, trace });
+    } catch (err: any) {
+      trace.failedAt = err.message;
+      trace.stack = err.stack;
+      res.status(500).json({ success: false, trace });
     }
   });
 
@@ -1110,9 +1154,10 @@ async function startServer() {
   // Public endpoint for member login fallback by memberId, phone, or email (pre-auth)
   // Supports multi-profile family accounts sharing 1 phone number
   app.post("/api/member/resolve-email", async (req, res) => {
-    const { memberId, selectedMemberId, childId } = req.body;
-    if (!memberId || typeof memberId !== "string") {
-      return res.status(400).json({ error: "Missing memberId search term" });
+    const rawSearch = (req.body?.memberId || req.body?.phone || req.body?.identifier || req.body?.term || '').toString().trim();
+    const { selectedMemberId, childId } = req.body || {};
+    if (!rawSearch) {
+      return res.status(400).json({ error: "Missing memberId or phone search term" });
     }
 
     try {
@@ -1121,7 +1166,7 @@ async function startServer() {
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId || (config?.firestoreDatabaseId ? config.firestoreDatabaseId.replace(/^db-/, '') : 'default');
 
-      const rawTerm = memberId.trim();
+      const rawTerm = rawSearch;
       const cleanId = rawTerm.toLowerCase().replace(/^mem-/, '');
       const numId = parseInt(cleanId, 10);
       const chosenTarget = (selectedMemberId || childId || '').toString().trim();
@@ -1247,25 +1292,47 @@ async function startServer() {
         return res.status(404).json({ error: "Member ID or phone not found. Please verify your details or contact the front desk." });
       }
 
-      // Determine the deterministic auth email
+      // Determine the deterministic auth user
       const effectiveMemberId = String(clientData.memberId || cleanId).toLowerCase();
       const syntheticEmail = `member-${effectiveMemberId}@${tenantId}.mitrixo-member.local`;
-      const emailToUse = clientData.authEmail || clientData.email || syntheticEmail;
 
-      // Ensure the user exists in Firebase Auth
       let authUser: any = null;
-      try {
-        authUser = await admin.auth().getUserByEmail(emailToUse);
-      } catch (authErr: any) {
-        if (authErr?.code === 'auth/user-not-found') {
-          console.log(`[Auth] Auto-provisioning auth user for member ${effectiveMemberId}: ${emailToUse}`);
-          authUser = await admin.auth().createUser({
-            email: emailToUse,
-            password: (req.body && req.body.password) || '12345678',
-            displayName: clientData.name || `Member ${effectiveMemberId}`
-          });
+      if (clientData.portalUserId) {
+        try {
+          authUser = await admin.auth().getUser(clientData.portalUserId);
+        } catch {}
+      }
+
+      if (!authUser) {
+        const candidateEmails = [
+          clientData.authEmail,
+          clientData.email,
+          `member-${effectiveMemberId}@strike-member.local`,
+          `member-${effectiveMemberId}@strike.mitrixo-member.local`,
+          `member-${effectiveMemberId}@default.mitrixo-member.local`,
+          `member-${effectiveMemberId}@mitrixogymcrm-member.local`,
+          syntheticEmail
+        ].filter(Boolean) as string[];
+
+        for (const candidate of candidateEmails) {
+          try {
+            authUser = await admin.auth().getUserByEmail(candidate);
+            if (authUser) break;
+          } catch {}
         }
       }
+
+      if (!authUser) {
+        const emailToCreate = clientData.authEmail || clientData.email || syntheticEmail;
+        console.log(`[Auth] Auto-provisioning auth user for member ${effectiveMemberId}: ${emailToCreate}`);
+        authUser = await admin.auth().createUser({
+          email: emailToCreate,
+          password: (req.body && req.body.password) || '12345678',
+          displayName: clientData.name || `Member ${effectiveMemberId}`
+        });
+      }
+
+      const emailToUse = authUser.email || syntheticEmail;
 
       // If user exists and password is provided and matches known test or default passwords (12345678 or Inzan1234!), sync it
       const candidatePass = req.body && req.body.password;
@@ -1299,13 +1366,21 @@ async function startServer() {
       const effectiveStatus = getEffectiveClientStatus(clientData);
 
       return res.json({
+        success: true,
         email: emailToUse,
         name: clientData.name,
         memberId: clientData.memberId,
         clientDocId,
         category: clientData.memberCategory || clientData.category || 'Adults',
         branch: clientData.branch || clientData.branchId || 'main',
-        status: effectiveStatus
+        status: effectiveStatus,
+        client: {
+          id: clientDocId,
+          memberId: clientData.memberId,
+          name: clientData.name,
+          email: emailToUse,
+          status: effectiveStatus
+        }
       });
     } catch (error) {
       console.error("[API] Error resolving member email:", error);
@@ -1316,9 +1391,9 @@ async function startServer() {
   // Switch Active Profile for Multi-Child / Family Accounts
   app.post("/api/auth/switch-profile", requireAuth, async (req, res) => {
     try {
-      const { targetClientId } = req.body;
+      const targetClientId = (req.body?.targetClientId || req.body?.targetMemberId || '').toString().trim();
       if (!targetClientId) {
-        return res.status(400).json({ error: "Missing targetClientId" });
+        return res.status(400).json({ error: "Missing targetClientId or targetMemberId" });
       }
 
       const db = await getDbForRequest(req);
@@ -1360,6 +1435,7 @@ async function startServer() {
 
       return res.json({
         success: true,
+        active_member_id: targetData.memberId || targetDoc.id,
         activeProfile: {
           id: targetDoc.id,
           memberId: targetData.memberId || targetDoc.id,
@@ -1372,6 +1448,11 @@ async function startServer() {
           membershipExpiry: targetData.membershipExpiry || targetData.endDate || '',
           packages: targetData.packages || [],
           sessionsRemaining: targetData.sessionsRemaining || 0
+        },
+        client: {
+          id: targetDoc.id,
+          ...targetData,
+          status: effectiveStatus
         }
       });
     } catch (err) {
@@ -2728,6 +2809,238 @@ async function startServer() {
     }
   });
 
+  // Server-authoritative endpoint to cancel a class
+  // 1. Validates staff authorization
+  // 2. Marks class as cancelled with reason and timestamp
+  // 3. Atomically refunds session tokens to ALL enrolled attendees (packages, entitlements, sessionsRemaining)
+  // 4. Updates classBookings records to status 'cancelled' with cancellationRefunded: true
+  // 5. Sends high-priority push notifications and systemNotifications apologizing to members and confirming the token refund
+  app.post("/api/classes/cancel", requireAuth, async (req: any, res: any) => {
+    try {
+      const { classId, reason } = req.body;
+      if (!classId) {
+        return res.status(400).json({ error: "Missing classId" });
+      }
+
+      const db = await getDbForRequest(req);
+      const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+      const requesterRole = requesterDoc.data()?.role || req.user?.role;
+      const isStaff = isStaffRole(requesterRole);
+      if (!isStaff) {
+        return res.status(403).json({ error: "Only staff or coaches can cancel classes" });
+      }
+
+      const classRef = db.collection("classSchedules").doc(classId);
+      const classDoc = await classRef.get();
+      if (!classDoc.exists) {
+        return res.status(404).json({ error: "Class not found" });
+      }
+
+      const classData = classDoc.data() || {};
+      if (classData.status === 'cancelled') {
+        return res.status(400).json({ error: "This class is already cancelled" });
+      }
+
+      const attendees: string[] = Array.isArray(classData.attendees) ? classData.attendees : [];
+      const waitlist: string[] = Array.isArray(classData.waitlist) ? classData.waitlist : [];
+      const cancelReason = reason?.trim() || "Instructor scheduling update / Facility maintenance";
+      const cancelledAt = new Date().toISOString();
+
+      // Resolve attendee client documents and their push tokens / entitlements
+      const memberRefunds: { clientId: string; name: string; phone: string; pushToken?: string }[] = [];
+
+      for (const attendeeId of attendees) {
+        let cDoc = await db.collection("clients").doc(attendeeId).get();
+        if (!cDoc.exists) {
+          const snap = await db.collection("clients").where("memberId", "==", attendeeId).limit(1).get();
+          if (!snap.empty) cDoc = snap.docs[0]!;
+          else {
+            const snapUid = await db.collection("clients").where("portalUserId", "==", attendeeId).limit(1).get();
+            if (!snapUid.empty) cDoc = snapUid.docs[0]!;
+          }
+        }
+
+        if (cDoc.exists) {
+          const cData = cDoc.data() || {};
+          const cRef = cDoc.ref;
+          
+          let pushToken = cData.expoPushToken;
+          if (!pushToken && cData.portalUserId) {
+            const uDoc = await db.collection("users").doc(cData.portalUserId).get();
+            pushToken = uDoc.data()?.expoPushToken;
+          }
+
+          // Refund session token:
+          // 1. Check active entitlements
+          const entSnap = await db.collection("entitlements")
+            .where("clientId", "==", cDoc.id)
+            .where("status", "==", "active")
+            .get();
+
+          let refundedViaEnt = false;
+          for (const entDoc of entSnap.docs) {
+            const entData = entDoc.data();
+            if ((entData.type === 'class' || entData.type === 'all') && entData.sessionsTotal !== 'unlimited' && entData.sessionsUsed > 0) {
+              await entDoc.ref.update({
+                sessionsUsed: Math.max(0, entData.sessionsUsed - 1),
+                updatedAt: cancelledAt
+              });
+              await db.collection(`entitlements/${entDoc.id}/adjustments`).add({
+                entitlementId: entDoc.id,
+                type: 'refund',
+                amount: 1,
+                reason: `Class Cancelled by Gym: ${classData.name}`,
+                performedBy: req.user?.uid || 'system',
+                createdAt: cancelledAt
+              });
+              refundedViaEnt = true;
+              break;
+            }
+          }
+
+          if (!refundedViaEnt) {
+            // 2. Direct client packages & sessionsRemaining refund
+            const packages = Array.isArray(cData.packages) ? [...cData.packages] : [];
+            for (let i = 0; i < packages.length; i++) {
+              const pkg = packages[i];
+              if (pkg.sessionsTotal !== 'unlimited' && pkg.usedSessions && pkg.usedSessions > 0) {
+                pkg.usedSessions = Math.max(0, pkg.usedSessions - 1);
+                if (typeof pkg.sessionsRemaining === 'number') {
+                  pkg.sessionsRemaining = pkg.sessionsRemaining + 1;
+                }
+                break;
+              }
+            }
+            const rawRemaining = cData.sessionsRemaining;
+            const newRemaining = typeof rawRemaining === 'number' ? rawRemaining + 1 : rawRemaining;
+            const newUsed = typeof cData.usedSessions === 'number' ? Math.max(0, cData.usedSessions - 1) : cData.usedSessions;
+
+            await cRef.update({
+              packages,
+              sessionsRemaining: newRemaining,
+              usedSessions: newUsed,
+              updatedAt: cancelledAt
+            });
+          }
+
+          // Update classBookings record
+          const bookingDocRef = db.collection("classBookings").doc(`${classId}_${cDoc.id}`);
+          await bookingDocRef.set({
+            status: 'cancelled',
+            cancelledAt,
+            cancelledBy: req.user?.uid || 'staff',
+            cancelReason,
+            cancellationRefunded: true,
+            updatedAt: cancelledAt
+          }, { merge: true });
+
+          // In-app notification
+          await db.collection("systemNotifications").add(buildSystemNotification({
+            type: 'class_cancelled_refunded',
+            title: `Class Cancelled: ${classData.name}`,
+            body: `Dear ${cData.name || 'Member'}, your ${classData.name} session on ${classData.date || 'today'} has been cancelled. Your session token has been automatically returned to your balance. We apologize for the inconvenience.`,
+            severity: 'warning',
+            data: {
+              classId,
+              clientId: cDoc.id,
+              className: classData.name,
+              refunded: true,
+            }
+          }));
+
+          memberRefunds.push({
+            clientId: cDoc.id,
+            name: cData.name || 'Member',
+            phone: cData.phone || '',
+            pushToken
+          });
+        }
+      }
+
+      // Also mark waitlist bookings as cancelled
+      for (const waitlistId of waitlist) {
+        const bookingDocRef = db.collection("classBookings").doc(`${classId}_${waitlistId}`);
+        await bookingDocRef.set({
+          status: 'cancelled',
+          cancelledAt,
+          cancelledBy: req.user?.uid || 'staff',
+          cancelReason,
+          updatedAt: cancelledAt
+        }, { merge: true });
+      }
+
+      // Mark the class schedule document as cancelled
+      await classRef.update({
+        status: 'cancelled',
+        cancelReason,
+        cancelledAt,
+        cancelledBy: req.user?.uid || 'staff',
+        updatedAt: cancelledAt
+      });
+
+      // Audit log
+      await db.collection("auditLogs").add({
+        action: "CANCEL_CLASS",
+        entityType: 'CLASS',
+        entityId: classId,
+        details: `Cancelled class ${classData.name} (${classData.date} ${classData.time || ''}). Reason: ${cancelReason}. Refunded ${memberRefunds.length} members.`,
+        timestamp: cancelledAt,
+        userId: req.user?.uid || 'staff',
+        userName: requesterDoc.data()?.name || req.user?.email || "Staff"
+      });
+
+      // Send Expo Push notifications in a batch to all attendees with registered tokens
+      const pushMessages: any[] = [];
+      const classDateStr = classData.date || (classData.startTime ? classData.startTime.substring(0, 10) : 'today');
+      const classTimeStr = classData.time || '';
+
+      for (const m of memberRefunds) {
+        if (m.pushToken && m.pushToken.startsWith('ExponentPushToken')) {
+          pushMessages.push({
+            to: m.pushToken,
+            title: `Class Cancelled: ${classData.name}`,
+            body: `Dear ${m.name}, your ${classData.name} class on ${classDateStr}${classTimeStr ? ` at ${classTimeStr}` : ''} has unfortunately been cancelled. We sincerely apologize for any inconvenience. Your session token has been fully restored to your account.`,
+            priority: 'high',
+            sound: 'default',
+            channelId: 'member-alerts',
+            data: {
+              type: 'class_cancelled',
+              classId,
+              className: classData.name
+            }
+          });
+        }
+      }
+
+      if (pushMessages.length > 0) {
+        try {
+          await fetch("https://exp.host/--/api/v2/push/send", {
+            method: "POST",
+            headers: {
+              "Accept": "application/json",
+              "Accept-encoding": "gzip, deflate",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(pushMessages),
+          });
+          console.log(`[Classes Cancel] Sent ${pushMessages.length} push notifications for cancelled class ${classId}`);
+        } catch (pushErr) {
+          console.error("[Classes Cancel] Error sending push notifications:", pushErr);
+        }
+      }
+
+      return res.json({
+        success: true,
+        message: `Class cancelled successfully. Refunded ${memberRefunds.length} members.`,
+        refundedCount: memberRefunds.length,
+        notifiedCount: pushMessages.length
+      });
+    } catch (err: any) {
+      console.error("[Classes Cancel] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to cancel class" });
+    }
+  });
+
   // ===============================================================
   // AGENT 3 & FIX 1: Strict Two-Phase Booking Interceptor (POST /api/v1/bookings)
   // Enforces:
@@ -2947,125 +3260,6 @@ async function startServer() {
     } catch (err: any) {
       console.error('[API /api/v1/sessions] Error:', err);
       return res.status(500).json({ error: err.message || 'Failed to fetch sessions' });
-    }
-  });
-
-  // ===============================================================
-  // AGENT 2: Multi-Child / Shared Phone Profile Switcher (POST /api/member/resolve-email)
-  // Enables 1-to-many parent-to-student profiles without session overwrites
-  // ===============================================================
-  app.post('/api/member/resolve-email', async (req: any, res: any) => {
-    try {
-      const rawInput = (req.body.phone || req.body.memberId || req.body.identifier || '').toString().trim();
-      const selectedMemberId = req.body.selectedMemberId;
-      if (!rawInput) {
-        return res.status(400).json({ error: 'Phone number or Member ID is required' });
-      }
-
-      const db = await getDbForRequest(req);
-      const normalizedPhone = normalizeEgyptPhone(rawInput);
-      const variants = getEgyptPhoneVariants(rawInput);
-      const cleanInput9 = normalizedPhone ? normalizedPhone.slice(-9) : rawInput.replace(/\D/g, '').slice(-9);
-
-      const snap = await db.collection('clients').get();
-
-      const matchingClients: any[] = [];
-      for (const doc of snap.docs) {
-        const data = doc.data();
-        const docPhone = (data.phone || '').toString();
-        const docNormPhone = data.normalized_phone || normalizeEgyptPhone(docPhone);
-        const docMemberId = (data.memberId || '').toString();
-
-        const isMatch = (Boolean(normalizedPhone) && Boolean(docNormPhone) && docNormPhone === normalizedPhone) ||
-                        variants.includes(docPhone) ||
-                        (Boolean(cleanInput9) && docPhone.replace(/\D/g, '').slice(-9) === cleanInput9) ||
-                        docMemberId === rawInput ||
-                        doc.id === rawInput;
-
-        if (isMatch) {
-          matchingClients.push({
-            id: doc.id,
-            memberId: data.memberId || doc.id,
-            name: data.name || 'Member',
-            tier: toCanonicalTier(data.tier || data.memberCategory || data.category),
-            branch: data.branch || data.homeBranch || 'Maxim Compound',
-            status: getEffectiveStatus(data),
-            email: data.email || `${data.memberId || doc.id}@strike.gym`
-          });
-        }
-      }
-
-      if (matchingClients.length === 0) {
-        return res.status(404).json({ error: 'No member profile found for this phone number' });
-      }
-
-      // If multiple children share phone and no specific member was selected, return SELECT_PROFILE
-      if (matchingClients.length > 1 && !selectedMemberId) {
-        return res.json({
-          requiresProfileSelection: true,
-          action: "SELECT_PROFILE",
-          accounts: matchingClients.map(c => ({
-            memberId: c.memberId,
-            name: c.name,
-            tier: c.tier,
-            branch: c.branch,
-            status: c.status
-          })),
-          profiles: matchingClients
-        });
-      }
-
-      const targetClient = selectedMemberId
-        ? (matchingClients.find(c => c.memberId === selectedMemberId || c.id === selectedMemberId) || matchingClients[0])
-        : matchingClients[0];
-
-      return res.json({
-        success: true,
-        email: targetClient.email,
-        client: targetClient
-      });
-    } catch (err: any) {
-      console.error('[API /api/member/resolve-email] Error:', err);
-      return res.status(500).json({ error: err.message || 'Resolve email failed' });
-    }
-  });
-
-  // ===============================================================
-  // AGENT 2: Profile Switch Endpoint (POST /api/auth/switch-profile)
-  // ===============================================================
-  app.post('/api/auth/switch-profile', requireAuth, async (req: any, res: any) => {
-    try {
-      const { targetMemberId } = req.body;
-      if (!targetMemberId) {
-        return res.status(400).json({ error: 'targetMemberId is required' });
-      }
-
-      const db = await getDbForRequest(req);
-      let targetDoc = await db.collection('clients').doc(targetMemberId).get();
-      if (!targetDoc.exists) {
-        const snap = await db.collection('clients').where('memberId', '==', targetMemberId).limit(1).get();
-        if (!snap.empty) {
-          targetDoc = snap.docs[0]!;
-        }
-      }
-
-      if (!targetDoc.exists) {
-        return res.status(404).json({ error: 'Target profile not found' });
-      }
-
-      const targetData = targetDoc.data()!;
-      return res.json({
-        success: true,
-        active_member_id: targetData.memberId || targetDoc.id,
-        client: {
-          id: targetDoc.id,
-          ...targetData,
-          status: getEffectiveStatus(targetData)
-        }
-      });
-    } catch (err: any) {
-      console.error('[API /api/auth/switch-profile] Error:', err);
-      return res.status(500).json({ error: err.message || 'Switch profile failed' });
     }
   });
 

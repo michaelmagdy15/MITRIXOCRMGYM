@@ -1,3 +1,4 @@
+import { matchesPhoneSearch } from '../utils/phoneUtils';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../context';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -53,10 +54,13 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
   );
 
   // Filter clients/members (limit to top 10 for performance)
-  const filteredClients = query.trim() ? clients.filter(c => 
+  const trimmedQuery = query.trim();
+  const cleanIdQuery = trimmedQuery.replace(/^#/, '');
+  const filteredClients = trimmedQuery ? clients.filter(c => 
     c.name.toLowerCase().includes(query.toLowerCase()) || 
-    (c.phone && c.phone.includes(query)) ||
-    (c.memberId && c.memberId.toString().includes(query)) ||
+    matchesPhoneSearch(c.phone, trimmedQuery) ||
+    matchesPhoneSearch((c as any).parentPhone, trimmedQuery) ||
+    (c.memberId && c.memberId.toString().includes(cleanIdQuery)) ||
     (c.packageType && c.packageType.toLowerCase().includes(query.toLowerCase()))
   ).slice(0, 10) : [];
 

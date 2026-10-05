@@ -22,7 +22,34 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
+    const msg = error?.message || '';
+    if (msg.includes('INTERNAL ASSERTION FAILED') || msg.includes('b815') || msg.includes('ca9')) {
+      const lastRecovery = Number(sessionStorage.getItem('last_assertion_recovery') || '0');
+      if (Date.now() - lastRecovery > 8000) {
+        sessionStorage.setItem('last_assertion_recovery', String(Date.now()));
+        this.clearFirestoreCacheAndReload();
+      }
+    }
   }
+
+  private clearFirestoreCacheAndReload = () => {
+    try {
+      if (window.indexedDB && window.indexedDB.databases) {
+        window.indexedDB.databases().then((dbs) => {
+          if (Array.isArray(dbs)) {
+            dbs.forEach((db) => {
+              if (db.name && db.name.includes('firestore')) {
+                try { window.indexedDB.deleteDatabase(db.name); } catch(e) {}
+              }
+            });
+          }
+          window.location.reload();
+        }).catch(() => window.location.reload());
+        return;
+      }
+    } catch (e) {}
+    window.location.reload();
+  };
 
   render() {
     if (this.state.hasError) {
@@ -41,7 +68,7 @@ export class ErrorBoundary extends Component<Props, State> {
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
             <button
-              onClick={() => window.location.reload()}
+              onClick={this.clearFirestoreCacheAndReload}
               className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               Reload Page
