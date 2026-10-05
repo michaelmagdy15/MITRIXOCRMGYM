@@ -641,7 +641,7 @@ function AppContent() {
       icon: UserPlus,
       show: (features.leads !== false) && canAny(['leads.view_all', 'leads.view_assigned_only', 'leads.create'])
     },
-    { id: 'clients', label: t('nav.clients'), icon: Users, show: can('members.view') },
+    { id: 'clients', label: isInzan ? 'Members' : t('nav.clients'), icon: Users, show: can('members.view') },
     { id: 'calendar', label: t('nav.calendar'), icon: CalendarIcon, show: canAny(['classes.view', 'coaches.schedule_pt']) },
     {
       id: 'bookings',
@@ -676,11 +676,11 @@ function AppContent() {
     { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: effectiveRole !== 'admin' },
     {
       id: 'payments',
-      label: t('nav.payments'),
+      label: isInzan ? 'Payments' : t('nav.payments'),
       icon: CreditCard,
       show: (features.payments !== false) && can('payments.view')
     },
-    { id: 'attendance', label: t('nav.attendance'), icon: Scan, show: (features.attendance !== false) && can('attendance.view') },
+    { id: 'attendance', label: isInzan ? 'Check-in' : t('nav.attendance'), icon: Scan, show: (features.attendance !== false) && can('attendance.view') },
     {
       id: 'reports',
       label: t('nav.reports'),
@@ -752,6 +752,26 @@ function AppContent() {
 
   const visibleNavItems = navItems.filter(item => item.show);
 
+  const NAV_SECTIONS = [
+    { id: 'OPERATIONS', label: 'Operations' },
+    { id: 'PEOPLE', label: 'People' },
+    { id: 'FINANCE', label: 'Finance' },
+    { id: 'MANAGEMENT', label: 'Management' },
+  ];
+
+  const getNavSection = (id: string): string => {
+    if (['dashboard', 'attendance', 'calendar', 'class-manager', 'operations', 'call-center', 'lost-and-found', 'complaints'].includes(id)) {
+      return 'OPERATIONS';
+    }
+    if (['clients', 'leads', 'nutrition', 'tasks'].includes(id)) {
+      return 'PEOPLE';
+    }
+    if (['payments', 'bookings', 'quotes', 'reports', 'advanced-reports'].includes(id)) {
+      return 'FINANCE';
+    }
+    return 'MANAGEMENT';
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground flex font-sans overflow-x-hidden">
       <OfflineBanner />
@@ -813,42 +833,95 @@ function AppContent() {
             )}
           </div>
 
-          <nav className="flex-1 overflow-y-auto p-3 space-y-1.5 no-scrollbar">
-            {visibleNavItems.map(item => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              const notificationCount = notificationTabCounts[item.id] || 0;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`flex items-center rounded-lg transition-all duration-200 text-left w-full h-10 px-3 relative ${
-                    isActive 
-                      ? 'bg-primary text-primary-foreground font-semibold shadow-sm' 
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                  } ${isSidebarCollapsed ? 'justify-center' : ''}`}
-                  title={isSidebarCollapsed ? item.label : undefined}
-                >
-                  <Icon className="h-5 w-5 flex-shrink-0" />
-                  {notificationCount > 0 && (
-                    <span className={`absolute flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground ring-2 ring-card ${
-                      isSidebarCollapsed
-                        ? 'right-2 top-1.5 h-3.5 min-w-3.5 px-0.5'
-                        : 'right-2 top-2 h-4 min-w-4 px-1'
+          <nav className="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
+            {isInzan ? (
+              NAV_SECTIONS.map((sec, secIdx) => {
+                const sectionItems = visibleNavItems.filter(item => getNavSection(item.id) === sec.id);
+                if (sectionItems.length === 0) return null;
+                return (
+                  <div key={sec.id} className="space-y-1">
+                    {!isSidebarCollapsed ? (
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 pt-2 pb-0.5">
+                        {sec.label}
+                      </div>
+                    ) : (
+                      secIdx > 0 && <div className="my-1.5 border-t border-border/40" />
+                    )}
+                    {sectionItems.map(item => {
+                      const Icon = item.icon;
+                      const isActive = activeTab === item.id;
+                      const notificationCount = notificationTabCounts[item.id] || 0;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveTab(item.id)}
+                          className={`flex items-center rounded-xl transition-all duration-200 text-left w-full h-11 px-3 relative border active:scale-[0.98] ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground font-semibold shadow-md border-primary ring-1 ring-primary/40' 
+                              : 'bg-neutral-800/60 hover:bg-neutral-700/80 text-neutral-300 hover:text-white border-neutral-700/40'
+                          } ${isSidebarCollapsed ? 'justify-center' : ''}`}
+                          title={isSidebarCollapsed ? item.label : undefined}
+                        >
+                          <Icon className="h-5 w-5 flex-shrink-0" />
+                          {notificationCount > 0 && (
+                            <span className={`absolute flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground ring-2 ring-card ${
+                              isSidebarCollapsed
+                                ? 'right-2 top-1.5 h-3.5 min-w-3.5 px-0.5'
+                                : 'right-2 top-2 h-4 min-w-4 px-1'
+                            }`}>
+                              {notificationCount > 9 ? '9+' : notificationCount}
+                            </span>
+                          )}
+                          <span className={`text-sm font-medium transition-all duration-300 overflow-hidden whitespace-nowrap ${
+                            isSidebarCollapsed 
+                              ? 'opacity-0 max-w-0 ms-0 pointer-events-none' 
+                              : 'opacity-100 max-w-[150px] ms-3'
+                          }`}>
+                            {item.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            ) : (
+              visibleNavItems.map(item => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                const notificationCount = notificationTabCounts[item.id] || 0;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`flex items-center rounded-lg transition-all duration-200 text-left w-full h-10 px-3 relative ${
+                      isActive 
+                        ? 'bg-primary text-primary-foreground font-semibold shadow-sm' 
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    } ${isSidebarCollapsed ? 'justify-center' : ''}`}
+                    title={isSidebarCollapsed ? item.label : undefined}
+                  >
+                    <Icon className="h-5 w-5 flex-shrink-0" />
+                    {notificationCount > 0 && (
+                      <span className={`absolute flex items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground ring-2 ring-card ${
+                        isSidebarCollapsed
+                          ? 'right-2 top-1.5 h-3.5 min-w-3.5 px-0.5'
+                          : 'right-2 top-2 h-4 min-w-4 px-1'
+                      }`}>
+                        {notificationCount > 9 ? '9+' : notificationCount}
+                      </span>
+                    )}
+                    <span className={`text-sm font-medium transition-all duration-300 overflow-hidden whitespace-nowrap ${
+                      isSidebarCollapsed 
+                        ? 'opacity-0 max-w-0 ms-0 pointer-events-none' 
+                        : 'opacity-100 max-w-[150px] ms-3'
                     }`}>
-                      {notificationCount > 9 ? '9+' : notificationCount}
+                      {item.label}
                     </span>
-                  )}
-                  <span className={`text-sm font-medium transition-all duration-300 overflow-hidden whitespace-nowrap ${
-                    isSidebarCollapsed 
-                      ? 'opacity-0 max-w-0 ms-0 pointer-events-none' 
-                      : 'opacity-100 max-w-[150px] ms-3'
-                  }`}>
-                    {item.label}
-                  </span>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })
+            )}
           </nav>
 
           <div className="p-3 border-t border-border flex flex-col gap-2 overflow-hidden flex-shrink-0">
@@ -947,34 +1020,75 @@ function AppContent() {
             </Button>
           </div>
 
-          <nav className="flex-1 overflow-y-auto space-y-1.5 no-scrollbar mb-4">
-            {visibleNavItems.map(item => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              const notificationCount = notificationTabCounts[item.id] || 0;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setIsMobileSidebarOpen(false);
-                  }}
-                  className={`flex items-center gap-3 rounded-lg transition-all duration-200 text-left w-full h-11 px-3 ${
-                    isActive 
-                      ? 'bg-primary text-primary-foreground font-semibold shadow-sm' 
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                  }`}
-                >
-                  <Icon className="h-5 w-5 flex-shrink-0" />
-                  <span className="text-sm truncate flex-1">{item.label}</span>
-                  {notificationCount > 0 && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
-                      {notificationCount > 9 ? '9+' : notificationCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+          <nav className="flex-1 overflow-y-auto space-y-2 no-scrollbar mb-4">
+            {isInzan ? (
+              NAV_SECTIONS.map(sec => {
+                const sectionItems = visibleNavItems.filter(item => getNavSection(item.id) === sec.id);
+                if (sectionItems.length === 0) return null;
+                return (
+                  <div key={sec.id} className="space-y-1.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-3 pt-2 pb-0.5">
+                      {sec.label}
+                    </div>
+                    {sectionItems.map(item => {
+                      const Icon = item.icon;
+                      const isActive = activeTab === item.id;
+                      const notificationCount = notificationTabCounts[item.id] || 0;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsMobileSidebarOpen(false);
+                          }}
+                          className={`flex items-center gap-3 rounded-xl transition-all duration-200 text-left w-full h-11 px-3 border active:scale-[0.98] ${
+                            isActive 
+                              ? 'bg-primary text-primary-foreground font-semibold shadow-md border-primary ring-1 ring-primary/40' 
+                              : 'bg-neutral-800/60 hover:bg-neutral-700/80 text-neutral-300 hover:text-white border-neutral-700/40'
+                          }`}
+                        >
+                          <Icon className="h-5 w-5 flex-shrink-0" />
+                          <span className="text-sm truncate flex-1">{item.label}</span>
+                          {notificationCount > 0 && (
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
+                              {notificationCount > 9 ? '9+' : notificationCount}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            ) : (
+              visibleNavItems.map(item => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                const notificationCount = notificationTabCounts[item.id] || 0;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setActiveTab(item.id);
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`flex items-center gap-3 rounded-lg transition-all duration-200 text-left w-full h-11 px-3 ${
+                      isActive 
+                        ? 'bg-primary text-primary-foreground font-semibold shadow-sm' 
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-sm truncate flex-1">{item.label}</span>
+                    {notificationCount > 0 && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-bold text-destructive-foreground">
+                        {notificationCount > 9 ? '9+' : notificationCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+            )}
           </nav>
 
           <div className="border-t pt-4 space-y-3">

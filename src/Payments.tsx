@@ -25,6 +25,11 @@ import CascadingPackageSelector from './components/CascadingPackageSelector';
 import { resolvePaymentBranch, normalizeBranchName } from './utils/branchUtils';
 import { matchesPhoneSearch } from './utils/phoneUtils';
 import { toCanonicalBranchId } from './utils/memberCategories';
+import { isTenantInzan, isValidNationalIdOrPassport, isValidEgyptianMobile } from './utils/inzanOrg';
+import { getTenantId, storage } from './firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { addAuditLog } from './services/auditService';
+import { ShieldAlert, Paperclip } from 'lucide-react';
 
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
@@ -55,6 +60,25 @@ export default function Payments() {
     return packages.filter(p => features?.ptPackages !== false || p.type !== 'Private');
   }, [packages, features]);
   const [isNewPaymentOpen, setIsNewPaymentOpen] = useState(false);
+
+  const isInzan = isTenantInzan(branding?.companyName) || getTenantId() === 'inzanathletics';
+  const isCurrentUserAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin';
+
+  // Corporate Discount Verification State
+  const [discountReason, setDiscountReason] = useState<'Standard' | 'Corporate' | 'Referral' | 'Promotional'>('Standard');
+  const [corporateProofUrl, setCorporateProofUrl] = useState<string>('');
+  const [corporateProofFileName, setCorporateProofFileName] = useState<string>('');
+  const [isUploadingCorporateProof, setIsUploadingCorporateProof] = useState<boolean>(false);
+
+  // Pre-Payment Verification Gate (National ID) State
+  const [inlineNationalId, setInlineNationalId] = useState<string>('');
+  const [newClientNationalId, setNewClientNationalId] = useState<string>('');
+  const [isSavingNationalId, setIsSavingNationalId] = useState<boolean>(false);
+
+  // Sales Rep Reassign Confirmation Dialog State
+  const [salesReassignConfirmOpen, setSalesReassignConfirmOpen] = useState<boolean>(false);
+  const [pendingSalesName, setPendingSalesName] = useState<string>('');
+  const [reassignPaymentTarget, setReassignPaymentTarget] = useState<{ isEdit: boolean; oldName: string; newName: string; paymentId?: string } | null>(null);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [editPaymentDate, setEditPaymentDate] = useState('');
   const [editAmount, setEditAmount] = useState('');
@@ -276,6 +300,12 @@ export default function Payments() {
 
   const handleCreateNewClient = async () => {
     if (!newClientName.trim() || !newClientPhone.trim()) return;
+    if (isInzan && !isValidNationalIdOrPassport(newClientNationalId)) {
+      setAlertTitle('National ID Required');
+      setAlertDescription('Inzan policy requires a valid Egyptian National ID (14 digits) or Passport before creating an account.');
+      setAlertOpen(true);
+      return;
+    }
     await addClient({
       id: Math.random().toString(36).substr(2, 9),
       name: newClientName.trim(),
@@ -290,6 +320,7 @@ export default function Payments() {
       linkedAccount: newClientLinked || undefined,
       gender: newClientGender,
       memberCategory: newClientCategory,
+      nationalId: newClientNationalId.trim() || undefined,
     } as any);
     setPendingNewPhone(newClientPhone.trim());
     setIsCreatingNew(false);
@@ -300,6 +331,7 @@ export default function Payments() {
     setNewClientLinked(false);
     setNewClientGender('Male');
     setNewClientCategory('Adults');
+    setNewClientNationalId('');
   };
 
   const handlePackageChange = (val: string | null) => {
@@ -320,6 +352,33 @@ export default function Payments() {
     const finalPackageType = packageType === 'Custom' ? customPackage : packageType;
     const isGuest = clientId === 'WALK-IN-GUEST' || isWalkInGuest;
     const resolvedGuestName = (guestClientName || clientSearch).trim();
+    const selectedClient = !isGuest ? clients.find(c => c.id === clientId) : null;
+
+    // Inzan Mandatory Verification Gate: National ID Enforcement
+    if (isInzan) {
+      const effectiveId = (!isGuest ? (selectedClient?.nationalId || inlineNationalId) : inlineNationalId) || '';
+      if (!isValidNationalIdOrPassport(effectiveId)) {
+        setAlertTitle('National ID Required');
+        setAlertDescription('Inzan policy strictly requires a verified Egyptian National ID (14 digits) or Passport before completing payment. Please enter and verify the National ID.');
+        setAlertOpen(true);
+        return;
+      }
+    }
+
+    if (isInzan && !isGuest && !isValidEgyptianMobile(selectedClient?.phone)) {
+      setAlertTitle('Valid Mobile Number Required');
+      setAlertDescription('Inzan policy requires a valid Egyptian mobile number (+201XXXXXXXXX) on the member profile before payment.');
+      setAlertOpen(true);
+      return;
+    }
+
+    // Inzan Corporate Discount Document Gate
+    if (isInzan && discountReason === 'Corporate' && !corporateProofUrl) {
+      setAlertTitle('Corporate Proof Document Required');
+      setAlertDescription('Corporate discounts require an attached copy of the member’s work badge or corporate ID. Please attach the verification proof before proceeding.');
+      setAlertOpen(true);
+      return;
+    }
 
     if (!isGuest && !clientId && !resolvedGuestName) {
       setAlertTitle('Missing Information');
@@ -445,8 +504,13 @@ export default function Payments() {
         isMemberOnHold,
         systemPackage: pkg,
         isRenewal: isRenewalPayment,
-        previousPackageName: isRenewalPayment ? finalPackageType : undefined
+        previousPackageName: isRenewalPayment ? finalPackageType : undefined,
+        corporateProofUrl: discountReason === 'Corporate' ? corporateProofUrl : undefined,
+        discountReason: discountReason !== 'Standard' ? discountReason : undefined
       });
+      if (isInzan && !isGuest && clientId && discountReason === 'Corporate' && corporateProofUrl) {
+        await updateClient(clientId, { corporateProofUrl } as Partial<Client>);
+      }
     } catch (error) {
       console.error('Error processing payment:', error);
       setAlertTitle('Error');
@@ -483,6 +547,11 @@ export default function Payments() {
       setPaymentCategory('Memberships');
       setReceiptNumber('');
       setIsMemberOnHold(false);
+      setDiscountReason('Standard');
+      setCorporateProofUrl('');
+      setCorporateProofFileName('');
+      setInlineNationalId('');
+      setNewClientNationalId('');
   };
 
   const handleHoldPayment = async () => {
@@ -1095,6 +1164,22 @@ export default function Payments() {
     return totals;
   }, [canViewBranchTotals, filteredPayments, clients]);
 
+  // Inzan pre-payment verification gate: payment stays blocked until member data is complete.
+  const inzanGateIssues: string[] = (() => {
+    if (!isInzan) return [];
+    const issues: string[] = [];
+    const guestMode = clientId === 'WALK-IN-GUEST' || isWalkInGuest;
+    const gateClient = !guestMode && clientId ? clients.find(cl => cl.id === clientId) : null;
+    if (!guestMode && !gateClient) { issues.push('Select or create a member'); return issues; }
+    const name = guestMode ? (guestClientName || clientSearch).trim() : (gateClient?.name || '').trim();
+    if (name.length < 2) issues.push('Full name');
+    if (!guestMode && !isValidEgyptianMobile(gateClient?.phone)) issues.push('Valid Egyptian mobile number (+201XXXXXXXXX)');
+    const idValue = (!guestMode ? (gateClient?.nationalId || inlineNationalId) : inlineNationalId) || '';
+    if (!isValidNationalIdOrPassport(idValue)) issues.push('National ID (14 digits) or Passport');
+    if (discountReason === 'Corporate' && !corporateProofUrl) issues.push('Corporate proof document is required to apply corporate pricing');
+    return issues;
+  })();
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -1173,6 +1258,14 @@ export default function Payments() {
                               <option value="Junior Only">Junior Only</option>
                               <option value="Junior Advanced">Junior Advanced</option>
                             </select>
+                            {isInzan && (
+                              <Input
+                                placeholder="National ID (14 digits) or Passport *"
+                                className="h-10 rounded-xl text-sm bg-background/60"
+                                value={newClientNationalId}
+                                onChange={e => setNewClientNationalId(e.target.value)}
+                              />
+                            )}
                             <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
                               <Checkbox checked={newClientLinked} onCheckedChange={c => setNewClientLinked(!!c)} />
                               {t('members.linked_family_account')}
@@ -1236,6 +1329,9 @@ export default function Payments() {
                                       setClientId(client.id);
                                       setClientSearch(`${client.name}${client.phone ? ` (${client.phone})` : ''}`);
                                       if (client.branch) setPaymentBranch(client.branch);
+                                      const repName = client.salesRep || resolveUserDisplay(client.assignedTo, users, '') || (currentUser?.role === 'rep' ? currentUser.name : '');
+                                      if (repName) setSalesName(repName);
+                                      setInlineNationalId(client.nationalId || (client as any).nationalIdOrPassport || (client as any).passport || '');
                                       setClientDropdownOpen(false);
                                     }}
                                   >
@@ -1263,6 +1359,51 @@ export default function Payments() {
                         )}
                       </div>
                     )}
+                    {isInzan && clientId && clientId !== 'WALK-IN-GUEST' && (() => {
+                      const curClient = clients.find(c => c.id === clientId);
+                      const hasValidId = isValidNationalIdOrPassport(curClient?.nationalId || inlineNationalId);
+                      if (hasValidId) return null;
+                      return (
+                        <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-500 text-xs space-y-2 mt-2">
+                          <div className="flex items-center gap-2 font-bold">
+                            <ShieldAlert className="h-4 w-4 shrink-0" />
+                            <span>Pre-Payment Verification Gate: National ID Required</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Inzan policy requires entering the National ID (14 digits) or Passport before payment can proceed.
+                          </p>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Egyptian National ID (14 digits) or Passport..."
+                              value={inlineNationalId}
+                              onChange={e => setInlineNationalId(e.target.value)}
+                              className="h-9 text-xs bg-background text-foreground"
+                            />
+                            <Button
+                              size="sm"
+                              type="button"
+                              disabled={!isValidNationalIdOrPassport(inlineNationalId) || isSavingNationalId}
+                              onClick={async () => {
+                                if (clientId && isValidNationalIdOrPassport(inlineNationalId)) {
+                                  setIsSavingNationalId(true);
+                                  try {
+                                    await updateClient(clientId, { nationalId: inlineNationalId.trim() });
+                                    setAlertTitle('Verified');
+                                    setAlertDescription('National ID verified and saved to member profile.');
+                                    setAlertOpen(true);
+                                  } finally {
+                                    setIsSavingNationalId(false);
+                                  }
+                                }
+                              }}
+                              className="h-9 text-xs font-bold shrink-0"
+                            >
+                              {isSavingNationalId ? 'Saving...' : 'Save & Verify'}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -1353,6 +1494,80 @@ export default function Payments() {
                   </div>
                   {discountedAmount && (
                     <p className="text-xs font-semibold text-emerald-500 ml-1">Final Total: {discountedAmount} LE</p>
+                  )}
+
+                  {isInzan && discountType && (
+                    <div className="space-y-2 pt-2 border-t border-border/30">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Discount Category</Label>
+                      <Select value={discountReason} onValueChange={(v: any) => setDiscountReason(v)}>
+                        <SelectTrigger className="h-10 rounded-xl bg-background/50 border-white/10 text-xs font-medium">
+                          <SelectValue placeholder="Discount Category" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl border-none shadow-2xl">
+                          <SelectItem value="Standard">Standard / Manager Discretion</SelectItem>
+                          <SelectItem value="Corporate">Corporate Partner (Proof Required)</SelectItem>
+                          <SelectItem value="Referral">Member Referral</SelectItem>
+                          <SelectItem value="Promotional">Seasonal / Promotional Campaign</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {discountReason === 'Corporate' && (
+                        <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 text-xs space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-primary flex items-center gap-1.5">
+                              <Paperclip className="h-3.5 w-3.5" />
+                              Corporate Verification Document *
+                            </span>
+                            {corporateProofUrl && (
+                              <Badge className="bg-emerald-500 text-white text-[10px]">Proof Attached</Badge>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Upload National ID or Corporate Work Badge (Image / PDF). Required to authorize corporate pricing.
+                          </p>
+                          <Input
+                            type="file"
+                            accept=".png,.jpg,.jpeg,.pdf"
+                            disabled={isUploadingCorporateProof}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              const okType = /^image\/(png|jpe?g)$/.test(file.type) || file.type === 'application/pdf';
+                              if (!okType || file.size > 5 * 1024 * 1024) {
+                                setAlertTitle('Invalid Document');
+                                setAlertDescription('Upload a PNG, JPG or PDF file up to 5MB.');
+                                setAlertOpen(true);
+                                e.target.value = '';
+                                return;
+                              }
+                              setIsUploadingCorporateProof(true);
+                              try {
+                                const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '');
+                                const path = `corporate_proofs/${clientId || 'guest'}_${Date.now()}_${cleanName}`;
+                                const r = storageRef(storage, path);
+                                await uploadBytes(r, file);
+                                const url = await getDownloadURL(r);
+                                setCorporateProofUrl(url);
+                                setCorporateProofFileName(file.name);
+                              } catch (err: any) {
+                                console.error('Upload proof failed:', err);
+                                setAlertTitle('Upload Failed');
+                                setAlertDescription(err?.message || 'Failed to upload document.');
+                                setAlertOpen(true);
+                              } finally {
+                                setIsUploadingCorporateProof(false);
+                              }
+                            }}
+                            className="h-9 text-xs bg-background"
+                          />
+                          {corporateProofFileName && (
+                            <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                              Attached: {corporateProofFileName}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -1502,9 +1717,29 @@ export default function Payments() {
                 )}
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.sales_person')}</Label>
-                  <Select value={salesName} onValueChange={v => v && setSalesName(v)}>
-                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.sales_person')}</Label>
+                    {isInzan && !isCurrentUserAdmin && (
+                      <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                        Commission Locked
+                      </Badge>
+                    )}
+                  </div>
+                  <Select
+                    value={salesName}
+                    disabled={isInzan && !isCurrentUserAdmin}
+                    onValueChange={(v) => {
+                      if (!v) return;
+                      if (isInzan && isCurrentUserAdmin && salesName && salesName !== v) {
+                        setPendingSalesName(v);
+                        setReassignPaymentTarget({ isEdit: false, oldName: salesName, newName: v });
+                        setSalesReassignConfirmOpen(true);
+                      } else {
+                        setSalesName(v);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg disabled:opacity-60 disabled:cursor-not-allowed">
                       <SelectValue placeholder="For commission" />
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
@@ -1513,6 +1748,11 @@ export default function Payments() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {isInzan && !isCurrentUserAdmin && (
+                    <p className="text-[10px] text-muted-foreground ml-1">
+                      Sales attribution is permanently locked against staff changes to protect commission integrity.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -1542,6 +1782,14 @@ export default function Payments() {
                 </div>
               </div>
 
+              {inzanGateIssues.length > 0 && (
+                <div className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
+                  <p className="font-bold flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> Complete member verification before payment:</p>
+                  <ul className="mt-1 list-disc pl-6 text-xs space-y-0.5">
+                    {inzanGateIssues.map(issue => <li key={issue}>{issue}</li>)}
+                  </ul>
+                </div>
+              )}
               <div className="mt-6 md:mt-12 flex gap-3 pb-safe">
                 <Button 
                   variant="outline" 
@@ -1552,6 +1800,7 @@ export default function Payments() {
                 </Button>
                 <Button 
                   onClick={handleAddPayment} 
+                  disabled={inzanGateIssues.length > 0 || isUploadingCorporateProof}
                   className="flex-1 h-12 md:h-16 rounded-xl md:rounded-2xl text-base md:text-xl font-extrabold shadow-2xl shadow-primary/30 hover:shadow-primary/50 transition-all hover:scale-[1.01] active:scale-[0.99]"
                 >
                   {t('payments.complete_transaction')}
@@ -2077,9 +2326,27 @@ export default function Payments() {
                                       </Select>
                                     </div>
                                     <div>
-                                      <Label className="text-xs font-semibold">{t('payments.edit.sales_name')}</Label>
-                                      <Select value={editSalesName} onValueChange={(val) => setEditSalesName(val || '')}>
-                                        <SelectTrigger className="h-9">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <Label className="text-xs font-semibold">{t('payments.edit.sales_name')}</Label>
+                                        {isInzan && !isCurrentUserAdmin && (
+                                          <span className="text-[10px] text-amber-500 font-bold">Locked</span>
+                                        )}
+                                      </div>
+                                      <Select
+                                        value={editSalesName}
+                                        disabled={isInzan && !isCurrentUserAdmin}
+                                        onValueChange={(val) => {
+                                          if (!val) return;
+                                          if (isInzan && isCurrentUserAdmin && editSalesName && editSalesName !== val) {
+                                            setPendingSalesName(val);
+                                            setReassignPaymentTarget({ isEdit: true, oldName: editSalesName, newName: val, paymentId: payment.id });
+                                            setSalesReassignConfirmOpen(true);
+                                          } else {
+                                            setEditSalesName(val);
+                                          }
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-9 disabled:opacity-60 disabled:cursor-not-allowed">
                                           <SelectValue placeholder={t('payments.edit.select_sales_rep')} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -2451,6 +2718,56 @@ export default function Payments() {
           )}
         </div>
       </div>
+
+      {/* Reassign Sales Attribution Confirmation Dialog */}
+      <Dialog open={salesReassignConfirmOpen} onOpenChange={setSalesReassignConfirmOpen}>
+        <DialogContent className="max-w-md rounded-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-600">
+              <ShieldAlert className="h-5 w-5" />
+              Reassign Sales Commission
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-3 text-sm space-y-3">
+            <p>
+              Are you sure you want to reassign sales commission from{' '}
+              <strong className="text-foreground">{reassignPaymentTarget?.oldName || 'Unassigned'}</strong> to{' '}
+              <strong className="text-emerald-600">{reassignPaymentTarget?.newName}</strong>?
+            </p>
+            <p className="text-xs text-muted-foreground bg-muted/40 p-3 rounded-xl border">
+              This action modifies commission attribution and will be recorded in the permanent audit trail.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setSalesReassignConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+              onClick={async () => {
+                if (reassignPaymentTarget) {
+                  if (reassignPaymentTarget.isEdit) {
+                    setEditSalesName(reassignPaymentTarget.newName);
+                  } else {
+                    setSalesName(reassignPaymentTarget.newName);
+                  }
+                  await addAuditLog(
+                    'UPDATE',
+                    'PAYMENT',
+                    reassignPaymentTarget.paymentId || clientId || 'new',
+                    `Reassigned sales commission from ${reassignPaymentTarget.oldName || 'unassigned'} to ${reassignPaymentTarget.newName}`,
+                    currentUser?.name
+                  );
+                }
+                setSalesReassignConfirmOpen(false);
+              }}
+            >
+              Confirm Reassignment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog 
         isOpen={alertOpen}

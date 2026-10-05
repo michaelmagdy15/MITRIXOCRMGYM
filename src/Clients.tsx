@@ -37,6 +37,8 @@ import { resolvePaymentCategory } from './utils/paymentCategories';
 import { matchesPhoneSearch } from './utils/phoneUtils';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { InzanMemberShow } from './components/InzanMemberShow';
+import { AdjustPackageDatesDialog, canOverridePackageDates } from './components/AdjustPackageDatesDialog';
+import { addAuditLog } from './services/auditService';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
 import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
 import { PhoneInput } from './components/ui/PhoneInput';
@@ -162,6 +164,11 @@ export default function Clients() {
     updateClient(activeClient.id, updates);
   };
   const [activeTab, setActiveTab] = useState('all');
+  // Inzan-only: lifecycle view (leads + members), package date lock and delete confirmation
+  const isInzanTenant = getTenantId().toLowerCase().includes('inzan');
+  const canAdjustPackageDates = canOverridePackageDates(currentUser);
+  const [pkgDeleteIdx, setPkgDeleteIdx] = useState<number | null>(null);
+  const [dateAdjustIdx, setDateAdjustIdx] = useState<number | null>(null);
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [isBulkPackageDialogOpen, setIsBulkPackageDialogOpen] = useState(false);
   const [bulkSelectedPackageName, setBulkSelectedPackageName] = useState('');
@@ -1043,7 +1050,10 @@ export default function Clients() {
   const now = new Date();
 
   // context.clients is already visibleClients (rep-filtered via isClientAssignedToRep).
-  const members = clients.filter(c => (c.status || '').toLowerCase().trim() !== 'lead');
+  const isLeadStatus = (s?: string) => (s || '').toLowerCase().trim() === 'lead';
+  // Inzan: leads/prospects are part of the same account lifecycle and must stay findable.
+  const members = isInzanTenant ? clients : clients.filter(c => !isLeadStatus(c.status));
+  const leadAccounts = isInzanTenant ? clients.filter(c => isLeadStatus(c.status)) : [];
   
   const isStatusActive = (s?: string) => (s || '').toLowerCase().trim() === 'active';
   const isStatusNearlyExpired = (s?: string) => {
@@ -1085,7 +1095,8 @@ export default function Clients() {
       base = members;
     } else {
       switch (deferredActiveTab) {
-        case 'all': base = [...activeMembers, ...onHold, ...nearlyExpired]; break;
+        case 'all': base = isInzanTenant ? [...activeMembers, ...onHold, ...nearlyExpired, ...leadAccounts] : [...activeMembers, ...onHold, ...nearlyExpired]; break;
+        case 'leads': base = leadAccounts; break;
         case 'active': base = [...activeMembers, ...nearlyExpired]; break;
         case 'hold': base = onHold; break;
         case 'expired': base = expired; break;
@@ -2041,16 +2052,21 @@ export default function Clients() {
         <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
           <TabsList className="flex w-max sm:w-full bg-muted/50 rounded-lg p-1 justify-start sm:justify-center">
             <TabsTrigger value="all" className="px-4 text-xs sm:text-sm">
-              All Current ({activeMembers.length + nearlyExpired.length + onHold.length})
+              {isInzanTenant ? 'All Accounts' : 'All Current'} ({activeMembers.length + nearlyExpired.length + onHold.length + leadAccounts.length})
             </TabsTrigger>
             <TabsTrigger value="active" className="px-4 text-xs sm:text-sm">
-              {t('members.tabs.active')} ({activeMembers.length + nearlyExpired.length})
+              {isInzanTenant ? 'Active Members' : t('members.tabs.active')} ({activeMembers.length + nearlyExpired.length})
             </TabsTrigger>
+            {isInzanTenant && (
+              <TabsTrigger value="leads" className="px-4 text-xs sm:text-sm">
+                Leads &amp; Prospects ({leadAccounts.length})
+              </TabsTrigger>
+            )}
             <TabsTrigger value="hold" className="px-4 text-xs sm:text-sm">
               {t('members.tabs.hold')} ({onHold.length})
             </TabsTrigger>
             <TabsTrigger value="expired" className="px-4 text-xs sm:text-sm">
-              {t('members.tabs.expired')} ({expired.length})
+              {isInzanTenant ? 'Expired / Inactive' : t('members.tabs.expired')} ({expired.length})
             </TabsTrigger>
             <TabsTrigger value="renewal" className="px-4 text-xs sm:text-sm bg-blue-500/10 text-blue-700 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">
               {t('members.tabs.renewal_pipeline')}
@@ -2215,6 +2231,39 @@ export default function Clients() {
           }}
         />
       )}
+
+      {/* Inzan package safeguards (rendered alongside the member profile) */}
+      <ConfirmDialog
+        isOpen={pkgDeleteIdx !== null}
+        onOpenChange={(open) => { if (!open) setPkgDeleteIdx(null); }}
+        title="Delete Package"
+        description={`Are you sure you want to permanently delete "${(pkgDeleteIdx !== null && activeClient?.packages?.[pkgDeleteIdx]?.packageName) || 'this package'}" from this member? This action cannot be undone.`}
+        variant="destructive"
+        confirmText="Yes, Delete"
+        onConfirm={async () => {
+          if (!activeClient || pkgDeleteIdx === null) return;
+          const removed = activeClient.packages?.[pkgDeleteIdx];
+          updateClientPackages((activeClient.packages || []).filter((_, i) => i !== pkgDeleteIdx));
+          await addAuditLog('DELETE', 'PACKAGE_RECORD', activeClient.id, `Deleted package "${removed?.packageName || 'unknown'}" from ${activeClient.name}`, currentUser?.name);
+          setPkgDeleteIdx(null);
+        }}
+      />
+
+      <AdjustPackageDatesDialog
+        pkg={dateAdjustIdx !== null ? (activeClient?.packages?.[dateAdjustIdx] ?? null) : null}
+        onOpenChange={(open) => { if (!open) setDateAdjustIdx(null); }}
+        onConfirm={async (startIso, endIso, reason) => {
+          if (!activeClient || dateAdjustIdx === null) return;
+          const updated = [...(activeClient.packages || [])];
+          const cur = updated[dateAdjustIdx];
+          if (!cur) return;
+          updated[dateAdjustIdx] = { ...cur, startDate: startIso, endDate: endIso };
+          updateClientPackages(updated);
+          await addAuditLog('ADJUSTMENT', 'PACKAGE_RECORD', activeClient.id,
+            `Adjusted "${cur.packageName}" dates from ${cur.startDate || '—'} → ${cur.endDate || '—'} to ${startIso} → ${endIso}`,
+            currentUser?.name, { reason });
+        }}
+      />
 
       {activeClient && (
         <div className="-m-4 md:-m-8 min-h-[calc(100vh-4.5rem)] flex flex-col bg-background overflow-hidden animate-in fade-in duration-200">
@@ -2883,6 +2932,8 @@ export default function Clients() {
                                   <Input
                                     type="date"
                                     className="h-7 text-[10px] px-1 font-mono bg-background"
+                                    disabled={isInzanTenant}
+                                    title={isInzanTenant ? 'Dates are locked. Admins can use "Adjust Dates".' : undefined}
                                     value={pkg.startDate ? safeFormatDate(pkg.startDate, 'yyyy-MM-dd', '') : ''}
                                     onChange={(e) => {
                                       const updated = [...(activeClient.packages || [])];
@@ -2905,6 +2956,8 @@ export default function Clients() {
                                   <Input
                                     type="date"
                                     className="h-7 text-[10px] px-1 font-mono bg-background"
+                                    disabled={isInzanTenant}
+                                    title={isInzanTenant ? 'Dates are locked. Admins can use "Adjust Dates".' : undefined}
                                     value={pkg.endDate ? safeFormatDate(pkg.endDate, 'yyyy-MM-dd', '') : ''}
                                     onChange={(e) => {
                                       const updated = [...(activeClient.packages || [])];
@@ -2972,10 +3025,23 @@ export default function Clients() {
                                   variant="ghost"
                                   size="icon"
                                   className="h-7 w-7 text-destructive shrink-0"
-                                  onClick={() => updateClientPackages((activeClient.packages || []).filter((_, i) => i !== idx))}
+                                  onClick={() => {
+                                    if (isInzanTenant) { setPkgDeleteIdx(idx); return; }
+                                    updateClientPackages((activeClient.packages || []).filter((_, i) => i !== idx));
+                                  }}
                                 >
                                   <Trash2 className="h-3 w-3" />
                                 </Button>
+                                {isInzanTenant && canAdjustPackageDates && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] px-2 shrink-0"
+                                    onClick={() => setDateAdjustIdx(idx)}
+                                  >
+                                    <Calendar className="h-3 w-3 mr-1" /> Adjust Dates
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           ))}

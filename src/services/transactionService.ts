@@ -65,6 +65,8 @@ export interface PaymentTransactionParams {
   isGuest?: boolean; // True when payment is for a drop-in / walk-in guest without a member profile
   systemPackage?: Package; // The matched package configuration, if any
   previousPackageName?: string;
+  corporateProofUrl?: string;
+  discountReason?: string;
 }
 
 export const processPaymentTransaction = async (params: PaymentTransactionParams): Promise<void> => {
@@ -104,6 +106,8 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       discountType: params.discountType,
       discountValue: params.discountValue,
       discountedAmount: params.discountedAmount,
+      corporateProofUrl: params.corporateProofUrl || undefined,
+      discountReason: params.discountReason || undefined,
       isUpgradePayment: false,
       isOnHold: params.isMemberOnHold || false,
       holdReason: params.isMemberOnHold ? (params.notes || 'Placed on hold at payment checkout') : undefined,
@@ -232,6 +236,8 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       discountType: params.discountType,
       discountValue: params.discountValue,
       discountedAmount: params.discountedAmount,
+      corporateProofUrl: params.corporateProofUrl || undefined,
+      discountReason: params.discountReason || undefined,
       isUpgradePayment: params.isUpgradePayment || false,
       previousPackageName: params.previousPackageName,
       isOnHold: params.isMemberOnHold || false,

@@ -1,3 +1,4 @@
+import { getTenantId } from '../firebase';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Package } from '../types';
 import { MEMBER_CATEGORIES, MemberCategory, normalizeMemberCategory, isPackageMatchingFilter } from '../utils/memberCategories';
@@ -50,6 +51,25 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
   // PT Add-on Toggle
   const [isPtSelected, setIsPtSelected] = useState<boolean>(false);
 
+  // Segmented package category filter (Inzan-only POS segmentation)
+  const showCategoryTabs = getTenantId().toLowerCase().includes('inzan');
+  const [packageTypeFilter, setPackageTypeFilter] = useState<'ALL' | 'MEMBERSHIP' | 'PT' | 'DROPIN'>('ALL');
+
+  const isPtPackage = (pkg: Package) => {
+    const t = (pkg.type || '').toLowerCase();
+    const n = (pkg.name || '').toLowerCase();
+    return t === 'private' || n.includes('pt') || n.includes('private') || n.includes('personal');
+  };
+
+  const isDropInPackage = (pkg: Package) => {
+    const n = (pkg.name || '').toLowerCase();
+    return n.includes('drop') || n.includes('day pass') || n.includes('daypass') || n.includes('visit') || n.includes('single') || pkg.sessions === 1;
+  };
+
+  const isMembershipPackage = (pkg: Package) => {
+    return !isPtPackage(pkg) && !isDropInPackage(pkg);
+  };
+
   // Sync initial props
   useEffect(() => {
     if (initialCategory) {
@@ -80,9 +100,21 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
   // Filter packages dynamically based on Step 1, Step 2, and PT toggle using SQL RBAC parity
   const filteredPackages = useMemo(() => {
     return packages.filter((pkg) => {
-      return isPackageMatchingFilter(pkg, category, branch, isPtSelected);
+      if (!isPackageMatchingFilter(pkg, category, branch, packageTypeFilter === 'PT' || isPtSelected)) {
+        return false;
+      }
+      if (packageTypeFilter === 'MEMBERSHIP') {
+        return isMembershipPackage(pkg);
+      }
+      if (packageTypeFilter === 'PT') {
+        return isPtPackage(pkg);
+      }
+      if (packageTypeFilter === 'DROPIN') {
+        return isDropInPackage(pkg);
+      }
+      return true;
     });
-  }, [packages, category, branch, isPtSelected]);
+  }, [packages, category, branch, isPtSelected, packageTypeFilter]);
 
   // Currently selected package object
   const activePackage = useMemo(() => {
@@ -210,6 +242,52 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
           </div>
         )}
       </div>
+
+      {/* Segmented Package Category Filter Tabs */}
+      {showCategoryTabs && (
+      <div className="space-y-1.5 pt-1">
+        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <Layers className="h-3.5 w-3.5 text-primary" />
+            POS Package Category
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {packageTypeFilter === 'ALL' && 'All Types'}
+            {packageTypeFilter === 'MEMBERSHIP' && 'Primary Memberships'}
+            {packageTypeFilter === 'PT' && 'Private Coaching'}
+            {packageTypeFilter === 'DROPIN' && 'Day Pass / Drop-in'}
+          </span>
+        </Label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-muted/40 p-1.5 rounded-xl border border-border/40">
+          {[
+            { id: 'ALL', label: 'All Packages' },
+            { id: 'MEMBERSHIP', label: 'Gym Memberships' },
+            { id: 'PT', label: 'Personal Training (PT)' },
+            { id: 'DROPIN', label: 'Drop-in / Day Pass' },
+          ].map((tab) => {
+            const isSel = packageTypeFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setPackageTypeFilter(tab.id as any);
+                  if (tab.id === 'PT') setIsPtSelected(true);
+                  if (tab.id === 'MEMBERSHIP' || tab.id === 'DROPIN') setIsPtSelected(false);
+                }}
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-all text-center truncate ${
+                  isSel
+                    ? 'bg-primary text-primary-foreground shadow-sm font-bold scale-[1.02]'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/70'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      )}
 
       {/* Step 3: Dynamic Filtered Package Dropdown */}
       <div className="space-y-2 pt-1">

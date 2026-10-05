@@ -74,6 +74,7 @@
 | Provisioning creates empty branding | provisioning.ts sets `logoUrl: ''` intentionally — tenant must upload their own logo. |
 | Mobile WebView cache | App Store app caches `index.html` aggressively. Always include cache-busting script in index.html when deploying. User-Agent: `mitrixogymcrmCRM-Mobile`. |
 | Mobile app URL per tenant | Use EAS build profiles: `production-strike` for Strike tenant, `production-strikeboxing` for STRIKE Boxing. Each loads from different subdomain. |
+| React hook dependency TDZ | Never place a useEffect dependency array reading component state before that state is initialized with useState(). Vite/Rollup minification obfuscates the name (e.g. Jr), causing runtime ReferenceErrors when the view mounts. Always declare all useState hooks before effects. |
 
 When you discover a new landmine, add it to this table (WORKFLOW.md Phase 6).
 

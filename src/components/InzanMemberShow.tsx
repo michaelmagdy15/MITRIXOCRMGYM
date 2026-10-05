@@ -26,6 +26,10 @@ import { toast } from 'sonner';
 import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette, ArrowLeft } from 'lucide-react';
 import { compressImage } from '../utils/imageUtils';
 import EntitlementManager from './EntitlementManager';
+import { AdjustPackageDatesDialog, canOverridePackageDates, buildPackageUpdates } from './AdjustPackageDatesDialog';
+import { ConfirmDialog } from './ConfirmDialog';
+import { addAuditLog } from '../services/auditService';
+import { Trash2, CalendarClock } from 'lucide-react';
 
 interface InzanMemberShowProps {
   client: Client;
@@ -75,6 +79,12 @@ export function InzanMemberShow({
   setRenewStartDate
 }: InzanMemberShowProps) {
   const [activeTab, setActiveTab] = useState<TabType>('member_data');
+  const canAdjustDates = canOverridePackageDates(currentUser);
+  const [adjustPkgId, setAdjustPkgId] = useState<string | null>(null);
+  const [deletePkgId, setDeletePkgId] = useState<string | null>(null);
+  const isLeadAccount = (client.status || '').toLowerCase().trim() === 'lead';
+  const adjustPkg = adjustPkgId ? (client.packages || []).find(p => p.id === adjustPkgId) ?? null : null;
+  const deletePkg = deletePkgId ? (client.packages || []).find(p => p.id === deletePkgId) ?? null : null;
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Client>>({});
   const [isSaving, setIsSaving] = useState(false);
@@ -382,9 +392,24 @@ export function InzanMemberShow({
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {client.phone} · {client.branch || 'No branch'} ·{' '}
-                <Badge className={client.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/10 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/10 border border-rose-500/20'}>
-                  {client.status}
-                </Badge>
+                {isLeadAccount ? (
+                  <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/10 border border-amber-500/30 uppercase">
+                    Lead / Prospect
+                  </Badge>
+                ) : (
+                  <Badge className={client.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/10 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/10 border border-rose-500/20'}>
+                    {client.status}
+                  </Badge>
+                )}
+                {isLeadAccount && (
+                  <Button
+                    size="sm"
+                    onClick={() => handleAddPackageClick()}
+                    className="ml-2 h-6 px-2 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    Convert to Member / Buy Package
+                  </Button>
+                )}
                 {unpaidAmount > 0 && (
                   <Badge className="bg-red-500/10 text-red-500 hover:bg-red-500/10 border border-red-500/20 ml-2">
                     Unpaid: {unpaidAmount.toLocaleString()} LE
@@ -705,6 +730,16 @@ export function InzanMemberShow({
                     >
                       Change Package (Renew)
                     </Button>
+                    {canAdjustDates && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-7 border-amber-500/40 text-amber-600"
+                        onClick={() => setAdjustPkgId(pkg.id)}
+                      >
+                        <CalendarClock className="h-3.5 w-3.5 mr-1" /> Adjust Dates
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -748,6 +783,7 @@ export function InzanMemberShow({
                       <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Expires</TableHead>
                       <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-center">Sessions</TableHead>
                       <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-center">Status</TableHead>
+                      {canAdjustDates && <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-right">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -773,6 +809,16 @@ export function InzanMemberShow({
                                 {pkg.status}
                               </Badge>
                             </TableCell>
+                            {canAdjustDates && (
+                              <TableCell className="py-3 px-4 text-right whitespace-nowrap">
+                                <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]" onClick={() => setAdjustPkgId(pkg.id)}>
+                                  <CalendarClock className="h-3.5 w-3.5 mr-1" /> Adjust Dates
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" title="Delete package" onClick={() => setDeletePkgId(pkg.id)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))
                     ) : (
@@ -1068,6 +1114,43 @@ export function InzanMemberShow({
           </div>
         )}
       </div>
+
+      <AdjustPackageDatesDialog
+        pkg={adjustPkg}
+        onOpenChange={(open) => { if (!open) setAdjustPkgId(null); }}
+        onConfirm={async (startIso, endIso, reason) => {
+          if (!adjustPkg) return;
+          const updated = (client.packages || []).map(p => p.id === adjustPkg.id ? { ...p, startDate: startIso, endDate: endIso } : p);
+          await onUpdateClient(client.id, buildPackageUpdates(updated) as Partial<Client>);
+          await addAuditLog('ADJUSTMENT', 'PACKAGE_RECORD', client.id,
+            `Adjusted "${adjustPkg.packageName}" dates from ${adjustPkg.startDate || '—'} → ${adjustPkg.endDate || '—'} to ${startIso} → ${endIso}`,
+            currentUser?.name, { reason });
+          toast.success('Package dates updated.');
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deletePkg}
+        onOpenChange={(open) => { if (!open) setDeletePkgId(null); }}
+        title="Delete Package"
+        description={`Are you sure you want to permanently delete "${deletePkg?.packageName || 'this package'}"? This action cannot be undone.`}
+        variant="destructive"
+        confirmText="Yes, Delete"
+        onConfirm={async () => {
+          if (!deletePkg) return;
+          try {
+            const updated = (client.packages || []).filter(p => p.id !== deletePkg.id);
+            await onUpdateClient(client.id, buildPackageUpdates(updated) as Partial<Client>);
+            await addAuditLog('DELETE', 'PACKAGE_RECORD', client.id, `Deleted package "${deletePkg.packageName}" from ${client.name}`, currentUser?.name);
+            toast.success('Package deleted.');
+          } catch (err) {
+            console.error('[InzanMemberShow] Failed to delete package:', err);
+            toast.error('Failed to delete package.');
+          } finally {
+            setDeletePkgId(null);
+          }
+        }}
+      />
     </div>
   );
 }

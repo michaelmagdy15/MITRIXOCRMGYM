@@ -344,6 +344,8 @@ export interface Payment {
   currency?: string;
   receiptSerial?: string;
   linkedEntitlementId?: string; // Link to an entitlement record
+  corporateProofUrl?: string; // Attachment URL for corporate discount verification
+  discountReason?: string; // Reason or category of discount (Corporate, Referral, Promotional)
 }
 
 export type Gender = 'Male' | 'Female' | 'Other' | 'Prefer not to say';

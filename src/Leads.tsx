@@ -24,6 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Trash2, ChevronLeft, ChevronRight, User, Search, MapPin, Tag, Info, AlertCircle, Activity, QrCode, Copy, RefreshCw } from 'lucide-react';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
+import { addClient as addClientWithId } from './services/clientService';
 import { WhatsAppDialog } from './components/WhatsAppDialog';
 import { MessageCircle } from 'lucide-react';
 import { downloadFile } from './utils/download';
@@ -477,7 +478,7 @@ export default function Leads() {
     }
   };
 
-  const handleAddLead = () => {
+  const handleAddLead = async () => {
     if (!newLeadName || newLeadName.trim().length < 2) {
       alert('Please enter a valid lead name (at least 2 characters).');
       return;
@@ -502,7 +503,18 @@ export default function Leads() {
       nextReminderDate: new Date(Date.now() + 86400000).toISOString(),
       linkedAccount: newLeadLinked || undefined,
     };
-    addClient(newLead);
+    let createdId: string | null = null;
+    if (isInzan) {
+      try {
+        createdId = await addClientWithId(newLead);
+      } catch (err) {
+        console.error('[Leads] Failed to create lead:', err);
+        alert(err instanceof Error ? `Could not save lead: ${err.message}` : 'Could not save lead. Please try again.');
+        return;
+      }
+    } else {
+      addClient(newLead);
+    }
     setIsNewLeadOpen(false);
     setNewLeadName('');
     setNewLeadPhone('');
@@ -511,6 +523,11 @@ export default function Leads() {
     setNewLeadBranch('');
     setNewLeadAssignedTo('');
     setNewLeadLinked(false);
+    if (isInzan && createdId) {
+      // Open the full account profile so staff can verify the saved details instantly.
+      setActiveClientId(createdId);
+      setNavTab('clients');
+    }
   };
 
   const availablePackages: Package[] = useMemo(() => {
@@ -791,6 +808,17 @@ export default function Leads() {
               >
                 <MessageCircle className="h-4 w-4" />
               </Button>
+              {isInzan && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 text-xs font-semibold"
+                  onClick={() => { setActiveClientId(lead.id); setNavTab('clients'); }}
+                  title="View Account"
+                >
+                  <User className="h-3.5 w-3.5 mr-1" /> View Account
+                </Button>
+              )}
               {lead.stage !== 'Won' && lead.stage !== 'Converted' && (
                 <Button
                   variant="ghost"
@@ -963,6 +991,18 @@ export default function Leads() {
                   >
                     <MessageCircle className="h-4 w-4" />
                   </Button>
+                  {isInzan && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs font-semibold"
+                      onClick={() => { setActiveClientId(lead.id); setNavTab('clients'); }}
+                      title="View Account"
+                    >
+                      <User className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline">View Account</span>
+                    </Button>
+                  )}
                   {lead.stage !== 'Won' && lead.stage !== 'Converted' && (
                     <Button
                       variant="outline"
@@ -1561,7 +1601,11 @@ export default function Leads() {
                     <Label>{t('leads.assigned_to')}</Label>
                     <Select value={newLeadAssignedTo} onValueChange={(v) => setNewLeadAssignedTo(v || '')}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select assignment" />
+                        <SelectValue placeholder="Select assignment">
+                          {newLeadAssignedTo
+                            ? (newLeadAssignedTo === 'unassigned' ? t('leads.tabs.unassigned') : resolveUserDisplay(newLeadAssignedTo, users, 'Select assignment'))
+                            : 'Select assignment'}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>

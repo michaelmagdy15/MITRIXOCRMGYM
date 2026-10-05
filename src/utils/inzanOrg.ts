@@ -117,3 +117,35 @@ export const getDepartmentForJobTitle = (title: InzanJobTitle): InzanDepartment 
   }
   return 'Operations';
 };
+
+export const isTenantInzan = (companyName?: string): boolean => {
+  try {
+    // Check hostname, document dataset, or branding name
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname.toLowerCase();
+      if (hostname.includes('inzan')) return true;
+      if (document.documentElement.dataset.tenantTheme === 'inzanathletics') return true;
+    }
+    const comp = (companyName || '').toLowerCase();
+    if (comp.includes('inzan')) return true;
+    return false;
+  } catch {
+    return false;
+  }
+};
+
+export const isValidNationalIdOrPassport = (val?: string): boolean => {
+  if (!val) return false;
+  const clean = val.trim();
+  // Egyptian National ID (14 digits) or Passport (6-12 alphanumeric chars)
+  if (/^\d{14}$/.test(clean)) return true;
+  if (/^[A-Za-z0-9]{6,14}$/.test(clean)) return true;
+  return false;
+};
+
+
+/** Validates an Egyptian mobile number (accepts 01XXXXXXXXX, 201XXXXXXXXX or +201XXXXXXXXX). */
+export const isValidEgyptianMobile = (phone?: string | null): boolean => {
+  const digits = (phone || '').replace(/[^\d]/g, '');
+  return /^(20)?0?1[0125]\d{8}$/.test(digits);
+};
