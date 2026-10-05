@@ -11,6 +11,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "test:pricing": "vite-node src/utils/pricing.test.ts",
+    "test:calendar": "vite-node src/utils/calendarSync.test.ts",
     "audit:frontend": "node scripts/lighthouse-audit.js",
     "audit:backend": "autocannon -c 10 -d 30 -p 10 -H \"x-audit-bypass: true\" http://localhost:3000/api/clients",
     "audit:db": "node scripts/db-audit.js",

@@ -76,6 +76,7 @@
 | Mobile WebView cache | App Store app caches `index.html` aggressively. Always include cache-busting script in index.html when deploying. User-Agent: `mitrixogymcrmCRM-Mobile`. |
 | Mobile app URL per tenant | Use EAS build profiles: `production-strike` for Strike tenant, `production-strikeboxing` for STRIKE Boxing. Each loads from different subdomain. |
 | React hook dependency TDZ | Never place a useEffect dependency array reading component state before that state is initialized with useState(). Vite/Rollup minification obfuscates the name (e.g. Jr), causing runtime ReferenceErrors when the view mounts. Always declare all useState hooks before effects. |
+| Firestore offline persistence is silent | `src/firebase.ts` uses `persistentLocalCache` + `persistentMultipleTabManager` (multi-tab is required, since staff may open several tabs). If IndexedDB is unavailable — iOS Safari private browsing, restrictive WKWebView/WebView, storage quota — the SDK does **not** throw: it logs `Error using user provided cache. Falling back to memory cache` and silently loses offline persistence. Never wrap `initializeFirestore` in a cache try/catch expecting a failure signal; there is none. Verify offline behaviour on a real device, not just in a desktop browser. Do not add a Workbox `backgroundSync` queue for `/api/*` to compensate — it replays POSTs and can double-charge members. |
 
 When you discover a new landmine, add it to this table (WORKFLOW.md Phase 6).
 

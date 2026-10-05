@@ -667,7 +667,7 @@ RULES:
 | 7 | Auto No-Show Function | 🟡 Important | ☐ |
 | 8 | Payment Status & Refund | 🟡 Important | ☐ |
 | 9 | Notification Templates | 🟡 Important | ☐ |
-| 10 | Calendar Sync | 🟡 Important | ☐ |
+| 10 | Calendar Sync | 🟡 Important | ☑ |
 | 11 | Shift Reports | 🟡 Important | ☐ |
 
 > **Recommended order:** 1 → 2 → 4 → 3 → 5 → 6 → 8 → 7 → 9 → 10 → 11

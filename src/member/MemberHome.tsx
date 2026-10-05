@@ -8,6 +8,8 @@ import { db, getTenantId } from '../firebase';
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fns';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
+import { generateICSCalendar, downloadICS, CalendarEvent } from '../utils/calendarSync';
+import { toast } from 'sonner';
 import { 
   Sparkles, Calendar, CheckCircle2, Trophy, Activity, Dumbbell, Award, Users, 
   ShoppingBag, Bell, Clock, Flame, ChevronRight, MapPin, Zap, User, 
@@ -259,6 +261,67 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
       });
   }, []);
 
+  // ─── Fetch upcoming bookings for "Export All Upcoming" ───
+  useEffect(() => {
+    if (!client?.id) {
+      setUpcomingSessions([]);
+      return;
+    }
+
+    const todayStr = format(startOfDay(new Date()), 'yyyy-MM-dd');
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + 60);
+    const horizonStr = format(horizon, 'yyyy-MM-dd');
+
+    const isUpcomingStatus = (s: any) => {
+      const st = String(s?.status || '').toLowerCase();
+      if (!st) return true;
+      return ['scheduled', 'confirmed', 'approved', 'booked', 'pending'].includes(st);
+    };
+
+    // PT sessions for this member
+    getDocs(query(collection(db, 'sessions'), where('clientId', '==', client.id)))
+      .then((snapshot) => {
+        const list = snapshot.docs
+          .map(d => ({ id: d.id, kind: 'session' as const, ...d.data() }))
+          .filter((s: any) => isUpcomingStatus(s))
+          .filter((s: any) => {
+            const dateStr = s.date || '';
+            return dateStr >= todayStr && dateStr <= horizonStr;
+          })
+          .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+
+        setUpcomingSessions(list);
+      })
+      .catch((err) => {
+        console.warn("Could not load upcoming sessions:", err.code || err.message);
+        setUpcomingSessions([]);
+      });
+
+    // Class bookings for this member within the export horizon
+    getDocs(query(
+      collection(db, 'classSchedules'),
+      where('date', '>=', todayStr),
+      where('date', '<=', horizonStr)
+    ))
+      .then((snapshot) => {
+        const memberIds = [client.id, client.memberId, client.portalUserId].filter(Boolean) as string[];
+        if (memberIds.length === 0) return;
+        const booked = snapshot.docs
+          .map(d => ({ id: d.id, kind: 'class' as const, ...d.data() }))
+          .filter((c: any) => Array.isArray(c.attendees) && c.attendees.some((a: string) => memberIds.includes(a)));
+        if (booked.length === 0) return;
+        setUpcomingSessions(prev => {
+          const seen = new Set(prev.map(s => s.id));
+          return [...prev, ...booked.filter(c => !seen.has(c.id))]
+            .sort((a: any, b: any) => String(a.date || '').localeCompare(String(b.date || '')));
+        });
+      })
+      .catch((err) => {
+        console.warn("Could not load upcoming class bookings:", err.code || err.message);
+      });
+  }, [client?.id, client?.memberId, client?.portalUserId]);
+
   // ─── Auto-rotate announcements ───
   useEffect(() => {
     if (announcements.length <= 1) return;
@@ -302,6 +365,52 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
   const formatOptionalDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
     try { return format(parseISO(dateStr), 'dd MMM yyyy'); } catch { return 'N/A'; }
+  };
+
+  // ─── Upcoming bookings → calendar events ───
+  const upcomingCalendarEvents = useMemo<CalendarEvent[]>(() => {
+    return upcomingSessions.map((s: any) => {
+      const dateStr = s.date || format(new Date(), 'yyyy-MM-dd');
+      const isClass = s.kind === 'class';
+      const startTime = s.startTime && String(s.startTime).length >= 10
+        ? String(s.startTime)
+        : `${dateStr}T${String(s.startTime || '10:00').length === 5 ? `${s.startTime}:00` : s.startTime || '10:00:00'}`;
+      const endTime = s.endTime && String(s.endTime).length >= 10
+        ? String(s.endTime)
+        : (() => {
+            const [h = 10, m = 0] = String(s.startTime || '10:00').split(':').map(Number);
+            const endH = String((h + 1) % 24).padStart(2, '0');
+            return `${dateStr}T${endH}:${String(m).padStart(2, '0')}:00`;
+          })();
+
+      const location = s.branch || s.location || branding?.companyName || 'Inzan Athletics';
+      return {
+        title: isClass
+          ? `${s.name || s.title || 'Group Class'}${s.instructor ? ` with ${s.instructor}` : ''}`
+          : `PT Session${s.type ? ` (${s.type})` : ''}${s.coachName ? ` with ${s.coachName}` : ''}`,
+        description: isClass
+          ? `Group class booking at ${location}.${s.notes ? `\nNotes: ${s.notes}` : ''}`
+          : `Personal training session at ${location}.${s.type ? `\nType: ${s.type}` : ''}${s.notes ? `\nNotes: ${s.notes}` : ''}`,
+        location,
+        startTime,
+        endTime,
+      };
+    });
+  }, [upcomingSessions, branding?.companyName]);
+
+  const handleExportUpcoming = () => {
+    try {
+      const ics = generateICSCalendar(upcomingCalendarEvents);
+      if (!ics) {
+        toast.error('No upcoming bookings with a valid date to export');
+        return;
+      }
+      downloadICS(`inzan-upcoming-${format(new Date(), 'yyyy-MM-dd')}`, ics);
+      toast.success(`${upcomingCalendarEvents.length} upcoming booking${upcomingCalendarEvents.length === 1 ? '' : 's'} exported`);
+    } catch (err) {
+      console.error('Failed to export upcoming bookings:', err);
+      toast.error('Failed to export calendar file');
+    }
   };
 
   // ─── Quick Shortcuts ───
@@ -557,6 +666,53 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
           </div>
         )}
       </div>
+
+      {/* ─── Upcoming Bookings + Calendar Export ─── */}
+      {upcomingSessions.length > 0 && (
+        <Card className="border border-border/60 rounded-2xl shadow-xs">
+          <CardHeader className="pb-2">
+            <SectionHeader
+              title="Upcoming Bookings"
+              subtitle={`${upcomingSessions.length} scheduled`}
+              action={<CalendarPlus className="h-4 w-4 text-primary" />}
+            />
+          </CardHeader>
+          <CardContent className="space-y-2 pt-0">
+            <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+              {upcomingSessions.slice(0, 10).map((s: any) => {
+                const isClass = s.kind === 'class';
+                return (
+                  <div key={`${s.kind}-${s.id}`} className="flex items-center justify-between gap-2 bg-muted/40 rounded-lg px-2.5 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">
+                        {isClass
+                          ? (s.name || s.title || 'Group Class')
+                          : `PT Session${s.type ? ` (${s.type})` : ''}`}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        {safeFormatDate(s.date, 'dd MMM yyyy')}
+                        {s.startTime ? ` · ${String(s.startTime).substring(0, 5)}` : ''}
+                        {s.branch ? ` · ${s.branch}` : ''}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] shrink-0">
+                      {isClass ? 'Class' : 'PT'}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full h-9 rounded-xl text-xs font-bold border-primary/20 text-primary hover:bg-primary/10"
+              onClick={handleExportUpcoming}
+            >
+              <CalendarPlus className="h-3.5 w-3.5 mr-1.5" /> Export All to Calendar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Announcement Carousel ─── */}
       {announcements.length > 0 && (

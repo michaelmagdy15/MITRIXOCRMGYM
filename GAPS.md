@@ -1,6 +1,20 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-10-06 (Dashboard Personalization & Mobile Offline Resilience)
+Updated: 2026-10-07 (Member Calendar Sync)
+
+---
+
+## RECENT WORK - 2026-10-07 (INZAN.CALENDAR.1 — Member Calendar Sync)
+
+- **INZAN.CALENDAR.1 Calendar Sync (PRD §6.3)**: Per-booking sync already existed via `CalendarSyncButton` on booked class cards (`src/member/MemberClasses.tsx`) and upcoming PT sessions (`src/member/MemberSessions.tsx`), each offering "Download .ics" and "Add to Google Calendar". Added the missing bulk path.
+- Extended `src/utils/calendarSync.ts` with `generateICSEvent()`, `generateICSCalendar()`, and `downloadICS()`. `generateIcsFile()` now delegates to the same builder, so single- and multi-event output share one RFC 5545 implementation. Multi-event UIDs are unique per event.
+- Added an "Upcoming Bookings" card with "Export All to Calendar" to `src/member/MemberHome.tsx`. It reads the member's upcoming PT sessions (`sessions` where `clientId` matches) and booked classes (`classSchedules` where `attendees` contains `clientId`/`memberId`/`portalUserId`) across a 60-day horizon, then emits one `.ics` file. This also replaces the `upcomingSessions` state that was previously declared but never populated.
+- Events with an unusable `startTime` are dropped rather than collapsing onto "now", and an empty result raises an error toast instead of downloading a bogus file.
+- Club timezone is declared with `X-WR-TIMEZONE:Africa/Cairo`; `DTSTART`/`DTEND` remain UTC instants so bookings render at the right local time in any client.
+- New tests: `src/utils/calendarSync.test.ts` (12 cases, `npm run test:calendar`) covering envelope validity, UTC stamping, RFC 5545 escaping, multi-event UID uniqueness, invalid-date rejection, Google Calendar URL parameters, and CRLF line endings.
+- **Decision: kept the existing `getGoogleCalendarUrl`/`generateIcsFile` export names** used by `CalendarSyncButton` rather than renaming them to the prompt's `addToGoogleCalendar`/`generateICSEvent` names and touching every call site. `generateICSEvent` was added as the spec-named alias.
+- **Decision: used `X-WR-TIMEZONE` instead of a `VTIMEZONE` block.** UTC instants need no transition rules, and a hand-written `VTIMEZONE` would silently drift across Egypt's DST changes.
+- **Proof**: `npm run lint` exit 0, `npm run build` exit 0, `npm run test:pricing` pass, `npm run test:calendar` 12/12 pass. Authenticated member-portal smoke test still pending — local browser project cannot access `db-inzanathletics`. No deployment performed.
 
 ---
 
