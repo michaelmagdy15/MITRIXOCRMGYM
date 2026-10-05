@@ -144,6 +144,18 @@ export const onBookingCancelled = onDocumentUpdated(
             updatedAt: new Date().toISOString()
           });
 
+          // Audit log the promotion
+          const auditRef = tenantDb.collection("auditLogs").doc();
+          transaction.set(auditRef, {
+            action: 'WAITLIST_PROMOTION',
+            entityType: 'CLASS',
+            entityId: scheduleId,
+            details: `Promoted ${promotedUser.memberName || promotedUser.clientName || promotedUserId} from waitlist to booked for ${scheduleData.name || 'a class'}`,
+            timestamp: new Date().toISOString(),
+            userId: promotedUserId || 'system',
+            userName: promotedUser.memberName || promotedUser.clientName || 'Member'
+          });
+
           // Notify staff about the promotion
           const notificationRef = tenantDb.collection("systemNotifications").doc();
           transaction.set(notificationRef, {
