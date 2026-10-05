@@ -15,6 +15,15 @@ Updated: 2026-10-05 (Strike Live Payment Permissions Emergency Fix & Inzan Athle
 
 ---
 
+## RECENT WORK - 2026-10-05 (INZAN.DISCOUNT.1 / INZAN.ARCHIVE.1 / INZAN.PAY.2)
+
+- **INZAN.DISCOUNT.1 Shared Discount Calculation & Checkout Integration**: Added `src/utils/pricing.ts` with deterministic gross/net/amount-paid/discount validation; integrated into new member enrollment, Record Payment, inline new-member during payment, walk-in/guest checkout, package add, renewal, upgrade, and class booking purchase flows. Stored `originalAmount`, used `amount_paid`, and based loyalty points on money actually collected.
+- **INZAN.ARCHIVE.1 Package Soft-Archive**: Replaced hard `deleteDoc(package)` with archive (`isActive=false`, `archivedAt`, `archivedBy`, `archivedReason`) and added `restorePackage`. Archived packages are hidden from new-sale selectors while historical member records still resolve their package details.
+- **INZAN.PAY.2 Atomic Payment/Entitlement Transaction**: Moved entitlement creation and activation inside the same Firestore transaction as payment, client package, wallet, and points updates. Added optional `operationId` idempotency key to `processPaymentTransaction` and `Payment` to prevent duplicate processing.
+- **Proof**: `npm run lint` and `npm run build` pass 0 errors; `npm run test:pricing` passes 19/19. Authenticated Firestore smoke testing remains blocked on local `db-inzanathletics` access. No deployment performed.
+
+---
+
 ## RECENT WORK - 2026-10-05 (STRIKE.HOTFIX.1 / INZAN.RELEASE.1)
 
 ### Strike Dedicated Tenant (strike-production-f5242)
