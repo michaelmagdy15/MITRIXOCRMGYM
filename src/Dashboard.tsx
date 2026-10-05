@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAppContext } from './context';
+import type { Payment } from './types';
 import { SALES_NAME_MAPPING } from './constants';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { differenceInDays, isSameDay, parseISO, isAfter, isBefore, addDays, subDays, subMonths, startOfMonth, endOfMonth, isWithinInterval, format, getDay } from 'date-fns';
@@ -20,6 +21,14 @@ const safeParseISO = (dateStr: any): Date => {
   const valid = toValidDate(dateStr);
   return valid || new Date(NaN);
 };
+
+// A payment only counts toward revenue when it is settled and not soft-deleted.
+// Refunds set status 'refunded' and a deleted_at timestamp, so both are excluded.
+const isValidPayment = (p: Payment) => !p.deleted_at && (!p.status || p.status === 'paid');
+
+// Revenue must reflect money actually collected. amount_paid is authoritative
+// once a discount is applied; amount is the gross price before discount.
+const getPaymentNet = (p: Payment) => Number(p.amount_paid ?? p.amount) || 0;
 
 const PRIVATE_PACKAGES = [
   'drop session pt', 
@@ -388,6 +397,7 @@ export default function Dashboard() {
     let membershipsTarget = 0;
 
     let relevantPayments = payments.filter(p => {
+      if (!isValidPayment(p)) return false;
       if (!p.date) return false;
       return safeFormatDate(p.date, 'yyyy-MM') === currentMonthStr;
     });
@@ -445,7 +455,7 @@ export default function Dashboard() {
       }
     }
 
-    const currentAmount = relevantPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+    const currentAmount = relevantPayments.reduce((acc, p) => acc + (getPaymentNet(p)), 0);
     const privatePayments = relevantPayments.filter(p => isPrivatePackage(p.packageType));
     const groupPayments = relevantPayments.filter(p => isGroupPackage(p.packageType));
     const membershipPayments = relevantPayments.filter(p => !isPrivatePackage(p.packageType) && !isGroupPackage(p.packageType));
@@ -453,13 +463,13 @@ export default function Dashboard() {
     const privateSessionsSold = privatePayments.length;
     const groupSessionsSold = groupPayments.length;
     const membershipsSold = membershipPayments.length;
-    const privateRevenue = privatePayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-    const groupRevenue = groupPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-    const membershipsRevenue = membershipPayments.reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+    const privateRevenue = privatePayments.reduce((acc, p) => acc + (getPaymentNet(p)), 0);
+    const groupRevenue = groupPayments.reduce((acc, p) => acc + (getPaymentNet(p)), 0);
+    const membershipsRevenue = membershipPayments.reduce((acc, p) => acc + (getPaymentNet(p)), 0);
     
-    const cash = relevantPayments.filter(p => p.method === 'Cash').reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-    const visa = relevantPayments.filter(p => p.method === 'Credit Card').reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
-    const instapay = relevantPayments.filter(p => p.method === 'Instapay').reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+    const cash = relevantPayments.filter(p => p.method === 'Cash').reduce((acc, p) => acc + (getPaymentNet(p)), 0);
+    const visa = relevantPayments.filter(p => p.method === 'Credit Card').reduce((acc, p) => acc + (getPaymentNet(p)), 0);
+    const instapay = relevantPayments.filter(p => p.method === 'Instapay').reduce((acc, p) => acc + (getPaymentNet(p)), 0);
 
     return {
       targetAmount,
@@ -506,6 +516,7 @@ export default function Dashboard() {
       }
 
       const monthPayments = payments.filter(p => {
+        if (!isValidPayment(p)) return false;
         const pDate = safeParseISO(p.date);
         if (isNaN(pDate.getTime())) return false;
         if (!isWithinInterval(pDate, { start, end })) return false;
@@ -517,9 +528,9 @@ export default function Dashboard() {
         return true;
       });
 
-      const achievedAmount = monthPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-      const privateRevenue = monthPayments.filter(p => isPrivatePackage(p.packageType)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
-      const groupRevenue = monthPayments.filter(p => isGroupPackage(p.packageType)).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const achievedAmount = monthPayments.reduce((sum, p) => sum + (getPaymentNet(p)), 0);
+      const privateRevenue = monthPayments.filter(p => isPrivatePackage(p.packageType)).reduce((s, p) => s + (getPaymentNet(p)), 0);
+      const groupRevenue = monthPayments.filter(p => isGroupPackage(p.packageType)).reduce((s, p) => s + (getPaymentNet(p)), 0);
 
       return {
         month: format(date, 'MMM yy'),
@@ -537,13 +548,14 @@ export default function Dashboard() {
       const start = startOfMonth(date);
       const end = endOfMonth(date);
       const mp = payments.filter(p => {
+        if (!isValidPayment(p)) return false;
         const d = safeParseISO(p.date);
         if (isNaN(d.getTime())) return false;
         return isWithinInterval(d, { start, end });
       });
       return {
         month: format(date, 'MMM yy'),
-        Revenue: mp.reduce((s, p) => s + (Number(p.amount) || 0), 0),
+        Revenue: mp.reduce((s, p) => s + getPaymentNet(p), 0),
       };
     });
   }, [payments]);
@@ -554,12 +566,13 @@ export default function Dashboard() {
     return reps.map(rep => {
       const repTarget = userTargets.find(t => t.userId === rep.id && t.month === currentMonthStr);
       const repPayments = payments.filter(p => {
+        if (!isValidPayment(p)) return false;
         if (safeFormatDate(p.date, 'yyyy-MM') !== currentMonthStr) return false;
         return isPaymentAttributedToRep(p, rep.id, rep.name || '');
       });
       return {
         name: (rep.name || rep.email || 'Unknown').split(' ')[0],
-        Revenue: repPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0),
+        Revenue: repPayments.reduce((s, p) => s + (getPaymentNet(p)), 0),
         Target: repTarget?.targetAmount || 0,
       };
     });
@@ -572,15 +585,16 @@ export default function Dashboard() {
       const start = startOfMonth(date);
       const end = endOfMonth(date);
       const mp = payments.filter(p => {
+        if (!isValidPayment(p)) return false;
         const d = safeParseISO(p.date);
         if (isNaN(d.getTime())) return false;
         return isWithinInterval(d, { start, end });
       });
       return {
         month: format(date, 'MMM yy'),
-        Cash: mp.filter(p => p.method === 'Cash').reduce((s, p) => s + (Number(p.amount) || 0), 0),
-        Visa: mp.filter(p => p.method === 'Credit Card').reduce((s, p) => s + (Number(p.amount) || 0), 0),
-        Instapay: mp.filter(p => p.method === 'Instapay').reduce((s, p) => s + (Number(p.amount) || 0), 0),
+        Cash: mp.filter(p => p.method === 'Cash').reduce((s, p) => s + (getPaymentNet(p)), 0),
+        Visa: mp.filter(p => p.method === 'Credit Card').reduce((s, p) => s + (getPaymentNet(p)), 0),
+        Instapay: mp.filter(p => p.method === 'Instapay').reduce((s, p) => s + (getPaymentNet(p)), 0),
       };
     });
   }, [payments]);
@@ -592,6 +606,7 @@ export default function Dashboard() {
       const start = startOfMonth(date);
       const end = endOfMonth(date);
       const mp = payments.filter(p => {
+        if (!isValidPayment(p)) return false;
         const d = safeParseISO(p.date);
         if (isNaN(d.getTime())) return false;
         return isWithinInterval(d, { start, end });
@@ -613,10 +628,11 @@ export default function Dashboard() {
       const targetAmount = repTarget?.targetAmount || 0;
 
       const repPayments = payments.filter(p => {
+        if (!isValidPayment(p)) return false;
         if (safeFormatDate(p.date, 'yyyy-MM') !== currentMonthStr) return false;
         return isPaymentAttributedToRep(p, rep.id, rep.name || '');
       });
-      const revenue = repPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+      const revenue = repPayments.reduce((s, p) => s + (getPaymentNet(p)), 0);
 
       const convertedThisMonth = clients.filter(c => 
         isClientAssignedToRep(c, rep.id, rep.name || '') && 
@@ -776,30 +792,20 @@ export default function Dashboard() {
           </Select>
         </div>
       ) : (
-        <div className="flex items-center gap-3 bg-muted/30 px-4 py-3 rounded-lg border border-border/50">
-          <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
-          <span className="text-sm text-muted-foreground flex-1">{t('dashboard.viewing_history')}</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/30 p-3 rounded-lg border border-border/50">
+          <div>
+            <h3 className="text-sm font-medium capitalize">{currentUser?.name || 'Dashboard'}</h3>
+            <p className="text-xs text-muted-foreground">{currentUser?.branch || currentUser?.role || 'Staff'}</p>
+          </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSelectedMonthOffset(o => o + 1)}
-            >
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setSelectedMonthOffset(o => o + 1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span className="text-sm font-semibold w-28 text-center">
-              {format(selectedMonth, 'MMM yyyy')}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSelectedMonthOffset(o => Math.max(0, o - 1))}
-              disabled={selectedMonthOffset === 0}
-            >
+            <span className="text-sm font-semibold w-28 text-center">{format(selectedMonth, 'MMM yyyy')}</span>
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setSelectedMonthOffset(o => Math.max(0, o - 1))} disabled={selectedMonthOffset === 0}>
               <ChevronRight className="h-4 w-4" />
             </Button>
+            <Badge variant="secondary" className="capitalize">{currentUser?.role || 'User'}</Badge>
           </div>
         </div>
       )}

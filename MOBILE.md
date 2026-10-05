@@ -214,8 +214,8 @@ app.post("/api/proxy-push", requireAuth, async (req, res) => {
 |---|---|---|
 | Android Play Console publication | High | Pending |
 | Native iOS/Android features (notifications, camera) | Medium | Partial |
-| Background sync | Medium | Not started |
-| Offline mode improvements | Medium | Basic offline banner only |
+| Background sync | Medium | Done ✅ (Firestore persistent offline cache) |
+| Offline mode improvements | Medium | Done ✅ (offline reads/writes persist; failed server calls surface a visible error instead of silent replay) |
 
 ---
 

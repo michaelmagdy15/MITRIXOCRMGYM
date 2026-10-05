@@ -1,6 +1,17 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-10-05 (Strike Live Payment Permissions Emergency Fix & Inzan Athletics Comprehensive Tenant Release)
+Updated: 2026-10-06 (Dashboard Personalization & Mobile Offline Resilience)
+
+---
+
+## RECENT WORK - 2026-10-06 (INZAN.DASH.1 / INZAN.OFFLINE.1 / INZAN.ANALYTICS.1)
+
+- **INZAN.DASH.1 Role-Based Dashboard Personalization**: Replaced the generic "viewing history" header for non-global-dashboard users with a personalized role/branch banner plus month navigation in `src/Dashboard.tsx`. Reps and limited-role staff now see their own context while manager/CEO global filters remain unchanged.
+- **INZAN.OFFLINE.1 Mobile Offline Resilience**: Switched Firestore from in-memory to persistent multi-tab IndexedDB cache in `src/firebase.ts` (`persistentLocalCache` + `persistentMultipleTabManager`). Reads and writes now survive short outages, app backgrounding, and mobile WebView reloads; the existing offline banner is finally backed by real local persistence.
+- **INZAN.ANALYTICS.1 Dashboard Revenue Accuracy**: Added module-scope `isValidPayment` and `getPaymentNet` helpers in `src/Dashboard.tsx`. Revenue now counts money actually collected (`amount_paid ?? amount`, consistent with the `INZAN.DISCOUNT.1` pricing engine) and excludes refunded, soft-deleted, failed, and pending payments. Applied across all seven revenue surfaces: filtered sales stats, payment-method split, personal chart, team trend, per-rep comparison, 6-month method/session breakdowns, and the rep leaderboard.
+- **Decision: did not add a Workbox `backgroundSync` queue for `/api/*`.** Workbox replays queued POSTs on reconnect, which can double-write financial endpoints when a request reached the server but its response was lost. Replaying is not idempotent for every route (`operationId` currently covers checkout flows only), so a silent replay could double-charge a member. Offline durability is instead provided by the Firestore persistent cache, which is the app's real data path; failed `/api` calls surface a visible error rather than being silently re-sent.
+- **Decision: left the rep leaderboard conversion-rate denominator unchanged.** `totalLeadsCount` counts every client assigned to a rep, not only leads. Correcting it requires lead-acquisition history the schema does not store, and silently redefining a published KPI is worse than a recorded known gap.
+- **Proof**: `npm run lint` and `npm run build` pass 0 errors. Authenticated Firestore smoke testing remains blocked on local `db-inzanathletics` access. Persistent IndexedDB cache still needs on-device verification (storage pressure, multi-tab behaviour). No deployment performed.
 
 ---
 
