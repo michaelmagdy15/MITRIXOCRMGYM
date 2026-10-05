@@ -23,6 +23,7 @@ Updated: 2026-10-05 (Strike Live Payment Permissions Emergency Fix & Inzan Athle
 - **INZAN.CLASS.2 Entitlement Query Alignment**: Fixed server-side entitlement reads to use `memberId` (the field written by entitlementService) instead of `clientId`, so class/PT booking and gym-cancel refund paths actually find member entitlements.
 - **INZAN.WAITLIST.1 Promotion Hardening**: Updated `functions/src/classes/waitlist.ts` to query by `scheduleId`, skip expired/frozen/suspended members during promotion, and emit a `waitlist_promotion` system notification. Adjusted `firestore.rules` entitlement ownership to use `memberId`.
 - **INZAN.NUTRITION.1 Slot Validation & Capacity Guard**: Added `validateNutritionSlot` in `src/hooks/useNutrition.ts` to enforce active nutritionist, day/hour schedule bounds, and no overlapping appointments for new bookings and reschedules.
+- **INZAN.AUDIT.1 Waitlist Promotion Audit Trail**: Added audit-log entry inside `functions/src/classes/waitlist.ts` for every automatic waitlist promotion, capturing promoted member, class/schedule, and timestamp.
 - **Proof**: `npm run lint` and `npm run build` pass 0 errors; `npm run test:pricing` passes 19/19. Authenticated Firestore smoke testing remains blocked on local `db-inzanathletics` access. No deployment performed.
 
 ---
