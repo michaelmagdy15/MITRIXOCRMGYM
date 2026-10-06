@@ -17,7 +17,7 @@ import {
   AlertTriangle,
   Award
 } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { useAppContext } from '../context';
 
 const DAYS_OF_WEEK = [
   { key: 1, label: 'Monday' },
@@ -45,10 +45,7 @@ export const ClassAnalytics: React.FC = () => {
   const [bookings, setBookings] = useState<ClassBooking[]>([]);
   const [instructors, setInstructors] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Payout configuration
-  const [payoutRate, setPayoutRate] = useState<number>(50); // Base rate per class (EGP)
-  const [perHeadRate, setPerHeadRate] = useState<number>(10); // Extra per attended member (EGP)
+  const { defaultPayoutRates } = useAppContext();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -144,8 +141,8 @@ export const ClassAnalytics: React.FC = () => {
     const totalCap = instClasses.reduce((sum, c) => sum + (c.capacity || 15), 0);
     const avgFillRate = totalCap > 0 ? Math.round((attendedCount / totalCap) * 100) : 0;
     
-    const basePay = instClasses.length * payoutRate;
-    const bonusPay = attendedCount * perHeadRate;
+    const basePay = instClasses.length * (defaultPayoutRates.freeClassRate || 0);
+    const bonusPay = attendedCount * (defaultPayoutRates.paidClassFixedRate || 0);
     const totalPayout = basePay + bonusPay;
 
     return {
@@ -333,22 +330,12 @@ export const ClassAnalytics: React.FC = () => {
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground font-medium">Base/Class:</span>
-                <Input 
-                  type="number" 
-                  className="w-20 h-8 text-xs font-semibold" 
-                  value={payoutRate} 
-                  onChange={(e) => setPayoutRate(Number(e.target.value))} 
-                />
+                <span className="text-xs font-semibold">{defaultPayoutRates.freeClassRate || 0}</span>
                 <span className="text-xs text-muted-foreground">EGP</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground font-medium">Bonus/Head:</span>
-                <Input 
-                  type="number" 
-                  className="w-20 h-8 text-xs font-semibold" 
-                  value={perHeadRate} 
-                  onChange={(e) => setPerHeadRate(Number(e.target.value))} 
-                />
+                <span className="text-xs font-semibold">{defaultPayoutRates.paidClassFixedRate || 0}</span>
                 <span className="text-xs text-muted-foreground">EGP</span>
               </div>
             </div>
