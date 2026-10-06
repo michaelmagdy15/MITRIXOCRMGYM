@@ -75,6 +75,21 @@ service cloud.firestore {
       );
     }
 
+    function isNutritionStaff() {
+      return isTenantAdmin() || (
+        isAuthenticated() && (
+          (request.auth.token.keys().hasAny(['role']) && request.auth.token.role in ['nutritionist', 'doctor']) ||
+          (userExists() && getUserRole() in ['nutritionist', 'doctor'])
+        )
+      );
+    }
+
+    function getUserDepartment() {
+      return userExists() && 'department' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.department
+        : null;
+    }
+
     function isOwnClientRecord(clientId) {
       return isAuthenticated() && (
         (
@@ -326,12 +341,15 @@ service cloud.firestore {
     match /auditLogs/{logId} {
       allow read: if canAccessSettings();
       allow create: if isAuthenticated() && isValidAuditLog(request.resource.data);
-      allow delete: if canAccessSettings();
+      allow update: if false; // Immutable audit log
+      allow delete: if isPlatformSuperAdmin();
     }
 
     match /mail/{mailId} {
-      allow create: if isAuthenticated();
-      allow read, update, delete: if isTenantStaff();
+      allow create: if isTenantStaff();
+      allow read: if isTenantAdmin() || (isTenantStaff() && (resource.data.senderId == request.auth.uid || resource.data.recipientId == request.auth.uid || resource.data.recipientId == 'all' || (resource.data.department != null && resource.data.department == getUserDepartment())));
+      allow update: if isTenantStaff() && (resource.data.recipientId == request.auth.uid || isTenantAdmin());
+      allow delete: if isTenantAdmin();
     }
 
     match /clients/{clientId} {
@@ -495,8 +513,18 @@ service cloud.firestore {
     }
 
     match /nutritionConsultations/{consultationId} {
-      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
-      allow write: if isTenantStaff();
+      allow read: if isNutritionStaff() || (isAuthenticated() && (resource.data.nutritionistId == request.auth.uid || (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId))));
+      allow write: if isNutritionStaff() || isTenantAdmin();
+    }
+
+    match /nutritionSlotReservations/{slotKey} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff() || isAuthenticated();
+    }
+
+    match /operationLocks/{lockId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff() || isAuthenticated();
     }
 
     match /nutritionistProfiles/{profileId} {
@@ -506,6 +534,38 @@ service cloud.firestore {
 
     match /shiftHandovers/{handoverId} {
       allow read, write: if isTenantStaff();
+    }
+
+    match /shiftReconciliations/{recId} {
+      allow read: if isTenantStaff();
+      allow create, update: if isTenantStaff();
+      allow delete: if isTenantAdmin();
+    }
+
+    match /inventoryProducts/{productId} {
+      allow read: if isTenantStaff();
+      allow write: if isTenantAdmin();
+    }
+
+    match /inventorySuppliers/{supplierId} {
+      allow read: if isTenantStaff();
+      allow write: if isTenantAdmin();
+    }
+
+    match /inventoryMovements/{movementId} {
+      allow read: if isTenantStaff();
+      allow create: if isTenantStaff();
+      allow update, delete: if isTenantAdmin();
+    }
+
+    match /equipment/{equipId} {
+      allow read: if isTenantStaff();
+      allow write: if isTenantAdmin();
+    }
+
+    match /equipmentMaintenance/{maintId} {
+      allow read: if isTenantStaff();
+      allow write: if isTenantStaff();
     }
 
     match /complaints/{complaintId} {

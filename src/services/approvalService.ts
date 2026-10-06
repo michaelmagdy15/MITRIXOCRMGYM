@@ -1,4 +1,4 @@
-import { collection, addDoc, updateDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, getDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ApprovalRequest, ApprovalRequestType, ApprovalStatus } from '../types/approval';
 import { addAuditLog } from './auditService';
@@ -72,7 +72,7 @@ export const approveRequest = async (
   }
 
   // 1. Execute specific logic based on type
-  await executeApprovalSideEffects(request);
+  await executeApprovalSideEffects(request, approverName);
 
   // 2. Mark as approved
   await updateDoc(reqRef, {
@@ -125,17 +125,68 @@ export const rejectRequest = async (
 /**
  * Helper to execute the actual business logic for an approved request
  */
-async function executeApprovalSideEffects(req: ApprovalRequest) {
+async function executeApprovalSideEffects(req: ApprovalRequest, approverName?: string) {
   const { type, targetEntityId, details } = req;
   
   switch (type) {
-    case 'class_cancellation':
-      // Update classSchedules status to cancelled
+    case 'class_cancellation': {
+      // 1. Update classSchedules status to cancelled
       await updateDoc(doc(db, 'classSchedules', targetEntityId), {
         status: 'cancelled',
+        cancelledAt: new Date().toISOString(),
+        cancelledBy: req.approvedBy || approverName || 'Manager',
+        cancellationReason: req.reason || 'Manager approved cancellation',
         updatedAt: serverTimestamp()
       });
+
+      // 2. Refund all booked members and cancel bookings
+      try {
+        const bookingsSnap = await getDocs(
+          query(collection(db, 'classBookings'), where('scheduleId', '==', targetEntityId))
+        );
+        for (const bDoc of bookingsSnap.docs) {
+          const booking = bDoc.data();
+          if (booking.status !== 'cancelled') {
+            await updateDoc(bDoc.ref, {
+              status: 'cancelled',
+              cancelledAt: new Date().toISOString(),
+              cancellationReason: 'Class cancelled by management'
+            });
+
+            // Refund 1 session token to client
+            const memberClientId = booking.clientId || booking.memberId;
+            if (memberClientId) {
+              const cRef = doc(db, 'clients', memberClientId);
+              const cSnap = await getDoc(cRef);
+              if (cSnap.exists()) {
+                const cData = cSnap.data();
+                const curRemaining = cData.sessionsRemaining;
+                if (typeof curRemaining === 'number') {
+                  await updateDoc(cRef, { sessionsRemaining: curRemaining + 1 });
+                }
+              }
+
+              // Create notification doc
+              try {
+                await addDoc(collection(db, 'notifications'), {
+                  clientId: memberClientId,
+                  title: 'Class Cancelled',
+                  message: 'A booked class was cancelled by the gym. Your class credit has been restored.',
+                  type: 'class_cancelled',
+                  read: false,
+                  createdAt: new Date().toISOString()
+                });
+              } catch (e) {
+                console.warn('[approvalService] Notification failed:', e);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`[approvalService] Bookings refund on class cancellation failed:`, e);
+      }
       break;
+    }
 
     case 'pt_override':
       // Update sessions status to newStatus
@@ -159,16 +210,70 @@ async function executeApprovalSideEffects(req: ApprovalRequest) {
       }
       break;
 
-    case 'refund':
-      // Update payment status
-      await updateDoc(doc(db, 'payments', targetEntityId), {
+    case 'refund': {
+      // Update payment status (Preserve historical record, do NOT soft delete!)
+      const paymentRef = doc(db, 'payments', targetEntityId);
+      const paymentSnap = await getDoc(paymentRef);
+      const paymentData = paymentSnap.exists() ? paymentSnap.data() : null;
+
+      await updateDoc(paymentRef, {
         status: 'refunded',
-        deleted_at: new Date().toISOString(),
         refundMethod: details.refundMethod || 'Cash',
         refundAmount: details.amount,
+        refundedAt: new Date().toISOString(),
+        refundedBy: req.approvedBy || approverName || 'Manager',
         updatedAt: serverTimestamp()
       });
+
+      // Revoke linked entitlement if present
+      const entitlementId = details.entitlementId || paymentData?.linkedEntitlementId;
+      if (entitlementId) {
+        try {
+          await updateDoc(doc(db, 'entitlements', entitlementId), {
+            status: 'revoked',
+            revokedReason: 'Payment refunded',
+            revokedAt: new Date().toISOString(),
+            updatedAt: serverTimestamp()
+          });
+        } catch (e) {
+          console.warn(`[approvalService] Entitlement ${entitlementId} revocation failed:`, e);
+        }
+      }
+
+      // Expire client package if associated
+      const targetClientId = details.clientId || paymentData?.clientId;
+      if (targetClientId) {
+        try {
+          const clientRef = doc(db, 'clients', targetClientId);
+          const clientSnap = await getDoc(clientRef);
+          if (clientSnap.exists()) {
+            const clientData = clientSnap.data();
+            const pkgs = clientData.packages || [];
+            const updatedPkgs = pkgs.map((p: any) => {
+              if (p.packageName === details.packageType || p.packageName === paymentData?.packageType) {
+                return { ...p, status: 'Refunded', refundedAt: new Date().toISOString() };
+              }
+              return p;
+            });
+            await updateDoc(clientRef, {
+              packages: updatedPkgs,
+              updatedAt: serverTimestamp()
+            });
+          }
+        } catch (e) {
+          console.warn(`[approvalService] Client package status update on refund failed:`, e);
+        }
+      }
+
+      await addAuditLog(
+        'UPDATE',
+        'PAYMENT',
+        targetEntityId,
+        `Refund approved: ${details.amount} LE via ${details.refundMethod || 'Cash'}`,
+        approverName
+      );
       break;
+    }
 
     case 'balance_adjustment':
       // Update client's package remaining sessions

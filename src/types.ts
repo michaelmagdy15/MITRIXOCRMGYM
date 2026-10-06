@@ -314,6 +314,9 @@ export interface Payment {
   amount_paid: number;
   /** Original catalogue/gross amount before discount (additive; legacy records may omit). */
   originalAmount?: number;
+  remainingBalance?: number;
+  isPartialPayment?: boolean;
+  isComplimentary?: boolean;
   date: string; // ISO string
   method: 'Cash' | 'Credit Card' | 'Bank Transfer' | 'Instapay' | 'Other';
   status?: 'paid' | 'pending' | 'refunded' | 'failed';

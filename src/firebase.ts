@@ -16,9 +16,9 @@ import { inzanFirebaseConfig } from './config/inzanFirebaseConfig';
 
 // Support dynamic tenant configurations loaded based on subdomain or query param
 const getActiveConfig = () => {
-  const dynamicConfig = (window as any).__FIREBASE_CONFIG__;
+  const dynamicConfig = typeof window !== 'undefined' ? (window as any).__FIREBASE_CONFIG__ : undefined;
   if (isStandaloneMode()) {
-    if (dynamicConfig?.tenantId === inzanFirebaseConfig.tenantId || window.location.hostname.toLowerCase().includes('inzan')) {
+    if (dynamicConfig?.tenantId === inzanFirebaseConfig.tenantId || (typeof window !== 'undefined' && window.location.hostname.toLowerCase().includes('inzan'))) {
       throw new Error('Inzan cannot use the Strike standalone deployment. Check the tenant hosting configuration.');
     }
     return {
@@ -100,32 +100,34 @@ export const getTenantId = (): string => {
 
   // 3. Extract from domain / hostname
   try {
-    const hostname = window.location.hostname.toLowerCase();
-    
-    // Direct domain matching first to avoid misidentifying generic subdomains (e.g. admin.inzanathletics.com)
-    if (hostname.includes('inzanathletics') || hostname.includes('inzan')) return 'inzanathletics';
-    if (hostname.includes('strike-egy') || hostname.includes('strikeboxing') || hostname.startsWith('strike.')) return 'strike';
+    if (typeof window !== 'undefined' && window.location) {
+      const hostname = window.location.hostname.toLowerCase();
+      
+      // Direct domain matching first to avoid misidentifying generic subdomains (e.g. admin.inzanathletics.com)
+      if (hostname.includes('inzanathletics') || hostname.includes('inzan')) return 'inzanathletics';
+      if (hostname.includes('strike-egy') || hostname.includes('strikeboxing') || hostname.startsWith('strike.')) return 'strike';
 
-    const parts = hostname.split('.');
-    // e.g. "strike.mitrixo.com" → parts = ["strike", "mitrixo", "com"]
-    // e.g. "inzanathletics.localhost" → parts = ["inzanathletics", "localhost"]
-    if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'admin' && parts[0] !== 'app' && parts[0] !== 'portal') {
-      const sub = parts[0]!;
-      if (sub === 'inzan' || sub === 'inzanathletics') return 'inzanathletics';
-      if (sub === 'strike') return 'strike';
-      return sub;
-    }
-    if (parts.length === 2 && (parts[1] === 'localhost' || parts[1] === 'local')) {
-      const sub = parts[0]!;
-      if (sub === 'inzan' || sub === 'inzanathletics') return 'inzanathletics';
-      if (sub === 'strike') return 'strike';
-      return sub;
-    }
+      const parts = hostname.split('.');
+      // e.g. "strike.mitrixo.com" → parts = ["strike", "mitrixo", "com"]
+      // e.g. "inzanathletics.localhost" → parts = ["inzanathletics", "localhost"]
+      if (parts.length >= 3 && parts[0] !== 'www' && parts[0] !== 'admin' && parts[0] !== 'app' && parts[0] !== 'portal') {
+        const sub = parts[0]!;
+        if (sub === 'inzan' || sub === 'inzanathletics') return 'inzanathletics';
+        if (sub === 'strike') return 'strike';
+        return sub;
+      }
+      if (parts.length === 2 && (parts[1] === 'localhost' || parts[1] === 'local')) {
+        const sub = parts[0]!;
+        if (sub === 'inzan' || sub === 'inzanathletics') return 'inzanathletics';
+        if (sub === 'strike') return 'strike';
+        return sub;
+      }
 
-    // 4. Custom domains: check the config's databaseId for a hint
-    const dbId = (activeConfig as any).firestoreDatabaseId;
-    if (dbId && dbId !== '(default)') {
-      return dbId.replace(/^db-/, '');
+      // 4. Custom domains: check the config's databaseId for a hint
+      const dbId = (activeConfig as any).firestoreDatabaseId;
+      if (dbId && dbId !== '(default)') {
+        return dbId.replace(/^db-/, '');
+      }
     }
   } catch {
     // SSR or non-browser environment
@@ -148,9 +150,11 @@ const app = initializeApp(activeConfig);
 export const auth = getAuth(app);
 
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
+  localCache: (typeof window !== 'undefined' && typeof indexedDB !== 'undefined')
+    ? persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      })
+    : undefined,
 }, (activeConfig as any).firestoreDatabaseId);
 
 export const storage = getStorage(app);

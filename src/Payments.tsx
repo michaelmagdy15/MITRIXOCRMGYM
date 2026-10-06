@@ -1228,6 +1228,14 @@ export default function Payments() {
             <div className="flex-1 overflow-y-auto p-5 md:p-10 pt-6 md:pt-8 pb-10 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 md:gap-x-10 gap-y-4 md:gap-y-8">
                 
+                <div className="md:col-span-2 lg:col-span-3 bg-primary/5 border border-primary/20 rounded-2xl p-4 text-xs text-muted-foreground flex items-start gap-3">
+                  <Receipt className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-semibold text-foreground text-sm">Payment & Entitlement Transaction Integrity</div>
+                    <div>Selecting a package and recording payment executes an atomic transaction that registers the financial receipt, updates the member package status, and creates the exact service entitlement for booking. Partial payments preserve remaining balances, while Inzan members require Egyptian mobile and National ID verification before completion.</div>
+                  </div>
+                </div>
+
                 <div className="space-y-3 lg:col-span-2">
                   <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.table.client')}</Label>
                   <div className="relative" ref={clientDropdownRef}>

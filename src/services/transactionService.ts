@@ -70,6 +70,8 @@ export interface PaymentTransactionParams {
   previousPackageName?: string;
   corporateProofUrl?: string;
   discountReason?: string;
+  paymentStatus?: 'paid' | 'pending' | 'failed';
+  isComplimentary?: boolean;
   /** Idempotency key. If a payment already exists with this key, the transaction is skipped. */
   operationId?: string;
 }
@@ -124,10 +126,12 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
   const effectiveBranch = normalizeBranchName(rawBranch);
   const effectiveBranchId = params.branchId || toCanonicalBranchId(effectiveBranch) || undefined;
   const effectiveCategory = params.packageCategory || resolvePaymentCategory(params.packageType);
+  const lockRef = params.operationId ? doc(db, 'operationLocks', params.operationId) : null;
 
   if (isGuestClient) {
     const paymentRef = doc(collection(db, 'payments'));
     const clientNameVal = params.clientName || 'Walk-in Guest';
+    const remainingBalance = Math.max(0, params.amount - actualAmountPaid);
     const paymentData: Partial<Payment> = {
       id: paymentRef.id,
       clientId: params.clientId || 'WALK-IN-GUEST',
@@ -137,6 +141,10 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       amount: params.amount,
       originalAmount: params.originalAmount,
       amount_paid: actualAmountPaid,
+      remainingBalance,
+      isPartialPayment: remainingBalance > 0,
+      isComplimentary: params.isComplimentary || (params.amount === 0 && actualAmountPaid === 0),
+      status: params.paymentStatus || 'paid',
       method: params.method,
       date: safeIsoDate(params.paymentDate, true),
       instapayRef: params.instapayRef,
@@ -165,7 +173,25 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       created_at: new Date().toISOString(),
       deleted_at: null
     };
-    await setDoc(paymentRef, cleanData(paymentData), { merge: true });
+
+    if (lockRef) {
+      await runTransaction(db, async (txn) => {
+        const lockSnap = await txn.get(lockRef);
+        if (lockSnap.exists()) {
+          console.warn(`[processPaymentTransaction] Duplicate guest operationId ${params.operationId}; skipping.`);
+          return;
+        }
+        txn.set(lockRef, {
+          operationId: params.operationId,
+          clientId: params.clientId || 'WALK-IN-GUEST',
+          status: 'COMMITTED',
+          createdAt: new Date().toISOString()
+        });
+        txn.set(paymentRef, cleanData(paymentData));
+      });
+    } else {
+      await setDoc(paymentRef, cleanData(paymentData), { merge: true });
+    }
     return;
   }
 
@@ -197,6 +223,15 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
 
   // 2. Run Firestore transaction for write atomicity and read consistency
   await runTransaction(db, async (transaction) => {
+    // 0. Concurrency lock check: ensure this operation has not already been processed
+    if (lockRef) {
+      const lockSnap = await transaction.get(lockRef);
+      if (lockSnap.exists()) {
+        console.warn(`[processPaymentTransaction] Operation lock ${params.operationId} already held; skipping duplicate submission.`);
+        return;
+      }
+    }
+
     // Fetch client details inside transaction to guarantee data integrity
     const clientSnap = await transaction.get(clientRef);
     if (!clientSnap.exists()) {
@@ -267,6 +302,9 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
        resolvedEndDate = end.toISOString();
     }
 
+    const isPendingOrFailed = params.paymentStatus === 'pending' || params.paymentStatus === 'failed';
+    const remainingBalance = Math.max(0, params.amount - actualAmountPaid);
+
     // D. Create Payment and Entitlement documents atomically
     const paymentRef = doc(collection(db, 'payments'));
     const entitlementRef = params.systemPackage ? doc(collection(db, 'entitlements')) : null;
@@ -278,6 +316,10 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       amount: params.amount,
       originalAmount: params.originalAmount,
       amount_paid: actualAmountPaid,
+      remainingBalance,
+      isPartialPayment: remainingBalance > 0,
+      isComplimentary: params.isComplimentary || (params.amount === 0 && actualAmountPaid === 0),
+      status: params.paymentStatus || 'paid',
       method: params.method,
       date: safeIsoDate(params.paymentDate, true),
       instapayRef: params.instapayRef,
@@ -304,13 +346,24 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       holdDate: params.isMemberOnHold ? new Date().toISOString() : undefined,
       heldBy: params.isMemberOnHold ? params.recordedBy : undefined,
       operationId: params.operationId,
-      linkedEntitlementId: entitlementRef?.id,
+      linkedEntitlementId: (!isPendingOrFailed && entitlementRef) ? entitlementRef.id : undefined,
       created_at: new Date().toISOString(),
       deleted_at: null
     };
+
+    if (lockRef) {
+      transaction.set(lockRef, {
+        operationId: params.operationId,
+        clientId: params.clientId,
+        status: 'COMMITTED',
+        createdAt: new Date().toISOString()
+      });
+    }
+
     transaction.set(paymentRef, cleanData(paymentData));
 
-    if (entitlementRef && params.systemPackage) {
+    // Create entitlement ONLY for completed/paid payments
+    if (!isPendingOrFailed && entitlementRef && params.systemPackage) {
       const entitlement = buildEntitlementPayload(
         entitlementRef.id,
         params.clientId,
@@ -323,125 +376,152 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       transaction.set(entitlementRef, cleanData(entitlement));
     }
 
-    // E. Client Upgrade/Renewal Logic
-
-    // Expire previous active package if renewing the same package or upgrading from previous package
-    const updatedPkgs = clientPackages.map((p: any) => {
-      if (p.status !== 'Active') return p;
-      if (params.isRenewal && p.packageName === params.packageType) {
-        return { ...p, status: 'Expired' };
-      }
-      if (params.isUpgradePayment && params.previousPackageName && p.packageName === params.previousPackageName) {
-        return { ...p, status: 'Expired' };
-      }
-      return p;
-    });
-
-    let newClientPackage: any = {
-      id: Math.random().toString(36).substr(2, 9),
-      packageName: params.packageType,
-      startDate: resolvedStartDateIso,
-      endDate: resolvedEndDate,
-      status: 'Active'
-    };
-
-    const pkgStr = (params.packageType || '').toLowerCase();
-    let inferredCategory: 'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults' | undefined;
-    if (pkgStr.includes('kids pro')) {
-      inferredCategory = 'Kids Pro';
-    } else if (pkgStr.includes('kids')) {
-      inferredCategory = 'Kids Only';
-    } else if (pkgStr.includes('junior advanced') || pkgStr.includes('juniors advanced') || pkgStr.includes('junior pro')) {
-      inferredCategory = 'Junior Advanced';
-    } else if (pkgStr.includes('junior')) {
-      inferredCategory = 'Junior Only';
-    } else if (pkgStr.includes('adult')) {
-      inferredCategory = 'Adults';
-    } else {
-      inferredCategory = 'Adults';
-    }
-
-    const clientUpdate: any = {
-      packageType: params.packageType,
-      startDate: resolvedStartDateIso,
-      status: params.isMemberOnHold ? 'Hold' : 'Active',
-      hasDiscount: !!params.discountType,
-      lastContactDate: new Date().toISOString(),
-      memberCategory: inferredCategory
-    };
-    
-    if (resolvedEndDate) {
-      clientUpdate.membershipExpiry = resolvedEndDate;
-    }
-
-    if (params.systemPackage) {
-      const isUnlimited = params.systemPackage.sessions === 0;
-      const sessions = params.systemPackage.sessions;
-      newClientPackage.sessionsTotal = isUnlimited ? 'unlimited' : sessions;
-      newClientPackage.sessionsRemaining = isUnlimited ? 'unlimited' : sessions;
-      clientUpdate.sessionsRemaining = isUnlimited ? 'unlimited' : sessions;
-    }
-
-    clientUpdate.packages = [...updatedPkgs, newClientPackage];
-
-    // Only overwrite assignedTo when a specific rep was explicitly selected
-    if (params.sales_rep_id) {
-      clientUpdate.assignedTo = params.sales_rep_id;
-    }
-    if (params.salesName) {
-      clientUpdate.salesName = params.salesName;
-    }
-    if (clientData.status === 'Lead') {
-      clientUpdate.stage = 'Converted';
-    }
-
-    // Award points on actual money collected (1 Point per 100 LE/EGP spent)
-    if (pointsEarned > 0 && walletSnap) {
-      const currentPoints = clientData.points || 0;
-      clientUpdate.points = currentPoints + pointsEarned;
-
-      // Update pointsWallet doc
-      let walletData: any;
-      if (walletSnap.exists()) {
-        walletData = walletSnap.data();
-        transaction.update(walletRef, {
-          balance: (walletData.balance || 0) + pointsEarned,
-          totalEarned: (walletData.totalEarned || 0) + pointsEarned,
-          lastUpdated: new Date().toISOString()
-        });
-      } else {
-        walletData = {
-          memberId: params.clientId,
-          balance: pointsEarned,
-          totalEarned: pointsEarned,
-          totalSpent: 0,
-          lastUpdated: new Date().toISOString()
-        };
-        transaction.set(walletRef, walletData);
-      }
-
-      // Log pointsTransaction
-      const txnRef = doc(collection(db, 'pointsTransactions'));
-      transaction.set(txnRef, {
-        memberId: params.clientId,
-        type: 'credit',
-        amount: pointsEarned,
-        reason: 'purchase',
-        description: `Earned from package purchase: ${params.packageType}`,
-        balanceBefore: walletSnap.exists() ? (walletData.balance || 0) : 0,
-        balanceAfter: (walletSnap.exists() ? (walletData.balance || 0) : 0) + pointsEarned,
-        createdBy: params.recordedByName || 'System',
-        createdAt: new Date().toISOString()
+    // E. Client Upgrade/Renewal Logic and Package Activation
+    if (!isPendingOrFailed) {
+      // Expire previous active package if renewing the same package or upgrading from previous package
+      const updatedPkgs = clientPackages.map((p: any) => {
+        if (p.status !== 'Active') return p;
+        if (params.isRenewal && p.packageName === params.packageType) {
+          return { ...p, status: 'Expired' };
+        }
+        if (params.isUpgradePayment && params.previousPackageName && p.packageName === params.previousPackageName) {
+          return { ...p, status: 'Expired' };
+        }
+        return p;
       });
-    }
 
-    transaction.update(clientRef, cleanData(clientUpdate));
+      let newClientPackage: any = {
+        id: Math.random().toString(36).substr(2, 9),
+        packageName: params.packageType,
+        startDate: resolvedStartDateIso,
+        endDate: resolvedEndDate,
+        status: 'Active',
+        amount: params.amount,
+        amountPaid: actualAmountPaid,
+        remainingBalance,
+        isPartial: remainingBalance > 0,
+        isComplimentary: params.isComplimentary || (params.amount === 0 && actualAmountPaid === 0)
+      };
+
+      const pkgStr = (params.packageType || '').toLowerCase();
+      let inferredCategory: 'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults' | undefined;
+      if (pkgStr.includes('kids pro')) {
+        inferredCategory = 'Kids Pro';
+      } else if (pkgStr.includes('kids')) {
+        inferredCategory = 'Kids Only';
+      } else if (pkgStr.includes('junior advanced') || pkgStr.includes('juniors advanced') || pkgStr.includes('junior pro')) {
+        inferredCategory = 'Junior Advanced';
+      } else if (pkgStr.includes('junior')) {
+        inferredCategory = 'Junior Only';
+      } else if (pkgStr.includes('adult')) {
+        inferredCategory = 'Adults';
+      } else {
+        inferredCategory = 'Adults';
+      }
+
+      const clientUpdate: any = {
+        packageType: params.packageType,
+        startDate: resolvedStartDateIso,
+        status: params.isMemberOnHold ? 'Hold' : 'Active',
+        hasDiscount: !!params.discountType,
+        lastContactDate: new Date().toISOString(),
+        memberCategory: inferredCategory
+      };
+
+      if (remainingBalance > 0) {
+        clientUpdate.hasOutstandingBalance = true;
+        clientUpdate.outstandingBalance = (clientData.outstandingBalance || 0) + remainingBalance;
+      }
+      
+      if (resolvedEndDate) {
+        clientUpdate.membershipExpiry = resolvedEndDate;
+      }
+
+      if (params.systemPackage) {
+        const isUnlimited = params.systemPackage.sessions === 0;
+        const sessions = params.systemPackage.sessions;
+        newClientPackage.sessionsTotal = isUnlimited ? 'unlimited' : sessions;
+        newClientPackage.sessionsRemaining = isUnlimited ? 'unlimited' : sessions;
+        clientUpdate.sessionsRemaining = isUnlimited ? 'unlimited' : sessions;
+      }
+
+      clientUpdate.packages = [...updatedPkgs, newClientPackage];
+
+      // Only overwrite assignedTo when a specific rep was explicitly selected
+      if (params.sales_rep_id) {
+        clientUpdate.assignedTo = params.sales_rep_id;
+      }
+      if (params.salesName) {
+        clientUpdate.salesName = params.salesName;
+      }
+      if (clientData.status === 'Lead') {
+        clientUpdate.stage = 'Converted';
+      }
+
+      // Award points on actual money collected (1 Point per 100 LE/EGP spent)
+      if (pointsEarned > 0 && walletSnap) {
+        const currentPoints = clientData.points || 0;
+        clientUpdate.points = currentPoints + pointsEarned;
+
+        // Update pointsWallet doc
+        let walletData: any;
+        if (walletSnap.exists()) {
+          walletData = walletSnap.data();
+          transaction.update(walletRef, {
+            balance: (walletData.balance || 0) + pointsEarned,
+            totalEarned: (walletData.totalEarned || 0) + pointsEarned,
+            lastUpdated: new Date().toISOString()
+          });
+        } else {
+          walletData = {
+            memberId: params.clientId,
+            balance: pointsEarned,
+            totalEarned: pointsEarned,
+            totalSpent: 0,
+            lastUpdated: new Date().toISOString()
+          };
+          transaction.set(walletRef, walletData);
+        }
+
+        // Log pointsTransaction
+        const txnRef = doc(collection(db, 'pointsTransactions'));
+        transaction.set(txnRef, {
+          memberId: params.clientId,
+          type: 'credit',
+          amount: pointsEarned,
+          reason: 'purchase',
+          description: `Earned from package purchase: ${params.packageType}`,
+          balanceBefore: walletSnap.exists() ? (walletData.balance || 0) : 0,
+          balanceAfter: (walletSnap.exists() ? (walletData.balance || 0) : 0) + pointsEarned,
+          createdBy: params.recordedByName || 'System',
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      transaction.update(clientRef, cleanData(clientUpdate));
+    } else {
+      // Pending/Failed payment: record payment intent, but DO NOT grant package or activate membership
+      const pendingClientUpdate: any = {
+        lastContactDate: new Date().toISOString(),
+        hasPendingPayment: true,
+        lastPendingPaymentId: paymentRef.id
+      };
+      if (params.sales_rep_id) {
+        pendingClientUpdate.assignedTo = params.sales_rep_id;
+      }
+      if (params.salesName) {
+        pendingClientUpdate.salesName = params.salesName;
+      }
+      transaction.update(clientRef, cleanData(pendingClientUpdate));
+    }
 
     // F. Comment Document
     const commentRef = doc(collection(db, 'clients', params.clientId, 'comments'));
     let commentMsg = '';
     const formattedStartDate = safeFormatDate(validPkgStart, 'd MMM yyyy');
-    if (params.isRenewal) {
+    if (isPendingOrFailed) {
+      commentMsg = `Payment ${params.paymentStatus}: "${params.packageType}". Amount: ${actualAmountPaid.toLocaleString()} LE. Service not activated pending confirmation.`;
+    } else if (params.isRenewal) {
       commentMsg = `Package renewed: "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${actualAmountPaid.toLocaleString()} LE.`;
     } else if (params.previousPackageName && params.isUpgradePayment) {
       commentMsg = `Package upgraded: "${params.previousPackageName}" → "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${actualAmountPaid.toLocaleString()} LE.`;
@@ -450,6 +530,9 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       }
     } else {
       commentMsg = `Payment recorded: "${params.packageType}" starting ${formattedStartDate}. Amount collected: ${actualAmountPaid.toLocaleString()} LE.`;
+    }
+    if (remainingBalance > 0 && !isPendingOrFailed) {
+      commentMsg += ` (Partial payment: ${actualAmountPaid.toLocaleString()} LE paid, ${remainingBalance.toLocaleString()} LE remaining balance).`;
     }
     transaction.set(commentRef, {
       text: commentMsg,
@@ -464,7 +547,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     ? `Renewed package "${params.packageType}" for ${params.clientName} (+${actualAmountPaid.toLocaleString()} LE)`
     : params.isUpgradePayment
     ? `Upgraded "${params.previousPackageName}" → "${params.packageType}" for ${params.clientName} (+${actualAmountPaid.toLocaleString()} LE)`
-    : `Recorded payment of ${actualAmountPaid.toLocaleString()} LE for ${params.clientName} (${params.packageType})`;
+    : `Recorded payment of ${actualAmountPaid.toLocaleString()} LE for ${params.clientName} (${params.packageType})${params.paymentStatus ? ` [Status: ${params.paymentStatus}]` : ''}`;
 
   await addAuditLog(logAction as 'CREATE' | 'UPDATE' | 'DELETE', 'PAYMENT', params.clientId, logDetails, params.recordedByName);
 };
