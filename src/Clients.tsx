@@ -1809,9 +1809,13 @@ export default function Clients() {
                 </div>
                 <div className="space-y-3">
                   <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.assigned_to')}</Label>
-                  <Select value={newMemberAssignedTo} onValueChange={(v) => setNewMemberAssignedTo(v || '')}>
+                  <Select value={newMemberAssignedTo || 'unassigned'} onValueChange={(v) => setNewMemberAssignedTo(v === 'unassigned' ? '' : (v || ''))}>
                     <SelectTrigger className="h-14 rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder={t('leads.assigned_to')} />
+                      <SelectValue placeholder={t('leads.assigned_to')}>
+                        {newMemberAssignedTo
+                          ? (users.find(u => u.id === newMemberAssignedTo)?.name || users.find(u => u.id === newMemberAssignedTo)?.email || newMemberAssignedTo)
+                          : t('leads.tabs.unassigned')}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
                       <SelectItem value="unassigned" className="rounded-xl py-3 px-4">{t('leads.tabs.unassigned')}</SelectItem>
@@ -4107,7 +4111,11 @@ export default function Clients() {
                           <Label className="text-sm font-semibold">Sales Representative</Label>
                           <Select value={upgradeSalesRep} onValueChange={(val) => val && setUpgradeSalesRep(val)}>
                             <SelectTrigger className="h-11 rounded-xl">
-                              <SelectValue placeholder="Select Sales Rep" />
+                              <SelectValue placeholder="Select Sales Rep">
+                                {upgradeSalesRep === 'unassigned'
+                                  ? 'Unassigned'
+                                  : (users.find(u => u.id === upgradeSalesRep)?.name || users.find(u => u.id === upgradeSalesRep)?.email || 'Select Sales Rep')}
+                              </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="unassigned">Unassigned</SelectItem>
@@ -4287,7 +4295,11 @@ export default function Clients() {
                       <Label className="text-sm font-semibold">Sales Representative</Label>
                       <Select value={renewSalesRep} onValueChange={(val) => val && setRenewSalesRep(val)}>
                         <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue placeholder="Select Sales Rep" />
+                          <SelectValue placeholder="Select Sales Rep">
+                            {renewSalesRep === 'unassigned'
+                              ? 'Unassigned'
+                              : (users.find(u => u.id === renewSalesRep)?.name || users.find(u => u.id === renewSalesRep)?.email || 'Select Sales Rep')}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned">Unassigned</SelectItem>
@@ -4536,7 +4548,11 @@ export default function Clients() {
                         <Label className="text-sm font-semibold">Sales Representative</Label>
                         <Select value={addPackageSalesRep} onValueChange={(val) => val && setAddPackageSalesRep(val)}>
                           <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Select Sales Rep" />
+                            <SelectValue placeholder="Select Sales Rep">
+                              {addPackageSalesRep === 'unassigned'
+                                ? 'Unassigned'
+                                : (users.find(u => u.id === addPackageSalesRep)?.name || users.find(u => u.id === addPackageSalesRep)?.email || 'Select Sales Rep')}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="unassigned">Unassigned</SelectItem>

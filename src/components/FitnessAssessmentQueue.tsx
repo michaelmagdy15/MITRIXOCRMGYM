@@ -228,7 +228,11 @@ export function FitnessAssessmentQueue({ currentUser, coaches }: FitnessAssessme
                 <label className="text-sm font-medium">Select Trainer</label>
                 <Select value={assignCoachId} onValueChange={(val: any) => setAssignCoachId(val || '')}>
                   <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Choose a trainer" />
+                    <SelectValue placeholder="Choose a trainer">
+                      {assignCoachId
+                        ? (coaches.find(c => (c.userId || c.id) === assignCoachId)?.name || 'Choose a trainer')
+                        : 'Choose a trainer'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {coaches.filter(c => c.active).map(c => (

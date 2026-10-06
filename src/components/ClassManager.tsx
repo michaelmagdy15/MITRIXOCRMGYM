@@ -1532,7 +1532,9 @@ export const ClassManager: React.FC = () => {
                   }}
                 >
                   <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Select coach" />
+                    <SelectValue placeholder="Select coach">
+                      {instructorId ? (coaches.find(item => item.id === instructorId)?.name || 'Select coach') : 'Select coach'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {coaches.map(c => (
