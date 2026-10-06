@@ -11,9 +11,10 @@ This guide provides clear, step-by-step instructions on how to use every feature
 Inzan Athletics CRM is an all-in-one gym management platform that connects your front desk, sales team, coaches, nutritionists, and members into one easy-to-use system. 
 
 ### Why Does It Matter?
-- **One Member, One Profile:** No more duplicate records or lost paper forms. A member's payments, package balances, class bookings, attendance, and fitness assessments are stored in a single master profile.
+- **One Member, One Profile:** No more duplicate records or lost paper forms. A member's payments, package balances, class bookings, attendance, fitness assessments, and complaints are stored in a single master profile.
 - **Fair & Automatic Bookings:** Classes and personal training (PT) sessions respect real capacities. If a class is full, members join a fair first-come, first-served waitlist that automatically promotes them when a spot opens up.
 - **Accurate Financials:** Every sale, partial payment, and discount is tracked down to the exact pound collected. Cash drawers balance cleanly at the end of every shift with zero guesswork.
+- **Accountability & Audit:** Every critical action (refunds, cancellations, balance overrides, and date extensions) is logged permanently with timestamps and reasons.
 
 ---
 
@@ -56,7 +57,7 @@ Selling a package automatically updates the client profile and unlocks their boo
 
 1. Click **Payments** in the sidebar, then click **Record Payment** (or click **New Payment** directly on a member’s profile).
 2. **Select the Member:** Search and pick the client.
-   - *Pre-Payment Check:* Ensure the member has a full name, valid Egyptian mobile number, and National ID/Passport on file. If missing, a warning will prompt you to complete these fields first.
+   - *Pre-Payment Gate:* Ensure the member has a full name, valid Egyptian mobile number (`+201...`), and National ID/Passport on file. If missing, a warning will prompt you to complete these fields first.
 3. **Choose the Package:** Select from the category tabs:
    - **Gym Memberships** (Monthly, Quarterly, Annual access)
    - **Personal Training (PT)** (Private 1-on-1, Partner, or Group packages)
@@ -140,19 +141,132 @@ Front Desk cashiers close out their shifts with complete accounting transparency
 
 ---
 
+### Workflow 7: Member Complaints & SLA Case Management (PRD §16)
+Ensure customer service inquiries, facility issues, and feedback are resolved promptly.
+
+1. Open the member's profile in **Clients** or navigate to **Customer Support**.
+2. Click **New Case / Complaint**.
+3. Select the **Category**:
+   - `Complaint` (Staff, facility, hygiene)
+   - `Refund Request` (Financial escalations)
+   - `Coach Issue` / `Class Issue` (Training-related)
+   - `Membership Issue` (Freeze, transfer, renewals)
+4. Set **Priority** (`Low`, `Medium`, `High`, `Urgent`). The system sets an automatic **SLA Resolution Deadline**.
+5. Assign to a department head (e.g., *Fitness Manager*, *Operations Lead*).
+6. Once resolved, document the resolution notes and click **Mark as Resolved**. The CEO and management can audit open and overdue cases on the management dashboard.
+
+---
+
+### Workflow 8: Lost & Found Item Logging (PRD §7)
+Track misplaced member items transparently at the front desk.
+
+1. Click **Front Desk** > **Lost & Found**.
+2. Click **Log Found Item**.
+3. Enter item description, location found (e.g. *Cardio Area*, *Locker Room 2*), date/time found, and staff name.
+4. When a member claims the item:
+   - Click **Claim Item**.
+   - Search and select the claiming member.
+   - Verify their identity and click **Confirm Return**.
+5. The item status transitions from `Found` to `Returned`, logging an immutable record of who handed it over.
+
+---
+
+### Workflow 9: Nutrition Consultations & Confidential Notes (PRD §6.5, §11)
+Manage dietary consultations while maintaining strict clinical health privacy.
+
+1. Click **Nutrition** in the navigation sidebar.
+2. **Setting Availability:** Nutritionists define their weekly consultation hours and appointment lengths (e.g. 30 or 45 minutes).
+3. **Booking an Appointment:** Select client, service type, and available slot. The system’s collision engine guarantees no two clients can reserve the same slot.
+4. **Recording Private Consultation Notes:**
+   - Open the member’s appointment card and enter diet plans, macro calculations, body composition metrics, and confidential health observations.
+   - Click **Save Notes**.
+   - *Privacy Protection:* The system locks these notes in Firestore rules. Only the author nutritionist and the gym CEO can access these clinical records; they are strictly hidden from Front Desk and other coaches.
+
+---
+
+### Workflow 10: Fitness Assessments, Session Ratings & Package Freezes (PRD §6.4, §9)
+Enable members to request evaluations, review workouts, and freeze memberships within policy.
+
+1. **Submitting an Assessment Request:**
+   - A member or front-desk staff opens **Fitness Assessments** and clicks **Request Assessment**.
+   - Input preferred coach, available date/time, training goals, and existing injuries.
+   - The Fitness Manager reviews the queue and assigns the assessment to the coach.
+2. **Member Session Ratings:**
+   - After a PT session is completed, the member receives a prompt in their app to rate the session from **1 to 5 stars** with optional comments.
+   - Ratings aggregate into coach performance scorecards visible on the manager dashboard.
+3. **Package Freeze Requests (Max 7 Days for PT):**
+   - Members requesting a medical or travel freeze submit a request in **My Membership** > **Request Freeze**.
+   - System validates the freeze duration against the package limit (maximum 7 consecutive days).
+   - Once approved, the package expiration date extends automatically by the exact freeze duration, and bookings are temporarily paused.
+
+---
+
+### Workflow 11: Inventory Receiving & Retail Sales (PRD §24)
+Manage gym gear, boxing gloves, apparel, and supplements without stock leakage.
+
+1. Click **Inventory** in the sidebar.
+2. **Receiving New Stock:**
+   - Click **Receive Shipment**.
+   - Select product (e.g. *Inzan 12oz Pro Gloves*), enter supplier name, purchase order reference, and quantity received.
+   - Stock increments atomically and clears any `LOW_STOCK` warnings.
+3. **Retail POS Sales:**
+   - When selling an item at the front desk, select the product in the checkout window.
+   - The system verifies available quantity. If stock is 0, the system rejects the transaction to prevent overselling.
+   - Upon payment completion, stock decrements automatically.
+4. **Low Stock Alerts:** Items whose quantity drops below their configured minimum threshold are automatically flagged with a **Yellow Low Stock** badge.
+
+---
+
+### Workflow 12: Daily Staff Checklists & Timeliness KPIs (PRD §18.2)
+Ensure facility cleanliness, opening procedures, and closing checks are performed on schedule.
+
+1. Click **Tasks** in the sidebar.
+2. The system automatically populates the day’s recurring checklist from templates:
+   - **Opening Checklist** (Due 06:30 AM: Unlock facility, sound system, AC check)
+   - **Equipment Inspection** (Due 12:00 PM: Boxing ring ropes, bag tension, treadmill check)
+   - **Cash Count** (Due 03:00 PM: Shift handover cash count)
+   - **Closing Checklist** (Due 11:30 PM: Lock gates, lights off, final drawer settlement)
+3. Staff check off items as they complete them.
+4. If a task is checked off past its due time, it is marked **Completed Overdue**.
+5. Managers can view the **Staff KPI Scorecard** showing the percentage of tasks completed and timeliness rates per employee.
+
+---
+
+### Workflow 13: Equipment Register & Maintenance Tracking (PRD §24)
+Track gym assets, routine maintenance schedules, and book value depreciation.
+
+1. Click **Settings** > **Equipment Register**.
+2. **Registering New Equipment:**
+   - Click **Add Equipment**.
+   - Enter serial number, brand, purchase date, purchase price, salvage value, and useful life (in years).
+   - Enter `Service Interval Days` (e.g. 90 days for quarterly service).
+3. **Straight-Line Depreciation:**
+   - The system automatically computes annual depreciation and current book value based on elapsed years.
+4. **Maintenance Due Alerts:**
+   - When an asset reaches its `nextServiceDueDate`, the status turns to **Orange Maintenance Due**.
+   - Facility staff schedule the service, record parts replaced and service costs, and enter the next due date to return the equipment to **Green Operational** status.
+
+---
+
 ## 4. Key Features Breakdown
 
 | Module / Feature | Where to Find It | What It Does & How to Use It |
 |---|---|---|
-| **Live Front Desk Dashboard** | Click **Front Desk** | Displays today's real-time gym traffic: expected check-ins, PT sessions, classes, and cashier shift totals. |
-| **360° Member Directory** | Click **Clients** | Search any member to view their complete history: personal details, package expiry, session balances, payments, attendance history, and notes. |
-| **Sales CRM & Pipeline** | Click **Leads** | Visual kanban board tracking prospective members from first contact to signed membership with follow-up task reminders. |
-| **Class Scheduler & Rosters** | Click **Classes** | Create and publish weekly classes, manage in-studio capacity, view confirmed attendees, and manage waitlists. |
+| **Live Front Desk Dashboard** | Click **Front Desk** | Real-time gym traffic: today's check-ins, scheduled PT sessions, classes, and cashier shift summaries. |
+| **360° Member Directory** | Click **Clients** | View comprehensive member profiles: personal details, package expiry, session balances, payments, attendance history, notes, and complaints. |
+| **Sales CRM & Pipeline** | Click **Leads** | Visual kanban board tracking prospective members from inquiry to signed membership with follow-up task reminders. |
+| **Class Scheduler & Rosters** | Click **Classes** | Create and publish weekly classes, manage capacity, view confirmed attendees, and manage waitlists. |
 | **Personal Training (PT)** | Click **Private Sessions** | Manage trainer availability, schedule 1-on-1, partner, or small group sessions, and track session token deductions. |
 | **Nutrition Consultations** | Click **Nutrition** | Book private consultation appointments with nutritionists and maintain confidential dietary and assessment notes. |
-| **Payments & POS** | Click **Payments** | Record cash, credit card, bank transfer, and Instapay sales; issue receipts; and handle partial payments with balance tracking. |
+| **Customer Service & Complaints** | Click **Support** / **Clients** | Log member feedback, set SLA deadlines, assign department owners, and track resolution notes. |
+| **Lost & Found Logging** | Click **Front Desk** > **Lost & Found** | Log misplaced items, record storage location, verify claimant identity, and track returned items. |
+| **Inventory & Consumables** | Click **Inventory** | Track stock quantities, record supplier shipments, prevent overselling, and monitor low-stock warnings. |
+| **Staff Tasks & Checklists** | Click **Tasks** | Daily opening/closing checklists with automated timeliness and completion rate KPI scorecards. |
+| **Equipment Register** | Click **Settings** > **Equipment** | Track facility assets, schedule preventative maintenance, and calculate GAAP straight-line depreciation. |
+| **Payments & POS** | Click **Payments** | Record cash, credit card, bank transfer, and Instapay sales; issue receipts; and handle partial payments. |
+| **Shift Reconciliation** | Click **Front Desk** > **Shift Reconciliation** | Balance physical drawer cash and card terminals against expected sales, flag variances, and export RFC 4180 CSV reports. |
 | **Manager Approvals** | Click **Approvals** | Central queue for managers to review and approve refund requests, instructor class cancellations, and date adjustments. |
-| **Immutable Audit Trail** | Click **Settings** > **Audit Trail** | An unalterable activity log showing who performed every critical action (payments, refunds, status changes, date overrides) with timestamps and reasons. |
+| **Immutable Audit Trail** | Click **Settings** > **Audit Trail** | Unalterable activity log showing who performed every critical action with timestamps and mandatory reasons. |
 | **Member Mobile Portal** | Member App / Mobile Web | Self-service app where members view their digital QR card, book classes/PT, join waitlists, and export bookings to Google Calendar. |
 
 ---
@@ -182,6 +296,10 @@ Front Desk cashiers close out their shifts with complete accounting transparency
 ### Q5: Who can read confidential nutrition consultation notes?
 - **Why this happens:** Strict client health privacy is enforced at the database level.
 - **How to fix it:** Only the specific nutritionist who created the consultation note and the gym CEO / Super Admin have permission to view or edit clinical nutrition notes. Front Desk, Sales, and other coaches cannot view these records.
+
+### Q6: What happens if the internet disconnects at the front desk?
+- **Why this happens:** Temporary ISP drops or local network glitches.
+- **How to fix it:** Inzan Athletics CRM features persistent multi-tab local caching. You can continue looking up member records, viewing schedules, and checking in members. Once connection is restored, the system synchronizes all queued operations smoothly with the central database.
 
 ---
 
