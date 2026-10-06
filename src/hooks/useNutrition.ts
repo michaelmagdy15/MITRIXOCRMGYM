@@ -10,7 +10,8 @@ import {
   getDocs,
   getDoc,
   where,
-  orderBy
+  orderBy,
+  runTransaction
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
@@ -21,6 +22,10 @@ import {
   BodyMetrics
 } from '../types/nutrition';
 import { addAuditLog } from '../services/auditService';
+import {
+  generateSlotBucketKeys,
+  validateNutritionSlotRules
+} from '../utils/nutritionBooking';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -136,24 +141,68 @@ export function useNutritionists() {
   return { profiles, loading, error };
 }
 
-// Action: Book a new nutrition appointment
+// Action: Book a new nutrition appointment with atomic concurrency slot locks
 export async function bookAppointment(
   data: Omit<NutritionAppointment, 'id' | 'createdAt' | 'updatedAt'>
 ): Promise<string> {
   try {
-    await validateNutritionSlot(db, data.nutritionistId, data.date, data.startTime, data.endTime);
-
+    const bucketKeys = generateSlotBucketKeys(data.nutritionistId, data.date, data.startTime, data.endTime);
     const newRef = doc(collection(db, 'nutritionAppointments'));
     const now = new Date().toISOString();
-    const appointmentData: NutritionAppointment = {
-      ...data,
-      id: newRef.id,
-      status: data.status || 'Scheduled',
-      createdAt: now,
-      updatedAt: now
-    };
 
-    await setDoc(newRef, appointmentData);
+    await runTransaction(db, async (transaction) => {
+      // 1. Validate nutritionist profile and working hours
+      const profileRef = doc(db, 'nutritionistProfiles', data.nutritionistId);
+      const profileSnap = await transaction.get(profileRef);
+      if (!profileSnap.exists()) {
+        throw new Error('Nutritionist profile not found.');
+      }
+      const profile = profileSnap.data() as NutritionistProfile;
+      validateNutritionSlotRules({
+        nutritionistId: data.nutritionistId,
+        date: data.date,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        schedule: profile.schedule,
+        active: profile.active
+      });
+
+      // 2. Concurrency check: read all deterministic slot reservation bucket docs
+      for (const key of bucketKeys) {
+        const lockRef = doc(db, 'nutritionSlotReservations', key);
+        const lockSnap = await transaction.get(lockRef);
+        if (lockSnap.exists()) {
+          const lockData = lockSnap.data();
+          if (lockData.appointmentId && lockData.active !== false) {
+            throw new Error(`Time slot conflict: Selected time (${data.startTime} - ${data.endTime}) is already reserved for Dr. ${data.nutritionistName || 'this nutritionist'}. Please select another time.`);
+          }
+        }
+      }
+
+      // 3. Reserve all bucket locks atomically
+      for (const key of bucketKeys) {
+        const lockRef = doc(db, 'nutritionSlotReservations', key);
+        transaction.set(lockRef, {
+          appointmentId: newRef.id,
+          nutritionistId: data.nutritionistId,
+          date: data.date,
+          timeBucket: key.split('_').pop() || '',
+          clientId: data.clientId,
+          active: true,
+          createdAt: now
+        });
+      }
+
+      // 4. Create appointment record
+      const appointmentData: NutritionAppointment = {
+        ...data,
+        id: newRef.id,
+        status: data.status || 'Scheduled',
+        createdAt: now,
+        updatedAt: now
+      };
+      transaction.set(newRef, appointmentData);
+    });
 
     await addAuditLog(
       'CREATE',
@@ -178,15 +227,36 @@ export async function updateAppointmentStatus(
   try {
     const ref = doc(db, 'nutritionAppointments', appointmentId);
     const now = new Date().toISOString();
-    const updates: Partial<NutritionAppointment> = {
-      status,
-      updatedAt: now
-    };
-    if (reason) {
-      updates.cancellationReason = reason;
-    }
 
-    await updateDoc(ref, updates);
+    await runTransaction(db, async (transaction) => {
+      const appSnap = await transaction.get(ref);
+      if (!appSnap.exists()) {
+        throw new Error('Appointment not found.');
+      }
+      const appData = appSnap.data() as NutritionAppointment;
+
+      // Release reservation locks if appointment is cancelled or marked no-show
+      if (status === 'Cancelled' || status === 'No-show') {
+        try {
+          const bucketKeys = generateSlotBucketKeys(appData.nutritionistId, appData.date, appData.startTime, appData.endTime);
+          for (const key of bucketKeys) {
+            const lockRef = doc(db, 'nutritionSlotReservations', key);
+            transaction.delete(lockRef);
+          }
+        } catch {
+          // If times were somehow malformed, proceed with status update
+        }
+      }
+
+      const updates: Partial<NutritionAppointment> = {
+        status,
+        updatedAt: now
+      };
+      if (reason) {
+        updates.cancellationReason = reason;
+      }
+      transaction.update(ref, updates);
+    });
 
     await addAuditLog(
       'UPDATE',
@@ -365,24 +435,89 @@ export function useNutrition() {
   const updateAppointment = useCallback(async (id: string, updates: Partial<NutritionAppointment>) => {
     try {
       const ref = doc(db, 'nutritionAppointments', id);
+      const isReschedule = Boolean(updates.date || updates.startTime || updates.endTime || updates.nutritionistId);
 
-      // Validate slot if reschedule changes time, date, or nutritionist
-      if (updates.date || updates.startTime || updates.endTime || updates.nutritionistId) {
-        const currentSnap = await getDoc(ref);
-        const current = currentSnap.exists() ? (currentSnap.data() as NutritionAppointment) : null;
-        const nutritionistId = updates.nutritionistId || current?.nutritionistId || '';
-        const date = updates.date || current?.date || '';
-        const startTime = updates.startTime || current?.startTime || '';
-        const endTime = updates.endTime || current?.endTime || '';
-        if (nutritionistId && date && startTime && endTime) {
-          await validateNutritionSlot(db, nutritionistId, date, startTime, endTime, id);
-        }
+      if (isReschedule) {
+        await runTransaction(db, async (transaction) => {
+          const currentSnap = await transaction.get(ref);
+          if (!currentSnap.exists()) {
+            throw new Error('Appointment not found');
+          }
+          const current = currentSnap.data() as NutritionAppointment;
+
+          const targetNutritionistId = updates.nutritionistId || current.nutritionistId;
+          const targetDate = updates.date || current.date;
+          const targetStartTime = updates.startTime || current.startTime;
+          const targetEndTime = updates.endTime || current.endTime;
+
+          // 1. Validate target profile & schedule
+          const profileRef = doc(db, 'nutritionistProfiles', targetNutritionistId);
+          const profileSnap = await transaction.get(profileRef);
+          if (profileSnap.exists()) {
+            const profile = profileSnap.data() as NutritionistProfile;
+            validateNutritionSlotRules({
+              nutritionistId: targetNutritionistId,
+              date: targetDate,
+              startTime: targetStartTime,
+              endTime: targetEndTime,
+              schedule: profile.schedule,
+              active: profile.active
+            });
+          }
+
+          // 2. Check conflict on new buckets
+          const newBucketKeys = generateSlotBucketKeys(targetNutritionistId, targetDate, targetStartTime, targetEndTime);
+          for (const key of newBucketKeys) {
+            const lockRef = doc(db, 'nutritionSlotReservations', key);
+            const lockSnap = await transaction.get(lockRef);
+            if (lockSnap.exists()) {
+              const lockData = lockSnap.data();
+              if (lockData.appointmentId && lockData.appointmentId !== id && lockData.active !== false) {
+                throw new Error(`Time slot conflict: Selected time (${targetStartTime} - ${targetEndTime}) is already booked for this nutritionist.`);
+              }
+            }
+          }
+
+          // 3. Delete old bucket keys
+          try {
+            const oldBucketKeys = generateSlotBucketKeys(current.nutritionistId, current.date, current.startTime, current.endTime);
+            for (const key of oldBucketKeys) {
+              const lockRef = doc(db, 'nutritionSlotReservations', key);
+              transaction.delete(lockRef);
+            }
+          } catch {
+            // In case old times were invalid
+          }
+
+          // 4. Set new bucket keys
+          const now = new Date().toISOString();
+          for (const key of newBucketKeys) {
+            const lockRef = doc(db, 'nutritionSlotReservations', key);
+            transaction.set(lockRef, {
+              appointmentId: id,
+              nutritionistId: targetNutritionistId,
+              date: targetDate,
+              timeBucket: key.split('_').pop() || '',
+              clientId: current.clientId,
+              active: true,
+              createdAt: now
+            });
+          }
+
+          // 5. Update appointment doc
+          transaction.update(ref, {
+            ...updates,
+            status: updates.status || 'Rescheduled',
+            updatedAt: now
+          });
+        });
+      } else {
+        await updateDoc(ref, {
+          ...updates,
+          updatedAt: new Date().toISOString()
+        });
       }
 
-      await updateDoc(ref, {
-        ...updates,
-        updatedAt: new Date().toISOString()
-      });
       await addAuditLog(
         'UPDATE',
         'SESSION',
@@ -397,7 +532,23 @@ export function useNutrition() {
 
   const deleteAppointment = useCallback(async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'nutritionAppointments', id));
+      const ref = doc(db, 'nutritionAppointments', id);
+      await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(ref);
+        if (snap.exists()) {
+          const app = snap.data() as NutritionAppointment;
+          try {
+            const bucketKeys = generateSlotBucketKeys(app.nutritionistId, app.date, app.startTime, app.endTime);
+            for (const key of bucketKeys) {
+              const lockRef = doc(db, 'nutritionSlotReservations', key);
+              transaction.delete(lockRef);
+            }
+          } catch {
+            // Ignore key generation error on delete
+          }
+          transaction.delete(ref);
+        }
+      });
       await addAuditLog('DELETE', 'SESSION', id, `Deleted nutrition appointment ${id}`);
     } catch (err) {
       console.error("Error deleting appointment:", err);

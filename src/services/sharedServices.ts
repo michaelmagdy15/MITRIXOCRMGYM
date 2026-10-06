@@ -12,6 +12,7 @@ import {
 } from '../types';
 import { cleanData } from '../utils';
 import { addAuditLog } from './auditService';
+import { updatePTSessionStatus } from './ptSessionService';
 
 // Payment Service
 export const addPayment = async (payment: Omit<Payment, 'id'>) => {
@@ -65,5 +66,13 @@ export const addPrivateSession = async (session: Omit<PrivateSession, 'id'>) => 
 };
 
 export const updatePrivateSession = async (id: SessionId, updates: Partial<PrivateSession>) => {
-  await updateDoc(doc(db, 'sessions', id), cleanData(updates));
+  if (updates.status && ['Scheduled', 'Attended', 'No Show', 'Cancelled'].includes(updates.status)) {
+    await updatePTSessionStatus(id, updates.status as any, {
+      reason: (updates as any).cancellationReason
+    });
+  }
+  const { status: _, ...otherUpdates } = updates;
+  if (Object.keys(otherUpdates).length > 0) {
+    await updateDoc(doc(db, 'sessions', id), cleanData(otherUpdates));
+  }
 };

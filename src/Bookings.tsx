@@ -47,6 +47,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { processPaymentTransaction } from './services/transactionService';
+import { updatePTSessionStatus } from './services/ptSessionService';
 import { useOperationId } from './hooks/useOperationId';
 import { Package, Branch } from './types';
 import { ClassBooking, BookingStatus } from './types/class';
@@ -451,13 +452,13 @@ export default function Bookings() {
   // =========================================================================
   const handleUpdatePtStatus = async (sessionId: string, newStatus: 'Scheduled' | 'Attended' | 'Cancelled' | 'No Show') => {
     try {
-      await updateDoc(doc(db, 'sessions', sessionId), {
-        status: newStatus,
-        updatedAt: new Date().toISOString()
+      const result = await updatePTSessionStatus(sessionId, newStatus, {
+        authorName: (currentUser as any)?.name || 'Staff'
       });
-    } catch (err) {
+      alert(`PT Session updated to ${newStatus}. ${result.reason}`);
+    } catch (err: any) {
       console.error("Error updating PT session status:", err);
-      alert("Failed to update session status.");
+      alert(err?.message || "Failed to update session status.");
     }
   };
 

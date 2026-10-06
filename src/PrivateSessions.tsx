@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { PTPackageRecord, Branch } from './types';
+import { updatePTSessionStatus } from './services/ptSessionService';
 import { 
   MapPin, 
   Users as TrainerIcon, 
@@ -85,9 +86,15 @@ export default function PrivateSessions() {
     }
   };
 
-  const handleUpdateStatus = (session: PTPackageRecord, status: PTPackageRecord['status']) => {
-    // updatePrivateSession atomically handles package balance adjustment (deduct/restore) on the client doc and active package
-    updatePrivateSession(session.id, { status });
+  const handleUpdateStatus = async (session: PTPackageRecord, status: PTPackageRecord['status']) => {
+    try {
+      await updatePTSessionStatus(session.id, status, {
+        authorName: (currentUser as any)?.name || 'Staff'
+      });
+    } catch (err: any) {
+      console.error("Error updating PT session status:", err);
+      alert(err?.message || "Failed to update session status.");
+    }
   };
 
   const sessionsForSelectedDate = privateSessions

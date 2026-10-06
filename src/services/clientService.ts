@@ -13,6 +13,7 @@ import { Client, ClientId, SessionId } from '../types';
 import { cleanData } from '../utils';
 import { normalizeEgyptPhone } from '../utils/phoneUtils';
 import { addAuditLog } from './auditService';
+import { updatePTSessionStatus } from './ptSessionService';
 
 export const generateMemberId = async (): Promise<string> => {
   const counterRef = doc(db, 'counters', 'clients');
@@ -172,47 +173,7 @@ export const recordSessionAttendance = async (
   client: Client,
   authorName: string
 ): Promise<void> => {
-  const batch = writeBatch(db);
-  const sessionRef = doc(db, 'sessions', sessionId);
-
-  // 1. Update session status
-  batch.update(sessionRef, { status });
-
-  // 2. Handle session deduction logic if attended — skip for unlimited packages
-  if (status === 'Attended' && 'sessionsRemaining' in client && typeof client.sessionsRemaining === 'number') {
-    const clientRef = doc(db, 'clients', clientId);
-    batch.update(clientRef, { 
-      sessionsRemaining: client.sessionsRemaining - 1,
-      lastContactDate: new Date().toISOString()
-    });
-
-    // 3. Automatically log comment
-    const commentRef = doc(collection(db, 'clients', clientId, 'comments'));
-    batch.set(commentRef, {
-      text: `Private Session Attended.`,
-      date: new Date().toISOString(),
-      author: authorName
-    });
-  } else if (status === 'Attended' && client.sessionsRemaining === 'unlimited') {
-    // Unlimited package: still log attendance comment, just don't decrement
-    const clientRef = doc(db, 'clients', clientId);
-    batch.update(clientRef, { lastContactDate: new Date().toISOString() });
-    const commentRef = doc(collection(db, 'clients', clientId, 'comments'));
-    batch.set(commentRef, {
-      text: `Private Session Attended (Unlimited Package).`,
-      date: new Date().toISOString(),
-      author: authorName
-    });
-  }
-
-  await batch.commit();
-
-  await addAuditLog(
-    'UPDATE', 
-    'SESSION', 
-    sessionId, 
-    `Updated session status to ${status} for client ${client.name}`
-  );
+  await updatePTSessionStatus(sessionId, status, { authorName });
 };
 
 export const deleteMultipleClients = async (ids: ClientId[]): Promise<void> => {

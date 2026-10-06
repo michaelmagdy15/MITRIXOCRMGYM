@@ -40,20 +40,27 @@ export const processNoShows = onSchedule("*/15 * * * *", async (event) => {
       if (unverifiedBookingsSnapshot.empty) continue;
 
       const batch = tenantDb.batch();
+      const newlyMarkedNoShows: string[] = [];
       
       for (const bookingDoc of unverifiedBookingsSnapshot.docs) {
         // Mark as no-show
-        batch.update(bookingDoc.ref, { status: "no-show" });
+        batch.update(bookingDoc.ref, { 
+          status: "no-show",
+          noShowAt: new Date().toISOString()
+        });
         noShowCount++;
 
         // Add a strike to the member and enforce lockout if strikes exceed threshold
         const memberId = bookingDoc.data().memberId;
         if (memberId) {
+          newlyMarkedNoShows.push(memberId);
           const clientRef = tenantDb.collection("clients").doc(memberId);
           const clientDoc = await clientRef.get();
           const currentStrikes = (clientDoc.data()?.noShowStrikes || 0) + 1;
+          const currentLegacyStrikes = (clientDoc.data()?.strikes || 0) + 1;
           const updateData: Record<string, any> = {
             noShowStrikes: currentStrikes,
+            strikes: currentLegacyStrikes,
             lastNoShowAt: new Date().toISOString()
           };
           if (currentStrikes >= 3) {
@@ -64,6 +71,12 @@ export const processNoShows = onSchedule("*/15 * * * *", async (event) => {
           }
           batch.update(clientRef, updateData);
         }
+      }
+
+      if (newlyMarkedNoShows.length > 0) {
+        const currentScheduleNoShows: string[] = Array.isArray(scheduleDoc.data()?.noShows) ? scheduleDoc.data()?.noShows : [];
+        const combinedNoShows = Array.from(new Set([...currentScheduleNoShows, ...newlyMarkedNoShows]));
+        batch.update(scheduleDoc.ref, { noShows: combinedNoShows });
       }
       
       await batch.commit();

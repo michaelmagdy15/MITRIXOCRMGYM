@@ -30,6 +30,7 @@ import {
   AppError
 } from './src/utils/bookingCutoff.js';
 import { desktopSyncRouter } from './src/routes/desktopSync.js';
+import { generateSlotBucketKeys, validateNutritionSlotRules } from './src/utils/nutritionBooking.js';
 import {
   defaultFirebaseConfig,
   strikeCrmConfig,
@@ -3004,7 +3005,7 @@ async function startServer() {
   // 5. Sends high-priority push notifications and systemNotifications apologizing to members and confirming the token refund
   app.post("/api/classes/cancel", requireAuth, async (req: any, res: any) => {
     try {
-      const { classId, reason } = req.body;
+      const { classId, reason, approvalRequestId } = req.body;
       if (!classId) {
         return res.status(400).json({ error: "Missing classId" });
       }
@@ -3016,6 +3017,8 @@ async function startServer() {
       if (!isStaff) {
         return res.status(403).json({ error: "Only staff or coaches can cancel classes" });
       }
+
+      const isManagerOrAdmin = ['manager', 'admin', 'super_admin', 'crm_admin'].includes(String(requesterRole || '').toLowerCase());
 
       const classRef = db.collection("classSchedules").doc(classId);
       const classDoc = await classRef.get();
@@ -3032,6 +3035,58 @@ async function startServer() {
       const waitlist: string[] = Array.isArray(classData.waitlist) ? classData.waitlist : [];
       const cancelReason = reason?.trim() || "Instructor scheduling update / Facility maintenance";
       const cancelledAt = new Date().toISOString();
+
+      if (!isManagerOrAdmin) {
+        // Coach/Instructor cancellation requires manager approval per PRD §10, §20, §32
+        const approvalReq = await db.collection("approvalRequests").add({
+          type: 'class_cancellation',
+          status: 'pending',
+          requesterId: req.user?.uid || '',
+          requesterName: requesterDoc.data()?.name || req.user?.email || "Instructor",
+          requesterRole: String(requesterRole || 'coach'),
+          targetEntityId: classId,
+          targetEntityType: 'class',
+          details: {
+            classId,
+            className: classData.name || '',
+            date: classData.date || '',
+            startTime: classData.startTime || '',
+            instructorId: classData.instructorId || '',
+            attendeesCount: attendees.length,
+            waitlistCount: waitlist.length,
+            attendees,
+            waitlist
+          },
+          reason: cancelReason,
+          approverRole: 'manager',
+          createdAt: cancelledAt
+        });
+
+        await db.collection("auditLogs").add({
+          action: "REQUEST_CLASS_CANCELLATION",
+          entityType: 'CLASS',
+          entityId: classId,
+          details: `Instructor requested cancellation for class ${classData.name || classId} (${classData.date || ''}). Reason: ${cancelReason}. Sent for manager approval (Request ID: ${approvalReq.id}).`,
+          timestamp: cancelledAt,
+          userId: req.user?.uid || 'instructor',
+          userName: requesterDoc.data()?.name || req.user?.email || "Instructor"
+        });
+
+        return res.json({
+          status: 'PENDING_APPROVAL',
+          approvalRequestId: approvalReq.id,
+          message: 'Class cancellation request submitted for manager approval.'
+        });
+      }
+
+      if (approvalRequestId) {
+        await db.collection("approvalRequests").doc(approvalRequestId).update({
+          status: 'approved',
+          approvedBy: req.user?.uid || 'manager',
+          approvedAt: cancelledAt,
+          updatedAt: cancelledAt
+        });
+      }
 
       // Resolve attendee client documents and their push tokens / entitlements
       const memberRefunds: { clientId: string; name: string; phone: string; pushToken?: string }[] = [];
@@ -3225,6 +3280,316 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Classes Cancel] Error:", err);
       return res.status(500).json({ error: err.message || "Failed to cancel class" });
+    }
+  });
+
+  // ===============================================================
+  // NUTRITION BOOKING & CONCURRENCY ROUTES (PRD §6.5, §11, §13, §14, §25, §26)
+  // Enforces:
+  // 1. Authenticated actor & tenant isolation via getDbForRequest(req)
+  // 2. Deterministic slot reservation bucket locks to prevent double-booking
+  // 3. Nutritionist schedule working hours & active status validation
+  // ===============================================================
+
+  app.post('/api/nutrition/book', requireAuth, async (req: any, res: any) => {
+    try {
+      const {
+        clientId,
+        clientName,
+        clientPhone,
+        nutritionistId,
+        nutritionistName,
+        date,
+        startTime,
+        endTime,
+        notes,
+        status,
+        paymentStatus,
+        price
+      } = req.body;
+
+      if (!clientId || !nutritionistId || !date || !startTime || !endTime) {
+        return res.status(400).json({ error: 'clientId, nutritionistId, date, startTime, and endTime are required' });
+      }
+
+      const db = await getDbForRequest(req);
+      const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+      const requesterRole = requesterDoc.data()?.role || req.user?.role;
+      const isStaff = isStaffRole(requesterRole);
+
+      // Non-staff members can only book for themselves
+      if (!isStaff) {
+        const memberUid = req.user?.uid;
+        const clientDoc = await db.collection('clients').doc(clientId).get();
+        const clientData = clientDoc.data() || {};
+        const isOwner = clientId === memberUid || clientData.portalUserId === memberUid || clientData.memberId === memberUid;
+        if (!isOwner) {
+          return res.status(403).json({ error: 'Forbidden: You can only book nutrition appointments for yourself.' });
+        }
+      }
+
+      const bucketKeys = generateSlotBucketKeys(nutritionistId, date, startTime, endTime);
+      const nowIso = new Date().toISOString();
+      const appointmentRef = db.collection('nutritionAppointments').doc();
+
+      await db.runTransaction(async (transaction: any) => {
+        // 1. Validate nutritionist profile
+        const profRef = db.collection('nutritionistProfiles').doc(nutritionistId);
+        const profSnap = await transaction.get(profRef);
+        if (!profSnap.exists) {
+          throw new AppError('Nutritionist profile not found', 404);
+        }
+        const profData = profSnap.data();
+        validateNutritionSlotRules({
+          nutritionistId,
+          date,
+          startTime,
+          endTime,
+          schedule: profData.schedule,
+          active: profData.active
+        });
+
+        // 2. Check deterministic slot reservation locks
+        for (const key of bucketKeys) {
+          const lockRef = db.collection('nutritionSlotReservations').doc(key);
+          const lockSnap = await transaction.get(lockRef);
+          if (lockSnap.exists && lockSnap.data()?.active !== false) {
+            throw new AppError(`Time slot conflict: Selected time (${startTime} - ${endTime}) is already reserved for this nutritionist.`, 409);
+          }
+        }
+
+        // 3. Acquire reservation locks
+        for (const key of bucketKeys) {
+          const lockRef = db.collection('nutritionSlotReservations').doc(key);
+          transaction.set(lockRef, {
+            appointmentId: appointmentRef.id,
+            nutritionistId,
+            date,
+            timeBucket: key.split('_').pop() || '',
+            clientId,
+            active: true,
+            createdAt: nowIso
+          });
+        }
+
+        // 4. Create appointment document
+        transaction.set(appointmentRef, {
+          id: appointmentRef.id,
+          clientId,
+          clientName: clientName || 'Member',
+          clientPhone: clientPhone || '',
+          nutritionistId,
+          nutritionistName: nutritionistName || profData.name || 'Nutritionist',
+          date,
+          startTime,
+          endTime,
+          notes: notes || '',
+          status: status || 'Scheduled',
+          paymentStatus: paymentStatus || 'completed',
+          price: typeof price === 'number' ? price : 0,
+          bookedBy: req.user?.uid || 'portal',
+          createdAt: nowIso,
+          updatedAt: nowIso
+        });
+      });
+
+      // Audit log
+      await db.collection('auditLogs').add({
+        action: 'CREATE',
+        entityType: 'SESSION',
+        entityId: appointmentRef.id,
+        details: `Booked nutrition appointment for ${clientName || clientId} with ${nutritionistName || nutritionistId} on ${date} at ${startTime}`,
+        timestamp: nowIso,
+        userId: req.user?.uid || 'staff',
+        userName: requesterDoc.data()?.name || req.user?.email || 'User'
+      });
+
+      return res.json({
+        success: true,
+        appointmentId: appointmentRef.id,
+        message: 'Nutrition appointment successfully booked.'
+      });
+    } catch (err: any) {
+      console.error('[Nutrition Book] Error:', err);
+      const statusCode = err.statusCode || (err.message?.includes('conflict') ? 409 : 400);
+      return res.status(statusCode).json({ error: err.message || 'Failed to book nutrition appointment.' });
+    }
+  });
+
+  app.post('/api/nutrition/reschedule', requireAuth, async (req: any, res: any) => {
+    try {
+      const { appointmentId, newDate, newStartTime, newEndTime, reason } = req.body;
+      if (!appointmentId || !newDate || !newStartTime || !newEndTime) {
+        return res.status(400).json({ error: 'appointmentId, newDate, newStartTime, and newEndTime are required' });
+      }
+
+      const db = await getDbForRequest(req);
+      const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+      const requesterRole = requesterDoc.data()?.role || req.user?.role;
+      const isStaff = isStaffRole(requesterRole);
+      const nowIso = new Date().toISOString();
+
+      await db.runTransaction(async (transaction: any) => {
+        const appRef = db.collection('nutritionAppointments').doc(appointmentId);
+        const appSnap = await transaction.get(appRef);
+        if (!appSnap.exists) {
+          throw new AppError('Appointment not found', 404);
+        }
+        const appData = appSnap.data();
+
+        // Non-staff can only reschedule own appointment
+        if (!isStaff && appData.clientId !== req.user?.uid) {
+          const clientDoc = await db.collection('clients').doc(appData.clientId).get();
+          if (clientDoc.data()?.portalUserId !== req.user?.uid) {
+            throw new AppError('Forbidden: You can only reschedule your own appointments', 403);
+          }
+        }
+
+        // Validate nutritionist working hours on new date/time
+        const profRef = db.collection('nutritionistProfiles').doc(appData.nutritionistId);
+        const profSnap = await transaction.get(profRef);
+        if (profSnap.exists) {
+          validateNutritionSlotRules({
+            nutritionistId: appData.nutritionistId,
+            date: newDate,
+            startTime: newStartTime,
+            endTime: newEndTime,
+            schedule: profSnap.data()?.schedule,
+            active: profSnap.data()?.active
+          });
+        }
+
+        // Check new bucket locks
+        const newBucketKeys = generateSlotBucketKeys(appData.nutritionistId, newDate, newStartTime, newEndTime);
+        for (const key of newBucketKeys) {
+          const lockRef = db.collection('nutritionSlotReservations').doc(key);
+          const lockSnap = await transaction.get(lockRef);
+          if (lockSnap.exists && lockSnap.data()?.active !== false && lockSnap.data()?.appointmentId !== appointmentId) {
+            throw new AppError(`Time slot conflict: Selected time (${newStartTime} - ${newEndTime}) is already reserved.`, 409);
+          }
+        }
+
+        // Release old bucket locks
+        try {
+          const oldBucketKeys = generateSlotBucketKeys(appData.nutritionistId, appData.date, appData.startTime, appData.endTime);
+          for (const key of oldBucketKeys) {
+            const lockRef = db.collection('nutritionSlotReservations').doc(key);
+            transaction.delete(lockRef);
+          }
+        } catch {
+          // Ignore parse errors on old time
+        }
+
+        // Set new bucket locks
+        for (const key of newBucketKeys) {
+          const lockRef = db.collection('nutritionSlotReservations').doc(key);
+          transaction.set(lockRef, {
+            appointmentId,
+            nutritionistId: appData.nutritionistId,
+            date: newDate,
+            timeBucket: key.split('_').pop() || '',
+            clientId: appData.clientId,
+            active: true,
+            createdAt: nowIso
+          });
+        }
+
+        // Update appointment
+        transaction.update(appRef, {
+          date: newDate,
+          startTime: newStartTime,
+          endTime: newEndTime,
+          status: 'Rescheduled',
+          rescheduleReason: reason || '',
+          rescheduledAt: nowIso,
+          updatedAt: nowIso
+        });
+      });
+
+      // Audit log
+      await db.collection('auditLogs').add({
+        action: 'UPDATE',
+        entityType: 'SESSION',
+        entityId: appointmentId,
+        details: `Rescheduled nutrition appointment ${appointmentId} to ${newDate} at ${newStartTime}. Reason: ${reason || 'Not specified'}`,
+        timestamp: nowIso,
+        userId: req.user?.uid || 'staff',
+        userName: requesterDoc.data()?.name || req.user?.email || 'User'
+      });
+
+      return res.json({ success: true, appointmentId, message: 'Appointment rescheduled successfully.' });
+    } catch (err: any) {
+      console.error('[Nutrition Reschedule] Error:', err);
+      const statusCode = err.statusCode || (err.message?.includes('conflict') ? 409 : 400);
+      return res.status(statusCode).json({ error: err.message || 'Failed to reschedule appointment.' });
+    }
+  });
+
+  app.post('/api/nutrition/cancel', requireAuth, async (req: any, res: any) => {
+    try {
+      const { appointmentId, reason } = req.body;
+      if (!appointmentId) {
+        return res.status(400).json({ error: 'appointmentId is required' });
+      }
+
+      const db = await getDbForRequest(req);
+      const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+      const requesterRole = requesterDoc.data()?.role || req.user?.role;
+      const isStaff = isStaffRole(requesterRole);
+      const nowIso = new Date().toISOString();
+
+      await db.runTransaction(async (transaction: any) => {
+        const appRef = db.collection('nutritionAppointments').doc(appointmentId);
+        const appSnap = await transaction.get(appRef);
+        if (!appSnap.exists) {
+          throw new AppError('Appointment not found', 404);
+        }
+        const appData = appSnap.data();
+
+        // Non-staff can only cancel own appointment
+        if (!isStaff && appData.clientId !== req.user?.uid) {
+          const clientDoc = await db.collection('clients').doc(appData.clientId).get();
+          if (clientDoc.data()?.portalUserId !== req.user?.uid) {
+            throw new AppError('Forbidden: You can only cancel your own appointments', 403);
+          }
+        }
+
+        // Release slot reservation locks
+        try {
+          const bucketKeys = generateSlotBucketKeys(appData.nutritionistId, appData.date, appData.startTime, appData.endTime);
+          for (const key of bucketKeys) {
+            const lockRef = db.collection('nutritionSlotReservations').doc(key);
+            transaction.delete(lockRef);
+          }
+        } catch {
+          // Ignore
+        }
+
+        // Update appointment doc
+        transaction.update(appRef, {
+          status: 'Cancelled',
+          cancellationReason: reason || 'Cancelled by member/staff',
+          cancelledAt: nowIso,
+          cancelledBy: req.user?.uid || 'staff',
+          updatedAt: nowIso
+        });
+      });
+
+      // Audit log
+      await db.collection('auditLogs').add({
+        action: 'UPDATE',
+        entityType: 'SESSION',
+        entityId: appointmentId,
+        details: `Cancelled nutrition appointment ${appointmentId}. Reason: ${reason || 'Not specified'}`,
+        timestamp: nowIso,
+        userId: req.user?.uid || 'staff',
+        userName: requesterDoc.data()?.name || req.user?.email || 'User'
+      });
+
+      return res.json({ success: true, appointmentId, message: 'Appointment cancelled successfully.' });
+    } catch (err: any) {
+      console.error('[Nutrition Cancel] Error:', err);
+      return res.status(err.statusCode || 400).json({ error: err.message || 'Failed to cancel appointment.' });
     }
   });
 
