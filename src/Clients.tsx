@@ -1777,6 +1777,14 @@ export default function Clients() {
             </DialogHeader>
             <div className="flex-1 overflow-y-auto p-10 pt-8 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-8">
+                <div className="md:col-span-2 bg-primary/5 border border-primary/20 rounded-2xl p-4 text-xs text-muted-foreground flex items-start gap-3">
+                  <UserPlus className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-semibold text-foreground text-sm">New Member Enrollment & Access Guide</div>
+                    <div>Registering a new member assigns an authoritative Member ID and generates a digital QR check-in badge. If an initial package is selected, the financial transaction and service entitlements are generated atomically, unlocking mobile portal access immediately.</div>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.table.name')}</Label>
                   <Input 
@@ -3995,6 +4003,13 @@ export default function Clients() {
             </DialogTitle>
           </DialogHeader>
 
+          <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3.5 my-2 text-xs text-muted-foreground flex items-start gap-2.5">
+            <TrendingUp className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-foreground">How Upgrades Work:</span> Upgrading transfers active membership tenure to the new tier. The price difference is computed against previous payments, the previous active cycle is retired, and new session entitlements are activated immediately.
+            </div>
+          </div>
+
           <div className="py-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Left Column: Selection & Timing */}
@@ -4189,6 +4204,13 @@ export default function Clients() {
               Renew Package
             </DialogTitle>
           </DialogHeader>
+
+          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-3.5 my-2 text-xs text-muted-foreground flex items-start gap-2.5">
+            <RotateCcw className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-foreground">How Renewals Work:</span> Renewing archives the existing package cycle, activates a fresh session quota and expiry window, and connects the payment receipt to the member's financial record without duplicate profile creation.
+            </div>
+          </div>
 
           <div className="py-3">
             {renewDialogClientId && (() => {

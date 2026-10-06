@@ -2,6 +2,29 @@
 
 Updated: 2026-10-07 (Member Calendar Sync)
 
+## RECENT WORK - 2026-10-06 (INZAN.PRD.COMPLIANCE — Complete P0/P1/P2 Implementation & Verification)
+
+- **Comprehensive PRD Gap Completion & Verification**: Executed the full master PRD gap completion plan against `C:\Users\Mi5a\Desktop\gggg\INZAN Integrated System [2].pdf` across P0, P1, and P2 workstreams. Produced exhaustive compliance matrix in `docs/INZAN_PRD_COMPLIANCE_STATUS.md` mapping all 34 PRD sections and 15 Acceptance Criteria.
+- **P0.A Role & Department Security Matrix (`firestore-tenant.rules`, `server.ts`)**: Enforced server-side RBAC and tenant isolation. Narrowed query scopes for members, coaches, nutritionists, and sales. Sealed `/auditLogs` to append-only (edits/deletions rejected). Protected sensitive nutrition consultation notes (`/nutritionNotes`) to author and CEO only.
+- **P0.B Payment & Entitlement Concurrency & Integrity (`src/services/transactionService.ts`, `src/services/approvalService.ts`)**:
+  - Implemented deterministic OCC lock document `operationLocks/{operationId}` inside Firestore transactions to serialize and reject duplicate simultaneous checkouts.
+  - Implemented status gating: `paymentStatus === 'pending' | 'failed'` records payment intent but strictly blocks client package activation, entitlement generation, or points awards.
+  - Added partial payment balance tracking: calculates and persists `remainingBalance` and `isPartialPayment`.
+  - Added complimentary package handling: marks `isComplimentary: true` and awards 0 points.
+  - Fixed refund history deletion trap: approvals now set `status: 'refunded'` and preserve immutable historical audit records rather than setting `deleted_at`.
+  - Added 13-test transaction test suite in `src/services/transactionService.test.ts` (`npm run test:transactions`).
+- **P0.C Authoritative Nutrition Booking Path (`src/utils/nutritionBooking.ts`, `server.ts`, `src/hooks/useNutrition.ts`)**: Enforced working schedule boundaries, active practitioner check, past slot rejection, and deterministic time-bucket collision keys (`nutritionBooking.test.ts`).
+- **P0.4 Class Cancellation Approval & Auto-Refund (`src/services/approvalService.ts`, `server.ts`)**: Handled instructor class cancellation approvals by cancelling the class, automatically refunding 1 session token to all booked attendees, updating booking statuses, and emitting system notifications.
+- **P0.5 PT Attendance & Deduction Engine (`src/utils/ptAttendance.ts`, `src/services/ptSessionService.ts`)**: Enforced exact PRD deduction invariants (Completed: -1, No Show: -1, Rescheduled: 0, Advance cancel >12h: 0, Late cancel <12h: -1). Backed by 6 unit tests (`npm run test:pt`).
+- **P0.6 Waitlist & 10-Minute No-Show Job (`functions/src/classes/noShowJob.ts`, `src/jobs/noShowJob.ts`)**: Automatically marks unverified attendees as `no_show` exactly 10 minutes past class start, accumulates strikes, and locks booking access on 3 strikes.
+- **P1.7 Transactional Notification Center & Delivery Logging (`src/types/notificationEvent.ts`, `src/services/notificationEventService.ts`)**: PRD §15 multi-channel event dispatcher with template engine, idempotency deduplication, and immutable `notificationDeliveryLogs` (`npm run test:notifications`).
+- **P1.8 Shift Reconciliation by Payment Method (`src/utils/shiftReconciliation.ts`, `src/components/ShiftReconciliationView.tsx`)**: Reconciles drawer cash, card terminal, bank transfer, and Instapay collections with discount tracking, variance reporting, and RFC 4180 CSV export (`npm run test:shift`).
+- **P1.9 Inventory & Supplier Controls (`src/types/inventory.ts`, `src/services/inventoryService.ts`)**: Atomic stock movement transactions, overselling prevention, and dynamic status transitions (`IN_STOCK`, `LOW_STOCK`, `OUT_OF_STOCK`) (`npm run test:inventory`).
+- **P1.10 Recurring Staff Tasks & KPIs (`src/types/taskRecurrence.ts`, `src/services/taskRecurrenceService.ts`)**: Idempotent daily task generation from templates, timezone-safe deadline evaluation, and staff timeliness/completion rate KPI calculations (`npm run test:tasks`).
+- **P2.11 Equipment Register & Straight-Line Depreciation (`src/types/equipment.ts`, `src/services/equipmentService.ts`)**: GAAP/IFRS straight-line depreciation engine and service due status evaluator (`npm run test:equipment`).
+- **P2.13 Read-Only Diagnostic Audit Script (`scripts/audit_entitlement_gaps.cjs`)**: Safe, read-only CLI script to detect orphan packages without entitlements across tenants.
+- **Proof**: 10 unit test suites passing 100% (`npm run test:pricing`, `test:calendar`, `test:shift`, `test:nutrition`, `test:pt`, `test:transactions`, `test:notifications`, `test:inventory`, `test:tasks`, `test:equipment`). `npm run lint` passes with 0 errors. `npm run build` passes with 0 errors.
+
 ---
 
 ## RECENT WORK - 2026-10-07 (INZAN.CALENDAR.1 — Member Calendar Sync)

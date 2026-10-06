@@ -1530,6 +1530,12 @@ export default function Leads() {
               <DialogHeader>
                 <DialogTitle className="text-xl md:text-2xl font-bold">{t('leads.add_lead')}</DialogTitle>
               </DialogHeader>
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-3.5 my-2 text-xs text-muted-foreground flex items-start gap-2.5">
+                <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-semibold text-foreground">How Lead Capture Works:</span> Enter prospect contact details and marketing source. When sales closes an agreement, converting this lead automatically creates their member profile, activates service entitlements, and preserves full sales attribution history without duplicate client records.
+                </div>
+              </div>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label>{t('leads.table.name')}</Label>
