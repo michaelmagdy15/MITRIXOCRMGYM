@@ -493,7 +493,7 @@ export default function Payments() {
       const selectedClient = !isGuest ? clients.find(c => c.id === clientId) : null;
       const pkg = packages.find(p => p.name === packageType);
 
-      if (!isGuest && selectedClient && pkg) {
+      if (isInzan && !isGuest && selectedClient && pkg) {
         const eligibility = validateMembershipEligibility(selectedClient, pkg);
         if (!eligibility.allowed) {
           setAlertTitle('Primary Membership Required');
@@ -503,12 +503,12 @@ export default function Payments() {
         }
       }
 
-      // Sales rep locking rule:
+      // Sales rep locking rule (Inzan only):
       // "When a sales rep is assigned to a member they will always be locked to them even when renewing.
       // The only person that can change a member that is assigned to a sales rep is the sales manager only."
       const clientRepId = selectedClient?.assignedTo || selectedClient?.salesRep;
-      const isClientRepLocked = Boolean(clientRepId && clientRepId !== 'unassigned');
-      const canReassignRep = canReassignMemberSalesRep(currentUser);
+      const isClientRepLocked = isInzan && Boolean(clientRepId && clientRepId !== 'unassigned');
+      const canReassignRep = isInzan ? canReassignMemberSalesRep(currentUser) : true;
 
       const effectiveSalesRepId = (isClientRepLocked && !canReassignRep) ? clientRepId! : (salesRepId || clientRepId || '');
       const effectiveSalesName = (isClientRepLocked && !canReassignRep)
@@ -1750,6 +1750,7 @@ export default function Payments() {
                           }}
                         />
                         {(() => {
+                          if (!isInzan) return null;
                           const currentPkg = packages.find(p => p.name === packageType);
                           const eligibility = (!isWalkInGuest && currentSelectedClient && currentPkg)
                             ? validateMembershipEligibility(currentSelectedClient, currentPkg)
@@ -1820,18 +1821,18 @@ export default function Payments() {
 
                 {(() => {
                   const selectedClientForForm = (!isWalkInGuest && clientId) ? clients.find(c => c.id === clientId) : null;
-                  const isRepLockedForForm = Boolean(selectedClientForForm?.assignedTo || selectedClientForForm?.salesRep);
+                  const isRepLockedForForm = isInzan && Boolean(selectedClientForForm?.assignedTo || selectedClientForForm?.salesRep);
                   const isRepFieldDisabled = isRepLockedForForm && !isSalesManager;
 
                   return (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.sales_person')}</Label>
-                        {isRepLockedForForm && !isSalesManager ? (
+                        {isInzan && isRepLockedForForm && !isSalesManager ? (
                           <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
                             🔒 Locked to Assigned Rep
                           </Badge>
-                        ) : isSalesManager && isRepLockedForForm ? (
+                        ) : isInzan && isSalesManager && isRepLockedForForm ? (
                           <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">
                             Sales Manager Authority
                           </Badge>
@@ -1860,7 +1861,7 @@ export default function Payments() {
                           ))}
                         </SelectContent>
                       </Select>
-                      {isRepLockedForForm && !isSalesManager && (
+                      {isInzan && isRepLockedForForm && !isSalesManager && (
                         <p className="text-[10px] text-muted-foreground ml-1">
                           Member is permanently locked to their assigned sales representative. Only the Sales Manager can reassign this member.
                         </p>
@@ -2364,7 +2365,7 @@ export default function Payments() {
                             {(() => {
                               const editEligibility = isPaymentEditableByStaff(payment, currentUser, can('payments.edit'));
                               if (!editEligibility.canEdit) return null;
-                              const isPaymentRepLocked = Boolean(client?.assignedTo || client?.salesRep || payment.sales_rep_id || payment.salesName);
+                              const isPaymentRepLocked = isInzan && Boolean(client?.assignedTo || client?.salesRep || payment.sales_rep_id || payment.salesName);
                               return (
                                 <Dialog open={editingPaymentId === payment.id} onOpenChange={(open) => {
                                   if (open) {
@@ -2446,15 +2447,15 @@ export default function Payments() {
                                       <div>
                                         <div className="flex items-center justify-between mb-1">
                                           <Label className="text-xs font-semibold">{t('payments.edit.sales_name')}</Label>
-                                          {(isPaymentRepLocked && !isSalesManager) ? (
+                                          {(isInzan && isPaymentRepLocked && !isSalesManager) ? (
                                             <span className="text-[10px] text-amber-500 font-bold">🔒 Locked</span>
-                                          ) : isSalesManager && isPaymentRepLocked ? (
+                                          ) : isInzan && isSalesManager && isPaymentRepLocked ? (
                                             <span className="text-[10px] text-emerald-500 font-bold">Manager Authority</span>
                                           ) : null}
                                         </div>
                                         <Select
                                           value={editSalesName}
-                                          disabled={isPaymentRepLocked && !isSalesManager}
+                                          disabled={isInzan && isPaymentRepLocked && !isSalesManager}
                                           onValueChange={(val) => {
                                             if (!val) return;
                                             if (isInzan && isSalesManager && editSalesName && editSalesName !== val) {

@@ -45,6 +45,7 @@ import { addAuditLog } from './services/auditService';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
 import { canReassignMemberSalesRep } from './utils/permissions';
 import { validateMembershipEligibility } from './utils/membershipRules';
+import { isTenantInzan } from './utils/inzanOrg';
 import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
@@ -173,7 +174,7 @@ export default function Clients() {
   };
   const [activeTab, setActiveTab] = useState('all');
   // Inzan-only: lifecycle view (leads + members), package date lock and delete confirmation
-  const isInzanTenant = getTenantId().toLowerCase().includes('inzan');
+  const isInzanTenant = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
   const canAdjustPackageDates = canOverridePackageDates(currentUser);
   const [pkgDeleteIdx, setPkgDeleteIdx] = useState<number | null>(null);
   const [dateAdjustIdx, setDateAdjustIdx] = useState<number | null>(null);
@@ -508,7 +509,7 @@ export default function Clients() {
     if (!pkg) return;
 
     const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
-    if (isKidsPackage && client.branch !== 'Mivida') {
+    if (isInzanTenant && isKidsPackage && client.branch !== 'Mivida') {
       alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
       return;
     }
@@ -519,8 +520,8 @@ export default function Clients() {
     const grossAmount = pkg.price;
 
     const clientAssignedRep = client.assignedTo || client.salesRep;
-    const isRepLocked = Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
-    const canReassign = canReassignMemberSalesRep(currentUser);
+    const isRepLocked = isInzanTenant && Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
+    const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
 
     const repId = (isRepLocked && !canReassign)
       ? clientAssignedRep!
@@ -594,7 +595,7 @@ export default function Clients() {
     if (!pkg) return;
 
     const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
-    if (isKidsPackage && client.branch !== 'Mivida') {
+    if (isInzanTenant && isKidsPackage && client.branch !== 'Mivida') {
       alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
       return;
     }
@@ -602,8 +603,8 @@ export default function Clients() {
     const grossAmount = pkg.price;
 
     const clientAssignedRep = client.assignedTo || client.salesRep;
-    const isRepLocked = Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
-    const canReassign = canReassignMemberSalesRep(currentUser);
+    const isRepLocked = isInzanTenant && Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
+    const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
 
     const repId = (isRepLocked && !canReassign)
       ? clientAssignedRep!
@@ -677,20 +678,22 @@ export default function Clients() {
     if (!pkg) return;
 
     const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
-    if (isKidsPackage && client.branch !== 'Mivida') {
+    if (isInzanTenant && isKidsPackage && client.branch !== 'Mivida') {
       alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
       return;
     }
 
-    const eligibility = validateMembershipEligibility(client, pkg);
-    if (!eligibility.allowed) {
-      alert(`Primary Membership Required:\n${eligibility.reason}`);
-      return;
+    if (isInzanTenant) {
+      const eligibility = validateMembershipEligibility(client, pkg);
+      if (!eligibility.allowed) {
+        alert(`Primary Membership Required:\n${eligibility.reason}`);
+        return;
+      }
     }
 
     const clientAssignedRep = client.assignedTo || client.salesRep;
-    const isRepLocked = Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
-    const canReassign = canReassignMemberSalesRep(currentUser);
+    const isRepLocked = isInzanTenant && Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
+    const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
 
     const repId = (isRepLocked && !canReassign)
       ? clientAssignedRep!
@@ -1718,8 +1721,8 @@ export default function Clients() {
               {canViewGlobalDashboard && (
                 <TableCell className="hidden xl:table-cell">
                   {(() => {
-                    const isAssigned = Boolean(client.assignedTo && client.assignedTo !== 'unassigned');
-                    const canReassign = canReassignMemberSalesRep(currentUser);
+                    const isAssigned = isInzanTenant && Boolean(client.assignedTo && client.assignedTo !== 'unassigned');
+                    const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
                     return (
                       <select 
                         className="flex h-8 w-[130px] items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
@@ -2439,7 +2442,7 @@ export default function Clients() {
 
       {activeClient && (
         <div className="-m-4 md:-m-8 min-h-[calc(100vh-4.5rem)] flex flex-col bg-background overflow-hidden animate-in fade-in duration-200">
-          {features?.customMemberProfile ? (
+          {(isInzanTenant && features?.customMemberProfile) ? (
             <InzanMemberShow
               client={activeClient}
               onClose={() => setActiveClientId(null)}
@@ -2706,7 +2709,7 @@ export default function Clients() {
                         <div className="space-y-1 col-span-1 sm:col-span-2">
                           <div className="flex items-center justify-between">
                             <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Sales Rep</Label>
-                            {Boolean(activeClient.assignedTo && activeClient.assignedTo !== 'unassigned') && !canReassignMemberSalesRep(currentUser) && (
+                            {isInzanTenant && Boolean(activeClient.assignedTo && activeClient.assignedTo !== 'unassigned') && !canReassignMemberSalesRep(currentUser) && (
                               <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
                                 🔒 Locked
                               </Badge>
@@ -2715,7 +2718,7 @@ export default function Clients() {
                           <select
                             className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
                             value={activeClient.assignedTo || 'unassigned'}
-                            disabled={(Boolean(activeClient.assignedTo && activeClient.assignedTo !== 'unassigned') && !canReassignMemberSalesRep(currentUser)) || !isEditing}
+                            disabled={(isInzanTenant && Boolean(activeClient.assignedTo && activeClient.assignedTo !== 'unassigned') && !canReassignMemberSalesRep(currentUser)) || !isEditing}
                             onChange={(e) => updateClient(activeClient.id, { assignedTo: e.target.value === 'unassigned' ? '' : e.target.value })}
                           >
                             <option value="unassigned">Unassigned</option>
@@ -4184,8 +4187,8 @@ export default function Clients() {
 
                         {(() => {
                           const client = clients.find(c => c.id === upgradeDialogClientId);
-                          const isRepLocked = Boolean(client?.assignedTo || client?.salesRep);
-                          const canReassign = canReassignMemberSalesRep(currentUser);
+                          const isRepLocked = isInzanTenant && Boolean(client?.assignedTo || client?.salesRep);
+                          const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
                           return (
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between">
@@ -4398,8 +4401,8 @@ export default function Clients() {
 
                     {(() => {
                       const client = clients.find(c => c.id === renewDialogClientId);
-                      const isRepLocked = Boolean(client?.assignedTo || client?.salesRep);
-                      const canReassign = canReassignMemberSalesRep(currentUser);
+                      const isRepLocked = isInzanTenant && Boolean(client?.assignedTo || client?.salesRep);
+                      const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
                       return (
                         <div className="space-y-1.5">
                           <div className="flex items-center justify-between">
@@ -4563,11 +4566,13 @@ export default function Clients() {
                   const endDate = safeFormatDate(safeAddDays(addPackageStartDate, pkg.expiryDays), 'dd MMM yyyy');
                   const client = clients.find(c => c.id === addPackageDialogClientId);
                   const isAlreadyActive = (client?.packages || []).some(p => p.status === 'Active' && p.packageName === pkg.name);
-                  const eligibility = validateMembershipEligibility(client, pkg);
+                  const eligibility = (isInzanTenant && client)
+                    ? validateMembershipEligibility(client, pkg)
+                    : { allowed: true, reason: '' };
 
                   return (
                     <div className="rounded-2xl bg-muted/30 border border-border/50 p-4 text-sm space-y-2">
-                      {!eligibility.allowed && (
+                      {isInzanTenant && !eligibility.allowed && (
                         <div className="text-xs bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 p-2.5 rounded-xl font-medium mb-1">
                           ⚠️ <strong>Primary Membership Required:</strong> {eligibility.reason}
                         </div>
@@ -4680,8 +4685,8 @@ export default function Clients() {
 
                       {(() => {
                         const client = clients.find(c => c.id === addPackageDialogClientId);
-                        const isRepLocked = Boolean(client?.assignedTo || client?.salesRep);
-                        const canReassign = canReassignMemberSalesRep(currentUser);
+                        const isRepLocked = isInzanTenant && Boolean(client?.assignedTo || client?.salesRep);
+                        const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
                         return (
                           <div className="space-y-1.5">
                             <div className="flex items-center justify-between">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from './context';
-import { db, auth } from './firebase';
+import { db, auth, getTenantId } from './firebase';
+import { isTenantInzan } from './utils/inzanOrg';
 import { 
   collection, 
   onSnapshot, 
@@ -106,6 +107,7 @@ interface PTSessionRecord {
 
 export default function Bookings() {
   const { currentUser, users, packages, branches, clients, setActiveTab, setActiveClientId, can } = useAppContext();
+  const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
 
   // Active Hub Tab: 'classes' | 'pt' | 'store'
   const [hubTab, setHubTab] = useState<'classes' | 'pt' | 'store'>('classes');
@@ -516,7 +518,7 @@ export default function Bookings() {
         const category = sysPkg ? resolveCategory(sysPkg) : 'Memberships' as PaymentCategory;
 
         const isKidsPackage = item.packageName.toLowerCase().includes('kids') || item.packageName.toLowerCase().includes('junior');
-        if (isKidsPackage && clientBranch !== 'Mivida') {
+        if (isInzan && isKidsPackage && clientBranch !== 'Mivida') {
           alert(`Booking rejected: "${item.packageName}" can only be booked at the Mivida branch.`);
           return;
         }

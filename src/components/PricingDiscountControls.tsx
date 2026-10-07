@@ -3,6 +3,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { calculatePricing, DiscountType, DiscountReason, DISCOUNT_REASONS, formatCurrencyAmount } from '../utils/pricing';
+import { isTenantInzan } from '../utils/inzanOrg';
+import { getTenantId } from '../firebase';
 
 export interface PricingControlsState {
   discountType: DiscountType;
@@ -58,6 +60,8 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
   corporateProofUploader,
   idPrefix = 'pricing',
 }) => {
+  const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
+
   const pricing = useMemo(() => {
     return calculatePricing({
       grossAmount,
@@ -190,7 +194,7 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
         </div>
       )}
 
-      {showCorporateProof && value.discountReason === 'Corporate' && (
+      {isInzan && showCorporateProof && value.discountReason === 'Corporate' && (
         <div className="space-y-1.5">
           <span className="text-xs font-semibold">Corporate Proof Document</span>
           {corporateProofUploader ? (
@@ -204,31 +208,33 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
         </div>
       )}
 
-      {/* Image 2 Visual Summary: Package Cost | Discount | Paid Amount | Unpaid (Red Border) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center pt-1">
-        <div className="p-2.5 rounded-xl bg-background/80 border border-border/50">
-          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Package Cost</span>
-          <span className="text-sm sm:text-base font-bold font-mono">{formatCurrencyAmount(pricing.grossAmount, currency)}</span>
+      {/* Image 2 Visual Summary: Package Cost | Discount | Paid Amount | Unpaid (Red Border) - Inzan PRD Only */}
+      {isInzan && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center pt-1">
+          <div className="p-2.5 rounded-xl bg-background/80 border border-border/50">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Package Cost</span>
+            <span className="text-sm sm:text-base font-bold font-mono">{formatCurrencyAmount(pricing.grossAmount, currency)}</span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-background/80 border border-border/50">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Discount</span>
+            <span className="text-sm sm:text-base font-bold font-mono text-rose-500">
+              {pricing.discountAmount > 0 ? `-${formatCurrencyAmount(pricing.discountAmount, currency)}` : `0 ${currency}`}
+            </span>
+          </div>
+          <div className="p-2.5 rounded-xl bg-background/80 border border-border/50">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Paid Amount *</span>
+            <span className="text-sm sm:text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
+              {formatCurrencyAmount(pricing.amountPaid, currency)}
+            </span>
+          </div>
+          <div className="p-2.5 rounded-xl border-2 border-rose-500/80 bg-rose-500/5 shadow-sm ring-1 ring-rose-500/20">
+            <span className="text-[10px] text-rose-500 uppercase font-bold tracking-wider block">Unpaid</span>
+            <span className="text-sm sm:text-base font-bold font-mono text-rose-600 dark:text-rose-400">
+              {formatCurrencyAmount(pricing.remainingBalance, currency)}
+            </span>
+          </div>
         </div>
-        <div className="p-2.5 rounded-xl bg-background/80 border border-border/50">
-          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Discount</span>
-          <span className="text-sm sm:text-base font-bold font-mono text-rose-500">
-            {pricing.discountAmount > 0 ? `-${formatCurrencyAmount(pricing.discountAmount, currency)}` : `0 ${currency}`}
-          </span>
-        </div>
-        <div className="p-2.5 rounded-xl bg-background/80 border border-border/50">
-          <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider block">Paid Amount *</span>
-          <span className="text-sm sm:text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
-            {formatCurrencyAmount(pricing.amountPaid, currency)}
-          </span>
-        </div>
-        <div className="p-2.5 rounded-xl border-2 border-rose-500/80 bg-rose-500/5 shadow-sm ring-1 ring-rose-500/20">
-          <span className="text-[10px] text-rose-500 uppercase font-bold tracking-wider block">Unpaid</span>
-          <span className="text-sm sm:text-base font-bold font-mono text-rose-600 dark:text-rose-400">
-            {formatCurrencyAmount(pricing.remainingBalance, currency)}
-          </span>
-        </div>
-      </div>
+      )}
 
       <div className="rounded-xl bg-background/60 border border-border/40 p-3 text-sm space-y-1.5">
         <div className="flex justify-between text-xs">

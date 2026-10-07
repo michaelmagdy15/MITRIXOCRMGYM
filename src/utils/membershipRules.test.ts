@@ -166,4 +166,10 @@ describe('Inzan Athletics Membership Hierarchy & Eligibility Rules', () => {
     const resMma = validateMembershipEligibility(adultWithoutMembership, mmaPackage);
     assert.strictEqual(resMma.allowed, true);
   });
+
+  it('11. Non-Inzan tenants (like Strike Boxing) are 100% exempt from primary membership requirements', () => {
+    const resStrike = validateMembershipEligibility(adultWithoutMembership, ptPackage, new Date(), 'strike');
+    assert.strictEqual(resStrike.allowed, true);
+    assert.strictEqual(resStrike.isExempt, true);
+  });
 });

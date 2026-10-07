@@ -8,6 +8,7 @@ import { addAuditLog } from '../services/auditService';
 import { useAuth } from '../contexts/AuthContext';
 import { resolvePaymentCategory } from '../utils/paymentCategories';
 import { isPaymentEditableByStaff } from '../utils/permissions';
+import { isTenantInzan } from '../utils/inzanOrg';
 
 interface UsePaymentsOptions {
   currentUser: User | null;
@@ -91,7 +92,8 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
     if (!currentUser) return;
     try {
       const payment = payments.find(p => p.id === id);
-      if (payment) {
+      const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
+      if (payment && isInzan) {
         const editCheck = isPaymentEditableByStaff(payment, currentUser, canDeletePayments);
         if (!editCheck.canEdit) {
           throw new Error(editCheck.reason || 'Unauthorized to modify this payment.');

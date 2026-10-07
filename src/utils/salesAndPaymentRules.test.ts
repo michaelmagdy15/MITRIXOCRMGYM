@@ -72,6 +72,11 @@ describe('Sales Rep Lock & Reassignment Rules', () => {
   it('denies Coach from reassigning member sales rep', () => {
     assert.strictEqual(canReassignMemberSalesRep(coachUser), false);
   });
+
+  it('ALLOWS non-Inzan tenants (like Strike Boxing) to reassign sales reps without Inzan locking', () => {
+    assert.strictEqual(canReassignMemberSalesRep(salesRepUser, undefined, 'strike'), true);
+    assert.strictEqual(canReassignMemberSalesRep(receptionistUser, undefined, 'strike'), true);
+  });
 });
 
 describe('Receptionist 1-Day Payment Edit Window Rules', () => {
@@ -141,5 +146,14 @@ describe('Receptionist 1-Day Payment Edit Window Rules', () => {
     const res = isPaymentEditableByStaff(recentPayment, otherStaff);
     assert.strictEqual(res.canEdit, false);
     assert.match(res.reason || '', /did not record/i);
+  });
+
+  it('ALLOWS staff on non-Inzan tenants (like Strike) to edit payments based on standard permissions without 24-hr lock', () => {
+    const expiredPayment = {
+      created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      recordedBy: staffRecorder.id
+    };
+    const resStaff = isPaymentEditableByStaff(expiredPayment, staffRecorder, true, 'strike');
+    assert.strictEqual(resStaff.canEdit, true);
   });
 });

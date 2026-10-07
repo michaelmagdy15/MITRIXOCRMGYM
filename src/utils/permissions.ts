@@ -1,4 +1,6 @@
 import { PermissionCategory, PermissionDefinition, PermissionTemplate, User, UserRole } from '../types';
+import { isTenantInzan } from './inzanOrg';
+import { getTenantId } from '../firebase';
 
 export interface CategoryMetadata {
   id: PermissionCategory;
@@ -1069,11 +1071,41 @@ export function syncLegacyFlags(permissions: Record<string, boolean>): Partial<U
  * even when renewing. The only person that can change a member that is assigned
  * to a sales rep is the sales manager only."
  */
+export function isTenantSubjectToInzanRules(tenantId?: string): boolean {
+  try {
+    if (typeof window !== 'undefined') {
+      const tenant = (tenantId || getTenantId()).toLowerCase();
+      return tenant.includes('inzan') || isTenantInzan();
+    }
+    if (tenantId) {
+      return tenantId.toLowerCase().includes('inzan');
+    }
+    return true; // Default in Node test environment: test Inzan rules
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Determines whether a user has authority to reassign a member's locked sales representative.
+ * 
+ * Business Rule:
+ * "When a sales rep is assigned to a member they will always be locked to them
+ * even when renewing. The only person that can change a member that is assigned
+ * to a sales rep is the sales manager only."
+ */
 export function canReassignMemberSalesRep(
   user: User | null | undefined,
-  templatesMap?: Record<string, PermissionTemplate>
+  templatesMap?: Record<string, PermissionTemplate>,
+  tenantId?: string
 ): boolean {
   if (!user) return false;
+
+  // Strict multi-tenant isolation: sales rep locking is specific to Inzan Athletics.
+  // For Strike Boxing and other tenants, sales reps can be assigned/reassigned normally.
+  if (!isTenantSubjectToInzanRules(tenantId)) {
+    return true;
+  }
 
   // 1. Super admins and CRM admins have executive override
   if (user.role === 'super_admin' || user.role === 'crm_admin') return true;
@@ -1109,9 +1141,16 @@ export function canReassignMemberSalesRep(
 export function isPaymentEditableByStaff(
   payment: { created_at?: string | null; date?: string | null; recordedBy?: string | null; sales_rep_id?: string | null },
   user: User | null | undefined,
-  canManagePayments: boolean = false
+  canManagePayments: boolean = false,
+  tenantId?: string
 ): { canEdit: boolean; reason?: string } {
   if (!user) return { canEdit: false, reason: 'Authentication required' };
+
+  // Strict multi-tenant isolation: the 1-day receptionist window is specific to Inzan Athletics.
+  // For Strike Boxing and other tenants, default to standard role-based / permission access.
+  if (!isTenantSubjectToInzanRules(tenantId)) {
+    return { canEdit: canManagePayments || ['manager', 'admin', 'super_admin', 'crm_admin'].includes(user.role) };
+  }
 
   // Managers, admins, super_admins, or users with payments.edit permission can always edit
   if (

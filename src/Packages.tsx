@@ -10,12 +10,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Package, Branch } from './types';
 import { Plus, Edit, Upload, X, Archive, RotateCcw, HelpCircle, ChevronDown, ChevronUp, Layers, Tag } from 'lucide-react';
-import { storage } from './firebase';
+import { storage, getTenantId } from './firebase';
+import { isTenantInzan } from './utils/inzanOrg';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import ImageCropperDialog from './components/ImageCropperDialog';
 
-export const PACKAGE_CATEGORIES = [
+export const INZAN_PACKAGE_CATEGORIES = [
   'Membership',
   'Personal Training',
   'SGF',
@@ -30,9 +31,22 @@ export const PACKAGE_CATEGORIES = [
   'Other'
 ] as const;
 
+export const STANDARD_PACKAGE_CATEGORIES = [
+  'Gym Memberships',
+  'Personal Training (PT)',
+  'Drop-in / Day Pass',
+  'Classes',
+  'Nutrition',
+  'Other'
+] as const;
+
+export const PACKAGE_CATEGORIES = INZAN_PACKAGE_CATEGORIES;
+
 export default function Packages() {
   const { currentUser, branches, features } = useAppContext();
   const { packages, addPackage, updatePackage, deletePackage, restorePackage } = usePackages();
+  const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
+  const availableCategories = isInzan ? INZAN_PACKAGE_CATEGORIES : STANDARD_PACKAGE_CATEGORIES;
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
@@ -285,7 +299,7 @@ export default function Packages() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {PACKAGE_CATEGORIES.map(cat => (
+                        {availableCategories.map(cat => (
                           <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                         ))}
                       </SelectContent>
@@ -405,7 +419,7 @@ export default function Packages() {
           <div className="flex items-start gap-3">
             <Layers className="h-5 w-5 text-primary shrink-0 mt-0.5" />
             <div className="space-y-2 text-sm">
-              <h4 className="font-semibold text-foreground">Package Configuration & Inzan Operations Guide</h4>
+              <h4 className="font-semibold text-foreground">{isInzan ? 'Package Configuration & Inzan Operations Guide' : 'Package Configuration Guide'}</h4>
               <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
                 <li><strong className="text-foreground">Categories:</strong> Segment packages cleanly across POS tabs (Gym Memberships, PT, Drop-in, Classes, Nutrition). This prevents cross-service booking confusion.</li>
                 <li><strong className="text-foreground">Unlimited Entry:</strong> Mark <em>∞ Unlimited</em> for time-governed memberships. Sessions field is stored as 0 and members enjoy unrestricted check-ins until expiry.</li>
@@ -427,7 +441,7 @@ export default function Packages() {
         >
           All Categories ({packages.length})
         </Button>
-        {PACKAGE_CATEGORIES.map(cat => {
+        {availableCategories.map(cat => {
           const count = packages.filter(p => (p.category || (p.type === 'Private' ? 'Personal Training (PT)' : 'Gym Memberships')) === cat).length;
           return (
             <Button
@@ -535,7 +549,7 @@ export default function Packages() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PACKAGE_CATEGORIES.map(cat => (
+                    {availableCategories.map(cat => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
                   </SelectContent>

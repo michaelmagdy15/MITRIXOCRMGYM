@@ -13,6 +13,8 @@
  */
 
 import { Client, Package } from '../types';
+import { isTenantInzan } from './inzanOrg';
+import { getTenantId } from '../firebase';
 
 export interface MembershipValidationResult {
   allowed: boolean;
@@ -103,11 +105,31 @@ export function isClientUnder16OrJunior(client?: Client | null): boolean {
   return false;
 }
 
+export function isTenantExemptFromPrimaryRules(tenantId?: string): boolean {
+  try {
+    if (typeof window !== 'undefined') {
+      const tenant = (tenantId || getTenantId()).toLowerCase();
+      return !tenant.includes('inzan') && !isTenantInzan();
+    }
+    if (tenantId) {
+      return !tenantId.toLowerCase().includes('inzan');
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Checks whether a client holds an active Primary Membership.
  */
-export function hasActivePrimaryMembership(client?: Client | null, now: Date = new Date()): boolean {
+export function hasActivePrimaryMembership(client?: Client | null, now: Date = new Date(), tenantId?: string): boolean {
   if (!client) return false;
+
+  // Multi-tenant isolation: non-Inzan gyms (like Strike Boxing) do not require primary memberships
+  if (isTenantExemptFromPrimaryRules(tenantId)) {
+    return true;
+  }
 
   // 1. Check client.packages array
   if (Array.isArray(client.packages) && client.packages.length > 0) {
@@ -150,10 +172,17 @@ export function hasActivePrimaryMembership(client?: Client | null, now: Date = n
 export function validateMembershipEligibility(
   client?: Client | null,
   targetPackage?: Package | null | { category?: string; name?: string; type?: string },
-  now: Date = new Date()
+  now: Date = new Date(),
+  tenantId?: string
 ): MembershipValidationResult {
   if (!targetPackage) {
     return { allowed: true, isPrimaryMembership: false, isExempt: true };
+  }
+
+  // Multi-tenant isolation: This invariant is strictly unique to INZAN ATHLETICS.
+  // For Strike Boxing Club (and other tenants), return allowed: true immediately!
+  if (isTenantExemptFromPrimaryRules(tenantId)) {
+    return { allowed: true, isPrimaryMembership: true, isExempt: true };
   }
 
   // 1. If the target package IS a primary membership, allowed!
