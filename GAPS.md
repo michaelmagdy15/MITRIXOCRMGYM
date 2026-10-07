@@ -2,6 +2,17 @@
 
 Updated: 2026-10-07 (Member Calendar Sync)
 
+## RECENT WORK - 2026-10-07 (INZAN.DOCS.2 — Website-led handbook redesign)
+
+- Redesigned the Inzan operational manual as a 25-page handbook using the actual website facility photograph, Inzan wordmark, Montserrat headings and Open Sans body text. Palette remains black, charcoal and white; no gold.
+- Added a page-numbered contents, chapter-specific layouts, four workflow diagrams, comparison tables and working checklists. Retained the distinction between current screens and conditional or unreleased services.
+- Reproducible edition-three builder: `build_inzan_manual_v3.py`; it supersedes the edition-two builder for the current manual.
+- Proof: exported through Microsoft Word and visually inspected all 25 rendered pages; corrected initial diagram clipping and heading font substitution. `npm run lint` and `npm run build` both exit 0, with existing build warnings only. No application code or production data changed.
+- Decision: use the website as the visual reference while retaining repository-backed operating rules, because marketing copy is not the source of system behavior.
+- Public release and deployment were not performed.
+
+---
+
 ## RECENT WORK - 2026-10-07 (INZAN.DOCS.1 — Comprehensive User Guide and Operational Manual)
 
 - Expanded `docs/INZAN_ATHLETICS_USER_GUIDE_OPERATIONAL_MANUAL.docx` into a 14-page, 19-section guide covering the member and coach portals, all current CRM navigation, end-to-end sales and payments, bookings, nutrition, front desk, shift close, reporting, settings, security, and exceptions.

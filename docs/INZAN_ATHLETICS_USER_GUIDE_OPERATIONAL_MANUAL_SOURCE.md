@@ -2,9 +2,9 @@
 
 ## User Guide and Operational Manual
 
-Version 2.0 | 7 October 2026 | Inzan Athletics operations
+Edition 03 | October 2026 | Inzan Athletics
 
-This manual explains the Inzan Athletics member app, coach portal and staff CRM as one operating system. Start with the role and navigation map, then use the workflow that matches the task in front of you. A transaction is complete only when its resulting record and status are visible in the appropriate profile, queue or report.
+Use this handbook at the front desk, on the training floor and during the daily close. Each procedure identifies where to work, what to record and how to check that the action is complete.
 
 Availability depends on the signed-in role, branch, tenant feature switches and deployment. The Inzan CRM is associated with admin.inzanathletics.com and the tenant database db-inzanathletics in the central Firebase project faa-test-guide-v2. If branding or member data looks wrong, stop the operation and report it to an administrator.
 
@@ -111,7 +111,7 @@ The Quotes module is visible only to authorized users. Choose the appropriate cl
 ### 4.4 Payment and package states
 
 - Paid: the payment and matching package or entitlement should appear together. Loyalty points, where enabled, derive from money collected.
-- Partial: the record carries remainingBalance and isPartialPayment. Follow up through Debtors or the member account.
+- Partial: review the amount collected and the balance still due. Follow up through Debtors or the member account.
 - Pending or failed: payment intent can exist without access. Resolve the status before booking a paid service.
 - Complimentary: a properly authorized package may activate with zero points.
 - Refund: use the approval and refund workflow. The payment history is retained and its status changes to refunded; do not delete the historical record.
@@ -198,7 +198,7 @@ Front desk, kiosk and coach check-in all contribute to the same attendance pictu
 
 ### 7.4 PT session credit rules
 
-Completed or No Show deducts one PT session. Rescheduled deducts zero. Advance cancellation more than twelve hours before session start deducts zero; a late cancellation within twelve hours forfeits one. The balance transition code also restores a previously deducted credit when a status is corrected to an eligible non-deducting state. Check the package and root balance after a correction.
+Completed or No Show uses one PT session. Rescheduled uses none. Advance cancellation with at least twelve hours of notice preserves the credit; cancellation with less than twelve hours of notice forfeits one. An authorized correction to a non-deducting status may restore a previously used credit. Check the session history and remaining package balance after any correction.
 
 ### 7.5 Calendar export
 
@@ -313,11 +313,11 @@ Settings Backup offers export and restore; restore merges records and may overwr
 
 ### 14.1 Stock movements and suppliers
 
-The inventory service supports supplier/product records and atomic receive, sale, adjustment and return movements. It rejects a sale that would make quantity negative, then labels a product IN_STOCK, LOW_STOCK or OUT_OF_STOCK according to its threshold. The current staff navigation does not expose a dedicated Inventory screen, so use this as a description of supported service logic until an authorized interface is available. Do not maintain stock with a manual Firestore edit.
+Inventory support includes supplier and product records, stock receipts, sales, adjustments and returns. A sale cannot reduce stock below zero. Products are classified as in stock, low stock or out of stock against their reorder threshold. A dedicated Inventory screen is not available in the current staff navigation. Continue using the approved stock register until an operator interface is released.
 
 ### 14.2 Equipment register
 
-The equipment service calculates straight-line depreciation from purchase price, salvage value and useful life, and evaluates service due, under repair and decommissioned states. The current CRM navigation does not expose a dedicated Equipment Register screen. Facility staff should use the approved operational register and escalate a due or unsafe item to management; do not infer that a maintenance alert is automatically distributed.
+Equipment support includes straight-line depreciation and service status calculations. A dedicated Equipment Register screen is not available in the current staff navigation. Record inspections, repairs and service dates in the approved facility register. Report an unsafe item to management immediately and follow the club's equipment isolation procedure.
 
 ## 15 Security, tenant isolation and offline operation
 
