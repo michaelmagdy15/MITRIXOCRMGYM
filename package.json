@@ -20,6 +20,8 @@
     "test:inventory": "vite-node src/services/inventoryService.test.ts",
     "test:tasks": "vite-node src/services/taskRecurrenceService.test.ts",
     "test:equipment": "vite-node src/services/equipmentService.test.ts",
+    "test:membership": "vite-node src/utils/membershipRules.test.ts",
+    "test:sales-rules": "vite-node src/utils/salesAndPaymentRules.test.ts",
     "audit:frontend": "node scripts/lighthouse-audit.js",
     "audit:backend": "autocannon -c 10 -d 30 -p 10 -H \"x-audit-bypass: true\" http://localhost:3000/api/clients",
     "audit:db": "node scripts/db-audit.js",

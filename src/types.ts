@@ -638,6 +638,7 @@ export interface FeatureFlags {
   customMemberProfile?: boolean;
   classBookingSystem?: boolean;
   nutrition?: boolean;
+  tasks?: boolean;
   // Commercial Gym & Department Isolation Flags
   commercialGymWorkspaces?: boolean;
   salesPipelineStages?: '5-stage' | '7-stage';

@@ -23,6 +23,8 @@ import { AlertDialog } from './components/AlertDialog';
 import { PaymentCategory, PAYMENT_CATEGORIES, resolvePaymentCategory } from './utils/paymentCategories';
 import { createApprovalRequest } from './services/approvalService';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
+import { canReassignMemberSalesRep, isPaymentEditableByStaff } from './utils/permissions';
+import { validateMembershipEligibility } from './utils/membershipRules';
 import { resolvePaymentBranch, normalizeBranchName } from './utils/branchUtils';
 import { matchesPhoneSearch } from './utils/phoneUtils';
 import { toCanonicalBranchId } from './utils/memberCategories';
@@ -69,6 +71,7 @@ export default function Payments() {
 
   const isInzan = isTenantInzan(branding?.companyName) || getTenantId() === 'inzanathletics';
   const isCurrentUserAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin';
+  const isSalesManager = canReassignMemberSalesRep(currentUser);
 
   // Corporate Discount Verification State
   const [discountReason, setDiscountReason] = useState<'Standard' | 'Corporate' | 'Referral' | 'Promotional'>('Standard');
@@ -488,6 +491,30 @@ export default function Payments() {
 
     try {
       const selectedClient = !isGuest ? clients.find(c => c.id === clientId) : null;
+      const pkg = packages.find(p => p.name === packageType);
+
+      if (!isGuest && selectedClient && pkg) {
+        const eligibility = validateMembershipEligibility(selectedClient, pkg);
+        if (!eligibility.allowed) {
+          setAlertTitle('Primary Membership Required');
+          setAlertDescription(eligibility.reason || 'An active primary gym membership is required for this package.');
+          setAlertOpen(true);
+          return;
+        }
+      }
+
+      // Sales rep locking rule:
+      // "When a sales rep is assigned to a member they will always be locked to them even when renewing.
+      // The only person that can change a member that is assigned to a sales rep is the sales manager only."
+      const clientRepId = selectedClient?.assignedTo || selectedClient?.salesRep;
+      const isClientRepLocked = Boolean(clientRepId && clientRepId !== 'unassigned');
+      const canReassignRep = canReassignMemberSalesRep(currentUser);
+
+      const effectiveSalesRepId = (isClientRepLocked && !canReassignRep) ? clientRepId! : (salesRepId || clientRepId || '');
+      const effectiveSalesName = (isClientRepLocked && !canReassignRep)
+        ? resolveUserDisplay(clientRepId!, users, selectedClient?.salesName || '')
+        : (salesName || '');
+
       const effectiveClientName = isGuest ? resolvedGuestName : (selectedClient?.name || resolvedGuestName);
 
       // Check for existing active packages with same type -> seamlessly process as Renewal cycle
@@ -496,7 +523,6 @@ export default function Payments() {
       );
       const isRenewalPayment = !isGuest && !!existingActivePackage;
 
-      const pkg = packages.find(p => p.name === packageType);
       const effectiveBranch = normalizeBranchName(paymentBranch || newClientBranch || selectedClient?.branch || currentUser?.branch || (branches.length > 0 ? branches[0] : ''));
 
       await processPaymentTransaction({
@@ -518,8 +544,8 @@ export default function Payments() {
         coachName: isPT ? resolvedCoachName : undefined,
         notes,
         receiptSerial: receiptNumber.trim() || undefined,
-        sales_rep_id: salesRepId || '',
-        salesName: salesName || '',
+        sales_rep_id: effectiveSalesRepId || '',
+        salesName: effectiveSalesName || '',
         recordedBy: recordedById || currentUser?.id || '',
         recordedByName: users.find(u => u.id === (recordedById || currentUser?.id))?.name || '',
         paymentDate: safeIsoDate(paymentDate, true),
@@ -1695,33 +1721,48 @@ export default function Payments() {
                   {(() => {
                     const currentSelectedClient = clientId ? clients.find(c => c.id === clientId) : null;
                     return (
-                      <CascadingPackageSelector
-                        packages={visiblePackages}
-                        selectedPackageName={packageType}
-                        initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
-                        initialBranch={paymentBranch || currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
-                        branches={branches}
-                        onCategoryChange={(cat) => {
-                          if (isCreatingNew) setNewClientCategory(cat);
-                        }}
-                        onBranchChange={(b) => {
-                          if (isCreatingNew) setNewClientBranch(b);
-                          if (b && b !== 'All Branches') setPaymentBranch(b);
-                        }}
-                        onPackageSelect={(pkg, isPt) => {
-                          if (!pkg) {
-                            setPackageType('Custom');
-                            return;
-                          }
-                          setPackageType(pkg.name);
-                          setAmount(pkg.price.toString());
-                          setPaymentCategory(isPt ? 'PT' : resolvePaymentCategory(pkg.name));
-                          if (startDate) {
-                            const end = safeAddDays(startDate, pkg.expiryDays);
-                            setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
-                          }
-                        }}
-                      />
+                      <>
+                        <CascadingPackageSelector
+                          packages={visiblePackages}
+                          selectedPackageName={packageType}
+                          initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
+                          initialBranch={paymentBranch || currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
+                          branches={branches}
+                          onCategoryChange={(cat) => {
+                            if (isCreatingNew) setNewClientCategory(cat);
+                          }}
+                          onBranchChange={(b) => {
+                            if (isCreatingNew) setNewClientBranch(b);
+                            if (b && b !== 'All Branches') setPaymentBranch(b);
+                          }}
+                          onPackageSelect={(pkg, isPt) => {
+                            if (!pkg) {
+                              setPackageType('Custom');
+                              return;
+                            }
+                            setPackageType(pkg.name);
+                            setAmount(pkg.price.toString());
+                            setPaymentCategory(isPt ? 'PT' : resolvePaymentCategory(pkg.name));
+                            if (startDate) {
+                              const end = safeAddDays(startDate, pkg.expiryDays);
+                              setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
+                            }
+                          }}
+                        />
+                        {(() => {
+                          const currentPkg = packages.find(p => p.name === packageType);
+                          const eligibility = (!isWalkInGuest && currentSelectedClient && currentPkg)
+                            ? validateMembershipEligibility(currentSelectedClient, currentPkg)
+                            : { allowed: true, reason: '' };
+                          if (eligibility.allowed) return null;
+                          return (
+                            <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-2xl text-xs flex items-center gap-2">
+                              <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
+                              <span><strong>Primary Membership Required:</strong> {eligibility.reason}</span>
+                            </div>
+                          );
+                        })()}
+                      </>
                     );
                   })()}
                 </div>
@@ -1777,44 +1818,56 @@ export default function Payments() {
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.sales_person')}</Label>
-                    {isInzan && !isCurrentUserAdmin && (
-                      <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
-                        Commission Locked
-                      </Badge>
-                    )}
-                  </div>
-                  <Select
-                    value={salesName}
-                    disabled={isInzan && !isCurrentUserAdmin}
-                    onValueChange={(v) => {
-                      if (!v) return;
-                      if (isInzan && isCurrentUserAdmin && salesName && salesName !== v) {
-                        setPendingSalesName(v);
-                        setReassignPaymentTarget({ isEdit: false, oldName: salesName, newName: v });
-                        setSalesReassignConfirmOpen(true);
-                      } else {
-                        setSalesName(v);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg disabled:opacity-60 disabled:cursor-not-allowed">
-                      <SelectValue placeholder="For commission" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      {uniqueSalesNames.map((name: string) => (
-                        <SelectItem key={name} value={name} className="rounded-xl py-3 px-4">{name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {isInzan && !isCurrentUserAdmin && (
-                    <p className="text-[10px] text-muted-foreground ml-1">
-                      Sales attribution is permanently locked against staff changes to protect commission integrity.
-                    </p>
-                  )}
-                </div>
+                {(() => {
+                  const selectedClientForForm = (!isWalkInGuest && clientId) ? clients.find(c => c.id === clientId) : null;
+                  const isRepLockedForForm = Boolean(selectedClientForForm?.assignedTo || selectedClientForForm?.salesRep);
+                  const isRepFieldDisabled = isRepLockedForForm && !isSalesManager;
+
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.sales_person')}</Label>
+                        {isRepLockedForForm && !isSalesManager ? (
+                          <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                            🔒 Locked to Assigned Rep
+                          </Badge>
+                        ) : isSalesManager && isRepLockedForForm ? (
+                          <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">
+                            Sales Manager Authority
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <Select
+                        value={salesName}
+                        disabled={isRepFieldDisabled}
+                        onValueChange={(v) => {
+                          if (!v) return;
+                          if (isInzan && isSalesManager && salesName && salesName !== v) {
+                            setPendingSalesName(v);
+                            setReassignPaymentTarget({ isEdit: false, oldName: salesName, newName: v });
+                            setSalesReassignConfirmOpen(true);
+                          } else {
+                            setSalesName(v);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg disabled:opacity-60 disabled:cursor-not-allowed">
+                          <SelectValue placeholder="For commission" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-2xl border-none shadow-2xl">
+                          {uniqueSalesNames.map((name: string) => (
+                            <SelectItem key={name} value={name} className="rounded-xl py-3 px-4">{name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {isRepLockedForForm && !isSalesManager && (
+                        <p className="text-[10px] text-muted-foreground ml-1">
+                          Member is permanently locked to their assigned sales representative. Only the Sales Manager can reassign this member.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 <div className="space-y-3">
                   <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.recorded_by')}</Label>
@@ -2308,187 +2361,201 @@ export default function Payments() {
                                 </div>
                               </DialogContent>
                             </Dialog>
-                            {['manager', 'super_admin', 'crm_admin'].includes(currentUser?.role || '') && (
-                              <Dialog open={editingPaymentId === payment.id} onOpenChange={(open) => {
-                                if (open) {
-                                  setEditingPaymentId(payment.id);
-                                  setEditAmount(payment.amount.toString());
-                                  setEditNotes(payment.notes || '');
-                                  setEditBranch(resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : '');
-                                  setEditMethod(payment.method);
-                                  setEditSalesName(payment.salesName || '');
-                                  setEditCoachName(payment.coachName || '');
-                                  setEditClientName(client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '');
-                                  setEditClientPhone(client?.phone || (client?.memberId ? String(client.memberId) : ''));
-                                  setEditPaymentDate(payment.date ? payment.date.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'));
-                                } else {
-                                  setEditingPaymentId(null);
-                                }
-                              }}>
-                                <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.edit_payment')} />}>
-                                  <DollarSign className="h-4 w-4" />
-                                </DialogTrigger>
-                                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                                  <DialogHeader>
-                                    <DialogTitle>{t('payments.edit.title')} - {client?.name || clientDisplayName}</DialogTitle>
-                                  </DialogHeader>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <Label className="text-xs font-semibold">{t('payments.edit.payment_date')}</Label>
-                                      <Input
-                                        type="date"
-                                        value={editPaymentDate}
-                                        onChange={(e) => setEditPaymentDate(e.target.value)}
-                                        max={format(new Date(), 'yyyy-MM-dd')}
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label className="text-xs font-semibold">{t('payments.edit.customer_name')}</Label>
-                                      <Input
-                                        value={editClientName}
-                                        onChange={(e) => setEditClientName(e.target.value)}
-                                        placeholder={t('payments.edit.customer_name')}
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label className="text-xs font-semibold">{t('payments.edit.customer_phone')}</Label>
-                                      <Input
-                                        value={editClientPhone}
-                                        onChange={(e) => setEditClientPhone(e.target.value)}
-                                        placeholder={t('payments.edit.customer_phone')}
-                                      />
-                                    </div>
-                                    <div>
-                                      <Label className="text-xs font-semibold">{t('payments.edit.branch')}</Label>
-                                      <Select value={editBranch} onValueChange={(val) => setEditBranch(val || '')}>
-                                        <SelectTrigger className="h-9">
-                                          <SelectValue placeholder={t('payments.edit.select_branch')} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {branches.map(b => (
-                                            <SelectItem key={b} value={b}>{b}</SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div>
-                                      <Label className="text-xs font-semibold">{t('payments.edit.method')}</Label>
-                                      <Select value={editMethod} onValueChange={(val) => setEditMethod(val as Payment['method'])}>
-                                        <SelectTrigger className="h-9">
-                                          <SelectValue placeholder={t('payments.edit.select_method')} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="Cash">{t('dashboard.cash')}</SelectItem>
-                                          <SelectItem value="Credit Card">{t('dashboard.visa')}</SelectItem>
-                                          <SelectItem value="Bank Transfer">{t('common.bank_transfer')}</SelectItem>
-                                          <SelectItem value="Instapay">{t('dashboard.instapay')}</SelectItem>
-                                          <SelectItem value="Other">{t('common.other')}</SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    <div>
-                                      <div className="flex items-center justify-between mb-1">
-                                        <Label className="text-xs font-semibold">{t('payments.edit.sales_name')}</Label>
-                                        {isInzan && !isCurrentUserAdmin && (
-                                          <span className="text-[10px] text-amber-500 font-bold">Locked</span>
-                                        )}
-                                      </div>
-                                      <Select
-                                        value={editSalesName}
-                                        disabled={isInzan && !isCurrentUserAdmin}
-                                        onValueChange={(val) => {
-                                          if (!val) return;
-                                          if (isInzan && isCurrentUserAdmin && editSalesName && editSalesName !== val) {
-                                            setPendingSalesName(val);
-                                            setReassignPaymentTarget({ isEdit: true, oldName: editSalesName, newName: val, paymentId: payment.id });
-                                            setSalesReassignConfirmOpen(true);
-                                          } else {
-                                            setEditSalesName(val);
-                                          }
-                                        }}
-                                      >
-                                        <SelectTrigger className="h-9 disabled:opacity-60 disabled:cursor-not-allowed">
-                                          <SelectValue placeholder={t('payments.edit.select_sales_rep')} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {uniqueSalesNames.map((name: string) => (
-                                            <SelectItem key={name} value={name}>
-                                              {name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    {(payment.package_category_type === 'PT' || (payment.package_category_type as string) === 'Private Training' || payment.coachName) && (
+                            {(() => {
+                              const editEligibility = isPaymentEditableByStaff(payment, currentUser, can('payments.edit'));
+                              if (!editEligibility.canEdit) return null;
+                              const isPaymentRepLocked = Boolean(client?.assignedTo || client?.salesRep || payment.sales_rep_id || payment.salesName);
+                              return (
+                                <Dialog open={editingPaymentId === payment.id} onOpenChange={(open) => {
+                                  if (open) {
+                                    setEditingPaymentId(payment.id);
+                                    setEditAmount(payment.amount.toString());
+                                    setEditNotes(payment.notes || '');
+                                    setEditBranch(resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : '');
+                                    setEditMethod(payment.method);
+                                    setEditSalesName(payment.salesName || '');
+                                    setEditCoachName(payment.coachName || '');
+                                    setEditClientName(client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '');
+                                    setEditClientPhone(client?.phone || (client?.memberId ? String(client.memberId) : ''));
+                                    setEditPaymentDate(payment.date ? payment.date.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'));
+                                  } else {
+                                    setEditingPaymentId(null);
+                                  }
+                                }}>
+                                  <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.edit_payment')} />}>
+                                    <DollarSign className="h-4 w-4" />
+                                  </DialogTrigger>
+                                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                                    <DialogHeader>
+                                      <DialogTitle>{t('payments.edit.title')} - {client?.name || clientDisplayName}</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="grid grid-cols-2 gap-4">
                                       <div>
-                                        <Label className="text-xs font-semibold">Coach Name</Label>
-                                        <Select value={editCoachName} onValueChange={(val) => setEditCoachName(val || '')}>
+                                        <Label className="text-xs font-semibold">{t('payments.edit.payment_date')}</Label>
+                                        <Input
+                                          type="date"
+                                          value={editPaymentDate}
+                                          onChange={(e) => setEditPaymentDate(e.target.value)}
+                                          max={format(new Date(), 'yyyy-MM-dd')}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs font-semibold">{t('payments.edit.customer_name')}</Label>
+                                        <Input
+                                          value={editClientName}
+                                          onChange={(e) => setEditClientName(e.target.value)}
+                                          placeholder={t('payments.edit.customer_name')}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs font-semibold">{t('payments.edit.customer_phone')}</Label>
+                                        <Input
+                                          value={editClientPhone}
+                                          onChange={(e) => setEditClientPhone(e.target.value)}
+                                          placeholder={t('payments.edit.customer_phone')}
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs font-semibold">{t('payments.edit.branch')}</Label>
+                                        <Select value={editBranch} onValueChange={(val) => setEditBranch(val || '')}>
                                           <SelectTrigger className="h-9">
-                                            <SelectValue placeholder="Select Coach" />
+                                            <SelectValue placeholder={t('payments.edit.select_branch')} />
                                           </SelectTrigger>
                                           <SelectContent>
-                                            <SelectItem value="unassigned">Unassigned</SelectItem>
-                                            {coaches.map(c => (
-                                              <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                            {branches.map(b => (
+                                              <SelectItem key={b} value={b}>{b}</SelectItem>
                                             ))}
                                           </SelectContent>
                                         </Select>
                                       </div>
-                                    )}
-                                    <div>
-                                      <Label className="text-xs font-semibold">{t('payments.edit.amount')}</Label>
-                                      <Input
-                                        type="number"
-                                        value={editAmount}
-                                        onChange={(e) => setEditAmount(e.target.value)}
-                                        step="0.01"
-                                      />
+                                      <div>
+                                        <Label className="text-xs font-semibold">{t('payments.edit.method')}</Label>
+                                        <Select value={editMethod} onValueChange={(val) => setEditMethod(val as Payment['method'])}>
+                                          <SelectTrigger className="h-9">
+                                            <SelectValue placeholder={t('payments.edit.select_method')} />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="Cash">{t('dashboard.cash')}</SelectItem>
+                                            <SelectItem value="Credit Card">{t('dashboard.visa')}</SelectItem>
+                                            <SelectItem value="Bank Transfer">{t('common.bank_transfer')}</SelectItem>
+                                            <SelectItem value="Instapay">{t('dashboard.instapay')}</SelectItem>
+                                            <SelectItem value="Other">{t('common.other')}</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center justify-between mb-1">
+                                          <Label className="text-xs font-semibold">{t('payments.edit.sales_name')}</Label>
+                                          {(isPaymentRepLocked && !isSalesManager) ? (
+                                            <span className="text-[10px] text-amber-500 font-bold">🔒 Locked</span>
+                                          ) : isSalesManager && isPaymentRepLocked ? (
+                                            <span className="text-[10px] text-emerald-500 font-bold">Manager Authority</span>
+                                          ) : null}
+                                        </div>
+                                        <Select
+                                          value={editSalesName}
+                                          disabled={isPaymentRepLocked && !isSalesManager}
+                                          onValueChange={(val) => {
+                                            if (!val) return;
+                                            if (isInzan && isSalesManager && editSalesName && editSalesName !== val) {
+                                              setPendingSalesName(val);
+                                              setReassignPaymentTarget({ isEdit: true, oldName: editSalesName, newName: val, paymentId: payment.id });
+                                              setSalesReassignConfirmOpen(true);
+                                            } else {
+                                              setEditSalesName(val);
+                                            }
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-9 disabled:opacity-60 disabled:cursor-not-allowed">
+                                            <SelectValue placeholder={t('payments.edit.select_sales_rep')} />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {uniqueSalesNames.map((name: string) => (
+                                              <SelectItem key={name} value={name}>
+                                                {name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      {(payment.package_category_type === 'PT' || (payment.package_category_type as string) === 'Private Training' || payment.coachName) && (
+                                        <div>
+                                          <Label className="text-xs font-semibold">Coach Name</Label>
+                                          <Select value={editCoachName} onValueChange={(val) => setEditCoachName(val || '')}>
+                                            <SelectTrigger className="h-9">
+                                              <SelectValue placeholder="Select Coach" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="unassigned">Unassigned</SelectItem>
+                                              {coaches.map(c => (
+                                                <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <Label className="text-xs font-semibold">{t('payments.edit.amount')}</Label>
+                                        <Input
+                                          type="number"
+                                          value={editAmount}
+                                          onChange={(e) => setEditAmount(e.target.value)}
+                                          step="0.01"
+                                        />
+                                      </div>
+                                      <div className="col-span-2">
+                                        <Label className="text-xs font-semibold">{t('payments.edit.notes')}</Label>
+                                        <Input
+                                          value={editNotes}
+                                          onChange={(e) => setEditNotes(e.target.value)}
+                                          placeholder={t('payments.edit.notes_placeholder')}
+                                        />
+                                      </div>
                                     </div>
-                                    <div className="col-span-2">
-                                      <Label className="text-xs font-semibold">{t('payments.edit.notes')}</Label>
-                                      <Input
-                                        value={editNotes}
-                                        onChange={(e) => setEditNotes(e.target.value)}
-                                        placeholder={t('payments.edit.notes_placeholder')}
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2 mt-6">
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => setEditingPaymentId(null)}
-                                    >
-                                      {t('common.cancel')}
-                                    </Button>
-                                    <Button
-                                      onClick={async () => {
-                                        const salesRepUser = users.find(u => 
-                                          u.id === editSalesName || 
-                                          (toCanonical(u.name || u.email || '').toLowerCase() === toCanonical(editSalesName || '').toLowerCase())
-                                        );
-                                        const salesRepId = salesRepUser ? salesRepUser.id : undefined;
+                                    <div className="flex gap-2 mt-6">
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => setEditingPaymentId(null)}
+                                      >
+                                        {t('common.cancel')}
+                                      </Button>
+                                      <Button
+                                        onClick={async () => {
+                                          const salesRepUser = users.find(u => 
+                                            u.id === editSalesName || 
+                                            (toCanonical(u.name || u.email || '').toLowerCase() === toCanonical(editSalesName || '').toLowerCase())
+                                          );
+                                          const rawRepId = salesRepUser ? salesRepUser.id : undefined;
 
-                                        await updatePayment(payment.id, {
-                                          amount: parseFloat(editAmount),
-                                          notes: editNotes || undefined,
-                                          branch: editBranch || undefined,
-                                          branchId: toCanonicalBranchId(editBranch) || undefined,
-                                          clientBranch: editBranch || undefined,
-                                          method: editMethod,
-                                          salesName: editSalesName || undefined,
-                                          sales_rep_id: salesRepId || undefined,
-                                          coachName: (editCoachName && editCoachName !== 'unassigned') ? editCoachName : undefined,
-                                          date: editPaymentDate ? safeIsoDate(editPaymentDate) : payment.date,
-                                        });
-                                        setEditingPaymentId(null);
-                                      }}
-                                    >
-                                      {t('payments.edit.save_changes')}
-                                    </Button>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            )}
+                                          const repId = (isPaymentRepLocked && !isSalesManager)
+                                            ? (payment.sales_rep_id || client?.assignedTo || client?.salesRep)
+                                            : rawRepId;
+                                          const repName = (isPaymentRepLocked && !isSalesManager)
+                                            ? (payment.salesName || resolveUserDisplay(repId, users, ''))
+                                            : editSalesName;
+
+                                          await updatePayment(payment.id, {
+                                            amount: parseFloat(editAmount),
+                                            notes: editNotes || undefined,
+                                            branch: editBranch || undefined,
+                                            branchId: toCanonicalBranchId(editBranch) || undefined,
+                                            clientBranch: editBranch || undefined,
+                                            method: editMethod,
+                                            salesName: repName || undefined,
+                                            sales_rep_id: repId || undefined,
+                                            coachName: (editCoachName && editCoachName !== 'unassigned') ? editCoachName : undefined,
+                                            date: editPaymentDate ? safeIsoDate(editPaymentDate) : payment.date,
+                                          });
+                                          setEditingPaymentId(null);
+                                        }}
+                                      >
+                                        {t('payments.edit.save_changes')}
+                                      </Button>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
+                              );
+                            })()}
                             {!payment.isOnHold ? (
                               <Dialog open={isHoldDialogOpen && holdPaymentId === payment.id} onOpenChange={(open) => {
                                 if (open) {

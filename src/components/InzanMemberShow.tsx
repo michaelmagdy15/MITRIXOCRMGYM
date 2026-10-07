@@ -29,6 +29,7 @@ import EntitlementManager from './EntitlementManager';
 import { AdjustPackageDatesDialog, canOverridePackageDates, buildPackageUpdates } from './AdjustPackageDatesDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { addAuditLog } from '../services/auditService';
+import { canReassignMemberSalesRep } from '../utils/permissions';
 import { Trash2, CalendarClock } from 'lucide-react';
 
 interface InzanMemberShowProps {
@@ -209,7 +210,14 @@ export function InzanMemberShow({
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onUpdateClient(client.id, formData);
+      const isRepLocked = Boolean(client.salesRep || client.assignedTo);
+      const canReassign = canReassignMemberSalesRep(currentUser);
+      const updates = { ...formData };
+      if (isRepLocked && !canReassign) {
+        // Enforce Sales Manager authority rule: preserve assigned sales rep unless Sales Manager
+        updates.salesRep = client.salesRep || client.assignedTo || '';
+      }
+      await onUpdateClient(client.id, updates);
       setIsEditing(false);
     } catch (err: any) {
       alert(err?.message || 'Failed to update client profile');
@@ -235,17 +243,24 @@ export function InzanMemberShow({
     value: string | number | undefined | null, 
     fieldKey?: keyof Client, 
     type: 'text' | 'select' | 'number' | 'date' = 'text',
-    options?: { value: string; label: string }[]
+    options?: { value: string; label: string }[],
+    disabled?: boolean
   ) => {
     if (isEditing && fieldKey) {
       if (type === 'select' && options) {
         return (
           <div className="flex flex-col space-y-1">
-            <span className="text-[10px] text-muted-foreground font-semibold uppercase">{label}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground font-semibold uppercase">{label}</span>
+              {disabled && (
+                <span className="text-[9px] text-amber-500 font-bold">🔒 Locked</span>
+              )}
+            </div>
             <select
-              className="h-8 w-full rounded border border-input bg-background px-2 py-0 text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+              className="h-8 w-full rounded border border-input bg-background px-2 py-0 text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
               value={(formData[fieldKey] as string) || ''}
               onChange={e => handleInputChange(fieldKey, e.target.value)}
+              disabled={disabled}
             >
               <option value="">Select...</option>
               {options.map(opt => (
@@ -257,10 +272,16 @@ export function InzanMemberShow({
       }
       return (
         <div className="flex flex-col space-y-1">
-          <span className="text-[10px] text-muted-foreground font-semibold uppercase">{label}</span>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground font-semibold uppercase">{label}</span>
+            {disabled && (
+              <span className="text-[9px] text-amber-500 font-bold">🔒 Locked</span>
+            )}
+          </div>
           <Input
             type={type}
-            className="h-8 text-xs bg-background text-foreground"
+            disabled={disabled}
+            className="h-8 text-xs bg-background text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
             value={(formData[fieldKey] !== undefined ? formData[fieldKey] : '') as any}
             onChange={e => handleInputChange(fieldKey, type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
           />
@@ -577,9 +598,18 @@ export function InzanMemberShow({
                   {renderField('National ID', client.nationalId, 'nationalId')}
                   {renderField('Email', client.email, 'email')}
                   {renderField('Area', client.city, 'city')}
-                  {renderField('Sales Man', users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || 'unassigned', 'salesRep', 'select', 
-                    users.filter(u => ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name }))
-                  )}
+                  {(() => {
+                    const isRepLocked = Boolean(client.salesRep || client.assignedTo);
+                    const canReassign = canReassignMemberSalesRep(currentUser);
+                    return renderField(
+                      'Sales Man',
+                      users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || 'unassigned',
+                      'salesRep',
+                      'select',
+                      users.filter(u => ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
+                      isRepLocked && !canReassign
+                    );
+                  })()}
                   {renderField('Trainer', users.find(u => u.id === (formData.assignedTo || client.assignedTo))?.name || 'unassigned', 'assignedTo', 'select',
                     users.filter(u => ['coach'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name }))
                   )}

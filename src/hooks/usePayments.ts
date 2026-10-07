@@ -7,6 +7,7 @@ import { cleanData } from '../utils';
 import { addAuditLog } from '../services/auditService';
 import { useAuth } from '../contexts/AuthContext';
 import { resolvePaymentCategory } from '../utils/paymentCategories';
+import { isPaymentEditableByStaff } from '../utils/permissions';
 
 interface UsePaymentsOptions {
   currentUser: User | null;
@@ -90,11 +91,17 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
     if (!currentUser) return;
     try {
       const payment = payments.find(p => p.id === id);
+      if (payment) {
+        const editCheck = isPaymentEditableByStaff(payment, currentUser, canDeletePayments);
+        if (!editCheck.canEdit) {
+          throw new Error(editCheck.reason || 'Unauthorized to modify this payment.');
+        }
+      }
       const clientName = payment
         ? (clients.find(c => c.id === payment.clientId)?.name || payment.clientId)
         : id;
 
-        await updateDoc(doc(db, 'payments', id), cleanData(updates));
+      await updateDoc(doc(db, 'payments', id), cleanData(updates));
       await addAuditLog('UPDATE', 'PAYMENT', id, `Updated payment for ${clientName}`, currentUser?.name);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `payments/${id}`);

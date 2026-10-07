@@ -331,7 +331,7 @@ export const PermissionTemplatesTab: React.FC<PermissionTemplatesTabProps> = ({
 
       {/* Create / Edit Template Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="w-[96vw] sm:max-w-4xl max-h-[92vh] flex flex-col p-0 overflow-hidden rounded-3xl">
+        <DialogContent className="w-[98vw] max-w-[98vw] sm:max-w-[98vw] h-[96vh] max-h-[96vh] flex flex-col p-0 overflow-hidden rounded-2xl">
           <DialogHeader className="p-6 pb-4 border-b bg-card">
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Sliders className="h-5 w-5 text-primary" />

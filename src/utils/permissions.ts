@@ -263,6 +263,12 @@ export const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     category: 'members'
   },
   {
+    key: 'members.reassign_sales_rep',
+    label: 'Reassign Member Sales Rep',
+    description: 'Change the permanently locked sales representative assigned to an existing gym member (Sales Manager only).',
+    category: 'members'
+  },
+  {
     key: 'members.adjust_balances',
     label: 'Adjust Session Balances',
     description: 'Perform manual session balance credits/deductions with mandatory audit notes.',
@@ -834,6 +840,47 @@ export const DEFAULT_SYSTEM_TEMPLATES: Omit<PermissionTemplate, 'id' | 'createdA
     }
   },
   {
+    name: 'Sales Manager',
+    description: 'Lead distribution, sales quota monitoring, rep re-assignments, commission audit, and revenue analytics.',
+    isSystem: true,
+    baseRole: 'manager',
+    permissions: {
+      ...ALL_PERMISSIONS_FALSE,
+      'dashboard.view': true,
+      'dashboard.view_financials': true,
+      'dashboard.view_rep_breakdown': true,
+      'dashboard.view_global': true,
+      'payments.view': true,
+      'payments.create': true,
+      'payments.create_guest': true,
+      'payments.print_receipt': true,
+      'payments.view_branch_totals': true,
+      'payments.export': true,
+      'members.view': true,
+      'members.view_all_branches': true,
+      'members.view_contact_info': true,
+      'members.create': true,
+      'members.edit_profile': true,
+      'members.manage_packages': true,
+      'members.reassign_sales_rep': true,
+      'members.log_interactions': true,
+      'members.export': true,
+      'leads.view_all': true,
+      'leads.view_contact_info': true,
+      'leads.create': true,
+      'leads.import_bulk': true,
+      'leads.edit': true,
+      'leads.assign': true,
+      'leads.convert': true,
+      'leads.export': true,
+      'packages.view': true,
+      'reports.view_basic': true,
+      'reports.view_advanced': true,
+      'reports.view_user_performance': true,
+      'operations.call_center': true
+    }
+  },
+  {
     name: 'Head Coach / Fitness Director',
     description: 'Class schedule builder, trainer assignments, session rosters, and PT tracking.',
     isSystem: true,
@@ -1012,3 +1059,97 @@ export function syncLegacyFlags(permissions: Record<string, boolean>): Partial<U
     can_assign_leads: !!permissions['leads.assign']
   };
 }
+
+/**
+ * Determines whether the current user is authorized to reassign or change
+ * an existing member's assigned sales representative.
+ * 
+ * Business Rule:
+ * "When a sales rep is assigned to a member they will always be locked to them
+ * even when renewing. The only person that can change a member that is assigned
+ * to a sales rep is the sales manager only."
+ */
+export function canReassignMemberSalesRep(
+  user: User | null | undefined,
+  templatesMap?: Record<string, PermissionTemplate>
+): boolean {
+  if (!user) return false;
+
+  // 1. Super admins and CRM admins have executive override
+  if (user.role === 'super_admin' || user.role === 'crm_admin') return true;
+
+  // 2. Explicit granular permission override (via template or custom permissions)
+  if (hasPermission(user, 'members.reassign_sales_rep', templatesMap)) return true;
+
+  // 3. Job title / role / department checks for Sales Manager
+  const jobTitle = (user.jobTitle || '').toLowerCase();
+  const dept = (user.department || '').toLowerCase();
+  if (
+    jobTitle.includes('sales manager') ||
+    jobTitle.includes('head of sales') ||
+    jobTitle.includes('director of sales') ||
+    jobTitle.includes('assistant sales manager')
+  ) {
+    return true;
+  }
+  if ((user.role as string) === 'sales_manager') return true;
+  if (user.role === 'manager' && (dept === 'sales' || jobTitle.includes('sales'))) return true;
+
+  // Non-sales managers cannot reassign locked member sales reps
+  return false;
+}
+
+/**
+ * Determines whether a payment can be edited or fixed by staff.
+ * 
+ * Business Rule:
+ * "The receptionist when they record a payment and they accidentally have a mistake in it,
+ * they only have a window of 1 day to fix the payment otherwise they cannot do anything to it."
+ */
+export function isPaymentEditableByStaff(
+  payment: { created_at?: string | null; date?: string | null; recordedBy?: string | null; sales_rep_id?: string | null },
+  user: User | null | undefined,
+  canManagePayments: boolean = false
+): { canEdit: boolean; reason?: string } {
+  if (!user) return { canEdit: false, reason: 'Authentication required' };
+
+  // Managers, admins, super_admins, or users with payments.edit permission can always edit
+  if (
+    canManagePayments ||
+    ['manager', 'admin', 'super_admin', 'crm_admin'].includes(user.role)
+  ) {
+    return { canEdit: true };
+  }
+
+  // Check if current user is the staff member who recorded or created the payment
+  const isRecorder = Boolean(
+    (payment.recordedBy && payment.recordedBy === user.id) ||
+    (payment.sales_rep_id && payment.sales_rep_id === user.id)
+  );
+
+  if (!isRecorder) {
+    return { canEdit: false, reason: 'You did not record this payment.' };
+  }
+
+  // Check 1-day (24-hour) window
+  const timestamp = payment.created_at || payment.date;
+  if (!timestamp) {
+    return { canEdit: true };
+  }
+
+  const paymentTime = new Date(timestamp).getTime();
+  if (isNaN(paymentTime)) return { canEdit: true };
+
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const elapsed = Date.now() - paymentTime;
+
+  if (elapsed <= oneDayMs) {
+    return { canEdit: true };
+  }
+
+  return {
+    canEdit: false,
+    reason: 'The 1-day window to fix this payment has expired. Only a manager can modify it.'
+  };
+}
+

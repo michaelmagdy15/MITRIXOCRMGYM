@@ -673,7 +673,7 @@ function AppContent() {
       icon: Activity,
       show: (features.nutrition === true || isInzan) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'coach')
     },
-    { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: effectiveRole !== 'admin' },
+    { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: (features.tasks !== false) && canAny(['tasks.view', 'tasks.manage_templates', 'tasks.assign']) },
     {
       id: 'payments',
       label: isInzan ? 'Payments' : t('nav.payments'),
@@ -685,25 +685,25 @@ function AppContent() {
       id: 'reports',
       label: t('nav.reports'),
       icon: BarChart3,
-      show: (features.reports !== false) && can('reports.view_basic') && currentUser.role !== 'admin'
+      show: (features.reports !== false) && can('reports.view_basic')
     },
     {
       id: 'audit',
       label: t('nav.audit'),
       icon: History,
-      show: can('reports.view_audit_logs') && currentUser.role !== 'admin'
+      show: can('reports.view_audit_logs')
     },
     {
       id: 'settings',
       label: t('nav.settings'),
       icon: SettingsIcon,
-      show: can('settings.access') && currentUser.role !== 'admin'
+      show: can('settings.access')
     },
     {
       id: 'qrcode',
       label: t('nav.qrcode'),
       icon: Smartphone,
-      show: can('settings.access') && currentUser.role !== 'admin' && !/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent)
+      show: can('settings.access') && !/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent)
     },
     {
       id: 'quotes',
@@ -721,14 +721,14 @@ function AppContent() {
       id: 'admin-hub',
       label: t('nav.admin-hub'),
       icon: ShieldAlert,
-      show: isManagerOrSama && effectiveRole !== 'admin'
+      show: isManagerOrSama
     },
     // --- Premium Modules (gated by feature flags) ---
     {
       id: 'advanced-reports',
       label: 'Premium Reports',
       icon: Star,
-      show: features.advancedReports === true && can('reports.view_advanced') && currentUser.role !== 'admin'
+      show: features.advancedReports === true && can('reports.view_advanced')
     },
     {
       id: 'call-center',
@@ -1337,13 +1337,11 @@ function AppContent() {
               </TabsContent>
             )}
 
-            {currentUser.role !== 'admin' && (
-              <TabsContent value="tasks" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-                <Tasks />
-              </TabsContent>
-            )}
+            <TabsContent value="tasks" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <Tasks />
+            </TabsContent>
 
-            {(canViewGlobalDashboard || canDeletePayments) && (
+            {(canViewGlobalDashboard || canDeletePayments || can('payments.view')) && (
               <TabsContent value="payments" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
                 <Payments />
               </TabsContent>

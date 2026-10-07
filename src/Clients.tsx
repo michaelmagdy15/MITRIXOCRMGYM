@@ -43,6 +43,8 @@ import { InzanMemberShow } from './components/InzanMemberShow';
 import { AdjustPackageDatesDialog, canOverridePackageDates } from './components/AdjustPackageDatesDialog';
 import { addAuditLog } from './services/auditService';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
+import { canReassignMemberSalesRep } from './utils/permissions';
+import { validateMembershipEligibility } from './utils/membershipRules';
 import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
@@ -274,6 +276,30 @@ export default function Clients() {
   React.useEffect(() => { if (renewDialogClientId) resetRenewOperationId(); }, [renewDialogClientId, resetRenewOperationId]);
   React.useEffect(() => { if (addPackageDialogClientId) resetAddPackageOperationId(); }, [addPackageDialogClientId, resetAddPackageOperationId]);
 
+  React.useEffect(() => {
+    if (renewDialogClientId) {
+      const c = clients.find(cl => cl.id === renewDialogClientId);
+      const rep = c?.assignedTo || c?.salesRep;
+      if (rep && rep !== 'unassigned') setRenewSalesRep(rep);
+    }
+  }, [renewDialogClientId, clients]);
+
+  React.useEffect(() => {
+    if (upgradeDialogClientId) {
+      const c = clients.find(cl => cl.id === upgradeDialogClientId);
+      const rep = c?.assignedTo || c?.salesRep;
+      if (rep && rep !== 'unassigned') setUpgradeSalesRep(rep);
+    }
+  }, [upgradeDialogClientId, clients]);
+
+  React.useEffect(() => {
+    if (addPackageDialogClientId) {
+      const c = clients.find(cl => cl.id === addPackageDialogClientId);
+      const rep = c?.assignedTo || c?.salesRep;
+      if (rep && rep !== 'unassigned') setAddPackageSalesRep(rep);
+    }
+  }, [addPackageDialogClientId, clients]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [searchMode, setSearchMode] = useState<'general' | 'id'>('general');
   const [fullPageView, setFullPageView] = useState(false);
@@ -492,7 +518,13 @@ export default function Clients() {
     const upgradeCredit = prevSysPkg ? prevSysPkg.price : 0;
     const grossAmount = pkg.price;
 
-    const repId = upgradeSalesRep !== 'unassigned' ? upgradeSalesRep : (currentUser?.id || '');
+    const clientAssignedRep = client.assignedTo || client.salesRep;
+    const isRepLocked = Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
+    const canReassign = canReassignMemberSalesRep(currentUser);
+
+    const repId = (isRepLocked && !canReassign)
+      ? clientAssignedRep!
+      : (upgradeSalesRep !== 'unassigned' ? upgradeSalesRep : (clientAssignedRep || currentUser?.id || ''));
     const repName = users.find(u => u.id === repId)?.name || '';
 
     if (upgradePaymentMethod === 'Instapay' && upgradeInstapayRef && !/^\d{12}$/.test(upgradeInstapayRef)) {
@@ -569,7 +601,13 @@ export default function Clients() {
     
     const grossAmount = pkg.price;
 
-    const repId = renewSalesRep !== 'unassigned' ? renewSalesRep : (currentUser?.id || '');
+    const clientAssignedRep = client.assignedTo || client.salesRep;
+    const isRepLocked = Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
+    const canReassign = canReassignMemberSalesRep(currentUser);
+
+    const repId = (isRepLocked && !canReassign)
+      ? clientAssignedRep!
+      : (renewSalesRep !== 'unassigned' ? renewSalesRep : (clientAssignedRep || currentUser?.id || ''));
     const repName = users.find(u => u.id === repId)?.name || '';
 
     if (renewPaymentMethod === 'Instapay' && renewInstapayRef && !/^\d{12}$/.test(renewInstapayRef)) {
@@ -644,12 +682,19 @@ export default function Clients() {
       return;
     }
 
-    if (addPackageMethod === 'Instapay' && addPackageInstapayRef && !/^\d{12}$/.test(addPackageInstapayRef)) {
-      alert('Please enter a valid 12-digit Instapay reference number.');
+    const eligibility = validateMembershipEligibility(client, pkg);
+    if (!eligibility.allowed) {
+      alert(`Primary Membership Required:\n${eligibility.reason}`);
       return;
     }
 
-    const repId = addPackageSalesRep !== 'unassigned' ? addPackageSalesRep : (currentUser?.id || '');
+    const clientAssignedRep = client.assignedTo || client.salesRep;
+    const isRepLocked = Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
+    const canReassign = canReassignMemberSalesRep(currentUser);
+
+    const repId = (isRepLocked && !canReassign)
+      ? clientAssignedRep!
+      : (addPackageSalesRep !== 'unassigned' ? addPackageSalesRep : (clientAssignedRep || currentUser?.id || ''));
     const repName = users.find(u => u.id === repId)?.name || '';
     const grossAmount = addPackageAmount ? parseFloat(addPackageAmount) : pkg.price;
 
@@ -1672,16 +1717,24 @@ export default function Clients() {
               )}
               {canViewGlobalDashboard && (
                 <TableCell className="hidden xl:table-cell">
-                  <select 
-                    className="flex h-8 w-[130px] items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    value={client.assignedTo || 'unassigned'}
-                    onChange={(e) => updateClient(client.id, { assignedTo: e.target.value === 'unassigned' ? '' : e.target.value })}
-                  >
-                    <option value="unassigned">{t('leads.tabs.unassigned')}</option>
-                    {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === client.assignedTo)).map(rep => (
-                      <option key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const isAssigned = Boolean(client.assignedTo && client.assignedTo !== 'unassigned');
+                    const canReassign = canReassignMemberSalesRep(currentUser);
+                    return (
+                      <select 
+                        className="flex h-8 w-[130px] items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                        value={client.assignedTo || 'unassigned'}
+                        disabled={isAssigned && !canReassign}
+                        title={isAssigned && !canReassign ? 'Locked: Only the Sales Manager can change an assigned sales rep.' : undefined}
+                        onChange={(e) => updateClient(client.id, { assignedTo: e.target.value === 'unassigned' ? '' : e.target.value })}
+                      >
+                        <option value="unassigned">{t('leads.tabs.unassigned')}</option>
+                        {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === client.assignedTo)).map(rep => (
+                          <option key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                 </TableCell>
               )}
               <TableCell>
@@ -2651,11 +2704,18 @@ export default function Clients() {
                           </select>
                         </div>
                         <div className="space-y-1 col-span-1 sm:col-span-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Sales Rep</Label>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Sales Rep</Label>
+                            {Boolean(activeClient.assignedTo && activeClient.assignedTo !== 'unassigned') && !canReassignMemberSalesRep(currentUser) && (
+                              <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                                🔒 Locked
+                              </Badge>
+                            )}
+                          </div>
                           <select
                             className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60 disabled:cursor-not-allowed"
                             value={activeClient.assignedTo || 'unassigned'}
-                            disabled={(currentUser?.role === 'rep' && !!activeClient.assignedTo) || (getTenantId().toLowerCase().includes('inzan') && !isEditing)}
+                            disabled={(Boolean(activeClient.assignedTo && activeClient.assignedTo !== 'unassigned') && !canReassignMemberSalesRep(currentUser)) || !isEditing}
                             onChange={(e) => updateClient(activeClient.id, { assignedTo: e.target.value === 'unassigned' ? '' : e.target.value })}
                           >
                             <option value="unassigned">Unassigned</option>
@@ -4122,24 +4182,47 @@ export default function Clients() {
                           </div>
                         )}
 
-                        <div className="space-y-1.5">
-                          <Label className="text-sm font-semibold">Sales Representative</Label>
-                          <Select value={upgradeSalesRep} onValueChange={(val) => val && setUpgradeSalesRep(val)}>
-                            <SelectTrigger className="h-11 rounded-xl">
-                              <SelectValue placeholder="Select Sales Rep">
-                                {upgradeSalesRep === 'unassigned'
-                                  ? 'Unassigned'
-                                  : (users.find(u => u.id === upgradeSalesRep)?.name || users.find(u => u.id === upgradeSalesRep)?.email || 'Select Sales Rep')}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="unassigned">Unassigned</SelectItem>
-                              {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === upgradeSalesRep)).map(rep => (
-                                <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        {(() => {
+                          const client = clients.find(c => c.id === upgradeDialogClientId);
+                          const isRepLocked = Boolean(client?.assignedTo || client?.salesRep);
+                          const canReassign = canReassignMemberSalesRep(currentUser);
+                          return (
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <Label className="text-sm font-semibold">Sales Representative</Label>
+                                {isRepLocked && (
+                                  <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                                    🔒 Locked to Assigned Rep
+                                  </Badge>
+                                )}
+                              </div>
+                              <Select
+                                value={upgradeSalesRep}
+                                disabled={isRepLocked && !canReassign}
+                                onValueChange={(val) => val && setUpgradeSalesRep(val)}
+                              >
+                                <SelectTrigger className="h-11 rounded-xl disabled:opacity-70 disabled:cursor-not-allowed">
+                                  <SelectValue placeholder="Select Sales Rep">
+                                    {upgradeSalesRep === 'unassigned'
+                                      ? 'Unassigned'
+                                      : (users.find(u => u.id === upgradeSalesRep)?.name || users.find(u => u.id === upgradeSalesRep)?.email || 'Select Sales Rep')}
+                                  </SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                                  {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === upgradeSalesRep)).map(rep => (
+                                    <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {isRepLocked && !canReassign && (
+                                <p className="text-[10px] text-muted-foreground">
+                                  Member is locked to assigned sales rep. Only the Sales Manager can reassign.
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()}
 
                         <PricingDiscountControls
                           grossAmount={(() => {
@@ -4313,24 +4396,47 @@ export default function Clients() {
                       </div>
                     )}
 
-                    <div className="space-y-1.5">
-                      <Label className="text-sm font-semibold">Sales Representative</Label>
-                      <Select value={renewSalesRep} onValueChange={(val) => val && setRenewSalesRep(val)}>
-                        <SelectTrigger className="h-11 rounded-xl">
-                          <SelectValue placeholder="Select Sales Rep">
-                            {renewSalesRep === 'unassigned'
-                              ? 'Unassigned'
-                              : (users.find(u => u.id === renewSalesRep)?.name || users.find(u => u.id === renewSalesRep)?.email || 'Select Sales Rep')}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unassigned">Unassigned</SelectItem>
-                          {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === renewSalesRep)).map(rep => (
-                            <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {(() => {
+                      const client = clients.find(c => c.id === renewDialogClientId);
+                      const isRepLocked = Boolean(client?.assignedTo || client?.salesRep);
+                      const canReassign = canReassignMemberSalesRep(currentUser);
+                      return (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-semibold">Sales Representative</Label>
+                            {isRepLocked && (
+                              <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                                🔒 Locked to Assigned Rep
+                              </Badge>
+                            )}
+                          </div>
+                          <Select
+                            value={renewSalesRep}
+                            disabled={isRepLocked && !canReassign}
+                            onValueChange={(val) => val && setRenewSalesRep(val)}
+                          >
+                            <SelectTrigger className="h-11 rounded-xl disabled:opacity-70 disabled:cursor-not-allowed">
+                              <SelectValue placeholder="Select Sales Rep">
+                                {renewSalesRep === 'unassigned'
+                                  ? 'Unassigned'
+                                  : (users.find(u => u.id === renewSalesRep)?.name || users.find(u => u.id === renewSalesRep)?.email || 'Select Sales Rep')}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="unassigned">Unassigned</SelectItem>
+                              {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === renewSalesRep)).map(rep => (
+                                <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {isRepLocked && !canReassign && (
+                            <p className="text-[10px] text-muted-foreground">
+                              Member is locked to assigned sales rep. Only the Sales Manager can reassign.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <PricingDiscountControls
                       grossAmount={(() => {
@@ -4457,9 +4563,15 @@ export default function Clients() {
                   const endDate = safeFormatDate(safeAddDays(addPackageStartDate, pkg.expiryDays), 'dd MMM yyyy');
                   const client = clients.find(c => c.id === addPackageDialogClientId);
                   const isAlreadyActive = (client?.packages || []).some(p => p.status === 'Active' && p.packageName === pkg.name);
+                  const eligibility = validateMembershipEligibility(client, pkg);
 
                   return (
                     <div className="rounded-2xl bg-muted/30 border border-border/50 p-4 text-sm space-y-2">
+                      {!eligibility.allowed && (
+                        <div className="text-xs bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 p-2.5 rounded-xl font-medium mb-1">
+                          ⚠️ <strong>Primary Membership Required:</strong> {eligibility.reason}
+                        </div>
+                      )}
                       {isAlreadyActive && (
                         <div className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 p-2.5 rounded-xl font-medium mb-1">
                           ℹ️ Note: Member already has an active cycle of this package. Adding this will register a Renewal and extend their membership.
@@ -4566,24 +4678,47 @@ export default function Clients() {
                         </div>
                       )}
 
-                      <div className="space-y-1.5">
-                        <Label className="text-sm font-semibold">Sales Representative</Label>
-                        <Select value={addPackageSalesRep} onValueChange={(val) => val && setAddPackageSalesRep(val)}>
-                          <SelectTrigger className="h-11 rounded-xl">
-                            <SelectValue placeholder="Select Sales Rep">
-                              {addPackageSalesRep === 'unassigned'
-                                ? 'Unassigned'
-                                : (users.find(u => u.id === addPackageSalesRep)?.name || users.find(u => u.id === addPackageSalesRep)?.email || 'Select Sales Rep')}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="unassigned">Unassigned</SelectItem>
-                            {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === addPackageSalesRep)).map(rep => (
-                              <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {(() => {
+                        const client = clients.find(c => c.id === addPackageDialogClientId);
+                        const isRepLocked = Boolean(client?.assignedTo || client?.salesRep);
+                        const canReassign = canReassignMemberSalesRep(currentUser);
+                        return (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-sm font-semibold">Sales Representative</Label>
+                              {isRepLocked && (
+                                <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                                  🔒 Locked to Assigned Rep
+                                </Badge>
+                              )}
+                            </div>
+                            <Select
+                              value={addPackageSalesRep}
+                              disabled={isRepLocked && !canReassign}
+                              onValueChange={(val) => val && setAddPackageSalesRep(val)}
+                            >
+                              <SelectTrigger className="h-11 rounded-xl disabled:opacity-70 disabled:cursor-not-allowed">
+                                <SelectValue placeholder="Select Sales Rep">
+                                  {addPackageSalesRep === 'unassigned'
+                                    ? 'Unassigned'
+                                    : (users.find(u => u.id === addPackageSalesRep)?.name || users.find(u => u.id === addPackageSalesRep)?.email || 'Select Sales Rep')}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="unassigned">Unassigned</SelectItem>
+                                {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === addPackageSalesRep)).map(rep => (
+                                  <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {isRepLocked && !canReassign && (
+                              <p className="text-[10px] text-muted-foreground">
+                                Member is locked to assigned sales rep. Only the Sales Manager can reassign.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className="space-y-1.5">
                         <Label className="text-sm font-semibold">Notes / Receipt Ref</Label>

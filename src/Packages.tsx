@@ -16,11 +16,17 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import ImageCropperDialog from './components/ImageCropperDialog';
 
 export const PACKAGE_CATEGORIES = [
+  'Membership',
+  'Personal Training',
+  'SGF',
+  'Gymnastics',
+  'Nutrition',
+  'Complimentary',
+  'Classes',
+  'Physiotherapy',
   'Gym Memberships',
   'Personal Training (PT)',
   'Drop-in / Day Pass',
-  'Nutrition',
-  'Classes',
   'Other'
 ] as const;
 
@@ -204,16 +210,26 @@ export default function Packages() {
 
   const getCategoryBadgeClass = (cat?: string) => {
     switch (cat) {
+      case 'Membership':
       case 'Gym Memberships':
         return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+      case 'Personal Training':
       case 'Personal Training (PT)':
         return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
-      case 'Drop-in / Day Pass':
+      case 'SGF':
         return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+      case 'Gymnastics':
+        return 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20';
+      case 'Drop-in / Day Pass':
+        return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
       case 'Nutrition':
         return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
       case 'Classes':
         return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+      case 'Physiotherapy':
+        return 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20';
+      case 'Complimentary':
+        return 'bg-teal-500/10 text-teal-500 border-teal-500/20';
       default:
         return 'bg-muted text-muted-foreground border-border';
     }

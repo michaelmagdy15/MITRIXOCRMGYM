@@ -409,11 +409,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     }
     let filtered = clients;
-    if (!canViewGlobalDashboard) {
+    // Only restrict to assigned clients if the user is strictly a sales representative
+    // without global or all-branch view rights. Admin, Manager, Front Desk, Super Admin MUST see all members!
+    const isRestrictedRep = (currentUser.role === 'rep' || effectiveRole === 'rep') &&
+      !can('members.view_all_branches') &&
+      !can('dashboard.view_global') &&
+      currentUser.role !== 'admin' &&
+      currentUser.role !== 'manager' &&
+      currentUser.role !== 'super_admin' &&
+      currentUser.role !== 'crm_admin';
+
+    if (isRestrictedRep) {
       filtered = clients.filter(c => isClientAssignedToRep(c, currentUser.id, currentUser.name || ''));
     }
     return filtered;
-  }, [clients, currentUser, searchQuery, canViewGlobalDashboard, isClientAssignedToRep]);
+  }, [clients, currentUser, effectiveRole, searchQuery, can, isClientAssignedToRep]);
 
   const visiblePayments = useMemo(() => {
     if (!currentUser) return [];
