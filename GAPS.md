@@ -2,6 +2,16 @@
 
 Updated: 2026-10-07 (Member Calendar Sync)
 
+## RECENT WORK - 2026-10-07 (INZAN.DOCS.1 — Comprehensive User Guide and Operational Manual)
+
+- Expanded `docs/INZAN_ATHLETICS_USER_GUIDE_OPERATIONAL_MANUAL.docx` into a 14-page, 19-section guide covering the member and coach portals, all current CRM navigation, end-to-end sales and payments, bookings, nutrition, front desk, shift close, reporting, settings, security, and exceptions.
+- Used the existing Inzan logo and the tenant's black, charcoal, and white visual theme. Added six monochrome workflow diagrams. Source and reproducible builder are in `docs/INZAN_ATHLETICS_USER_GUIDE_OPERATIONAL_MANUAL_SOURCE.md` and `build_inzan_manual_v2.py`.
+- Distinguished visible UI workflows from services without a dedicated operator screen and external integrations still pending provider configuration or management decisions.
+- Proof: Word rendered the document to 14 pages for visual review, with 7 embedded images including the logo. `npm run lint` and `npm run build` exit 0. Build retains existing sourcemap/chunk-size warnings. No application behavior or production data changed.
+- Decision: document inventory and equipment service behavior without inventing navigation entries, because the inspected CRM has no dedicated screens for those services.
+
+---
+
 ## RECENT WORK - 2026-10-06 (INZAN.PRD.COMPLIANCE — Complete P0/P1/P2 Implementation & Verification)
 
 - **Comprehensive PRD Gap Completion & Verification**: Executed the full master PRD gap completion plan against `C:\Users\Mi5a\Desktop\gggg\INZAN Integrated System [2].pdf` across P0, P1, and P2 workstreams. Produced exhaustive compliance matrix in `docs/INZAN_PRD_COMPLIANCE_STATUS.md` mapping all 34 PRD sections and 15 Acceptance Criteria.
