@@ -448,3 +448,15 @@ Implemented background sync via Vite PWA Service Worker for offline-capable mobi
 | C12: baseline lint | 2026-08-18 | Removed dead fix-migration route + firebaseAdmin import |
 
 - Delivery: user explicitly authorized committing and syncing the review branch codex/tenant-contracts-inzan-theme. Public deployment and app-store release remain pending.
+
+---
+
+## Sales Collateral - Bravo / Delta Brochure
+
+**Status:** Done - expanded 2026-10-08
+
+- Twelve-page premium MITRIXO brochure presents Bravo for boxing/combat-sports clubs and Delta for multi-service fitness centres.
+- Uses privacy-safe live Strike and Inzan class-manager captures plus a live 390 px Inzan mobile view.
+- Covers the platform proposition, connected member journey, edition workflows, responsive access, controls, reporting, comparison and implementation path.
+- Claims remain bounded: no production certification, guaranteed outcomes or completed third-party integrations are implied.
+- Decision: retained the existing verified live captures because the browser capture helper was unavailable and additional production views risked exposing member or financial data.

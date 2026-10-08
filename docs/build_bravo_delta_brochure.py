@@ -120,26 +120,38 @@ txt('mitrixo.com',M,748,12,'Head',WHITE)
 C.linkURL('https://mitrixo.com',(M,H-767,M+120,H-746),relative=0)
 end()
 
-# 02 - State clearly what is sold; explain the connected product.
+# 02 - Define the product and its commercial value.
 start('THE PLATFORM')
 label('What is Mitrixo',M,97)
 heading(['YOUR GYM BUSINESS','IN ONE SYSTEM'],M,129,32)
-para('MITRIXO is white-label gym management software. It connects your sales process and daily operations with a member experience carrying your gym’s identity.',M,226,493,12.5)
-para('Staff can follow the member journey without rebuilding the same information in a separate tool for each department.',M,297,485,11,GREY)
-label('A connected member journey',M,371)
-steps=[('01','ENQUIRY','Lead and follow-up'),('02','MEMBERSHIP','Package and payment'),('03','BOOKING','Class or PT session'),('04','VISIT','Check-in and history')]
-for i,(num,title,sub) in enumerate(steps):
-    x=M+i*132
-    txt(num,x,409,31,'Light','#A0A3A6');txt(title,x,459,9,'Head')
-    para(sub,x,482,115,9.5,GREY)
-    if i<3:arrow(x+47,435,x+111,'#A0A3A6')
-line(M,552,W-M,552)
-feature('FOR YOUR MEMBERS','A branded place to book','Membership details, digital pass, upcoming bookings and service history.',M,578)
-feature('FOR YOUR TEAM','A shared operating view','Member records, schedules, collections and follow-up, organised by role.',315,578)
-para('Bravo and Delta share the platform foundation. Each edition emphasises a different way of running a gym.',M,733,480,10,GREY)
+para('MITRIXO is a white-label operating platform for gyms. It brings commercial activity, daily delivery and the member experience into one branded system.',M,226,493,12.5)
+line(M,314,W-M,314)
+feature('ONE RECORD','Know the member','Keep contact details, memberships, balances, attendance and service history connected.',M,347)
+feature('ONE WORKFLOW','Move work forward','Turn enquiries into members, bookings into visits and staff actions into an auditable history.',315,347)
+feature('ONE BRAND','Own the experience','Present your logo, colours, products and configured domain across staff and member touchpoints.',M,515)
+feature('ONE VIEW','Manage the operation','Review schedules, collections, activity and exceptions without assembling a patchwork of tools.',315,515)
+rect(M,693,W-2*M,77,INK,r=7)
+txt('THE RESULT',M+18,713,9,'Head',WHITE)
+para('Less fragmentation for the team. More continuity for every member journey.',M+137,706,350,11.5,'#E2E3E4',17,'BodyBold')
 end()
 
-# 03 - Bravo positioning with a live Strike product view.
+# 03 - The connected operating model.
+start('THE MEMBER JOURNEY')
+label('From first contact to long-term value',M,97)
+heading(['ONE JOURNEY.','NO BROKEN HANDOFFS.'],M,129,31)
+para('Every stage creates context for the next. Teams work from the same member story while role-based access keeps responsibilities clear.',M,226,490,11.5,GREY)
+steps=[('01','ENQUIRY','Capture interest and record the next action.'),('02','JOIN','Select a package and record collection.'),('03','BOOK','Reserve a class, PT session or service.'),('04','ARRIVE','Check in and retain attendance history.'),('05','RETAIN','Review activity, balances and follow-up.')]
+for i,(num,title,sub) in enumerate(steps):
+    yy=316+i*82
+    txt(num,M,yy,27,'Light','#9A9DA0')
+    txt(title,103,yy+3,12,'Head')
+    para(sub,221,yy,302,10,GREY,15)
+    if i<4: line(M+13,yy+35,M+13,yy+72,'#BFC1C3',1)
+line(M,741,W-M,741)
+para('The workflow can be configured around the services, staff structure and operating policies of each gym.',M,761,485,9,GREY)
+end()
+
+# 04 - Bravo positioning with a live Strike product view.
 start('BRAVO / BOXING AND COMBAT SPORTS',True)
 label('Edition 01',M,91,'#B9BCBF')
 heading(['BRAVO'],M,119,57,WHITE)
@@ -151,7 +163,24 @@ feature('01 / SCHEDULE','Run the timetable','Publish classes, assign coaches, se
 feature('02 / OPERATIONS','Keep the day visible','Connect programmes, branches, attendance and staff actions in one working view.',315,658,218,True)
 end()
 
-# 04 - Delta positioning with a live Inzan product view.
+# 05 - Bravo's schedule-led operating rhythm.
+start('BRAVO / OPERATING MODEL')
+label('Built around the training floor',M,97)
+heading(['FROM TIMETABLE','TO RETENTION'],M,129,32)
+para('Bravo gives boxing and combat-sports teams a clear operational rhythm: programme the session, control capacity, record attendance and keep the relationship moving.',M,226,490,11.5,GREY)
+flow=[('01','PROGRAMME','Create the class and assign the coach.'),('02','CAPACITY','Set limits and organise the roster.'),('03','CHECK-IN','Confirm who trained and when.'),('04','FOLLOW-UP','Use history to guide the next action.')]
+for i,(n,t,b) in enumerate(flow):
+    x=M+(i%2)*272; yy=337+(i//2)*151
+    rect(x,yy,238,121,PAPER,r=7)
+    txt(n,x+15,yy+15,23,'Light','#9A9DA0')
+    txt(t,x+62,yy+19,11,'Head')
+    para(b,x+15,yy+60,204,10,GREY,15)
+label('Configured workspace',M,670)
+para('Members / packages / payments / class schedule / attendance / coaches / branch views / staff roles / reports',M,699,490,12,INK,19,'BodyBold')
+para('Module availability and permissions are confirmed for each installation.',M,773,485,8.5,GREY)
+end()
+
+# 06 - Delta positioning with a live Inzan product view.
 start('DELTA / MULTI SERVICE FITNESS')
 label('Edition 02',M,91)
 heading(['DELTA'],M,119,57)
@@ -163,7 +192,22 @@ feature('01 / SERVICES','Coordinate more services','Connect the member journey w
 feature('02 / CONTROL','See the working picture','Give each role the tools it needs while management retains broader oversight.',315,658,218)
 end()
 
-# 05 - Responsive product proof using a live mobile view.
+# 07 - Delta's cross-department operating model.
+start('DELTA / OPERATING MODEL',True)
+label('Designed for a broader service mix',M,97,'#B9BCBF')
+heading(['ONE MEMBER.','SEVERAL TEAMS.'],M,129,34,WHITE)
+para('Delta connects the departments that shape a modern fitness journey, without asking the member to start again at every handoff.',M,229,485,12,'#CFD1D3')
+departments=[('FRONT DESK','Memberships, arrivals and member support.'),('SALES','Enquiries, follow-up and package conversion.'),('COACHING','Classes, PT activity and attendance.'),('NUTRITION','Consultations and configured service workflows.'),('MANAGEMENT','Approvals, reporting and operational oversight.'),('MEMBER','Bookings, status and a branded club experience.')]
+for i,(t,b) in enumerate(departments):
+    x=M+(i%2)*272; yy=322+(i//2)*126
+    line(x,yy,x+238,yy,'#45474A')
+    txt(t,x,yy+18,11,'Head',WHITE)
+    para(b,x,yy+47,224,9.5,'#BFC1C3',14)
+label('The principle',M,724,'#A4A6A8')
+para('Shared context, role-specific workspaces and management visibility.',M,750,485,11.5,WHITE,17,'BodyBold')
+end()
+
+# 08 - Responsive product proof using a live mobile view.
 start('THE MEMBER EXPERIENCE')
 label('Responsive by design',M,91)
 heading(['DESKTOP CONTROL','MOBILE ACCESS'],M,123,32)
@@ -178,23 +222,42 @@ feature('ONE PLATFORM','Keep the context','Staff can move between desktop and mo
 para('Screenshot captured from the live Inzan staff interface. Mobile appearance varies by device and enabled modules.',315,678,220,8.5,GREY)
 end()
 
-# 06 - A readable capability spread, no invented KPIs.
-start('BUSINESS OPERATIONS')
-label('Behind every member experience',M,97)
-heading(['GIVE YOUR TEAM','THE WORKING TOOLS'],M,129,32)
-para('Keep the routine work visible, with the records managers need to review it.',M,227,475,12,GREY)
+# 09 - Operational controls.
+start('CONTROL AND GOVERNANCE')
+label('Designed for accountable operations',M,97)
+heading(['CONTROL WITHOUT','SLOWING THE TEAM'],M,129,32)
+para('Give staff the access they need, preserve the record behind important actions and keep sensitive work inside defined operating boundaries.',M,226,490,11.5,GREY)
 items=[
-('01','Sales and follow-up','Keep enquiries, member records, call outcomes and next actions connected.'),
-('02','Payments and balances','Record collections and payment methods, review outstanding amounts and retain transaction history.'),
-('03','Bookings and attendance','Coordinate the schedule and distinguish reservations from completed visits.'),
-('04','Roles and approvals','Organise access around staff responsibilities and route controlled changes for review.'),
-('05','Reports and exports','Review activity and collections by the available filters, then export for further analysis.'),
-('06','Club services','Add configured workflows for nutrition, lockers, guests, orders and member complaints.')]
-for i,(n,title,body) in enumerate(items):feature(n,title,body,M+(i%2)*272,307+(i//2)*148)
-para('Available modules and permissions are agreed for each installation. Selected club services depend on the chosen configuration.',M,763,490,8.5,GREY)
+('01','Role-based access','Organise screens and actions around staff responsibility.'),
+('02','Approval workflows','Route controlled changes and exceptions for review.'),
+('03','Payment history','Retain collections, methods, balances and transaction context.'),
+('04','Attendance history','Separate bookings from completed visits and cancellations.'),
+('05','Audit visibility','Keep an operational trail for supported staff actions.'),
+('06','Tenant separation','Configure branding, data and settings for each gym environment.')]
+for i,(n,title,body) in enumerate(items):feature(n,title,body,M+(i%2)*272,312+(i//2)*145)
+rect(M,753,W-2*M,43,INK,r=5)
+txt('CONTROL IS CONFIGURED TO MATCH YOUR TEAM AND POLICIES.',M+16,767,8.5,'Head',WHITE)
 end()
 
-# 07 - Compare the positioning without inventing a licence feature matrix.
+# 10 - Reporting and multi-location visibility.
+start('MANAGEMENT VISIBILITY',True)
+label('Turn activity into operating insight',M,97,'#B9BCBF')
+heading(['SEE THE CLUB.','ACT WITH CONTEXT.'],M,129,34,WHITE)
+para('MITRIXO brings operational records into management views that can be filtered, reviewed and exported for deeper analysis.',M,229,485,11.5,'#CFD1D3')
+feature('MEMBERSHIP','Understand the base','Review active members, packages, renewals and status across the configured operation.',M,321,220,True)
+feature('REVENUE','Follow collections','Review payment activity, methods, balances and outstanding amounts.',315,321,220,True)
+feature('ENGAGEMENT','Read participation','Use bookings, visits and attendance history to understand service activity.',M,484,220,True)
+feature('LOCATIONS','Compare branches','Use available branch and service filters to focus the operating picture.',315,484,220,True)
+line(M,659,W-M,659,'#3B3D40')
+label('Management loop',M,689,'#A4A6A8')
+txt('FILTER',M,720,12,'Head',WHITE);arrow(106,727,167,'#86898C')
+txt('REVIEW',181,720,12,'Head',WHITE);arrow(249,727,310,'#86898C')
+txt('DECIDE',324,720,12,'Head',WHITE);arrow(388,727,449,'#86898C')
+txt('EXPORT',463,720,12,'Head',WHITE)
+para('Reports reflect the data captured and permissions enabled in each configuration.',M,774,485,8.5,'#A4A6A8')
+end()
+
+# 11 - Compare the positioning without inventing a licence feature matrix.
 start('CHOOSE YOUR EDITION')
 label('Choose by operating model',M,97)
 heading(['BRAVO OR DELTA'],M,129,36)
@@ -220,7 +283,7 @@ for x in [M,188,368,W-M]:line(x,274,x,y,LIGHT)
 para('These are edition specialisations, not a claim that every capability is exclusive to one edition. The final module scope is agreed in your proposal.',M,752,490,9,GREY)
 end()
 
-# 08 - Commercial next step and honest boundaries.
+# 12 - Commercial next step and honest boundaries.
 start('YOUR BRAND / YOUR CONFIGURATION',True)
 label('White label by design',M,97,'#B9BCBF')
 heading(['LET MEMBERS','SEE YOUR BRAND'],M,130,37,WHITE)
