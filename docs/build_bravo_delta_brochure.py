@@ -11,9 +11,11 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.colors import HexColor
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import Paragraph
+from reportlab.lib.utils import ImageReader
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'output/pdf/MITRIXO_BRAVO_DELTA_BROCHURE.pdf'
+SCREENS = ROOT / 'docs/brochure_live_screens'
 OUT.parent.mkdir(parents=True, exist_ok=True)
 for name, file in [('Head','Montserrat-Bold.ttf'),('Heavy','Montserrat-ExtraBold.ttf'),('Light','Montserrat-Light.ttf'),('Body','OpenSans-Regular.ttf'),('BodyBold','OpenSans-Bold.ttf')]:
     pdfmetrics.registerFont(TTFont(name, str(Path('C:/Windows/Fonts') / file)))
@@ -84,6 +86,22 @@ def edition_glyph(kind,x,y,scale=1,color=WHITE):
             p=C.beginPath();p.moveTo(75,-inset);p.lineTo(150-inset,-150+inset);p.lineTo(inset,-150+inset);p.close();C.drawPath(p)
     C.restoreState()
 
+def screenshot(path,x,y,w,h,dark=False):
+    """Place a real product capture inside a restrained browser frame."""
+    rect(x,y,w,h,'#222426' if dark else '#E7E8E8',r=9)
+    rect(x+1.5,y+1.5,w-3,h-3,'#0D0E0F' if dark else WHITE,r=8)
+    dot='#797C80' if dark else '#A9ACAF'
+    for i in range(3):
+        C.setFillColor(HexColor(dot));C.circle(x+14+i*10,H-y-14,2.2,fill=1,stroke=0)
+    line(x+1.5,y+26,x+w-1.5,y+26,'#343638' if dark else LIGHT,.6)
+    im=ImageReader(str(path));iw,ih=im.getSize()
+    avail_w,avail_h=w-12,h-38
+    scale=max(avail_w/iw,avail_h/ih)
+    sw,sh=iw*scale,ih*scale
+    C.saveState();p=C.beginPath();p.rect(x+6,H-y-h+6,avail_w,avail_h);C.clipPath(p,stroke=0,fill=0)
+    C.drawImage(im,x+6+(avail_w-sw)/2,H-y-h+6+(avail_h-sh)/2,width=sw,height=sh,mask='auto')
+    C.restoreState()
+
 # 01 - Product cover, not a generic capability report.
 start('GYM MANAGEMENT SOFTWARE',True)
 label('White label platform',M,109,'#C8CACC')
@@ -121,63 +139,43 @@ feature('FOR YOUR TEAM','A shared operating view','Member records, schedules, co
 para('Bravo and Delta share the platform foundation. Each edition emphasises a different way of running a gym.',M,733,480,10,GREY)
 end()
 
-# 03 - Bravo positioning. Do not claim other editions lack shared features.
+# 03 - Bravo positioning with a live Strike product view.
 start('BRAVO / BOXING AND COMBAT SPORTS',True)
-label('Edition 01',M,97,'#B9BCBF')
-heading(['BRAVO'],M,127,65,WHITE)
-para('Built around the training schedule.',M,215,455,20,WHITE,27,'Head')
-para('For boxing clubs, combat-sports gyms and coached studios where the timetable, member packages and attendance shape the working day.',M,271,350,12,'#D2D3D5')
-edition_glyph('bravo',455,282,.54,'#8B8E91')
-line(M,391,W-M,391,'#3B3D40')
-feature('01 / MEMBERSHIPS','Know who can train','Manage member profiles, package validity, renewals and payment history in the same workflow.',M,419,dark=True)
-feature('02 / CLASSES','Organise the timetable','Publish sessions, manage class capacity and review bookings and attendance.',315,419,dark=True)
-feature('03 / COACHING','Keep sessions visible','Coordinate coaches and personal training, with session records connected to the member.',M,582,dark=True)
-feature('04 / RECEPTION','Run the front desk','Search members, check them in, record collections and follow up on renewals.',315,582,dark=True)
-label('Configuration reference / Strike Boxing',M,752,'#B9BCBF',7)
+label('Edition 01',M,91,'#B9BCBF')
+heading(['BRAVO'],M,119,57,WHITE)
+para('Built around the training schedule.',M,194,455,18,WHITE,25,'Head')
+para('For boxing clubs and combat-sports gyms where class capacity, coaching and attendance shape the working day.',M,242,475,11,'#D2D3D5')
+screenshot(SCREENS/'strike-class-manager-desktop.jpg',M,321,W-2*M,286,True)
+label('Live Strike configuration / class schedule manager',M,622,'#B9BCBF',7)
+feature('01 / SCHEDULE','Run the timetable','Publish classes, assign coaches, set capacity and review the active roster.',M,658,218,True)
+feature('02 / OPERATIONS','Keep the day visible','Connect programmes, branches, attendance and staff actions in one working view.',315,658,218,True)
 end()
 
-# 04 - Delta positioning.
+# 04 - Delta positioning with a live Inzan product view.
 start('DELTA / MULTI SERVICE FITNESS')
-label('Edition 02',M,97)
-heading(['DELTA'],M,127,65)
-para('Connect the whole club.',M,215,455,22,INK,29,'Head')
-para('For fitness clubs and performance centres offering memberships, personal training, group classes and nutrition through several teams.',M,271,350,12,GREY)
-edition_glyph('delta',455,282,.54,'#55585B')
-line(M,391,W-M,391)
-feature('01 / MEMBER JOURNEY','One member record','Connect lead follow-up, sales, packages and ongoing service history across departments.',M,419)
-feature('02 / SERVICE DELIVERY','Coordinate more services','Bring PT, classes and nutrition appointments into connected member and staff workflows.',315,419)
-feature('03 / CLUB CONTROL','Handle the exceptions','Review requests, approvals, member complaints and operational tasks with accountable staff roles.',M,582)
-feature('04 / MANAGEMENT','See the operating picture','Review departmental activity, collections, outstanding balances and reports.',315,582)
-label('Configuration reference / Inzan Athletics',M,752,GREY,7)
+label('Edition 02',M,91)
+heading(['DELTA'],M,119,57)
+para('Connect the whole club.',M,194,455,19,INK,26,'Head')
+para('For fitness clubs and performance centres coordinating memberships, PT, classes and nutrition through several teams.',M,242,475,11,GREY)
+screenshot(SCREENS/'inzan-class-manager-desktop.jpg',M,321,W-2*M,286,False)
+label('Live Inzan configuration / class schedule manager',M,622,GREY,7)
+feature('01 / SERVICES','Coordinate more services','Connect the member journey with schedules, staff workspaces and operational requests.',M,658,218)
+feature('02 / CONTROL','See the working picture','Give each role the tools it needs while management retains broader oversight.',315,658,218)
 end()
 
-# 05 - Product visual deliberately schematic, using no actual member data.
+# 05 - Responsive product proof using a live mobile view.
 start('THE MEMBER EXPERIENCE')
-label('Your brand in their hands',M,97)
-heading(['MAKE THE NEXT','VISIT SIMPLE'],M,128,34)
-para('Give members a familiar place to see their membership and plan their training.',M,226,269,12,GREY)
-feature('MEMBERSHIP','A clearer account','Show package details, validity and remaining sessions where applicable.',M,320,255)
-feature('BOOKINGS','A plan for the week','Browse services, book eligible sessions and review upcoming appointments.',M,459,255)
-feature('ARRIVAL','A digital member pass','Bring the member’s identity into the check-in workflow with a QR pass.',M,598,255)
-# Phone schematic, native vector text throughout.
-px,py,pw,ph=344,247,205,452
-rect(px,py,pw,ph,'#141517',r=24);rect(px+8,py+8,pw-16,ph-16,'#F5F5F3',r=18)
-rect(px+70,py+16,65,8,'#141517',r=4)
-label('YOUR CLUB',px+24,py+48,INK,9)
-txt('Welcome back',px+24,py+82,16,'Head')
-txt('Your membership',px+24,py+115,9,'Body',GREY)
-line(px+24,py+141,px+pw-24,py+141)
-txt('Member pass',px+24,py+160,12,'Head')
-# Generic pass graphic: deliberately not a scannable QR credential.
-for a,b in [(0,0),(37,0),(0,37)]:
-    rect(px+28+a,py+193+b,23,23,INK);rect(px+32+a,py+197+b,15,15,'#F5F5F3');rect(px+36+a,py+201+b,7,7,INK)
-txt('DEMO',px+111,py+207,11,'Head',GREY)
-line(px+24,py+277,px+pw-24,py+277)
-txt('Upcoming training',px+24,py+297,12,'Head')
-txt('Group class',px+24,py+329,11,'Body')
-txt('View booking',px+24,py+353,9,'Body',GREY)
-rect(px+24,py+386,pw-48,34,INK,r=6);txt('EXPLORE CLASSES',px+39,py+395,8,'Head',WHITE)
-para('Illustrative member journey.<br/>Not a live product screenshot.',344,717,205,8,GREY)
+label('Responsive by design',M,91)
+heading(['DESKTOP CONTROL','MOBILE ACCESS'],M,123,32)
+para('The same live platform adapts to the smaller screen, keeping navigation and daily actions available away from the desk.',M,215,486,11.5,GREY)
+rect(M,291,230,392,'#111214',r=25)
+rect(M+8,299,214,376,'#060707',r=19)
+C.drawImage(ImageReader(str(SCREENS/'inzan-class-manager-mobile.jpg')),M+17,H-661,width=196,height=349,preserveAspectRatio=True,anchor='c',mask='auto')
+rect(M+87,304,56,6,'#292B2D',r=3)
+label('Live mobile / 390 px',M,699,GREY,6)
+feature('RESPONSIVE NAVIGATION','Work beyond the desk','The live Inzan configuration condenses its navigation and operational cards for mobile use.',315,330,220)
+feature('ONE PLATFORM','Keep the context','Staff can move between desktop and mobile layouts without changing systems or rebuilding records.',315,506,220)
+para('Screenshot captured from the live Inzan staff interface. Mobile appearance varies by device and enabled modules.',315,678,220,8.5,GREY)
 end()
 
 # 06 - A readable capability spread, no invented KPIs.

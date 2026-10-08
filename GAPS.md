@@ -5,6 +5,7 @@ Updated: 2026-10-07 (Member Calendar Sync)
 ## RECENT WORK - 2026-10-08 (MARKETING.DOCS.1 — Bravo and Delta brochure)
 
 - Created an eight-page MITRIXO sales brochure with Bravo positioned for boxing/combat-sports clubs and Delta for multi-service fitness centres, referencing the Strike and Inzan configurations respectively.
+- Updated the edition and responsive-product pages with live Strike and Inzan class-manager captures, including an Inzan mobile-width view. Avoided member contact data, financial dashboards and private operational notes.
 - Matched the Inzan guide's monochrome palette, Montserrat headings, Open Sans text and editorial spacing. Included original labelled product illustrations, an edition comparison and Michael Mitry's supplied website contacts.
 - Output: `output/pdf/MITRIXO_BRAVO_DELTA_BROCHURE.pdf`. Rebuild source and claim notes are in `docs/build_bravo_delta_brochure.py` and `docs/BRAVO_DELTA_BROCHURE_NOTES.md`.
 - Proof: all eight rendered PDF pages visually inspected; text remains selectable and contact URLs are linked. Build and lint exit 0 with existing build warnings. No application or production changes.

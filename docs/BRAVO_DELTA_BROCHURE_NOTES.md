@@ -18,7 +18,8 @@ MITRIXO is white-label gym management software that connects memberships, paymen
 - The brochure does not claim production certification, guaranteed revenue improvements, uptime, regulatory certification, deployment lead times, an included native app-store release, or completed third-party integrations.
 - Inventory and equipment services without operator screens are not sold as finished user-facing modules.
 - Bravo and Delta share capabilities. The comparison describes their focus rather than inventing contractual feature exclusions.
-- All diagrams and the member phone are original vector illustrations. The phone is explicitly labelled illustrative, not a screenshot. No member records, credentials, or private metrics are included.
+- Edition pages use live class-manager captures from the Strike and Inzan production interfaces. The responsive page uses a live Inzan staff-interface capture at a 390-pixel CSS viewport. No member contact details, credentials, clinical records or financial dashboards are included.
+- Screenshot chrome and device framing are original brochure graphics. The captures are labelled by tenant and context so they are not mistaken for generic mockups.
 - Strike Boxing and Inzan Athletics are identified as configuration references, not quoted endorsements. No customer photography or logos are reused.
 - Sales contact supplied by the owner: Michael Mitry, https://mitrixo.com and https://mi5a.com. No private account email is repurposed as a sales contact.
 
