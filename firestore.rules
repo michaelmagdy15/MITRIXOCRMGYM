@@ -90,7 +90,7 @@ service cloud.firestore {
     
     // SETTINGS (Tenant configuration)
     match /settings/{settingId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isManager();
     }
     
@@ -127,7 +127,7 @@ service cloud.firestore {
     
     // PACKAGES (Product Definitions)
     match /packages/{packageId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isManager();
     }
     
@@ -144,7 +144,7 @@ service cloud.firestore {
     
     // COACHES (Coach Profiles)
     match /coaches/{coachId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow update: if isOwner(coachId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid) || isManager();
       allow create, delete: if isManager();
     }
@@ -188,7 +188,7 @@ service cloud.firestore {
     
     // CLASS SCHEDULES (Class Definitions)
     match /classSchedules/{classId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isStaff();
     }
     

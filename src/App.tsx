@@ -92,7 +92,7 @@ function AppContent() {
     return localStorage.getItem('sidebar_collapsed') === 'true';
   });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
-  const [showPortalOverride, setShowPortalOverride] = React.useState<'crm' | 'member' | null>(null);
+  const [showPortalOverride, setShowPortalOverride] = React.useState<'crm' | 'store' | 'member' | null>(null);
   const [clientViewMode, setClientViewMode] = React.useState<'portal' | 'store'>('portal');
   const [memberPortalInitialTab, setMemberPortalInitialTab] = React.useState<string>('home');
   const [notificationTabCounts, setNotificationTabCounts] = React.useState<Record<string, number>>({});
@@ -581,16 +581,15 @@ function AppContent() {
   }
 
   if (!currentUser) {
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike|Inzan/i.test(navigator.userAgent) || window.innerWidth < 768;
-    if (isMobile && features.mobileApp === true && showPortalOverride !== 'crm') {
+    const isExplicitLogin = showPortalOverride === 'crm' || window.location.pathname === '/login';
+    if (!isExplicitLogin || showPortalOverride === 'store' || showPortalOverride === 'member') {
       return (
-        <MemberPortal 
-          isGuest={true} 
+        <GuestPortal 
           onSwitchToCRM={() => setShowPortalOverride('crm')} 
         />
       );
     }
-    return <Login onSwitchToMemberStore={() => setShowPortalOverride('member')} />;
+    return <Login onSwitchToMemberStore={() => setShowPortalOverride('store')} />;
   }
 
   // Block the app until user sets a real password

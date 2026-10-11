@@ -334,7 +334,7 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read: if (settingId == 'branding') || (settingId == 'features') || (settingId == 'storefront') || (settingId == 'branches') || canAccessSettings();
+      allow read: if true;
       allow write: if canAccessSettings() && (settingId != 'branding' || isValidBranding(request.resource.data));
     }
 
@@ -393,7 +393,7 @@ service cloud.firestore {
     }
 
     match /packages/{packageId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isTenantAdmin();
     }
 
@@ -459,7 +459,7 @@ service cloud.firestore {
     }
 
     match /coaches/{coachId} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isTenantAdmin();
     }
 

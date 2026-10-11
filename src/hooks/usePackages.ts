@@ -14,12 +14,6 @@ export const usePackages = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!currentUser) {
-      setPackages([]);
-      setLoading(false);
-      setError(null);
-      return;
-    }
     const unsub = onSnapshot(collection(db, 'packages'), (snapshot) => {
       setPackages(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Package)));
       setLoading(false);
@@ -28,11 +22,10 @@ export const usePackages = () => {
       const errMsg = err?.message || 'Failed to fetch packages from database';
       console.error('[Packages] Failed to fetch packages:', err);
       setError(errMsg);
-      toast.error(`Package sync error: ${errMsg}`);
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser]);
+  }, []);
 
   const addPackage = async (pkg: Omit<Package, 'id'>) => {
     try {

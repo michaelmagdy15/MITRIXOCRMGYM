@@ -514,6 +514,17 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         </div>
         
         <div className="flex items-center gap-2">
+          {!isLoggedIn && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onSwitchToCRM()}
+              className="h-8 text-xs font-bold rounded-lg border-primary/30 text-primary hover:bg-primary/10 gap-1.5 sf-interactive"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              <span>Sign In</span>
+            </Button>
+          )}
           {isLoggedIn && displayName && (
             <button 
               onClick={() => onSwitchToCRM('profile')}

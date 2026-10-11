@@ -15,16 +15,8 @@ export const useCoaches = () => {
 
 
   useEffect(() => {
-    if (!currentUser) {
-      setCoaches([]);
-      setLoading(false);
-      return;
-    }
-
-
-
-    // Members/coaches can't list all coaches — skip the global listener
-    if (effectiveRole === 'client' || effectiveRole === 'coach') {
+    // Members/coaches logged in don't manage coaches — skip the CRM management listener
+    if (currentUser && (effectiveRole === 'client' || effectiveRole === 'coach')) {
       setLoading(false);
       return;
     }
