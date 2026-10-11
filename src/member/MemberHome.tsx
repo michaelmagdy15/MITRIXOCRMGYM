@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { QRCodeSVG } from 'qrcode.react';
 import { db, getTenantId } from '../firebase';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fns';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { generateICSCalendar, downloadICS, CalendarEvent } from '../utils/calendarSync';
@@ -13,12 +13,14 @@ import { toast } from 'sonner';
 import { 
   Sparkles, Calendar, CheckCircle2, Trophy, Activity, Dumbbell, Award, Users, 
   ShoppingBag, Bell, Clock, Flame, ChevronRight, MapPin, Zap, User, 
-  TrendingUp, Star, Timer, Target, Coins, AlertCircle, Lock, Maximize2, Minimize2, CalendarPlus
+  TrendingUp, Star, Timer, Target, Coins, AlertCircle, Lock, Maximize2, Minimize2, CalendarPlus,
+  BellRing, Download, Smartphone, X, Megaphone, ExternalLink
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { isRunningInNativeApp } from '../utils/nativeBridge';
 import { SectionHeader } from './components/SectionHeader';
 import { EmptyState } from './components/EmptyState';
 import { Skeleton, SkeletonCard } from './components/Skeleton';
@@ -130,10 +132,13 @@ interface Announcement {
   body: string;
   imageUrl?: string;
   linkUrl?: string;
-  priority: number;
-  startDate: string;
-  endDate: string;
-  createdBy: string;
+  priority?: number;
+  startDate?: string;
+  endDate?: string;
+  createdAt?: string;
+  isActive?: boolean;
+  createdBy?: string;
+  createdByName?: string;
 }
 
 export default function MemberHome({ client, linkedClients, onSelectClient, onSwitchToStore, onNavigate, onClientLinked }: { 
@@ -156,6 +161,22 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [currentAnnouncementIndex, setCurrentAnnouncementIndex] = useState(0);
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
+  const [activeAnnouncementModal, setActiveAnnouncementModal] = useState<Announcement | null>(null);
+  const [isPushPromptDismissed, setIsPushPromptDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem('dismissed_push_prompt') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isAppDownloadModalOpen, setIsAppDownloadModalOpen] = useState(false);
+
+  const isNativeApp = useMemo(() => isRunningInNativeApp(), []);
+  const hasPushToken = Boolean(
+    client?.expoPushToken || 
+    (window as any).expoPushToken ||
+    (client as any)?.fcmToken
+  );
 
   const greeting = useMemo(() => getGreeting(), []);
   const firstName = (client?.name?.split(' ')[0] || 'Member').toUpperCase();
@@ -237,28 +258,54 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
       });
   }, []);
 
-  // ─── Fetch announcements ───
+  // ─── Real-time announcements listener & Pop-up Modal Check ───
   useEffect(() => {
-    getDocs(collection(db, 'announcements'))
-      .then((snapshot) => {
-        const now = new Date();
-        const list = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() } as Announcement))
-          .filter(a => {
-            try {
-              if (!a.startDate || !a.endDate) return false;
-              const start = parseISO(a.startDate);
-              const end = parseISO(a.endDate);
-              return now >= start && now <= end;
-            } catch { return false; }
-          })
-          .sort((a, b) => (b.priority || 0) - (a.priority || 0));
-        setAnnouncements(list);
-      })
-      .catch((err) => {
-        // Announcements collection may not exist yet — that's fine
-        console.warn("Could not load announcements:", err.code || err.message);
-      });
+    const unsub = onSnapshot(collection(db, 'announcements'), (snapshot) => {
+      const now = new Date();
+      const list = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Announcement))
+        .filter(a => {
+          if (a.isActive === false) return false;
+          try {
+            if (a.startDate) {
+              const start = toValidDate(a.startDate);
+              if (start && now < start) return false;
+            }
+            if (a.endDate) {
+              const end = toValidDate(a.endDate);
+              if (end && now > end) return false;
+            }
+            return true;
+          } catch {
+            return true;
+          }
+        })
+        .sort((a, b) => {
+          const prioDiff = (b.priority || 0) - (a.priority || 0);
+          if (prioDiff !== 0) return prioDiff;
+          const bDate = b.createdAt || b.startDate || '';
+          const aDate = a.createdAt || a.startDate || '';
+          return bDate.localeCompare(aDate);
+        });
+
+      setAnnouncements(list);
+
+      // Check if there is an unseen active announcement to show in the Pop-up Modal
+      if (list.length > 0 && list[0]) {
+        const latest = list[0];
+        const seenKey = `seen_announcement_${latest.id}`;
+        try {
+          const hasSeen = localStorage.getItem(seenKey);
+          if (!hasSeen) {
+            setActiveAnnouncementModal(latest);
+          }
+        } catch {}
+      }
+    }, (err) => {
+      console.warn("Could not load announcements:", err.code || err.message);
+    });
+
+    return () => unsub();
   }, []);
 
   // ─── Fetch upcoming bookings for "Export All Upcoming" ───
@@ -531,6 +578,75 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
           {client.status || 'Active'}
         </Badge>
       </div>
+
+      {/* ─── App Download & Push Notification Enablement Campaign ─── */}
+      {!hasPushToken && !isPushPromptDismissed && (
+        <Card className="border-2 border-primary/30 bg-gradient-to-r from-primary/10 via-primary/5 to-background rounded-3xl shadow-sm overflow-hidden animate-in fade-in duration-300">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-primary/20 text-primary flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                  <BellRing className="h-5 w-5 text-primary animate-pulse" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-extrabold text-sm text-foreground uppercase tracking-tight">
+                      Never Miss a Class Update
+                    </h3>
+                    <Badge variant="outline" className="border-primary/40 text-primary text-[10px] font-bold px-2 py-0">
+                      Recommended
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Enable push notifications on your phone to never miss a class update, schedule change, or club announcement.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPushPromptDismissed(true);
+                  try {
+                    sessionStorage.setItem('dismissed_push_prompt', 'true');
+                  } catch {}
+                }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted/50 transition-colors"
+                title="Dismiss for this session"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-3.5 pt-3 border-t border-border/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <Smartphone className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span>Available for iPhone & Android</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {isNativeApp ? (
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl px-4 gap-1.5"
+                    onClick={() => {
+                      toast.info("Please open your phone's Settings > Strike Boxing > Notifications, and toggle 'Allow Notifications' to ON.");
+                    }}
+                  >
+                    <Bell className="h-3.5 w-3.5" /> Enable Notifications
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl px-4 gap-1.5"
+                    onClick={() => setIsAppDownloadModalOpen(true)}
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download App & Enable
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Family Athlete Profile Switcher ─── */}
       {linkedClients && linkedClients.length > 0 && (
@@ -1094,6 +1210,146 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
           </Card>
         )}
       </div>
+
+      {/* ─── Club Announcement Pop-Up Modal ─── */}
+      <Dialog 
+        open={!!activeAnnouncementModal} 
+        onOpenChange={(open) => {
+          if (!open && activeAnnouncementModal) {
+            try {
+              localStorage.setItem(`seen_announcement_${activeAnnouncementModal.id}`, 'true');
+            } catch {}
+            setActiveAnnouncementModal(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md border-2 border-primary/30 p-0 overflow-hidden rounded-3xl bg-card">
+          <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-background p-5 border-b border-border/60">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-sm">
+                  <Megaphone className="h-5 w-5" />
+                </div>
+                <div>
+                  <Badge variant="outline" className="text-[10px] font-bold border-primary/40 text-primary">
+                    Club Announcement
+                  </Badge>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {activeAnnouncementModal?.createdAt ? safeFormatDate(activeAnnouncementModal.createdAt, 'EEE, d MMM yyyy') : 'Important Update'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <h2 className="text-lg font-black tracking-tight text-foreground uppercase mt-3">
+              {activeAnnouncementModal?.title}
+            </h2>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {activeAnnouncementModal?.imageUrl && (
+              <img 
+                src={activeAnnouncementModal.imageUrl} 
+                alt="Announcement" 
+                className="w-full h-44 object-cover rounded-2xl border"
+              />
+            )}
+            <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-line font-medium">
+              {activeAnnouncementModal?.body}
+            </p>
+          </div>
+
+          <div className="p-4 bg-muted/20 border-t flex items-center justify-between gap-2">
+            {activeAnnouncementModal?.linkUrl ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs font-bold gap-1 rounded-xl h-9"
+                onClick={() => window.open(activeAnnouncementModal.linkUrl, '_blank')}
+              >
+                Learn More <ExternalLink className="h-3 w-3" />
+              </Button>
+            ) : <div />}
+
+            <Button
+              size="sm"
+              className="text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl px-5 h-9"
+              onClick={() => {
+                if (activeAnnouncementModal) {
+                  try {
+                    localStorage.setItem(`seen_announcement_${activeAnnouncementModal.id}`, 'true');
+                  } catch {}
+                  setActiveAnnouncementModal(null);
+                }
+              }}
+            >
+              Got It
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── App Download & Setup Instructions Modal ─── */}
+      <Dialog open={isAppDownloadModalOpen} onOpenChange={setIsAppDownloadModalOpen}>
+        <DialogContent className="sm:max-w-md border-2 border-primary/30 rounded-3xl p-5 bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black uppercase tracking-tight flex items-center gap-2 text-foreground">
+              <Smartphone className="h-5 w-5 text-primary" /> Download Strike Boxing App
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Get the native mobile experience with real-time class announcements and instant check-in.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            <div className="bg-primary/5 p-3.5 rounded-2xl border border-primary/20 space-y-2">
+              <p className="font-bold text-foreground flex items-center gap-2">
+                <span className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-black">1</span>
+                <span>Your App Login Details:</span>
+              </p>
+              <div className="bg-background/80 p-2.5 rounded-xl border border-border/60 font-mono text-[11px] space-y-1">
+                <p><span className="text-muted-foreground">Member ID:</span> <strong className="text-foreground">#{client.memberId || client.id}</strong></p>
+                <p><span className="text-muted-foreground">Phone:</span> <strong className="text-foreground">{client.phone || 'On file'}</strong></p>
+                <p><span className="text-muted-foreground">Default Password:</span> <strong className="text-primary">12345678</strong></p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="flex items-start gap-3 bg-muted/30 p-3 rounded-2xl border border-border/50">
+                <div className="text-lg">🍏</div>
+                <div className="space-y-0.5">
+                  <p className="font-bold text-foreground">Apple iOS (iPhone / iPad)</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Available on Apple App Store or via Strike TestFlight. When installing, tap <strong>Allow Notifications</strong> when prompted.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 bg-muted/30 p-3 rounded-2xl border border-border/50">
+                <div className="text-lg">🤖</div>
+                <div className="space-y-0.5">
+                  <p className="font-bold text-foreground">Google Android</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Download via Google Play or the direct Strike APK link. Enable notification permissions to receive schedule updates.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl text-[11px] text-amber-600 dark:text-amber-400">
+              💡 <strong>Instant Web App (PWA):</strong> On Safari (iPhone), tap the <strong>Share</strong> button and choose <strong>"Add to Home Screen"</strong> for a full-screen app experience.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              className="w-full rounded-xl text-xs font-bold h-10 bg-primary text-primary-foreground"
+              onClick={() => setIsAppDownloadModalOpen(false)}
+            >
+              Got It
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

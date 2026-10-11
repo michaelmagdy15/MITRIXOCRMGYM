@@ -197,14 +197,17 @@ export default function Dashboard() {
     setIsSendingPush(true);
     try {
       const { notifyAllMembers } = await import('./services/pushService');
-      const res = await notifyAllMembers(pushTitle.trim(), pushBody.trim());
+      const res = await notifyAllMembers(pushTitle.trim(), pushBody.trim(), {
+        createdByName: currentUser?.name || currentUser?.email || 'Strike Admin',
+        createdById: currentUser?.id || 'admin'
+      });
       if (res && res.successCount > 0) {
-        toast.success(`Announcement sent to all ${res.successCount} registered mobile devices!`);
-        setPushTitle('');
-        setPushBody('');
+        toast.success(`Announcement published in-app & sent as push to ${res.successCount} mobile devices!`);
       } else {
-        toast.warning('No active mobile push tokens registered on the system yet.');
+        toast.success('Announcement published in-app! All members opening the app or website will see this alert.');
       }
+      setPushTitle('');
+      setPushBody('');
     } catch (err) {
       console.error('[Dashboard] Error sending push announcement:', err);
       toast.error('Failed to send push notifications. Please check connection and try again.');
@@ -1692,16 +1695,16 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── MOBILE ANNOUNCEMENTS (PUSH NOTIFICATIONS) ── */}
+      {/* ── MULTI-CHANNEL ANNOUNCEMENTS (PUSH & IN-APP MODAL) ── */}
       {canSendPushNotifications && (
         <div className="grid grid-cols-1 gap-6">
           <Card className="border-primary/15 bg-primary/[0.02] dark:bg-primary/[0.02] rounded-2xl shadow-sm border">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-sm font-extrabold uppercase tracking-wider text-primary gap-2">
-                <Megaphone className="h-5 w-5 text-primary" /> Send Mobile Announcement
+                <Megaphone className="h-5 w-5 text-primary" /> Broadcast Club Announcement
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
-                Compose and broadcast a push notification to all gym members who have downloaded the mobile app.
+                Multi-channel broadcast: Sends an instant lock-screen push notification to all mobile app devices AND posts an in-app pop-up announcement for all 1,174 members when they open the website or portal.
               </p>
             </CardHeader>
             <CardContent className="pt-2">

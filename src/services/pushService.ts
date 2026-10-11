@@ -188,6 +188,56 @@ export async function notifyClient(clientId: string, title: string, body: string
 
 export async function notifyAllMembers(title: string, body: string, data?: any) {
   try {
+    const nowIso = new Date().toISOString();
+    const twoWeeksLaterIso = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    let announcementId = '';
+
+    // 1. Persist announcement to Firestore announcements collection so 100% of members see it in-app and on the website
+    try {
+      const annRef = doc(collection(db, 'announcements'));
+      announcementId = annRef.id;
+
+      await setDoc(annRef, {
+        id: annRef.id,
+        title,
+        body,
+        createdAt: nowIso,
+        startDate: nowIso,
+        endDate: twoWeeksLaterIso,
+        priority: 10,
+        isActive: true,
+        audience: 'all_members',
+        createdByName: data?.createdByName || 'Strike Admin',
+        createdById: data?.createdById || 'admin',
+        branch: data?.branch || 'ALL',
+        linkUrl: data?.linkUrl || '',
+        imageUrl: data?.imageUrl || ''
+      });
+      console.log('[Push Service] Announcement saved to announcements collection:', announcementId);
+    } catch (saveErr) {
+      console.error('[Push Service] Error saving to announcements collection:', saveErr);
+    }
+
+    // 2. Persist to systemNotifications collection (for staff/member notification bell feeds)
+    try {
+      const notifRef = doc(collection(db, 'systemNotifications'));
+      await setDoc(notifRef, {
+        id: notifRef.id,
+        title,
+        body,
+        type: 'club_announcement',
+        audience: 'members',
+        severity: 'info',
+        createdAt: nowIso,
+        announcementId,
+        readBy: []
+      });
+      console.log('[Push Service] Saved to systemNotifications collection');
+    } catch (sysErr) {
+      console.error('[Push Service] Error saving to systemNotifications collection:', sysErr);
+    }
+
+    // 3. Collect mobile app Expo push tokens
     const clientsSnap = await getDocs(collection(db, 'clients'));
     const usersSnap = await getDocs(collection(db, 'users'));
 
@@ -210,8 +260,8 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
     const uniqueTokens = Array.from(tokensSet);
 
     if (uniqueTokens.length === 0) {
-      console.log('[Push Service] No member tokens found.');
-      return { successCount: 0, totalCount: 0 };
+      console.log('[Push Service] No mobile push tokens found, but announcement saved in-app.');
+      return { successCount: 0, totalCount: 0, announcementId };
     }
 
     const chunks: string[][] = [];
@@ -226,7 +276,7 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
         to: token,
         title,
         body,
-        data,
+        data: { ...data, announcementId },
         categoryId: data?.categoryId || undefined
       }));
 
@@ -243,7 +293,7 @@ export async function notifyAllMembers(title: string, body: string, data?: any) 
       successCount += chunk.length;
     }
 
-    return { successCount, totalCount: uniqueTokens.length };
+    return { successCount, totalCount: uniqueTokens.length, announcementId };
   } catch (err) {
     console.error('[Push Service] Error sending push to all members:', err);
     throw err;

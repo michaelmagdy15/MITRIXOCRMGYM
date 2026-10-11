@@ -442,6 +442,8 @@ export interface Client {
   civilStatus?: string;
   barcode?: string;
   cardId?: string;
+  expoPushToken?: string;
+  fcmToken?: string;
   medicalInfo?: string;
   preferredTime?: 'Morning' | 'Afternoon' | 'Evening' | 'Night';
   colorLabel?: string;

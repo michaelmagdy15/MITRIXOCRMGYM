@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Bell, Calendar, Check, Gift, Info, Megaphone, Sparkles, X } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
+import { toValidDate } from '../utils/dateUtils';
 
 type MemberNotificationType =
   | 'announcement'
@@ -136,20 +137,21 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
         announcementsSnap.docs.forEach((d) => {
           const data = d.data();
           try {
-            if (!data.startDate || !data.endDate) return;
-            const start = parseISO(data.startDate);
-            const end = parseISO(data.endDate);
-            if (now >= start && now <= end) {
-              rows.push({
-                id: `ann_${d.id}`,
-                type: 'announcement',
-                title: data.title || 'Announcement',
-                body: data.body || '',
-                read: false,
-                createdAt: data.startDate,
-                source: 'announcement',
-              });
-            }
+            if (data.isActive === false) return;
+            const start = data.startDate ? toValidDate(data.startDate) : null;
+            const end = data.endDate ? toValidDate(data.endDate) : null;
+            if (start && now < start) return;
+            if (end && now > end) return;
+
+            rows.push({
+              id: `ann_${d.id}`,
+              type: 'announcement',
+              title: data.title || 'Announcement',
+              body: data.body || '',
+              read: false,
+              createdAt: data.createdAt || data.startDate || new Date().toISOString(),
+              source: 'announcement',
+            });
           } catch {
             // Ignore malformed announcement dates.
           }
