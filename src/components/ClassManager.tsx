@@ -86,6 +86,7 @@ export const ClassManager: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedDateFilter, setSelectedDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'week' | 'upcoming' | 'past'>('all');
+  const [selectedSpecificDate, setSelectedSpecificDate] = useState<string>('');
 
   // Form fields
   const [name, setName] = useState('');
@@ -412,64 +413,100 @@ export const ClassManager: React.FC = () => {
     if (!rosterClass) return;
     setActionLoadingId(attendeeId);
     try {
-      const isCurrentlyCheckedIn = rosterClass.checkedIn?.includes(attendeeId);
+      const client = clients.find(c => c.id === attendeeId || c.memberId === attendeeId);
+      const matchedIds = [attendeeId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
+      const isCurrentlyCheckedIn = (rosterClass.checkedIn || []).some(id => matchedIds.includes(String(id)));
       const classRef = doc(db, 'classSchedules', rosterClass.id);
 
       if (isCurrentlyCheckedIn) {
+        const filteredCheckedIn = (rosterClass.checkedIn || []).filter(id => !matchedIds.includes(String(id)));
         await updateDoc(classRef, {
-          checkedIn: arrayRemove(attendeeId)
+          checkedIn: filteredCheckedIn
         });
-        const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${attendeeId}`);
-        await updateDoc(bookingDocRef, {
-          status: 'booked',
-          checkedInAt: null
-        }).catch(() => {});
+
+        // Update classBookings under all matching keys
+        for (const id of matchedIds) {
+          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${id}`);
+          await updateDoc(bookingDocRef, {
+            status: 'booked',
+            checkedInAt: null,
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+        toast.info(`Check-in undone for ${client?.name || attendeeId}`);
       } else {
-        // Invoke atomic server check-in endpoint to create attendance audit record
-        let calledServer = false;
+        // 1. Immediately update Firestore class document (remove from noShows, add to checkedIn)
+        const filteredNoShows = (rosterClass.noShows || []).filter(id => !matchedIds.includes(String(id)));
+        const nextCheckedIn = Array.from(new Set([...(rosterClass.checkedIn || []), attendeeId]));
+        await updateDoc(classRef, {
+          checkedIn: nextCheckedIn,
+          noShows: filteredNoShows
+        });
+
+        // Compute backdated checkin timestamp if class is in the past
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
+        const classDateStr = rosterClass.date || (rosterClass.startTime ? rosterClass.startTime.substring(0, 10) : todayStr);
+        let effectiveCheckInTime = new Date().toISOString();
+        if (classDateStr < todayStr) {
+          const rawTime = ((rosterClass.time || '10:00').split('-')[0] || '10:00').trim();
+          const cleanTime = rawTime.length === 5 ? rawTime : '10:00';
+          effectiveCheckInTime = `${classDateStr}T${cleanTime}:00.000Z`;
+        }
+
+        // Update classBookings documents
+        for (const id of matchedIds) {
+          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${id}`);
+          await updateDoc(bookingDocRef, {
+            status: 'attended',
+            checkedInAt: effectiveCheckInTime,
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+
+        // 2. If client had no-show strikes logged, forgive the strike
+        if (client && typeof client.noShowStrikes === 'number' && client.noShowStrikes > 0) {
+          const clientRef = doc(db, 'clients', client.id);
+          const newStrikes = Math.max(0, client.noShowStrikes - 1);
+          await updateDoc(clientRef, {
+            noShowStrikes: newStrikes,
+            strikes: newStrikes,
+            ...(newStrikes < 3 ? { bookingBlockedUntil: null } : {}),
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+
+        // 3. Invoke atomic server check-in endpoint for audit history logging
         try {
           const token = await auth.currentUser?.getIdToken();
-          const res = await fetch('/api/v1/attendance/check-in', {
+          await fetch('/api/v1/attendance/check-in', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               ...(token ? { 'Authorization': `Bearer ${token}` } : {})
             },
             body: JSON.stringify({
-              memberId: attendeeId,
+              memberId: client?.id || attendeeId,
+              clientId: client?.id || attendeeId,
               sessionId: rosterClass.id,
               sessionTitle: rosterClass.name,
               branchId: rosterClass.branch_id || (rosterClass as any).branchId || '',
               branchName: rosterClass.branch,
-              sessionDate: rosterClass.date,
+              sessionDate: classDateStr,
               sessionTime: rosterClass.time,
               status: 'ATTENDED',
               checkedInBy: currentUser?.name || currentUser?.email || 'Staff',
               deductCredit: false // Already enrolled/admitted on class roster
             })
           });
-          if (res.ok) {
-            calledServer = true;
-          }
         } catch {
-          // fallback to direct client update below
+          // ignore network failure since local Firestore update succeeded
         }
 
-        if (!calledServer) {
-          await updateDoc(classRef, {
-            checkedIn: arrayUnion(attendeeId),
-            noShows: arrayRemove(attendeeId)
-          });
-          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${attendeeId}`);
-          await updateDoc(bookingDocRef, {
-            status: 'attended',
-            checkedInAt: new Date().toISOString()
-          }).catch(() => {});
-        }
+        toast.success(`Checked in ${client?.name || attendeeId} successfully!`);
       }
     } catch (err) {
       console.error("Error toggling check-in:", err);
-      alert("Failed to update check-in status.");
+      toast.error("Failed to update check-in status.");
     } finally {
       setActionLoadingId(null);
     }
@@ -479,28 +516,44 @@ export const ClassManager: React.FC = () => {
     if (!rosterClass) return;
     setActionLoadingId(attendeeId);
     try {
-      const isCurrentlyNoShow = rosterClass.noShows?.includes(attendeeId);
+      const client = clients.find(c => c.id === attendeeId || c.memberId === attendeeId);
+      const matchedIds = [attendeeId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
+      const isCurrentlyNoShow = (rosterClass.noShows || []).some(id => matchedIds.includes(String(id)));
       const classRef = doc(db, 'classSchedules', rosterClass.id);
 
       if (isCurrentlyNoShow) {
+        const filteredNoShows = (rosterClass.noShows || []).filter(id => !matchedIds.includes(String(id)));
         await updateDoc(classRef, {
-          noShows: arrayRemove(attendeeId)
+          noShows: filteredNoShows
         });
+        for (const id of matchedIds) {
+          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${id}`);
+          await updateDoc(bookingDocRef, {
+            status: 'booked',
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+        toast.info(`No-show removed for ${client?.name || attendeeId}`);
       } else {
+        const filteredCheckedIn = (rosterClass.checkedIn || []).filter(id => !matchedIds.includes(String(id)));
+        const nextNoShows = Array.from(new Set([...(rosterClass.noShows || []), attendeeId]));
         await updateDoc(classRef, {
-          noShows: arrayUnion(attendeeId),
-          checkedIn: arrayRemove(attendeeId)
+          noShows: nextNoShows,
+          checkedIn: filteredCheckedIn
         });
+        for (const id of matchedIds) {
+          const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${id}`);
+          await updateDoc(bookingDocRef, {
+            status: 'no-show',
+            noShowAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+        toast.warning(`Marked ${client?.name || attendeeId} as No-Show`);
       }
-
-      // Sync booking doc if exists
-      const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${attendeeId}`);
-      await updateDoc(bookingDocRef, {
-        status: isCurrentlyNoShow ? 'booked' : 'no-show'
-      }).catch(() => {});
     } catch (err) {
       console.error("Error toggling no-show:", err);
-      alert("Failed to update no-show status.");
+      toast.error("Failed to update no-show status.");
     } finally {
       setActionLoadingId(null);
     }
@@ -675,12 +728,21 @@ export const ClassManager: React.FC = () => {
     return [...classes].sort((a, b) => {
       const timeA = new Date(a.startTime || (a.date ? `${a.date}T00:00:00` : 0)).getTime();
       const timeB = new Date(b.startTime || (b.date ? `${b.date}T00:00:00` : 0)).getTime();
+      if (selectedDateFilter === 'past') {
+        return timeB - timeA; // Recent past classes first (e.g. yesterday, last Thursday at the top)
+      }
       return timeA - timeB;
     });
-  }, [classes]);
+  }, [classes, selectedDateFilter]);
 
   const filteredClasses = useMemo(() => {
     return sortedClasses.filter(cls => {
+      // 0. Specific Exact Date filter
+      if (selectedSpecificDate) {
+        const dStr = cls.date || (cls.startTime ? cls.startTime.substring(0, 10) : '');
+        if (dStr !== selectedSpecificDate) return false;
+      }
+
       // 1. Search filter
       const matchesSearch = 
         cls.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -698,8 +760,8 @@ export const ClassManager: React.FC = () => {
         return false;
       }
 
-      // 4. Date filter
-      if (selectedDateFilter !== 'all') {
+      // 4. Date filter (applied only if no specific date is selected)
+      if (!selectedSpecificDate && selectedDateFilter !== 'all') {
         const dateStr = cls.date || (cls.startTime ? cls.startTime.substring(0, 10) : '');
         if (dateStr) {
           try {
@@ -723,7 +785,7 @@ export const ClassManager: React.FC = () => {
 
       return true;
     });
-  }, [sortedClasses, searchTerm, selectedCategory, selectedBranch, selectedDateFilter]);
+  }, [sortedClasses, searchTerm, selectedCategory, selectedBranch, selectedDateFilter, selectedSpecificDate]);
 
   // Today's classes count
   const todayClassesCount = useMemo(() => {
@@ -828,7 +890,7 @@ export const ClassManager: React.FC = () => {
               {/* Multi-Filters */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* Date Filter */}
-                <Select value={selectedDateFilter} onValueChange={(val: any) => setSelectedDateFilter(val)}>
+                <Select value={selectedDateFilter} onValueChange={(val: any) => { setSelectedDateFilter(val); if (val !== 'all') setSelectedSpecificDate(''); }}>
                   <SelectTrigger className="h-9 text-xs w-[130px] bg-background">
                     <SelectValue placeholder="All Dates" />
                   </SelectTrigger>
@@ -841,6 +903,31 @@ export const ClassManager: React.FC = () => {
                     <SelectItem value="past">Past Classes</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {/* Specific Calendar Date Picker */}
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="date"
+                    value={selectedSpecificDate}
+                    onChange={e => {
+                      setSelectedSpecificDate(e.target.value);
+                      if (e.target.value) setSelectedDateFilter('all');
+                    }}
+                    className="h-9 text-xs w-[135px] bg-background"
+                    title="Jump to specific class date"
+                  />
+                  {selectedSpecificDate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedSpecificDate('')}
+                      className="h-9 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      title="Clear specific date"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
 
                 {/* Category Filter */}
                 <Select value={selectedCategory} onValueChange={(val) => { if (val) setSelectedCategory(val); }}>
@@ -1246,8 +1333,9 @@ export const ClassManager: React.FC = () => {
                       })
                       .map(attendeeId => {
                         const { client, displayName, displayPhone, displayId, rawId, isOrphaned } = resolveAttendee(attendeeId, clients);
-                        const isCheckedIn = rosterClass.checkedIn?.includes(attendeeId);
-                        const isNoShow = rosterClass.noShows?.includes(attendeeId);
+                        const matchedIds = [attendeeId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
+                        const isCheckedIn = (rosterClass.checkedIn || []).some(id => matchedIds.includes(String(id)));
+                        const isNoShow = !isCheckedIn && (rosterClass.noShows || []).some(id => matchedIds.includes(String(id)));
                         const isBusy = actionLoadingId === attendeeId;
 
                         return (

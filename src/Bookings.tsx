@@ -6,6 +6,7 @@ import {
   collection, 
   onSnapshot, 
   doc, 
+  getDoc,
   updateDoc, 
   query, 
   where, 
@@ -16,6 +17,7 @@ import {
   limit,
   runTransaction 
 } from 'firebase/firestore';
+import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -119,7 +121,8 @@ export default function Bookings() {
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [classSearchQuery, setClassSearchQuery] = useState('');
   const [classStatusFilter, setClassStatusFilter] = useState<'all' | 'booked' | 'attended' | 'waitlist' | 'cancelled' | 'no-show'>('all');
-  const [classDateFilter, setClassDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'week' | 'upcoming'>('all');
+  const [classDateFilter, setClassDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'week' | 'upcoming' | 'past'>('all');
+  const [classSpecificDate, setClassSpecificDate] = useState<string>('');
   const [classBranchFilter, setClassBranchFilter] = useState<string>('all');
   
   // Action states for class bookings
@@ -156,7 +159,7 @@ export default function Bookings() {
   const [loadingPt, setLoadingPt] = useState(true);
   const [ptSearchQuery, setPtSearchQuery] = useState('');
   const [ptStatusFilter, setPtStatusFilter] = useState<'all' | 'Scheduled' | 'Attended' | 'Cancelled' | 'No Show'>('all');
-  const [ptDateFilter, setPtDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'week' | 'upcoming'>('all');
+  const [ptDateFilter, setPtDateFilter] = useState<'all' | 'today' | 'tomorrow' | 'week' | 'upcoming' | 'past'>('all');
 
   // Real-time listener for PT sessions (capped to 150 items to protect read quota)
   useEffect(() => {
@@ -309,24 +312,145 @@ export default function Bookings() {
   const handleCheckInClassBooking = async (booking: ClassBooking) => {
     setProcessingBookingId(booking.id);
     try {
-      // 1. Update classBookings status
+      const targetClientId = booking.clientId || booking.memberId;
+      const client = clients.find(c => c.id === targetClientId || c.memberId === targetClientId);
+      const matchedIds = Array.from(new Set([targetClientId, booking.clientId, booking.memberId, client?.id, client?.memberId, (client as any)?.portalUserId].filter(Boolean))) as string[];
+
+      // Compute effective backdated timestamp if class was in the past
+      const todayStr = format(new Date(), 'yyyy-MM-dd');
+      const classDateStr = booking.classDate || (booking.classStartTime ? booking.classStartTime.substring(0, 10) : todayStr);
+      let effectiveCheckInTime = new Date().toISOString();
+      if (classDateStr < todayStr) {
+        const rawTime = (booking.classStartTime ? booking.classStartTime.substring(11, 16) : '10:00').trim();
+        const cleanTime = rawTime.length === 5 ? rawTime : '10:00';
+        effectiveCheckInTime = `${classDateStr}T${cleanTime}:00.000Z`;
+      }
+
+      // 1. Update this classBookings record
       await updateDoc(doc(db, 'classBookings', booking.id), {
         status: 'attended',
-        checkedInAt: new Date().toISOString(),
+        checkedInAt: effectiveCheckInTime,
         updatedAt: new Date().toISOString()
       });
 
-      // 2. Update classSchedules checkedIn array if classId is present
+      // Also update sibling key docs if present
       if (booking.classId) {
-        const resolvedClientId = booking.clientId || booking.memberId;
-        await updateDoc(doc(db, 'classSchedules', booking.classId), {
-          checkedIn: arrayUnion(resolvedClientId),
-          noShows: arrayRemove(resolvedClientId)
-        });
+        for (const id of matchedIds) {
+          if (id && `${booking.classId}_${id}` !== booking.id) {
+            await updateDoc(doc(db, 'classBookings', `${booking.classId}_${id}`), {
+              status: 'attended',
+              checkedInAt: effectiveCheckInTime,
+              updatedAt: new Date().toISOString()
+            }).catch(() => {});
+          }
+        }
       }
+
+      // 2. Update classSchedules checkedIn array and remove from noShows
+      if (booking.classId) {
+        const classRef = doc(db, 'classSchedules', booking.classId);
+        const classDoc = await getDoc(classRef).catch(() => null);
+        if (classDoc && classDoc.exists()) {
+          const cData = classDoc.data();
+          const currentCheckedIn = (cData.checkedIn || []) as string[];
+          const currentNoShows = (cData.noShows || []) as string[];
+          const nextCheckedIn = Array.from(new Set([...currentCheckedIn, targetClientId]));
+          const nextNoShows = currentNoShows.filter(id => !matchedIds.includes(String(id)));
+          await updateDoc(classRef, {
+            checkedIn: nextCheckedIn,
+            noShows: nextNoShows
+          });
+        }
+      }
+
+      // 3. If member had no-show strikes logged, forgive the strike and clear lockout
+      if (client && typeof client.noShowStrikes === 'number' && client.noShowStrikes > 0) {
+        const clientRef = doc(db, 'clients', client.id);
+        const newStrikes = Math.max(0, client.noShowStrikes - 1);
+        await updateDoc(clientRef, {
+          noShowStrikes: newStrikes,
+          strikes: newStrikes,
+          ...(newStrikes < 3 ? { bookingBlockedUntil: null } : {}),
+          updatedAt: new Date().toISOString()
+        }).catch(() => {});
+      }
+
+      // 4. Record attendance via audit check-in endpoint
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/v1/attendance/check-in', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            memberId: client?.id || targetClientId,
+            clientId: client?.id || targetClientId,
+            sessionId: booking.classId || '',
+            sessionTitle: booking.className || 'Group Class',
+            branchId: booking.branch || '',
+            branchName: booking.branch || '',
+            sessionDate: classDateStr,
+            sessionTime: booking.classStartTime ? booking.classStartTime.substring(11, 16) : '10:00',
+            status: 'ATTENDED',
+            checkedInBy: (currentUser as any)?.name || (currentUser as any)?.email || 'Staff',
+            deductCredit: false
+          })
+        });
+      } catch {
+        // ignore network error
+      }
+
+      toast.success(`Checked in ${booking.memberName || 'member'} successfully!`);
     } catch (err) {
       console.error("Error checking in booking:", err);
-      alert("Failed to check in attendee. Please try again.");
+      toast.error("Failed to check in attendee. Please try again.");
+    } finally {
+      setProcessingBookingId(null);
+    }
+  };
+
+  const handleUndoCheckInClassBooking = async (booking: ClassBooking) => {
+    setProcessingBookingId(booking.id);
+    try {
+      const targetClientId = booking.clientId || booking.memberId;
+      const client = clients.find(c => c.id === targetClientId || c.memberId === targetClientId);
+      const matchedIds = Array.from(new Set([targetClientId, booking.clientId, booking.memberId, client?.id, client?.memberId, (client as any)?.portalUserId].filter(Boolean))) as string[];
+
+      await updateDoc(doc(db, 'classBookings', booking.id), {
+        status: 'booked',
+        checkedInAt: null,
+        updatedAt: new Date().toISOString()
+      });
+
+      if (booking.classId) {
+        for (const id of matchedIds) {
+          if (id && `${booking.classId}_${id}` !== booking.id) {
+            await updateDoc(doc(db, 'classBookings', `${booking.classId}_${id}`), {
+              status: 'booked',
+              checkedInAt: null,
+              updatedAt: new Date().toISOString()
+            }).catch(() => {});
+          }
+        }
+
+        const classRef = doc(db, 'classSchedules', booking.classId);
+        const classDoc = await getDoc(classRef).catch(() => null);
+        if (classDoc && classDoc.exists()) {
+          const cData = classDoc.data();
+          const currentCheckedIn = (cData.checkedIn || []) as string[];
+          const nextCheckedIn = currentCheckedIn.filter(id => !matchedIds.includes(String(id)));
+          await updateDoc(classRef, {
+            checkedIn: nextCheckedIn
+          });
+        }
+      }
+
+      toast.info(`Check-in undone for ${booking.memberName || 'member'}`);
+    } catch (err) {
+      console.error("Error undoing check-in:", err);
+      toast.error("Failed to undo check-in.");
     } finally {
       setProcessingBookingId(null);
     }
@@ -335,23 +459,48 @@ export default function Bookings() {
   const handleMarkNoShowClassBooking = async (booking: ClassBooking) => {
     setProcessingBookingId(booking.id);
     try {
+      const targetClientId = booking.clientId || booking.memberId;
+      const client = clients.find(c => c.id === targetClientId || c.memberId === targetClientId);
+      const matchedIds = Array.from(new Set([targetClientId, booking.clientId, booking.memberId, client?.id, client?.memberId, (client as any)?.portalUserId].filter(Boolean))) as string[];
+
       // 1. Update classBookings status
       await updateDoc(doc(db, 'classBookings', booking.id), {
         status: 'no-show',
         updatedAt: new Date().toISOString()
       });
 
+      if (booking.classId) {
+        for (const id of matchedIds) {
+          if (id && `${booking.classId}_${id}` !== booking.id) {
+            await updateDoc(doc(db, 'classBookings', `${booking.classId}_${id}`), {
+              status: 'no-show',
+              updatedAt: new Date().toISOString()
+            }).catch(() => {});
+          }
+        }
+      }
+
       // 2. Update classSchedules noShows array
       if (booking.classId) {
-        const resolvedClientId = booking.clientId || booking.memberId;
-        await updateDoc(doc(db, 'classSchedules', booking.classId), {
-          noShows: arrayUnion(resolvedClientId),
-          checkedIn: arrayRemove(resolvedClientId)
-        });
+        const classRef = doc(db, 'classSchedules', booking.classId);
+        const classDoc = await getDoc(classRef).catch(() => null);
+        if (classDoc && classDoc.exists()) {
+          const cData = classDoc.data();
+          const currentCheckedIn = (cData.checkedIn || []) as string[];
+          const currentNoShows = (cData.noShows || []) as string[];
+          const nextNoShows = Array.from(new Set([...currentNoShows, targetClientId]));
+          const nextCheckedIn = currentCheckedIn.filter(id => !matchedIds.includes(String(id)));
+          await updateDoc(classRef, {
+            noShows: nextNoShows,
+            checkedIn: nextCheckedIn
+          });
+        }
       }
+
+      toast.info(`Marked ${booking.memberName || 'member'} as no-show.`);
     } catch (err) {
       console.error("Error marking no-show:", err);
-      alert("Failed to mark no-show. Please try again.");
+      toast.error("Failed to mark no-show. Please try again.");
     } finally {
       setProcessingBookingId(null);
     }
@@ -686,21 +835,25 @@ export default function Bookings() {
       if (classBranchFilter !== 'all' && b.branch && b.branch !== classBranchFilter) return false;
 
       // Date filter
-      if (classDateFilter !== 'all') {
-        const dateStr = b.classDate || (b.classStartTime ? b.classStartTime.substring(0, 10) : '');
-        if (dateStr) {
-          try {
-            const parsed = parseISO(dateStr);
-            if (classDateFilter === 'today' && !isToday(parsed)) return false;
-            if (classDateFilter === 'tomorrow' && !isTomorrow(parsed)) return false;
-            if (classDateFilter === 'week' && !isThisWeek(parsed, { weekStartsOn: 0 })) return false;
-            if (classDateFilter === 'upcoming') {
-              const todayStr = format(new Date(), 'yyyy-MM-dd');
-              if (dateStr < todayStr) return false;
-            }
-          } catch {
-            // keep if date parsing fails
+      const dateStr = b.classDate || (b.classStartTime ? b.classStartTime.substring(0, 10) : '');
+      if (classSpecificDate && dateStr !== classSpecificDate) return false;
+
+      if (classDateFilter !== 'all' && dateStr) {
+        try {
+          const parsed = parseISO(dateStr);
+          if (classDateFilter === 'today' && !isToday(parsed)) return false;
+          if (classDateFilter === 'tomorrow' && !isTomorrow(parsed)) return false;
+          if (classDateFilter === 'week' && !isThisWeek(parsed, { weekStartsOn: 0 })) return false;
+          if (classDateFilter === 'upcoming') {
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            if (dateStr < todayStr) return false;
           }
+          if (classDateFilter === 'past') {
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            if (dateStr >= todayStr) return false;
+          }
+        } catch {
+          // keep if date parsing fails
         }
       }
 
@@ -720,7 +873,7 @@ export default function Bookings() {
 
       return true;
     });
-  }, [classBookings, classStatusFilter, classBranchFilter, classDateFilter, classSearchQuery]);
+  }, [classBookings, classStatusFilter, classBranchFilter, classDateFilter, classSpecificDate, classSearchQuery]);
 
   // 2. Filtered PT Sessions
   const filteredPtSessions = useMemo(() => {
@@ -738,6 +891,10 @@ export default function Bookings() {
           if (ptDateFilter === 'upcoming') {
             const todayStr = format(new Date(), 'yyyy-MM-dd');
             if (s.date < todayStr) return false;
+          }
+          if (ptDateFilter === 'past') {
+            const todayStr = format(new Date(), 'yyyy-MM-dd');
+            if (s.date >= todayStr) return false;
           }
         } catch {
           // keep
@@ -922,7 +1079,10 @@ export default function Bookings() {
               {/* Filter Controls */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* Date Filter */}
-                <Select value={classDateFilter} onValueChange={(v: any) => setClassDateFilter(v)}>
+                <Select value={classDateFilter} onValueChange={(v: any) => {
+                  setClassDateFilter(v);
+                  if (v !== 'all') setClassSpecificDate('');
+                }}>
                   <SelectTrigger className="h-9 text-xs w-[130px] bg-background">
                     <SelectValue placeholder="All Dates" />
                   </SelectTrigger>
@@ -932,8 +1092,34 @@ export default function Bookings() {
                     <SelectItem value="tomorrow">Tomorrow</SelectItem>
                     <SelectItem value="week">This Week</SelectItem>
                     <SelectItem value="upcoming">Upcoming</SelectItem>
+                    <SelectItem value="past">Past Bookings</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {/* Specific Date Picker */}
+                <div className="flex items-center gap-1">
+                  <Input 
+                    type="date"
+                    value={classSpecificDate}
+                    onChange={(e) => {
+                      setClassSpecificDate(e.target.value);
+                      if (e.target.value) setClassDateFilter('all');
+                    }}
+                    className="h-9 text-xs w-[135px] bg-background"
+                    title="Jump to specific date"
+                  />
+                  {classSpecificDate && (
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      onClick={() => setClassSpecificDate('')} 
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                      title="Clear specific date"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
 
                 {/* Branch Filter */}
                 {branches && branches.length > 0 && (
@@ -1102,18 +1288,21 @@ export default function Bookings() {
                             {/* Actions */}
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1.5">
+                                {(b.status === 'booked' || b.status === 'no-show') && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isProcessing}
+                                    onClick={() => handleCheckInClassBooking(b)}
+                                    className="h-7 px-2 text-[11px] font-bold border-emerald-500/30 text-emerald-600 hover:bg-emerald-600 hover:text-white"
+                                    title={b.status === 'no-show' ? "Retroactive Check-in (Forgive No-Show)" : "Check in attendee"}
+                                  >
+                                    <Check className="h-3 w-3 mr-0.5" /> {b.status === 'no-show' ? 'Check-in (Fix)' : 'Check-in'}
+                                  </Button>
+                                )}
+
                                 {b.status === 'booked' && (
                                   <>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      disabled={isProcessing}
-                                      onClick={() => handleCheckInClassBooking(b)}
-                                      className="h-7 px-2 text-[11px] font-bold border-emerald-500/30 text-emerald-600 hover:bg-emerald-600 hover:text-white"
-                                      title="Check in attendee"
-                                    >
-                                      <Check className="h-3 w-3 mr-0.5" /> Check-in
-                                    </Button>
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -1138,9 +1327,21 @@ export default function Bookings() {
                                 )}
 
                                 {b.status === 'attended' && (
-                                  <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-                                    <CheckCircle className="h-3.5 w-3.5" /> Checked In
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                                      <CheckCircle className="h-3.5 w-3.5" /> Checked In
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      disabled={isProcessing}
+                                      onClick={() => handleUndoCheckInClassBooking(b)}
+                                      className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                                      title="Undo check-in"
+                                    >
+                                      Undo
+                                    </Button>
+                                  </div>
                                 )}
 
                                 {b.status === 'cancelled' && (
@@ -1148,7 +1349,7 @@ export default function Bookings() {
                                 )}
 
                                 {b.status === 'no-show' && (
-                                  <span className="text-[11px] text-rose-500 font-semibold">Marked No-Show</span>
+                                  <span className="text-[11px] text-rose-500 font-semibold">No-Show</span>
                                 )}
                               </div>
                             </TableCell>
@@ -1240,6 +1441,7 @@ export default function Bookings() {
                     <SelectItem value="tomorrow">Tomorrow</SelectItem>
                     <SelectItem value="week">This Week</SelectItem>
                     <SelectItem value="upcoming">Upcoming</SelectItem>
+                    <SelectItem value="past">Past Sessions</SelectItem>
                   </SelectContent>
                 </Select>
 

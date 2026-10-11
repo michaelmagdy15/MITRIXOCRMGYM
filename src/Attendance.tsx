@@ -6,13 +6,39 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Camera, CheckCircle, User, History, AlertCircle, MapPin, Scan, XCircle, Printer, Check, Calendar, AlertTriangle, Clock } from 'lucide-react';
+import { 
+  Camera, 
+  CheckCircle, 
+  User, 
+  History, 
+  AlertCircle, 
+  MapPin, 
+  Scan, 
+  XCircle, 
+  Printer, 
+  Check, 
+  Calendar, 
+  AlertTriangle, 
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  UserPlus,
+  RotateCcw,
+  Search,
+  CheckCheck,
+  X,
+  Phone
+} from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
-import { db, getTenantId } from './firebase';
-import { collection, query, onSnapshot } from 'firebase/firestore';
+import { db, getTenantId, auth } from './firebase';
+import { collection, query, onSnapshot, doc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ShiftHandoverDialog } from './components/ShiftHandoverDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toCanonicalBranchId } from './utils/memberCategories';
+import { toast } from 'sonner';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const {
@@ -54,15 +80,55 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     return () => unsub();
   }, []);
 
+  // ─── DAILY ATTENDANCE & HISTORICAL RECONCILIATION STATE ───
+  const cairoTodayStr = useMemo(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }), []);
+  const [rosterDate, setRosterDate] = useState<string>(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }));
+  const [selectedSessionFilter, setSelectedSessionFilter] = useState<string>('all');
+  const [rosterSearch, setRosterSearch] = useState<string>('');
+  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+  const [quickAddSessionId, setQuickAddSessionId] = useState('');
+  const [quickAddMemberId, setQuickAddMemberId] = useState('');
+  const [quickAddSearch, setQuickAddSearch] = useState('');
+  const [actionLoadingAttendeeId, setActionLoadingAttendeeId] = useState<string | null>(null);
+
+  const handlePrevDay = () => {
+    try {
+      const d = parseISO(rosterDate);
+      const prev = new Date(d.getTime() - 24 * 60 * 60 * 1000);
+      setRosterDate(format(prev, 'yyyy-MM-dd'));
+      setSelectedSessionFilter('all');
+    } catch {
+      setRosterDate(cairoTodayStr);
+    }
+  };
+
+  const handleNextDay = () => {
+    try {
+      const d = parseISO(rosterDate);
+      const next = new Date(d.getTime() + 24 * 60 * 60 * 1000);
+      setRosterDate(format(next, 'yyyy-MM-dd'));
+      setSelectedSessionFilter('all');
+    } catch {
+      setRosterDate(cairoTodayStr);
+    }
+  };
+
+  const handleToday = () => {
+    setRosterDate(cairoTodayStr);
+    setSelectedSessionFilter('all');
+  };
+
+  const classesOnSelectedDate = useMemo(() => {
+    return classes.filter(c => c.date === rosterDate);
+  }, [classes, rosterDate]);
+
   const dailyRoster = useMemo(() => {
-    const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-    
-    // 1. Get check-ins for today
+    // 1. Get check-ins for selected rosterDate
     const todayCheckins = attendances.filter(a => {
       if (!a.date) return false;
       try {
         const checkinCairoDate = new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-        return checkinCairoDate === cairoDateStr;
+        return checkinCairoDate === rosterDate;
       } catch {
         return false;
       }
@@ -71,27 +137,41 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     // Map by clientId to see if they checked in
     const checkinMap = new Map<string, typeof todayCheckins[0]>();
     todayCheckins.forEach(c => {
-      checkinMap.set(c.clientId, c);
+      if (c.clientId) checkinMap.set(c.clientId, c);
+      if ((c as any).memberId) checkinMap.set((c as any).memberId, c);
     });
 
     // 2. Sourced from classes
     const classAttendees: any[] = [];
     classes.forEach(cls => {
-      if (cls.date === cairoDateStr) {
+      if (cls.date === rosterDate) {
+        if (selectedSessionFilter !== 'all' && cls.id !== selectedSessionFilter) return;
         const attendees = cls.attendees || [];
         attendees.forEach((clientId: string) => {
-          const client = clients.find(c => c.id === clientId);
-          if (client) {
-            classAttendees.push({
-              clientId,
-              memberId: client.memberId || '—',
-              name: client.name,
-              slot: `${cls.name} (${cls.time})`,
-              checkedIn: checkinMap.has(clientId),
-              checkinTime: checkinMap.get(clientId)?.date,
-              type: 'Class'
-            });
-          }
+          const client = clients.find(c => c.id === clientId || c.memberId === clientId);
+          const matchedIds = [clientId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
+          const isCheckedIn = (cls.checkedIn || []).some((id: string) => matchedIds.includes(String(id))) ||
+                              matchedIds.some(id => checkinMap.has(id));
+          const isNoShow = !isCheckedIn && (cls.noShows || []).some((id: string) => matchedIds.includes(String(id)));
+          const checkinRecord = matchedIds.map(id => checkinMap.get(id)).find(Boolean);
+
+          classAttendees.push({
+            clientId,
+            client,
+            memberId: client?.memberId || '—',
+            name: client?.name || 'Member',
+            phone: client?.phone || '',
+            slot: `${cls.name} (${cls.time})`,
+            sessionId: cls.id,
+            sessionTitle: cls.name,
+            sessionTime: cls.time,
+            sessionDate: cls.date,
+            branch: cls.branch,
+            checkedIn: isCheckedIn,
+            isNoShow,
+            checkinTime: checkinRecord?.date || (isCheckedIn ? `${cls.date}T${(cls.time || '10:00').substring(0, 5)}:00.000Z` : undefined),
+            type: 'Class'
+          });
         });
       }
     });
@@ -99,18 +179,30 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     // 3. Sourced from private PT sessions
     const ptAttendees: any[] = [];
     ptPackageRecords.forEach(session => {
-      if (session.date === cairoDateStr && session.status !== 'Cancelled') {
-        const client = clients.find(c => c.id === session.clientId);
+      if (session.date === rosterDate && session.status !== 'Cancelled') {
+        if (selectedSessionFilter !== 'all' && selectedSessionFilter !== 'pt') return;
+        const client = clients.find(c => c.id === session.clientId || c.memberId === session.clientId);
         if (client) {
+          const matchedIds = [session.clientId, client.id, client.memberId].filter(Boolean) as string[];
           const isSessionAttended = session.status === 'Attended';
-          const hasCheckin = checkinMap.has(session.clientId) || isSessionAttended;
+          const hasCheckin = matchedIds.some(id => checkinMap.has(id)) || isSessionAttended;
+          const isNoShow = session.status === 'No Show';
+
           ptAttendees.push({
             clientId: session.clientId,
+            client,
             memberId: client.memberId || '—',
             name: client.name,
-            slot: `PT Session (${format(parseISO(session.date), 'h:mm a')})`,
+            phone: client.phone || '',
+            slot: `PT Session (${(session as any).time || (session.date.length > 10 ? format(parseISO(session.date), 'h:mm a') : '10:00 AM')})`,
+            sessionId: session.id,
+            sessionTitle: 'PT Session',
+            sessionTime: (session as any).time || '10:00',
+            sessionDate: session.date,
+            branch: session.branch || '',
             checkedIn: hasCheckin,
-            checkinTime: session.status === 'Attended' ? session.date : checkinMap.get(session.clientId)?.date,
+            isNoShow,
+            checkinTime: session.status === 'Attended' ? session.date : matchedIds.map(id => checkinMap.get(id)?.date).find(Boolean),
             type: 'PT'
           });
         }
@@ -119,41 +211,291 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
     // 4. Sourced from checkins not in classes/sessions (e.g. walk-ins)
     const walkins: any[] = [];
-    todayCheckins.forEach(checkin => {
-      const alreadyIncluded = classAttendees.some(x => x.clientId === checkin.clientId) || 
-                              ptAttendees.some(x => x.clientId === checkin.clientId);
-      if (!alreadyIncluded) {
-        const client = clients.find(c => c.id === checkin.clientId);
-        if (client) {
-          walkins.push({
-            clientId: checkin.clientId,
-            memberId: client.memberId || '—',
-            name: client.name,
-            slot: `Walk-in (${format(parseISO(checkin.date), 'h:mm a')})`,
-            checkedIn: true,
-            checkinTime: checkin.date,
-            type: 'Walk-in'
-          });
+    if (selectedSessionFilter === 'all') {
+      todayCheckins.forEach(checkin => {
+        const alreadyIncluded = classAttendees.some(x => x.clientId === checkin.clientId) || 
+                                ptAttendees.some(x => x.clientId === checkin.clientId);
+        if (!alreadyIncluded) {
+          const client = clients.find(c => c.id === checkin.clientId || c.memberId === checkin.clientId);
+          if (client) {
+            walkins.push({
+              clientId: checkin.clientId,
+              client,
+              memberId: client.memberId || '—',
+              name: client.name,
+              phone: client.phone || '',
+              slot: `Walk-in (${format(parseISO(checkin.date), 'h:mm a')})`,
+              sessionId: '',
+              sessionTitle: 'Walk-in',
+              sessionTime: '',
+              sessionDate: rosterDate,
+              branch: checkin.branch,
+              checkedIn: true,
+              isNoShow: false,
+              checkinTime: checkin.date,
+              type: 'Walk-in'
+            });
+          }
         }
-      }
-    });
+      });
+    }
 
-    // Combine all list items and remove duplicates (prefer scheduled class/PT slot over walk-in)
+    // Combine all list items and deduplicate
     const combined = [...classAttendees, ...ptAttendees, ...walkins];
     const uniqueMap = new Map<string, any>();
     combined.forEach(item => {
-      const existing = uniqueMap.get(item.clientId);
+      const key = `${item.sessionId || 'none'}_${item.clientId}`;
+      const existing = uniqueMap.get(key);
       if (!existing) {
-        uniqueMap.set(item.clientId, item);
+        uniqueMap.set(key, item);
       } else {
         if (existing.type === 'Walk-in' && item.type !== 'Walk-in') {
-          uniqueMap.set(item.clientId, item);
+          uniqueMap.set(key, item);
         }
       }
     });
 
-    return Array.from(uniqueMap.values());
-  }, [attendances, classes, ptPackageRecords, clients]);
+    let result = Array.from(uniqueMap.values());
+    if (rosterSearch.trim()) {
+      const q = rosterSearch.toLowerCase().trim();
+      result = result.filter(item => 
+        item.name.toLowerCase().includes(q) ||
+        String(item.memberId).toLowerCase().includes(q) ||
+        item.phone.includes(q) ||
+        item.slot.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [attendances, classes, ptPackageRecords, clients, rosterDate, selectedSessionFilter, rosterSearch]);
+
+  // ─── RETROACTIVE & LIVE CHECK-IN HANDLERS ───
+  const handleCheckInRosterItem = async (item: any) => {
+    setActionLoadingAttendeeId(item.clientId);
+    try {
+      const client = clients.find(c => c.id === item.clientId || c.memberId === item.clientId);
+      const targetClientId = client?.id || item.clientId;
+      const matchedIds = [item.clientId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
+
+      if (item.type === 'Class' && item.sessionId) {
+        const classRef = doc(db, 'classSchedules', item.sessionId);
+        const cls = classes.find(c => c.id === item.sessionId);
+        const filteredNoShows = (cls?.noShows || []).filter((id: string) => !matchedIds.includes(String(id)));
+        const nextCheckedIn = Array.from(new Set([...(cls?.checkedIn || []), item.clientId]));
+
+        await updateDoc(classRef, {
+          checkedIn: nextCheckedIn,
+          noShows: filteredNoShows
+        });
+
+        // Compute backdated timestamp
+        const rawTime = (item.sessionTime || '10:00').split('-')[0].trim();
+        const cleanTime = rawTime.length === 5 ? rawTime : '10:00';
+        const effectiveCheckInTime = `${item.sessionDate || rosterDate}T${cleanTime}:00.000Z`;
+
+        // Update classBookings under all matching keys
+        for (const id of matchedIds) {
+          const bookingDocRef = doc(db, 'classBookings', `${item.sessionId}_${id}`);
+          await updateDoc(bookingDocRef, {
+            status: 'attended',
+            checkedInAt: effectiveCheckInTime,
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+
+        // Forgive no-show strike if penalized
+        if (client && typeof client.noShowStrikes === 'number' && client.noShowStrikes > 0) {
+          const clientRef = doc(db, 'clients', client.id);
+          const newStrikes = Math.max(0, client.noShowStrikes - 1);
+          await updateDoc(clientRef, {
+            noShowStrikes: newStrikes,
+            strikes: newStrikes,
+            ...(newStrikes < 3 ? { bookingBlockedUntil: null } : {}),
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+
+        // Call server checkin endpoint for audit trail
+        try {
+          const token = await auth.currentUser?.getIdToken();
+          await fetch('/api/v1/attendance/check-in', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify({
+              memberId: targetClientId,
+              clientId: targetClientId,
+              sessionId: item.sessionId,
+              sessionTitle: item.sessionTitle,
+              branchId: toCanonicalBranchId(item.branch || selectedBranch),
+              branchName: item.branch || selectedBranch,
+              sessionDate: item.sessionDate || rosterDate,
+              sessionTime: item.sessionTime,
+              status: 'ATTENDED',
+              checkedInBy: currentUser?.name || currentUser?.email || 'Staff',
+              deductCredit: false
+            })
+          });
+        } catch {}
+
+        toast.success(`Checked in ${item.name} for ${item.slot}`);
+      } else if (item.type === 'PT' && item.sessionId) {
+        const ptRef = doc(db, 'sessions', item.sessionId);
+        await updateDoc(ptRef, {
+          status: 'Attended',
+          attendedAt: new Date().toISOString()
+        });
+        toast.success(`Checked in ${item.name} for ${item.slot}`);
+      }
+    } catch (err: any) {
+      console.error("Error checking in roster item:", err);
+      toast.error(err?.message || "Failed to check in member");
+    } finally {
+      setActionLoadingAttendeeId(null);
+    }
+  };
+
+  const handleUndoCheckIn = async (item: any) => {
+    setActionLoadingAttendeeId(item.clientId);
+    try {
+      const client = clients.find(c => c.id === item.clientId || c.memberId === item.clientId);
+      const matchedIds = [item.clientId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
+
+      if (item.type === 'Class' && item.sessionId) {
+        const classRef = doc(db, 'classSchedules', item.sessionId);
+        const cls = classes.find(c => c.id === item.sessionId);
+        const filteredCheckedIn = (cls?.checkedIn || []).filter((id: string) => !matchedIds.includes(String(id)));
+
+        await updateDoc(classRef, {
+          checkedIn: filteredCheckedIn
+        });
+
+        for (const id of matchedIds) {
+          const bookingDocRef = doc(db, 'classBookings', `${item.sessionId}_${id}`);
+          await updateDoc(bookingDocRef, {
+            status: 'booked',
+            checkedInAt: null,
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+        toast.info(`Undone check-in for ${item.name}`);
+      }
+    } catch (err: any) {
+      console.error("Error undoing check-in:", err);
+      toast.error("Failed to undo check-in");
+    } finally {
+      setActionLoadingAttendeeId(null);
+    }
+  };
+
+  const handleBatchCheckInRemaining = async () => {
+    const uncheked = dailyRoster.filter(item => !item.checkedIn && item.type === 'Class' && item.sessionId);
+    if (uncheked.length === 0) {
+      toast.info("All members on the roster are already checked in!");
+      return;
+    }
+    const confirmed = window.confirm(`Check in all ${uncheked.length} remaining members for this date/class?`);
+    if (!confirmed) return;
+
+    setActionLoadingAttendeeId('batch-checkin');
+    try {
+      for (const item of uncheked) {
+        await handleCheckInRosterItem(item);
+      }
+      toast.success(`Successfully checked in all ${uncheked.length} members!`);
+    } catch (err: any) {
+      console.error("Error during batch check-in:", err);
+      toast.error("Some members could not be checked in");
+    } finally {
+      setActionLoadingAttendeeId(null);
+    }
+  };
+
+  const handleQuickAddMember = async () => {
+    if (!quickAddSessionId || !quickAddMemberId) {
+      toast.error("Please select a session and member to add.");
+      return;
+    }
+    const targetClass = classes.find(c => c.id === quickAddSessionId);
+    if (!targetClass) return;
+    const client = clients.find(c => c.id === quickAddMemberId || c.memberId === quickAddMemberId);
+    if (!client) return;
+
+    setActionLoadingAttendeeId('quick-add');
+    try {
+      const classRef = doc(db, 'classSchedules', quickAddSessionId);
+      const nextAttendees = Array.from(new Set([...(targetClass.attendees || []), client.id]));
+      const nextCheckedIn = Array.from(new Set([...(targetClass.checkedIn || []), client.id]));
+      const filteredNoShows = (targetClass.noShows || []).filter((id: string) => id !== client.id && id !== client.memberId);
+
+      await updateDoc(classRef, {
+        attendees: nextAttendees,
+        checkedIn: nextCheckedIn,
+        noShows: filteredNoShows
+      });
+
+      // Backdated timestamp
+      const rawTime = (targetClass.time || '10:00').split('-')[0].trim();
+      const cleanTime = rawTime.length === 5 ? rawTime : '10:00';
+      const effectiveCheckInTime = `${targetClass.date || rosterDate}T${cleanTime}:00.000Z`;
+
+      // Set booking doc
+      const bookingDocRef = doc(db, 'classBookings', `${targetClass.id}_${client.id}`);
+      await setDoc(bookingDocRef, {
+        classId: targetClass.id,
+        className: targetClass.name,
+        classDate: targetClass.date,
+        classTime: targetClass.time,
+        branch: targetClass.branch || '',
+        clientId: client.id,
+        memberId: client.memberId || '',
+        memberName: client.name,
+        memberPhone: client.phone || '',
+        status: 'attended',
+        checkedInAt: effectiveCheckInTime,
+        staffOverride: true,
+        admittedBy: currentUser?.name || 'Staff',
+        bookedAt: effectiveCheckInTime,
+        createdAt: new Date().toISOString()
+      }, { merge: true });
+
+      // Call server checkin endpoint for audit trail
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        await fetch('/api/v1/attendance/check-in', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            memberId: client.id,
+            clientId: client.id,
+            sessionId: targetClass.id,
+            sessionTitle: targetClass.name,
+            branchId: toCanonicalBranchId(targetClass.branch || selectedBranch),
+            branchName: targetClass.branch || selectedBranch,
+            sessionDate: targetClass.date || rosterDate,
+            sessionTime: targetClass.time,
+            status: 'ATTENDED',
+            checkedInBy: currentUser?.name || currentUser?.email || 'Staff',
+            deductCredit: false
+          })
+        });
+      } catch {}
+
+      toast.success(`${client.name} added to ${targetClass.name} and checked in!`);
+      setIsQuickAddOpen(false);
+      setQuickAddMemberId('');
+      setQuickAddSearch('');
+    } catch (err: any) {
+      console.error("Error quick adding member:", err);
+      toast.error(err?.message || "Failed to add member to session");
+    } finally {
+      setActionLoadingAttendeeId(null);
+    }
+  };
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -794,73 +1136,272 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           )}
         </div>
       )}
-      {/* Daily Attendance Roster Section (Hidden in Kiosk Mode) */}
+      {/* Daily Attendance & Paper Sheet Reconciliation (Hidden in Kiosk Mode) */}
       {!isKiosk && (
         <Card className="border-2 border-primary/10 shadow-lg no-print">
-          <CardHeader className="bg-primary/5 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 py-4">
+          <CardHeader className="bg-primary/5 border-b flex flex-col md:flex-row items-start md:items-center justify-between gap-4 py-4">
             <div>
-              <CardTitle className="text-lg flex items-center text-primary">
-                <Calendar className="me-2 h-5 w-5" />
-                Daily Attendance Roster
-              </CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-lg flex items-center text-primary font-black uppercase">
+                  <Calendar className="me-2 h-5 w-5" />
+                  Daily Attendance & Paper Sheet Reconciliation
+                </CardTitle>
+                {rosterDate < cairoTodayStr && (
+                  <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-600 font-bold text-[10px] px-2 py-0.5">
+                    Past Sheet Mode ({rosterDate})
+                  </Badge>
+                )}
+                {rosterDate === cairoTodayStr && (
+                  <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-600 font-bold text-[10px] px-2 py-0.5">
+                    Today
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Expected and checked-in members for today ({new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')})
+                Cross-verify physical attendance sheets with CRM records and backdate check-ins for past classes.
               </p>
             </div>
-            <Button 
-              variant="outline"
-              className="flex items-center gap-1.5 font-bold shadow-sm"
-              onClick={() => window.print()}
-            >
-              <Printer className="h-4 w-4" />
-              Print Daily Roster
-            </Button>
+
+            {/* Controls Header */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Date Nav Controls */}
+              <div className="flex items-center bg-background rounded-lg border p-0.5 shadow-xs">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handlePrevDay} 
+                  className="h-8 w-8 p-0"
+                  title="Previous Day"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleToday} 
+                  className="h-8 px-2 text-xs font-bold"
+                  title="Jump to Today"
+                >
+                  Today
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleNextDay} 
+                  className="h-8 w-8 p-0"
+                  title="Next Day"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Input
+                  type="date"
+                  value={rosterDate}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setRosterDate(e.target.value);
+                      setSelectedSessionFilter('all');
+                    }
+                  }}
+                  className="h-8 text-xs w-[130px] border-0 focus-visible:ring-0 cursor-pointer"
+                  title="Pick specific date for reconciliation"
+                />
+              </div>
+
+              {/* Session / Class Filter */}
+              <Select value={selectedSessionFilter} onValueChange={(val) => { if (val) setSelectedSessionFilter(val); }}>
+                <SelectTrigger className="h-8 text-xs w-[180px] bg-background">
+                  <SelectValue placeholder="All Sessions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sessions ({classesOnSelectedDate.length} classes)</SelectItem>
+                  {classesOnSelectedDate.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.time} — {c.name} ({c.attendees?.length || 0})
+                    </SelectItem>
+                  ))}
+                  {ptPackageRecords.some(s => s.date === rosterDate && s.status !== 'Cancelled') && (
+                    <SelectItem value="pt">Private PT Sessions</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+
+              {/* Batch Check-In Remaining */}
+              {dailyRoster.some(r => !r.checkedIn && r.type === 'Class') && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={handleBatchCheckInRemaining}
+                  disabled={actionLoadingAttendeeId === 'batch-checkin'}
+                  className="h-8 text-xs font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                  title="Check in all remaining unverified members for this sheet"
+                >
+                  <CheckCheck className="h-3.5 w-3.5" />
+                  {actionLoadingAttendeeId === 'batch-checkin' ? 'Checking in...' : `Check In All (${dailyRoster.filter(r => !r.checkedIn).length})`}
+                </Button>
+              )}
+
+              {/* Quick Add Member to Session */}
+              {classesOnSelectedDate.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setQuickAddSessionId(selectedSessionFilter !== 'all' && selectedSessionFilter !== 'pt' ? selectedSessionFilter : classesOnSelectedDate[0]?.id || '');
+                    setQuickAddMemberId('');
+                    setQuickAddSearch('');
+                    setIsQuickAddOpen(true);
+                  }}
+                  className="h-8 text-xs font-bold gap-1 border-primary/30 text-primary hover:bg-primary/10 shadow-xs"
+                  title="Add an unenrolled or walk-in member to this session roster"
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Add Member
+                </Button>
+              )}
+
+              {/* Print Sheet */}
+              <Button 
+                variant="outline"
+                size="sm"
+                className="h-8 flex items-center gap-1.5 font-bold shadow-xs text-xs"
+                onClick={() => window.print()}
+                title="Print physical attendance roster sheet"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Print
+              </Button>
+            </div>
           </CardHeader>
+
+          {/* Quick Metrics Bar & Search Filter */}
+          <div className="p-3 bg-muted/20 border-b flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="secondary" className="text-xs font-bold py-1">
+                Total: {dailyRoster.length}
+              </Badge>
+              <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-bold py-1">
+                Checked In: {dailyRoster.filter(r => r.checkedIn).length}
+              </Badge>
+              <Badge variant="outline" className="text-xs font-bold py-1 text-muted-foreground">
+                Pending: {dailyRoster.filter(r => !r.checkedIn && !r.isNoShow).length}
+              </Badge>
+              {dailyRoster.some(r => r.isNoShow) && (
+                <Badge className="bg-rose-500/10 text-rose-600 border border-rose-500/20 text-xs font-bold py-1">
+                  No-Shows: {dailyRoster.filter(r => r.isNoShow).length}
+                </Badge>
+              )}
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search member, phone, or class..."
+                value={rosterSearch}
+                onChange={e => setRosterSearch(e.target.value)}
+                className="h-8 pl-8 text-xs bg-background"
+              />
+            </div>
+          </div>
+
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left border-collapse">
-                <thead className="bg-muted/50 border-b">
+                <thead className="bg-muted/50 border-b text-xs uppercase font-bold text-muted-foreground">
                   <tr>
-                    <th className="p-3 font-semibold text-muted-foreground">Member ID</th>
-                    <th className="p-3 font-semibold text-muted-foreground">Name</th>
-                    <th className="p-3 font-semibold text-muted-foreground">Time Slot / Class</th>
-                    <th className="p-3 font-semibold text-muted-foreground text-center">Status</th>
+                    <th className="p-3">Member ID</th>
+                    <th className="p-3">Member Name</th>
+                    <th className="p-3">Session / Class</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-right">Reconciliation Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {dailyRoster.map((item) => (
-                    <tr key={item.clientId} className="hover:bg-muted/30 transition-colors">
-                      <td className="p-3 font-mono text-xs">#{item.memberId}</td>
-                      <td className="p-3 font-bold">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveTab('clients');
-                            setActiveClientId(item.clientId);
-                          }}
-                          className="hover:underline text-left"
-                        >
-                          {item.name}
-                        </button>
-                      </td>
-                      <td className="p-3 text-muted-foreground">{item.slot}</td>
-                      <td className="p-3 flex justify-center">
-                        {item.checkedIn ? (
-                          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20 font-bold flex items-center gap-1 px-2.5 py-0.5">
-                            <Check className="h-3.5 w-3.5 stroke-[3]" /> Checked-In
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground hover:bg-muted font-bold px-2.5 py-0.5">
-                            Scheduled
-                          </Badge>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y text-xs">
+                  {dailyRoster.map((item) => {
+                    const isBusy = actionLoadingAttendeeId === item.clientId;
+                    return (
+                      <tr key={`${item.sessionId || 'nosess'}_${item.clientId}`} className="hover:bg-muted/30 transition-colors">
+                        <td className="p-3 font-mono font-bold text-muted-foreground">#{item.memberId}</td>
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveTab('clients');
+                              setActiveClientId(item.clientId);
+                            }}
+                            className="font-bold text-foreground hover:text-primary hover:underline text-left block"
+                            title="Open member CRM profile"
+                          >
+                            {item.name}
+                          </button>
+                          {item.phone && (
+                            <a href={`tel:${item.phone}`} className="text-[11px] text-muted-foreground flex items-center gap-1 hover:text-primary">
+                              <Phone className="h-3 w-3" /> {item.phone}
+                            </a>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <span className="font-semibold block text-foreground">{item.slot}</span>
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <MapPin className="h-3 w-3" /> {item.branch || selectedBranch || 'Main Studio'}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          {item.checkedIn ? (
+                            <div className="inline-flex flex-col items-center">
+                              <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 font-bold flex items-center gap-1 px-2.5 py-0.5 text-[11px]">
+                                <Check className="h-3.5 w-3.5 stroke-[3]" /> Checked-In
+                              </Badge>
+                              {item.checkinTime && (
+                                <span className="text-[10px] text-muted-foreground mt-0.5">
+                                  {item.checkinTime.length > 10 ? format(parseISO(item.checkinTime), 'h:mm a') : item.checkinTime}
+                                </span>
+                              )}
+                            </div>
+                          ) : item.isNoShow ? (
+                            <Badge className="bg-rose-500/10 text-rose-600 border border-rose-500/20 font-bold px-2 py-0.5 text-[11px]">
+                              No-Show
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground font-semibold px-2 py-0.5 text-[11px]">
+                              Booked / Unverified
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {!item.checkedIn ? (
+                              <Button
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => handleCheckInRosterItem(item)}
+                                className="h-7 px-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1 shadow-xs"
+                                title="Verify attendance and mark checked-in"
+                              >
+                                <Check className="h-3.5 w-3.5 stroke-[3]" />
+                                {isBusy ? "Checking..." : "Check In"}
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusy}
+                                onClick={() => handleUndoCheckIn(item)}
+                                className="h-7 px-2 text-xs font-bold text-muted-foreground hover:text-foreground gap-1"
+                                title="Undo check-in for this member"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                Undo
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {dailyRoster.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="p-8 text-center text-muted-foreground italic">
-                        No members scheduled or checked in for today.
+                      <td colSpan={5} className="p-10 text-center text-muted-foreground italic">
+                        No members scheduled or checked in for {rosterDate}.
                       </td>
                     </tr>
                   )}
@@ -870,6 +1411,94 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           </CardContent>
         </Card>
       )}
+
+      {/* Quick Add Member to Session Modal */}
+      <Dialog open={isQuickAddOpen} onOpenChange={setIsQuickAddOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-base font-black uppercase tracking-tight flex items-center gap-2">
+              <UserPlus className="h-5 w-5 text-primary" /> Add Member to Sheet Roster
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Directly enroll and retroactively check in a member from your physical attendance sheet.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Select Session ({rosterDate})</Label>
+              <Select value={quickAddSessionId} onValueChange={(val) => { if (val) setQuickAddSessionId(val); }}>
+                <SelectTrigger className="h-9 text-xs bg-background">
+                  <SelectValue placeholder="Choose class..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {classesOnSelectedDate.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.time} — {c.name} ({c.branch || 'Main Studio'})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Select Member</Label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Type name, phone, or member ID..."
+                  value={quickAddSearch}
+                  onChange={e => setQuickAddSearch(e.target.value)}
+                  className="h-9 pl-8 text-xs bg-background"
+                />
+              </div>
+
+              <div className="max-h-48 overflow-y-auto rounded-lg border bg-background divide-y mt-1">
+                {clients
+                  .filter(c => {
+                    if (!quickAddSearch.trim()) return true;
+                    const q = quickAddSearch.toLowerCase();
+                    return c.name.toLowerCase().includes(q) || (c.phone || '').includes(q) || String(c.memberId || '').includes(q);
+                  })
+                  .slice(0, 30)
+                  .map(c => {
+                    const isSelected = quickAddMemberId === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setQuickAddMemberId(c.id)}
+                        className={`w-full p-2 text-left flex items-center justify-between text-xs hover:bg-muted/50 transition-colors ${
+                          isSelected ? 'bg-primary/10 font-bold' : ''
+                        }`}
+                      >
+                        <div>
+                          <p className="font-bold text-foreground">{c.name} {c.memberId ? `(#${c.memberId})` : ''}</p>
+                          <p className="text-[10px] text-muted-foreground">{c.phone || 'No phone'}</p>
+                        </div>
+                        {isSelected && <Check className="h-4 w-4 text-primary shrink-0" />}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setIsQuickAddOpen(false)} className="text-xs font-semibold">
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={!quickAddSessionId || !quickAddMemberId || actionLoadingAttendeeId === 'quick-add'}
+              onClick={handleQuickAddMember}
+              className="text-xs font-bold bg-primary"
+            >
+              {actionLoadingAttendeeId === 'quick-add' ? 'Enrolling & Checking In...' : 'Enroll & Check In'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Hidden print container, styled via CSS for A4 print */}
       <div className="print-container hidden print:block font-sans">
@@ -881,7 +1510,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               <h1 style={{ fontSize: '24px', fontWeight: '800', letterSpacing: '0.025em', textTransform: 'uppercase', margin: 0, color: '#18181b' }}>Daily Attendance Roster</h1>
             </div>
             <p style={{ margin: '6px 0 0 0', fontSize: '13px', color: '#71717a', fontWeight: '500' }}>
-              Gym Branch: <span style={{ color: '#18181b', fontWeight: '600' }}>{selectedBranch || 'MAIN'}</span> | Date: <span style={{ color: '#18181b', fontWeight: '600' }}>{new Date().toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')}</span>
+              Gym Branch: <span style={{ color: '#18181b', fontWeight: '600' }}>{selectedBranch || 'MAIN'}</span> | Date: <span style={{ color: '#18181b', fontWeight: '600' }}>{rosterDate}</span>
             </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>

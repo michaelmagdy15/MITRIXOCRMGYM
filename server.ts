@@ -2214,6 +2214,14 @@ async function startServer() {
         const resolvedSessionDate = sessionDate || sessionData?.date || (sessionData?.startTime ? sessionData.startTime.substring(0, 10) : nowIso.substring(0, 10));
         const resolvedSessionTime = sessionTime || sessionData?.time || (sessionData?.startTime ? `${sessionData.startTime.substring(11, 16)} - ${sessionData.endTime ? sessionData.endTime.substring(11, 16) : ''}` : 'Class');
 
+        // Check if backdating a past session check-in
+        let effectiveCheckInTime = nowIso;
+        if (resolvedSessionDate && resolvedSessionDate < nowIso.substring(0, 10)) {
+          const rawTime = (resolvedSessionTime || '10:00').split('-')[0].trim();
+          const cleanTime = rawTime.length === 5 ? rawTime : '10:00';
+          effectiveCheckInTime = `${resolvedSessionDate}T${cleanTime}:00.000Z`;
+        }
+
         const attendanceRecord = {
           id: recordId,
           memberId: canonicalClientId,
@@ -2225,7 +2233,7 @@ async function startServer() {
           branchName: resolvedBranchName,
           sessionDate: resolvedSessionDate,
           sessionTime: resolvedSessionTime,
-          checkedInAt: nowIso,
+          checkedInAt: effectiveCheckInTime,
           checkedInBy: staffName,
           status: String(status).toUpperCase() as 'ATTENDED' | 'NO_SHOW' | 'CANCELLED',
           remainingCreditsAfter: typeof remainingCreditsAfter === 'number' ? remainingCreditsAfter : 0,
@@ -2261,13 +2269,16 @@ async function startServer() {
           clientId: canonicalClientId,
           memberId: canonicalClientId,
           branch: resolvedBranchName,
-          date: nowIso,
+          date: effectiveCheckInTime,
           recordedBy: staffName,
           packageName: targetPkg?.packageName || targetPkg?.name || clientData.packageType || '',
           sessionTitle: resolvedSessionTitle,
           status: attendanceRecord.status,
           remainingCreditsAfter: attendanceRecord.remainingCreditsAfter
         });
+
+        // Set of aliases for member to ensure thorough match in arrays
+        const aliasSet = new Set([canonicalClientId, targetMemberId, clientData?.memberId].filter(Boolean));
 
         // Update class schedule session attendees if session exists
         if (sessionRef && sessionSnap?.exists) {
@@ -2276,18 +2287,40 @@ async function startServer() {
           const currentAttendees: string[] = sessionData?.attendees || [];
 
           if (attendanceRecord.status === 'ATTENDED') {
-            const nextCheckedIn = currentCheckedIn.includes(canonicalClientId) ? currentCheckedIn : [...currentCheckedIn, canonicalClientId];
-            const nextNoShows = currentNoShows.filter(id => id !== canonicalClientId);
-            const nextAttendees = currentAttendees.includes(canonicalClientId) ? currentAttendees : [...currentAttendees, canonicalClientId];
+            const nextCheckedIn = currentCheckedIn.some(id => aliasSet.has(id))
+              ? currentCheckedIn
+              : [...currentCheckedIn, canonicalClientId];
+            const nextNoShows = currentNoShows.filter(id => !aliasSet.has(id));
+            const nextAttendees = currentAttendees.some(id => aliasSet.has(id))
+              ? currentAttendees
+              : [...currentAttendees, canonicalClientId];
             transaction.update(sessionRef, {
               checkedIn: nextCheckedIn,
               noShows: nextNoShows,
               attendees: nextAttendees,
               updatedAt: nowIso
             });
+
+            // If the member was previously flagged as no-show, forgive the strike and clear lockout
+            const wasMarkedNoShow = currentNoShows.some(id => aliasSet.has(id)) || bookingSnap?.data()?.status === 'no-show';
+            if (wasMarkedNoShow) {
+              const currentStrikes = clientData.noShowStrikes || clientData.strikes || 0;
+              const newStrikes = Math.max(0, currentStrikes - 1);
+              const clientUpdates: Record<string, any> = {
+                noShowStrikes: newStrikes,
+                strikes: newStrikes,
+                updatedAt: nowIso
+              };
+              if (newStrikes < 3 && clientData.bookingBlockedUntil) {
+                clientUpdates.bookingBlockedUntil = null;
+              }
+              transaction.update(clientRef, clientUpdates);
+            }
           } else if (attendanceRecord.status === 'NO_SHOW') {
-            const nextNoShows = currentNoShows.includes(canonicalClientId) ? currentNoShows : [...currentNoShows, canonicalClientId];
-            const nextCheckedIn = currentCheckedIn.filter(id => id !== canonicalClientId);
+            const nextNoShows = currentNoShows.some(id => aliasSet.has(id))
+              ? currentNoShows
+              : [...currentNoShows, canonicalClientId];
+            const nextCheckedIn = currentCheckedIn.filter(id => !aliasSet.has(id));
             transaction.update(sessionRef, {
               noShows: nextNoShows,
               checkedIn: nextCheckedIn,
@@ -2296,13 +2329,24 @@ async function startServer() {
           }
         }
 
-        // Update classBookings document if present
+        // Update classBookings document if present (write to both canonical and target ID keys to guarantee match)
         if (bookingRef) {
           transaction.set(bookingRef, {
             classId: targetSessionId,
             clientId: canonicalClientId,
             status: attendanceRecord.status === 'ATTENDED' ? 'attended' : attendanceRecord.status === 'NO_SHOW' ? 'no-show' : 'cancelled',
-            checkedInAt: attendanceRecord.status === 'ATTENDED' ? nowIso : null,
+            checkedInAt: attendanceRecord.status === 'ATTENDED' ? effectiveCheckInTime : null,
+            updatedAt: nowIso
+          }, { merge: true });
+        }
+        if (targetSessionId && targetMemberId && targetMemberId !== canonicalClientId) {
+          const alternateBookingRef = db.collection('classBookings').doc(`${targetSessionId}_${targetMemberId}`);
+          transaction.set(alternateBookingRef, {
+            classId: targetSessionId,
+            clientId: canonicalClientId,
+            memberId: targetMemberId,
+            status: attendanceRecord.status === 'ATTENDED' ? 'attended' : attendanceRecord.status === 'NO_SHOW' ? 'no-show' : 'cancelled',
+            checkedInAt: attendanceRecord.status === 'ATTENDED' ? effectiveCheckInTime : null,
             updatedAt: nowIso
           }, { merge: true });
         }

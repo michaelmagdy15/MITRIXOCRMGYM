@@ -451,6 +451,9 @@ export interface Client {
   staffAssignments?: Record<string, { staffId: string; staffName: string }>;
   legacyNotes?: string;
   legacyMemberId?: string;
+  noShowStrikes?: number;
+  strikes?: number;
+  bookingBlockedUntil?: string | null;
   isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
