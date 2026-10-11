@@ -2365,6 +2365,389 @@ async function startServer() {
   app.post("/api/v1/attendance/check-in", requireAuth, handleAttendanceCheckIn);
   app.post("/api/attendance/check-in", requireAuth, handleAttendanceCheckIn);
 
+  // ─── DEDICATED RETROACTIVE ATTENDANCE CHECK-IN & RECONCILIATION ENDPOINT ───
+  const handleRetroactiveAttendanceCheckIn = async (req: express.Request, res: express.Response) => {
+    try {
+      const sessionId = req.params.sessionId || req.body.sessionId || req.body.classId;
+      const {
+        memberId,
+        clientId,
+        reason = 'Manual reconciliation with paper attendance sheet',
+        notes,
+        forceEnroll = false,
+        deductCredit
+      } = req.body;
+
+      const targetMemberId = memberId || clientId;
+      if (!sessionId || !targetMemberId) {
+        return res.status(400).json({ error: "Missing sessionId or memberId parameter" });
+      }
+
+      const db = await getDbForRequest(req);
+
+      // Enforce role check: Only allow staff, managers, and administrators
+      const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+      const requesterRole = requesterDoc.data()?.role || req.user?.role;
+      if (!isStaffRole(requesterRole)) {
+        return res.status(403).json({
+          error: "Forbidden: Only staff, managers, and administrators can perform retroactive check-ins.",
+          code: "INSUFFICIENT_PERMISSIONS"
+        });
+      }
+
+      const staffName = requesterDoc.data()?.name || requesterDoc.data()?.email || req.user?.email || 'Staff';
+      const effectiveReason = notes || reason || 'Manual reconciliation with paper attendance sheet';
+
+      // Locate member doc reference
+      let clientRef = db.collection('clients').doc(targetMemberId);
+      let clientDoc = await clientRef.get();
+      if (!clientDoc.exists) {
+        const byMemberSnap = await db.collection('clients').where('memberId', '==', targetMemberId).limit(1).get();
+        if (!byMemberSnap.empty) {
+          clientDoc = byMemberSnap.docs[0]!;
+          clientRef = clientDoc.ref;
+        } else {
+          const byPhoneSnap = await db.collection('clients').where('phone', '==', targetMemberId).limit(1).get();
+          if (!byPhoneSnap.empty) {
+            clientDoc = byPhoneSnap.docs[0]!;
+            clientRef = clientDoc.ref;
+          }
+        }
+      }
+
+      if (!clientDoc.exists) {
+        return res.status(404).json({ error: "Member not found" });
+      }
+
+      const canonicalClientId = clientDoc.id;
+      const sessionRef = db.collection('classSchedules').doc(sessionId);
+      const bookingRef = db.collection('classBookings').doc(`${sessionId}_${canonicalClientId}`);
+
+      const result = await db.runTransaction(async (transaction) => {
+        // === 1. ALL READS FIRST ===
+        const currentClientSnap = await transaction.get(clientRef);
+        if (!currentClientSnap.exists) {
+          throw new Error("Client record not found during transaction");
+        }
+        const clientData = currentClientSnap.data() || {};
+
+        const sessionSnap = await transaction.get(sessionRef);
+        if (!sessionSnap.exists) {
+          throw new Error(`Session ${sessionId} not found`);
+        }
+        const sessionData = sessionSnap.data() || {};
+
+        const bookingSnap = await transaction.get(bookingRef);
+        const bookingData = bookingSnap.exists ? bookingSnap.data() : null;
+
+        // === 2. GUARDS & STATUS CHECK ===
+        const aliasSet = new Set([canonicalClientId, targetMemberId, clientData?.memberId].filter(Boolean));
+        const currentCheckedIn: string[] = sessionData.checkedIn || [];
+        const currentNoShows: string[] = sessionData.noShows || [];
+        const currentAttendees: string[] = sessionData.attendees || [];
+
+        const isAlreadyCheckedIn = currentCheckedIn.some(id => aliasSet.has(id)) || bookingData?.status === 'attended';
+        if (isAlreadyCheckedIn) {
+          return {
+            alreadyCheckedIn: true,
+            message: "Member is already marked as attended in this session.",
+            sessionId,
+            memberId: canonicalClientId
+          };
+        }
+
+        // Capacity and Enrollment Check
+        const isEnrolled = currentAttendees.some(id => aliasSet.has(id));
+        const sessionCapacity = Number(sessionData.capacity) || 30;
+        if (!isEnrolled && currentAttendees.length >= sessionCapacity && !forceEnroll) {
+          throw new Error(`Session is at full capacity (${sessionCapacity} members). Use forceEnroll=true to override.`);
+        }
+
+        // Pre-deduction check:
+        // If the member was already in attendees or has a 'booked' booking, credit was pre-deducted at reservation time.
+        const wasPreBooked = isEnrolled || (bookingSnap.exists && bookingData?.status === 'booked');
+        const willDeduct = typeof deductCredit === 'boolean' ? deductCredit : !wasPreBooked;
+
+        const packages: any[] = Array.isArray(clientData.packages) ? [...clientData.packages] : [];
+        let targetPkg: any = null;
+        let targetPkgIdx = -1;
+
+        if (willDeduct) {
+          // Find first active package with credits
+          targetPkgIdx = packages.findIndex(p => {
+            const isPt = p.type === 'pt' || p.isPT === true ||
+                         (p.name || '').toLowerCase().includes('pt') ||
+                         (p.packageName || '').toLowerCase().includes('pt');
+            if (isPt) return false;
+            const hasCredits = (typeof p.creditsLeft === 'number' && p.creditsLeft > 0) ||
+                               (typeof p.sessionsRemaining === 'number' && p.sessionsRemaining > 0) ||
+                               p.sessionsTotal === 'unlimited';
+            const isActive = p.status !== 'Expired' && p.status !== 'Inactive';
+            return isActive && hasCredits;
+          });
+          if (targetPkgIdx !== -1) targetPkg = packages[targetPkgIdx];
+
+          const isUnlimited = clientData.isUnlimited === true || clientData.membershipType === 'unlimited' || targetPkg?.sessionsTotal === 'unlimited';
+          const rawRemaining = typeof targetPkg?.creditsLeft === 'number'
+            ? targetPkg.creditsLeft
+            : typeof targetPkg?.sessionsRemaining === 'number'
+              ? targetPkg.sessionsRemaining
+              : typeof clientData.sessionsRemaining === 'number'
+                ? clientData.sessionsRemaining
+                : 0;
+
+          if (!isUnlimited && rawRemaining <= 0) {
+            throw new Error("Cannot check in: Member has 0 credits remaining on their active package.");
+          }
+
+          if (!isUnlimited && targetPkgIdx !== -1) {
+            const updatedPkg = { ...packages[targetPkgIdx] };
+            if (typeof updatedPkg.creditsLeft === 'number') {
+              updatedPkg.creditsLeft = Math.max(0, updatedPkg.creditsLeft - 1);
+            }
+            if (typeof updatedPkg.sessionsRemaining === 'number') {
+              updatedPkg.sessionsRemaining = Math.max(0, updatedPkg.sessionsRemaining - 1);
+            }
+            updatedPkg.usedSessions = (updatedPkg.usedSessions || 0) + 1;
+            packages[targetPkgIdx] = updatedPkg;
+          }
+        }
+
+        const nowIso = new Date().toISOString();
+        const recordId = `att_retro_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        const sessionDate = sessionData.date || (sessionData.startTime ? sessionData.startTime.substring(0, 10) : nowIso.substring(0, 10));
+        const sessionTime = sessionData.time || (sessionData.startTime ? `${sessionData.startTime.substring(11, 16)} - ${sessionData.endTime ? sessionData.endTime.substring(11, 16) : ''}` : '10:00');
+        const resolvedBranch = sessionData.branch || clientData.branch || 'Main Studio';
+        const resolvedBranchId = sessionData.branch_id || sessionData.branchId || toCanonicalBranchId(resolvedBranch) || 'strike_maxim';
+
+        // Effective backdated timestamp if session was in past
+        let effectiveCheckInTime = nowIso;
+        if (sessionDate < nowIso.substring(0, 10)) {
+          const rawTime = (sessionTime || '10:00').split('-')[0].trim();
+          const cleanTime = rawTime.length === 5 ? rawTime : '10:00';
+          effectiveCheckInTime = `${sessionDate}T${cleanTime}:00.000Z`;
+        }
+
+        const previousStatus = currentNoShows.some(id => aliasSet.has(id))
+          ? 'NO_SHOW'
+          : isEnrolled
+            ? 'BOOKED'
+            : 'UNMARKED';
+
+        // === 3. ALL WRITES LAST ===
+        // Update client doc if credit was deducted
+        if (willDeduct) {
+          const isUnlimited = clientData.isUnlimited === true || clientData.membershipType === 'unlimited' || targetPkg?.sessionsTotal === 'unlimited';
+          const newRemaining = isUnlimited ? clientData.sessionsRemaining : Math.max(0, (Number(clientData.sessionsRemaining) || 1) - 1);
+          transaction.update(clientRef, {
+            packages,
+            sessionsRemaining: newRemaining,
+            usedSessions: (clientData.usedSessions || 0) + 1,
+            updatedAt: nowIso
+          });
+        }
+
+        // Forgive no-show strikes if member was previously marked as no-show
+        const wasMarkedNoShow = currentNoShows.some(id => aliasSet.has(id)) || bookingData?.status === 'no-show';
+        if (wasMarkedNoShow) {
+          const currentStrikes = clientData.noShowStrikes || clientData.strikes || 0;
+          const newStrikes = Math.max(0, currentStrikes - 1);
+          const clientUpdates: Record<string, any> = {
+            noShowStrikes: newStrikes,
+            strikes: newStrikes,
+            updatedAt: nowIso
+          };
+          if (newStrikes < 3 && clientData.bookingBlockedUntil) {
+            clientUpdates.bookingBlockedUntil = null;
+          }
+          transaction.update(clientRef, clientUpdates);
+        }
+
+        // Update session attendees arrays
+        const nextCheckedIn = currentCheckedIn.some(id => aliasSet.has(id))
+          ? currentCheckedIn
+          : [...currentCheckedIn, canonicalClientId];
+        const nextNoShows = currentNoShows.filter(id => !aliasSet.has(id));
+        const nextAttendees = currentAttendees.some(id => aliasSet.has(id))
+          ? currentAttendees
+          : [...currentAttendees, canonicalClientId];
+
+        transaction.update(sessionRef, {
+          checkedIn: nextCheckedIn,
+          noShows: nextNoShows,
+          attendees: nextAttendees,
+          updatedAt: nowIso
+        });
+
+        // Update classBookings document
+        const bookingUpdate = {
+          classId: sessionId,
+          clientId: canonicalClientId,
+          status: 'attended',
+          checkInType: 'RETROACTIVE',
+          checkedInAt: effectiveCheckInTime,
+          checkedInBy: req.user?.uid || 'staff',
+          checkedInByName: staffName,
+          notes: effectiveReason,
+          updatedAt: nowIso
+        };
+        transaction.set(bookingRef, bookingUpdate, { merge: true });
+
+        if (targetMemberId !== canonicalClientId) {
+          const altBookingRef = db.collection('classBookings').doc(`${sessionId}_${targetMemberId}`);
+          transaction.set(altBookingRef, { ...bookingUpdate, memberId: targetMemberId }, { merge: true });
+        }
+
+        // Write immutable audit log entry to attendance_audit_logs
+        const auditLogRef = db.collection('attendance_audit_logs').doc();
+        const auditLogData = {
+          id: auditLogRef.id,
+          sessionId: sessionId,
+          sessionDate: sessionDate,
+          sessionTime: sessionTime,
+          sessionTitle: sessionData.name || 'Group Class',
+          branch: resolvedBranch,
+          branchId: resolvedBranchId,
+          memberId: canonicalClientId,
+          memberName: clientData.name || '',
+          memberPhone: clientData.phone || '',
+          performedBy: req.user?.uid || 'staff',
+          performedByName: staffName,
+          performedAt: nowIso,
+          action: 'RETROACTIVE_CHECK_IN',
+          previousStatus: previousStatus,
+          newStatus: 'ATTENDED',
+          checkInType: 'RETROACTIVE',
+          creditDeducted: willDeduct,
+          notes: effectiveReason
+        };
+        transaction.set(auditLogRef, auditLogData);
+
+        // Subcollection and legacy attendance collection writes
+        const attHistoryRef = db.collection('clients').doc(canonicalClientId).collection('attendance_history').doc(recordId);
+        transaction.set(attHistoryRef, auditLogData);
+
+        const legacyAttRef = db.collection('attendance').doc(recordId);
+        transaction.set(legacyAttRef, {
+          id: recordId,
+          clientId: canonicalClientId,
+          memberId: canonicalClientId,
+          branch: resolvedBranch,
+          date: effectiveCheckInTime,
+          recordedBy: staffName,
+          packageName: targetPkg?.packageName || targetPkg?.name || clientData.packageType || '',
+          sessionTitle: sessionData.name || 'Group Class',
+          status: 'ATTENDED',
+          checkInType: 'RETROACTIVE',
+          notes: effectiveReason
+        });
+
+        return {
+          id: recordId,
+          auditLogId: auditLogRef.id,
+          sessionId,
+          memberId: canonicalClientId,
+          memberName: clientData.name || '',
+          status: 'ATTENDED',
+          checkInType: 'RETROACTIVE',
+          creditDeducted: willDeduct,
+          checkedInAt: effectiveCheckInTime,
+          checkedInBy: staffName
+        };
+      });
+
+      return res.json({ success: true, record: result });
+    } catch (err: any) {
+      console.error("[Retroactive CheckIn Error]:", err);
+      return res.status(400).json({ error: err.message || "Failed to process retroactive check-in" });
+    }
+  };
+
+  const handleBatchAttendanceReconcile = async (req: express.Request, res: express.Response) => {
+    try {
+      const sessionId = req.params.sessionId || req.body.sessionId || req.body.classId;
+      const { items = [], defaultReason = 'Batch reconciliation with physical paper attendance sheet' } = req.body;
+      if (!sessionId || !Array.isArray(items)) {
+        return res.status(400).json({ error: "Missing sessionId or items array parameter" });
+      }
+
+      const db = await getDbForRequest(req);
+      const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+      const requesterRole = requesterDoc.data()?.role || req.user?.role;
+      if (!isStaffRole(requesterRole)) {
+        return res.status(403).json({
+          error: "Forbidden: Only staff, managers, and administrators can perform attendance reconciliation.",
+          code: "INSUFFICIENT_PERMISSIONS"
+        });
+      }
+
+      const results: any[] = [];
+      for (const item of items) {
+        const memberId = item.memberId || item.clientId;
+        if (!memberId) continue;
+        try {
+          if (item.paperPresent === true || item.status === 'ATTENDED' || item.status === 'attended') {
+            const fakeReq = {
+              params: { sessionId },
+              body: {
+                sessionId,
+                memberId,
+                reason: item.reason || defaultReason,
+                forceEnroll: item.forceEnroll || false,
+                deductCredit: item.deductCredit
+              },
+              user: req.user,
+              headers: req.headers
+            } as any;
+            let capturedResult: any = null;
+            let capturedError: any = null;
+            const fakeRes = {
+              status: (code: number) => ({
+                json: (data: any) => { capturedError = { code, ...data }; }
+              }),
+              json: (data: any) => { capturedResult = data; }
+            } as any;
+            await handleRetroactiveAttendanceCheckIn(fakeReq, fakeRes);
+            results.push({ memberId, success: !capturedError, data: capturedResult || capturedError });
+          } else if (item.paperPresent === false || item.status === 'NO_SHOW' || item.status === 'no-show') {
+            // Mark no-show
+            const sessionRef = db.collection('classSchedules').doc(sessionId);
+            const sDoc = await sessionRef.get();
+            if (sDoc.exists) {
+              const currentNoShows = sDoc.data()?.noShows || [];
+              const currentCheckedIn = sDoc.data()?.checkedIn || [];
+              const nextNoShows = Array.from(new Set([...currentNoShows, memberId]));
+              const nextCheckedIn = currentCheckedIn.filter((id: string) => id !== memberId);
+              await sessionRef.update({
+                noShows: nextNoShows,
+                checkedIn: nextCheckedIn,
+                updatedAt: new Date().toISOString()
+              });
+              await db.collection('classBookings').doc(`${sessionId}_${memberId}`).set({
+                status: 'no-show',
+                updatedAt: new Date().toISOString()
+              }, { merge: true });
+              results.push({ memberId, success: true, status: 'NO_SHOW' });
+            }
+          }
+        } catch (itemErr: any) {
+          results.push({ memberId, success: false, error: itemErr.message });
+        }
+      }
+
+      return res.json({ success: true, processedCount: results.length, results });
+    } catch (err: any) {
+      console.error("[Batch Reconcile Error]:", err);
+      return res.status(500).json({ error: err.message || "Failed to process batch reconciliation" });
+    }
+  };
+
+  app.post("/api/v1/sessions/:sessionId/attendance/retroactive-checkin", requireAuth, handleRetroactiveAttendanceCheckIn);
+  app.post("/api/v1/attendance/retroactive-checkin", requireAuth, handleRetroactiveAttendanceCheckIn);
+  app.post("/api/sessions/:sessionId/attendance/retroactive-checkin", requireAuth, handleRetroactiveAttendanceCheckIn);
+  app.post("/api/v1/sessions/:sessionId/attendance/batch-reconcile", requireAuth, handleBatchAttendanceReconcile);
+  app.post("/api/sessions/:sessionId/attendance/batch-reconcile", requireAuth, handleBatchAttendanceReconcile);
+
   const getAuthorizedInzanCallCenterDb = async (req: express.Request, res: express.Response) => {
     const tenantId = await getTenantIdForRequest(req);
     if (tenantId !== 'inzanathletics') {

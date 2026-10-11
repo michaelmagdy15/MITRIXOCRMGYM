@@ -27,7 +27,8 @@ import {
   Search,
   CheckCheck,
   X,
-  Phone
+  Phone,
+  FileSpreadsheet
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { Branch } from './types';
@@ -35,6 +36,7 @@ import { useLanguage } from './contexts/LanguageContext';
 import { db, getTenantId, auth } from './firebase';
 import { collection, query, onSnapshot, doc, updateDoc, setDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { ShiftHandoverDialog } from './components/ShiftHandoverDialog';
+import { AttendanceReconciliationModal } from './components/attendance/AttendanceReconciliationModal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toCanonicalBranchId } from './utils/memberCategories';
@@ -90,6 +92,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const [quickAddMemberId, setQuickAddMemberId] = useState('');
   const [quickAddSearch, setQuickAddSearch] = useState('');
   const [actionLoadingAttendeeId, setActionLoadingAttendeeId] = useState<string | null>(null);
+  const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false);
 
   const handlePrevDay = () => {
     try {
@@ -1270,6 +1273,18 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                 <Printer className="h-3.5 w-3.5" />
                 Print
               </Button>
+
+              {/* Dedicated Paper Reconciliation Workspace Modal */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsReconcileModalOpen(true)}
+                className="h-8 flex items-center gap-1.5 font-bold shadow-xs text-xs border-indigo-500/30 text-indigo-600 bg-indigo-500/10 hover:bg-indigo-500/20"
+                title="Open dedicated Paper Roster Reconciliation workspace"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                Paper Reconciliation
+              </Button>
             </div>
           </CardHeader>
 
@@ -1586,6 +1601,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         onOpenChange={setIsShiftHandoverOpen}
         currentUser={currentUser}
         selectedBranch={selectedBranch}
+      />
+
+      <AttendanceReconciliationModal
+        isOpen={isReconcileModalOpen}
+        onClose={() => setIsReconcileModalOpen(false)}
+        initialDate={rosterDate}
+        initialSessionId={selectedSessionFilter !== 'pt' && selectedSessionFilter !== 'all' ? selectedSessionFilter : undefined}
       />
     </div>
   );

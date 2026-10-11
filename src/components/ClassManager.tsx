@@ -37,8 +37,10 @@ import {
   UserPlus,
   UserCheck,
   UserX,
-  Sparkles
+  Sparkles,
+  FileSpreadsheet
 } from 'lucide-react';
+import AttendanceReconciliationModal from './attendance/AttendanceReconciliationModal';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAppContext } from '../context';
@@ -121,6 +123,10 @@ export const ClassManager: React.FC = () => {
   const [selectedMemberToAdd, setSelectedMemberToAdd] = useState<string>('');
   const [memberSearchTerm, setMemberSearchTerm] = useState('');
   const [cancelledBookings, setCancelledBookings] = useState<any[]>([]);
+  const [isBulkSyncing, setIsBulkSyncing] = useState(false);
+  const [isReconciliationOpen, setIsReconciliationOpen] = useState(false);
+  const [reconcileClassDate, setReconcileClassDate] = useState<string | undefined>(undefined);
+  const [reconcileSessionId, setReconcileSessionId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const fetchCoaches = async () => {
@@ -559,6 +565,67 @@ export const ClassManager: React.FC = () => {
     }
   };
 
+  const isRosterClassPast = useMemo(() => {
+    if (!rosterClass) return false;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const classDateStr = rosterClass.date || (rosterClass.startTime ? rosterClass.startTime.substring(0, 10) : todayStr);
+    return classDateStr < todayStr;
+  }, [rosterClass]);
+
+  const unconfirmedAttendees = useMemo(() => {
+    if (!rosterClass?.attendees) return [];
+    return rosterClass.attendees.filter(attendeeId => {
+      const client = clients.find(c => c.id === attendeeId || c.memberId === attendeeId);
+      const matchedIds = [attendeeId, client?.id, client?.memberId, (client as any)?.portalUserId].filter(Boolean) as string[];
+      const isCheckedIn = (rosterClass.checkedIn || []).some(id => matchedIds.includes(String(id)));
+      const isNoShow = (rosterClass.noShows || []).some(id => matchedIds.includes(String(id)));
+      return !isCheckedIn && !isNoShow;
+    });
+  }, [rosterClass, clients]);
+
+  const handleBulkMarkAllAttendedPaperSync = async () => {
+    if (!rosterClass || unconfirmedAttendees.length === 0) return;
+    setIsBulkSyncing(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch(`/api/v1/sessions/${rosterClass.id}/attendance/batch-reconcile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          sessionId: rosterClass.id,
+          items: unconfirmedAttendees.map(id => ({
+            memberId: id,
+            paperPresent: true,
+            reason: 'Paper sync: Bulk confirmed all booked attendees'
+          }))
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to process paper sync batch reconciliation.");
+      }
+
+      // Local update for immediate UI reflection
+      const nextCheckedIn = Array.from(new Set([...(rosterClass.checkedIn || []), ...unconfirmedAttendees]));
+      const nextNoShows = (rosterClass.noShows || []).filter(id => !unconfirmedAttendees.includes(String(id)));
+      await updateDoc(doc(db, 'classSchedules', rosterClass.id), {
+        checkedIn: nextCheckedIn,
+        noShows: nextNoShows,
+        updatedAt: new Date().toISOString()
+      });
+
+      toast.success(`Paper Sync Complete! Marked ${unconfirmedAttendees.length} members as attended & verified.`);
+    } catch (err: any) {
+      console.error("Bulk sync error:", err);
+      toast.error(err.message || "Failed to complete paper sync.");
+    } finally {
+      setIsBulkSyncing(false);
+    }
+  };
+
   const handleRemoveAttendeeFromClass = async (attendeeId: string) => {
     if (!rosterClass) return;
     const client = clients.find(c => c.id === attendeeId || c.memberId === attendeeId);
@@ -809,6 +876,18 @@ export const ClassManager: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setReconcileClassDate(undefined);
+              setReconcileSessionId(undefined);
+              setIsReconciliationOpen(true);
+            }}
+            className="gap-1.5 text-xs font-bold h-9 border-primary/30 text-primary hover:bg-primary/5"
+            title="Open Historical Paper Sheet Attendance Reconciliation Engine"
+          >
+            <FileSpreadsheet className="h-4 w-4" /> Paper Reconciliation
+          </Button>
           <Button onClick={openCreateDialog} className="gap-1.5 shadow-sm text-xs font-bold h-9">
             <Plus className="h-4 w-4" /> Schedule New Class
           </Button>
@@ -1213,14 +1292,29 @@ export const ClassManager: React.FC = () => {
                   </div>
                 </div>
 
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsAddMemberOpen(!isAddMemberOpen)}
-                  className="h-8 text-xs font-bold gap-1 border-primary/30 text-primary hover:bg-primary/10"
-                >
-                  <UserPlus className="h-3.5 w-3.5" /> Add Member
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setReconcileClassDate(rosterClass.date);
+                      setReconcileSessionId(rosterClass.id);
+                      setIsReconciliationOpen(true);
+                    }}
+                    className="h-8 text-xs font-bold gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                    title="Reconcile this session with physical paper roster"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" /> Paper Reconciliation
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setIsAddMemberOpen(!isAddMemberOpen)}
+                    className="h-8 text-xs font-bold gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" /> Add Member
+                  </Button>
+                </div>
               </div>
 
               {/* Inline Add Member Picker */}
@@ -1312,9 +1406,31 @@ export const ClassManager: React.FC = () => {
 
               {/* Attendees List */}
               <div className="space-y-2">
-                <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider">
-                  Enrolled Attendees ({rosterClass.attendees?.length || 0})
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold uppercase text-muted-foreground tracking-wider">
+                      Enrolled Attendees ({rosterClass.attendees?.length || 0})
+                    </p>
+                    {isRosterClassPast && unconfirmedAttendees.length > 0 && (
+                      <Badge className="bg-amber-500/10 text-amber-600 border border-amber-500/30 text-[10px] font-bold">
+                        {unconfirmedAttendees.length} Pending Verification
+                      </Badge>
+                    )}
+                  </div>
+                  {isRosterClassPast && unconfirmedAttendees.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isBulkSyncing}
+                      onClick={handleBulkMarkAllAttendedPaperSync}
+                      className="h-7 text-xs font-bold border-emerald-500/30 text-emerald-600 hover:bg-emerald-600 hover:text-white"
+                      title="Sync all unconfirmed bookings with physical paper attendance sheet"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 mr-1" />
+                      {isBulkSyncing ? "Syncing..." : "Mark All Booked as Attended (Paper Sync)"}
+                    </Button>
+                  )}
+                </div>
 
                 {!rosterClass.attendees || rosterClass.attendees.length === 0 ? (
                   <div className="p-8 text-center border border-dashed rounded-xl text-xs text-muted-foreground italic">
@@ -1392,11 +1508,15 @@ export const ClassManager: React.FC = () => {
                             <div className="flex items-center gap-2">
                               {isCheckedIn ? (
                                 <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[10px] font-bold">
-                                  <CheckCircle2 className="h-3 w-3 mr-1 inline" /> Checked In
+                                  <CheckCircle2 className="h-3 w-3 mr-1 inline" /> {isRosterClassPast ? 'Attended (Verified)' : 'Checked In'}
                                 </Badge>
                               ) : isNoShow ? (
                                 <Badge className="bg-rose-500/10 text-rose-600 border border-rose-500/20 text-[10px] font-bold">
                                   <UserX className="h-3 w-3 mr-1 inline" /> No-Show
+                                </Badge>
+                              ) : isRosterClassPast ? (
+                                <Badge className="bg-amber-500/10 text-amber-600 border border-amber-500/30 text-[10px] font-bold animate-pulse">
+                                  <Clock className="h-3 w-3 mr-1 inline" /> Pending Verification
                                 </Badge>
                               ) : (
                                 <Badge variant="secondary" className="text-[10px] font-bold">
@@ -1407,10 +1527,10 @@ export const ClassManager: React.FC = () => {
                               <Button
                                 size="sm"
                                 variant={isCheckedIn ? 'secondary' : 'outline'}
-                                disabled={isBusy}
+                                disabled={isBusy || isBulkSyncing}
                                 onClick={() => handleToggleCheckIn(attendeeId)}
                                 className="h-7 px-2 text-[11px] font-bold border-emerald-500/30 text-emerald-600 hover:bg-emerald-600 hover:text-white"
-                                title={isCheckedIn ? "Undo Check-In" : "Check in member"}
+                                title={isCheckedIn ? "Undo Check-In" : isRosterClassPast ? "Retroactive Check-in (Paper Sync)" : "Check in member"}
                               >
                                 {isCheckedIn ? "Undo" : "Check-in"}
                               </Button>
@@ -1418,7 +1538,7 @@ export const ClassManager: React.FC = () => {
                               <Button
                                 size="sm"
                                 variant={isNoShow ? 'secondary' : 'outline'}
-                                disabled={isBusy}
+                                disabled={isBusy || isBulkSyncing}
                                 onClick={() => handleToggleNoShow(attendeeId)}
                                 className="h-7 px-2 text-[11px] font-bold border-amber-500/30 text-amber-600 hover:bg-amber-600 hover:text-white"
                                 title={isNoShow ? "Undo No-Show" : "Mark as No-Show"}
@@ -1910,6 +2030,14 @@ export const ClassManager: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Historical Paper Attendance Reconciliation Engine Modal */}
+      <AttendanceReconciliationModal
+        isOpen={isReconciliationOpen}
+        onClose={() => setIsReconciliationOpen(false)}
+        initialDate={reconcileClassDate}
+        initialSessionId={reconcileSessionId}
+      />
     </div>
   );
 };
