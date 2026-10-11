@@ -36,8 +36,11 @@ import {
   Users, 
   Phone,
   ShieldAlert,
-  ChevronRight
+  ChevronRight,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { resolveAttendee } from '../../utils/attendeeUtils';
 import { ClassSchedule, ClassBooking } from '../../types/class';
 import { toast } from 'sonner';
@@ -76,6 +79,7 @@ export const AttendanceReconciliationModal: React.FC<AttendanceReconciliationMod
 
   // Bookings map loaded for the day for cross-verification
   const [dayBookings, setDayBookings] = useState<ClassBooking[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (initialDate) setSelectedDate(initialDate);
@@ -441,7 +445,14 @@ export const AttendanceReconciliationModal: React.FC<AttendanceReconciliationMod
 
   return (
     <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
-      <DialogContent className="max-w-5xl max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden bg-background">
+      <DialogContent 
+        className={cn(
+          "flex flex-col p-0 gap-0 overflow-hidden bg-background shadow-2xl transition-all duration-200 border",
+          isFullscreen
+            ? "fixed inset-0 z-50 w-screen sm:max-w-none md:max-w-none lg:max-w-none h-screen max-h-none rounded-none top-0 left-0 translate-x-0 translate-y-0"
+            : "w-[96vw] sm:max-w-[96vw] md:max-w-[96vw] lg:max-w-[1450px] xl:max-w-[1600px] h-[92vh] max-h-[95vh] rounded-2xl"
+        )}
+      >
         {/* Header */}
         <DialogHeader className="p-4 sm:p-5 border-b bg-card/60">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -472,6 +483,15 @@ export const AttendanceReconciliationModal: React.FC<AttendanceReconciliationMod
                 className={`h-7 text-xs font-bold ${selectedDate === format(new Date(), 'yyyy-MM-dd') ? 'bg-primary/10 text-primary border-primary/40' : ''}`}
               >
                 Today
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsFullscreen(!isFullscreen)}
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                title={isFullscreen ? "Exit Fullscreen (Restore)" : "Expand to Fullscreen"}
+              >
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               </Button>
             </div>
           </div>

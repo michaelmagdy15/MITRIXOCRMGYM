@@ -28,9 +28,20 @@ import {
   CheckCheck,
   X,
   Phone,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Globe,
+  CalendarDays,
+  ExternalLink,
+  MessageCircle
 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
+import { 
+  safeFormatDate, 
+  safeFormatTime, 
+  toValidDate, 
+  toSafeIsoDateTime, 
+  safeFormatDistanceToNow 
+} from './utils/dateUtils';
 import { Branch } from './types';
 import { useLanguage } from './contexts/LanguageContext';
 import { db, getTenantId, auth } from './firebase';
@@ -87,6 +98,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const [rosterDate, setRosterDate] = useState<string>(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }));
   const [selectedSessionFilter, setSelectedSessionFilter] = useState<string>('all');
   const [rosterSearch, setRosterSearch] = useState<string>('');
+  const [searchScope, setSearchScope] = useState<'day' | 'all'>('day');
+  const [showLowCreditsOnly, setShowLowCreditsOnly] = useState<boolean>(false);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddSessionId, setQuickAddSessionId] = useState('');
   const [quickAddMemberId, setQuickAddMemberId] = useState('');
@@ -96,7 +109,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   const handlePrevDay = () => {
     try {
-      const d = parseISO(rosterDate);
+      const d = toValidDate(rosterDate) || new Date();
       const prev = new Date(d.getTime() - 24 * 60 * 60 * 1000);
       setRosterDate(format(prev, 'yyyy-MM-dd'));
       setSelectedSessionFilter('all');
@@ -107,7 +120,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   const handleNextDay = () => {
     try {
-      const d = parseISO(rosterDate);
+      const d = toValidDate(rosterDate) || new Date();
       const next = new Date(d.getTime() + 24 * 60 * 60 * 1000);
       setRosterDate(format(next, 'yyyy-MM-dd'));
       setSelectedSessionFilter('all');
@@ -125,10 +138,18 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     return classes.filter(c => c.date === rosterDate);
   }, [classes, rosterDate]);
 
+  const availableQuickAddClasses = useMemo(() => {
+    if (classesOnSelectedDate.length > 0) return classesOnSelectedDate;
+    return [...classes].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 30);
+  }, [classes, classesOnSelectedDate]);
+
   const dailyRoster = useMemo(() => {
-    // 1. Get check-ins for selected rosterDate
-    const todayCheckins = attendances.filter(a => {
+    const isGlobal = searchScope === 'all';
+
+    // 1. Get check-ins for the active scope
+    const scopedCheckins = attendances.filter(a => {
       if (!a.date) return false;
+      if (isGlobal) return true;
       try {
         const checkinCairoDate = new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
         return checkinCairoDate === rosterDate;
@@ -138,100 +159,118 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     });
 
     // Map by clientId to see if they checked in
-    const checkinMap = new Map<string, typeof todayCheckins[0]>();
-    todayCheckins.forEach(c => {
+    const checkinMap = new Map<string, typeof scopedCheckins[0]>();
+    scopedCheckins.forEach(c => {
       if (c.clientId) checkinMap.set(c.clientId, c);
       if ((c as any).memberId) checkinMap.set((c as any).memberId, c);
+      if (c.sessionId && c.clientId) checkinMap.set(`${c.sessionId}_${c.clientId}`, c);
     });
 
     // 2. Sourced from classes
     const classAttendees: any[] = [];
     classes.forEach(cls => {
-      if (cls.date === rosterDate) {
-        if (selectedSessionFilter !== 'all' && cls.id !== selectedSessionFilter) return;
-        const attendees = cls.attendees || [];
-        attendees.forEach((clientId: string) => {
-          const client = clients.find(c => c.id === clientId || c.memberId === clientId);
-          const matchedIds = [clientId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
-          const isCheckedIn = (cls.checkedIn || []).some((id: string) => matchedIds.includes(String(id))) ||
-                              matchedIds.some(id => checkinMap.has(id));
-          const isNoShow = !isCheckedIn && (cls.noShows || []).some((id: string) => matchedIds.includes(String(id)));
-          const checkinRecord = matchedIds.map(id => checkinMap.get(id)).find(Boolean);
+      if (!isGlobal && cls.date !== rosterDate) return;
+      if (selectedSessionFilter !== 'all' && cls.id !== selectedSessionFilter) return;
 
-          classAttendees.push({
-            clientId,
-            client,
-            memberId: client?.memberId || '—',
-            name: client?.name || 'Member',
-            phone: client?.phone || '',
-            slot: `${cls.name} (${cls.time})`,
-            sessionId: cls.id,
-            sessionTitle: cls.name,
-            sessionTime: cls.time,
-            sessionDate: cls.date,
-            branch: cls.branch,
-            checkedIn: isCheckedIn,
-            isNoShow,
-            checkinTime: checkinRecord?.date || (isCheckedIn ? `${cls.date}T${(cls.time || '10:00').substring(0, 5)}:00.000Z` : undefined),
-            type: 'Class'
-          });
+      const attendees = cls.attendees || [];
+      attendees.forEach((clientId: string) => {
+        const client = clients.find(c => c.id === clientId || c.memberId === clientId);
+        const matchedIds = [clientId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
+        const isCheckedIn = (cls.checkedIn || []).some((id: string) => matchedIds.includes(String(id))) ||
+                            matchedIds.some(id => checkinMap.has(id));
+        const isNoShow = !isCheckedIn && (cls.noShows || []).some((id: string) => matchedIds.includes(String(id)));
+        const checkinRecord = matchedIds.map(id => checkinMap.get(id)).find(Boolean) || checkinMap.get(`${cls.id}_${clientId}`);
+
+        const sessionsRemaining = client?.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft;
+        const packageType = client?.packageType || client?.memberCategory || (client?.packages?.[0]?.packageName) || '';
+
+        classAttendees.push({
+          clientId,
+          client,
+          memberId: client?.memberId || '—',
+          name: client?.name || 'Member',
+          phone: client?.phone || '',
+          sessionsRemaining,
+          packageType,
+          slot: `${cls.name} (${cls.time})`,
+          sessionId: cls.id,
+          sessionTitle: cls.name,
+          sessionTime: cls.time,
+          sessionDate: cls.date,
+          branch: cls.branch,
+          checkedIn: isCheckedIn,
+          isNoShow,
+          checkinTime: checkinRecord?.date || (isCheckedIn ? toSafeIsoDateTime(cls.date, cls.time) : undefined),
+          type: 'Class'
         });
-      }
+      });
     });
 
     // 3. Sourced from private PT sessions
     const ptAttendees: any[] = [];
     ptPackageRecords.forEach(session => {
-      if (session.date === rosterDate && session.status !== 'Cancelled') {
-        if (selectedSessionFilter !== 'all' && selectedSessionFilter !== 'pt') return;
-        const client = clients.find(c => c.id === session.clientId || c.memberId === session.clientId);
-        if (client) {
-          const matchedIds = [session.clientId, client.id, client.memberId].filter(Boolean) as string[];
-          const isSessionAttended = session.status === 'Attended';
-          const hasCheckin = matchedIds.some(id => checkinMap.has(id)) || isSessionAttended;
-          const isNoShow = session.status === 'No Show';
+      if (!isGlobal && session.date !== rosterDate) return;
+      if (session.status === 'Cancelled') return;
+      if (selectedSessionFilter !== 'all' && selectedSessionFilter !== 'pt') return;
 
-          ptAttendees.push({
-            clientId: session.clientId,
-            client,
-            memberId: client.memberId || '—',
-            name: client.name,
-            phone: client.phone || '',
-            slot: `PT Session (${(session as any).time || (session.date.length > 10 ? format(parseISO(session.date), 'h:mm a') : '10:00 AM')})`,
-            sessionId: session.id,
-            sessionTitle: 'PT Session',
-            sessionTime: (session as any).time || '10:00',
-            sessionDate: session.date,
-            branch: session.branch || '',
-            checkedIn: hasCheckin,
-            isNoShow,
-            checkinTime: session.status === 'Attended' ? session.date : matchedIds.map(id => checkinMap.get(id)?.date).find(Boolean),
-            type: 'PT'
-          });
-        }
+      const client = clients.find(c => c.id === session.clientId || c.memberId === session.clientId);
+      if (client) {
+        const matchedIds = [session.clientId, client.id, client.memberId].filter(Boolean) as string[];
+        const isSessionAttended = session.status === 'Attended';
+        const hasCheckin = matchedIds.some(id => checkinMap.has(id)) || isSessionAttended;
+        const isNoShow = session.status === 'No Show';
+
+        const sessionsRemaining = client.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft;
+        const packageType = client.packageType || client.memberCategory || 'Personal Training';
+
+        ptAttendees.push({
+          clientId: session.clientId,
+          client,
+          memberId: client.memberId || '—',
+          name: client.name,
+          phone: client.phone || '',
+          sessionsRemaining,
+          packageType,
+          slot: `PT Session (${(session as any).time || safeFormatTime(session.date, 'h:mm a', '10:00 AM')})`,
+          sessionId: session.id,
+          sessionTitle: 'PT Session',
+          sessionTime: (session as any).time || '10:00',
+          sessionDate: session.date,
+          branch: session.branch || '',
+          checkedIn: hasCheckin,
+          isNoShow,
+          checkinTime: session.status === 'Attended' ? session.date : matchedIds.map(id => checkinMap.get(id)?.date).find(Boolean),
+          type: 'PT'
+        });
       }
     });
 
     // 4. Sourced from checkins not in classes/sessions (e.g. walk-ins)
     const walkins: any[] = [];
     if (selectedSessionFilter === 'all') {
-      todayCheckins.forEach(checkin => {
-        const alreadyIncluded = classAttendees.some(x => x.clientId === checkin.clientId) || 
-                                ptAttendees.some(x => x.clientId === checkin.clientId);
+      scopedCheckins.forEach(checkin => {
+        const alreadyIncluded = classAttendees.some(x => x.clientId === checkin.clientId && (!isGlobal || x.sessionDate === checkin.date)) || 
+                                ptAttendees.some(x => x.clientId === checkin.clientId && (!isGlobal || x.sessionDate === checkin.date));
         if (!alreadyIncluded) {
           const client = clients.find(c => c.id === checkin.clientId || c.memberId === checkin.clientId);
           if (client) {
+            const checkinDateOnly = checkin.date ? checkin.date.substring(0, 10) : rosterDate;
+            const sessionsRemaining = client.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft;
+            const packageType = client.packageType || client.memberCategory || 'Walk-in Member';
+
             walkins.push({
               clientId: checkin.clientId,
               client,
               memberId: client.memberId || '—',
               name: client.name,
               phone: client.phone || '',
-              slot: `Walk-in (${format(parseISO(checkin.date), 'h:mm a')})`,
+              sessionsRemaining,
+              packageType,
+              slot: `Walk-in (${safeFormatTime(checkin.date, 'h:mm a', 'Walk-in')})`,
               sessionId: '',
               sessionTitle: 'Walk-in',
               sessionTime: '',
-              sessionDate: rosterDate,
+              sessionDate: checkinDateOnly,
               branch: checkin.branch,
               checkedIn: true,
               isNoShow: false,
@@ -247,7 +286,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     const combined = [...classAttendees, ...ptAttendees, ...walkins];
     const uniqueMap = new Map<string, any>();
     combined.forEach(item => {
-      const key = `${item.sessionId || 'none'}_${item.clientId}`;
+      const key = `${item.sessionId || 'none'}_${item.sessionDate || 'nodate'}_${item.clientId}`;
       const existing = uniqueMap.get(key);
       if (!existing) {
         uniqueMap.set(key, item);
@@ -259,17 +298,39 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     });
 
     let result = Array.from(uniqueMap.values());
+
+    // Search filter across multiple fields
     if (rosterSearch.trim()) {
       const q = rosterSearch.toLowerCase().trim();
       result = result.filter(item => 
         item.name.toLowerCase().includes(q) ||
         String(item.memberId).toLowerCase().includes(q) ||
         item.phone.includes(q) ||
-        item.slot.toLowerCase().includes(q)
+        item.slot.toLowerCase().includes(q) ||
+        (item.sessionDate && item.sessionDate.includes(q)) ||
+        (item.branch && item.branch.toLowerCase().includes(q)) ||
+        (item.packageType && item.packageType.toLowerCase().includes(q))
       );
     }
+
+    // Low credits filter
+    if (showLowCreditsOnly) {
+      result = result.filter(item => item.sessionsRemaining !== undefined && item.sessionsRemaining !== null && item.sessionsRemaining !== '—' && Number(item.sessionsRemaining) <= 2);
+    }
+
+    // Sort order
+    if (isGlobal) {
+      result.sort((a, b) => {
+        const timeB = toValidDate(b.sessionDate)?.getTime() || 0;
+        const timeA = toValidDate(a.sessionDate)?.getTime() || 0;
+        return timeB - timeA;
+      });
+    } else {
+      result.sort((a, b) => (a.sessionTime || '').localeCompare(b.sessionTime || ''));
+    }
+
     return result;
-  }, [attendances, classes, ptPackageRecords, clients, rosterDate, selectedSessionFilter, rosterSearch]);
+  }, [attendances, classes, ptPackageRecords, clients, rosterDate, selectedSessionFilter, rosterSearch, searchScope, showLowCreditsOnly]);
 
   // ─── RETROACTIVE & LIVE CHECK-IN HANDLERS ───
   const handleCheckInRosterItem = async (item: any) => {
@@ -290,10 +351,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           noShows: filteredNoShows
         });
 
-        // Compute backdated timestamp
-        const rawTime = (item.sessionTime || '10:00').split('-')[0].trim();
-        const cleanTime = rawTime.length === 5 ? rawTime : '10:00';
-        const effectiveCheckInTime = `${item.sessionDate || rosterDate}T${cleanTime}:00.000Z`;
+        // Compute backdated timestamp safely
+        const effectiveCheckInTime = toSafeIsoDateTime(item.sessionDate || rosterDate, item.sessionTime);
 
         // Update classBookings under all matching keys
         for (const id of matchedIds) {
@@ -417,16 +476,67 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   const handleQuickAddMember = async () => {
     if (!quickAddSessionId || !quickAddMemberId) {
-      toast.error("Please select a session and member to add.");
+      toast.error("Please select a session or walk-in, and a member.");
       return;
     }
-    const targetClass = classes.find(c => c.id === quickAddSessionId);
-    if (!targetClass) return;
     const client = clients.find(c => c.id === quickAddMemberId || c.memberId === quickAddMemberId);
-    if (!client) return;
+    if (!client) {
+      toast.error("Member not found.");
+      return;
+    }
 
     setActionLoadingAttendeeId('quick-add');
     try {
+      if (quickAddSessionId === 'walkin_general') {
+        const effectiveCheckInTime = toSafeIsoDateTime(rosterDate, '12:00 PM');
+        const attendanceDocRef = doc(collection(db, 'attendances'));
+        await setDoc(attendanceDocRef, {
+          id: attendanceDocRef.id,
+          clientId: client.id,
+          memberName: client.name,
+          memberId: client.memberId || '',
+          date: effectiveCheckInTime,
+          branch: selectedBranch || 'Main Studio',
+          recordedBy: currentUser?.id || 'staff',
+          recordedByName: currentUser?.name || 'Staff',
+          type: 'Walk-In',
+          checkInType: 'RETROACTIVE',
+          notes: `Backdated general gym attendance for ${rosterDate}`,
+          createdAt: new Date().toISOString()
+        });
+
+        // Decrement credit if member is on package-based pass
+        const clientAny = client as any;
+        if (clientAny.activePackage && typeof clientAny.activePackage.creditsLeft === 'number' && clientAny.activePackage.creditsLeft > 0) {
+          const clientRef = doc(db, 'clients', client.id);
+          const newCredits = Math.max(0, clientAny.activePackage.creditsLeft - 1);
+          await updateDoc(clientRef, {
+            'activePackage.creditsLeft': newCredits,
+            sessionsRemaining: newCredits,
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        } else if (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) {
+          const clientRef = doc(db, 'clients', client.id);
+          const newCredits = Math.max(0, client.sessionsRemaining - 1);
+          await updateDoc(clientRef, {
+            sessionsRemaining: newCredits,
+            updatedAt: new Date().toISOString()
+          }).catch(() => {});
+        }
+
+        toast.success(`Backdated check-in recorded for ${client.name} on ${rosterDate}!`);
+        setIsQuickAddOpen(false);
+        setQuickAddMemberId('');
+        setQuickAddSearch('');
+        return;
+      }
+
+      const targetClass = classes.find(c => c.id === quickAddSessionId);
+      if (!targetClass) {
+        toast.error("Selected session not found.");
+        return;
+      }
+
       const classRef = doc(db, 'classSchedules', quickAddSessionId);
       const nextAttendees = Array.from(new Set([...(targetClass.attendees || []), client.id]));
       const nextCheckedIn = Array.from(new Set([...(targetClass.checkedIn || []), client.id]));
@@ -438,10 +548,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         noShows: filteredNoShows
       });
 
-      // Backdated timestamp
-      const rawTime = (targetClass.time || '10:00').split('-')[0].trim();
-      const cleanTime = rawTime.length === 5 ? rawTime : '10:00';
-      const effectiveCheckInTime = `${targetClass.date || rosterDate}T${cleanTime}:00.000Z`;
+      // Backdated timestamp safely constructed
+      const effectiveCheckInTime = toSafeIsoDateTime(targetClass.date || rosterDate, targetClass.time);
 
       // Set booking doc
       const bookingDocRef = doc(db, 'classBookings', `${targetClass.id}_${client.id}`);
@@ -463,10 +571,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         createdAt: new Date().toISOString()
       }, { merge: true });
 
-      // Call server checkin endpoint for audit trail
+      // Call retroactive-checkin endpoint for atomic credit check & audit logging
       try {
         const token = await auth.currentUser?.getIdToken();
-        await fetch('/api/v1/attendance/check-in', {
+        await fetch(`/api/v1/sessions/${targetClass.id}/attendance/retroactive-checkin`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -474,16 +582,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           },
           body: JSON.stringify({
             memberId: client.id,
-            clientId: client.id,
             sessionId: targetClass.id,
-            sessionTitle: targetClass.name,
-            branchId: toCanonicalBranchId(targetClass.branch || selectedBranch),
-            branchName: targetClass.branch || selectedBranch,
-            sessionDate: targetClass.date || rosterDate,
-            sessionTime: targetClass.time,
-            status: 'ATTENDED',
-            checkedInBy: currentUser?.name || currentUser?.email || 'Staff',
-            deductCredit: false
+            reason: `Staff quick-add to past session (${targetClass.date || rosterDate})`,
+            forceEnroll: true
           })
         });
       } catch {}
@@ -1062,7 +1163,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               <CardContent className="p-0">
                 <div className="max-h-[250px] overflow-y-auto">
                   {attendances
-                    .filter(a => parseISO(a.date).toDateString() === new Date().toDateString())
+                    .filter(a => toValidDate(a.date)?.toDateString() === new Date().toDateString())
                     .map(a => {
                       const client = clients.find(c => c.id === a.clientId);
                       const recorder = users.find(u => u.id === a.recordedBy);
@@ -1084,7 +1185,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                               <p className="text-sm font-bold">{t('attendance.unknown')}</p>
                             )}
                             <p className="text-[10px] text-muted-foreground flex items-center">
-                              <MapPin className="h-3 w-3 me-1" /> {a.branch} · {format(parseISO(a.date), 'h:mm a')}
+                              <MapPin className="h-3 w-3 me-1" /> {a.branch} · {safeFormatDate(a.date, 'h:mm a')}
                             </p>
                           </div>
                           <Badge variant="outline" className="text-[10px] h-5 px-1.5 opacity-70">
@@ -1093,7 +1194,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                         </div>
                       );
                     })}
-                  {attendances.filter(a => parseISO(a.date).toDateString() === new Date().toDateString()).length === 0 && (
+                  {attendances.filter(a => toValidDate(a.date)?.toDateString() === new Date().toDateString()).length === 0 && (
                     <div className="p-8 text-center text-muted-foreground text-xs italic">
                       {t('attendance.no_records')}
                     </div>
@@ -1244,23 +1345,24 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               )}
 
               {/* Quick Add Member to Session */}
-              {classesOnSelectedDate.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setQuickAddSessionId(selectedSessionFilter !== 'all' && selectedSessionFilter !== 'pt' ? selectedSessionFilter : classesOnSelectedDate[0]?.id || '');
-                    setQuickAddMemberId('');
-                    setQuickAddSearch('');
-                    setIsQuickAddOpen(true);
-                  }}
-                  className="h-8 text-xs font-bold gap-1 border-primary/30 text-primary hover:bg-primary/10 shadow-xs"
-                  title="Add an unenrolled or walk-in member to this session roster"
-                >
-                  <UserPlus className="h-3.5 w-3.5" />
-                  Add Member
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const defaultSessionId = (selectedSessionFilter !== 'all' && selectedSessionFilter !== 'pt')
+                    ? selectedSessionFilter
+                    : (classesOnSelectedDate[0]?.id || availableQuickAddClasses[0]?.id || 'walkin_general');
+                  setQuickAddSessionId(defaultSessionId);
+                  setQuickAddMemberId('');
+                  setQuickAddSearch('');
+                  setIsQuickAddOpen(true);
+                }}
+                className="h-8 text-xs font-bold gap-1 border-primary/30 text-primary hover:bg-primary/10 shadow-xs"
+                title="Add an unenrolled member or past walk-in to attendance roster"
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                Add Member
+              </Button>
 
               {/* Print Sheet */}
               <Button 
@@ -1289,10 +1391,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           </CardHeader>
 
           {/* Quick Metrics Bar & Search Filter */}
-          <div className="p-3 bg-muted/20 border-b flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="p-3 bg-muted/20 border-b flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-wrap">
               <Badge variant="secondary" className="text-xs font-bold py-1">
-                Total: {dailyRoster.length}
+                {searchScope === 'all' ? `Results: ${dailyRoster.length}` : `Total: ${dailyRoster.length}`}
               </Badge>
               <Badge className="bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-xs font-bold py-1">
                 Checked In: {dailyRoster.filter(r => r.checkedIn).length}
@@ -1305,16 +1407,72 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   No-Shows: {dailyRoster.filter(r => r.isNoShow).length}
                 </Badge>
               )}
+
+              {/* Quick Filter: Low / Expired Credits */}
+              <button
+                type="button"
+                onClick={() => setShowLowCreditsOnly(!showLowCreditsOnly)}
+                className={`text-[11px] font-bold px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 ${
+                  showLowCreditsOnly 
+                    ? 'bg-amber-500 text-white border-amber-600 shadow-xs' 
+                    : 'bg-background hover:bg-muted text-muted-foreground border-border'
+                }`}
+                title="Filter attendees with 2 or fewer remaining session credits"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                Low Credits (≤2)
+              </button>
             </div>
 
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search member, phone, or class..."
-                value={rosterSearch}
-                onChange={e => setRosterSearch(e.target.value)}
-                className="h-8 pl-8 text-xs bg-background"
-              />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+              {/* Search Scope Switcher */}
+              <div className="inline-flex rounded-lg p-0.5 bg-muted/80 border text-[11px] font-bold shrink-0 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setSearchScope('day')}
+                  className={`px-2.5 py-1 rounded-md transition-all ${
+                    searchScope === 'day' 
+                      ? 'bg-background text-foreground shadow-xs' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Search roster for the selected day only"
+                >
+                  📅 Selected Day
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchScope('all')}
+                  className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 ${
+                    searchScope === 'all' 
+                      ? 'bg-primary text-primary-foreground shadow-xs' 
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Search across all attendance dates across the entire CRM history"
+                >
+                  <Globe className="h-3 w-3" /> All System
+                </button>
+              </div>
+
+              {/* Search Input Box */}
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder={searchScope === 'all' ? "Search all attendance dates (name, phone, class)..." : "Search member, phone, or class..."}
+                  value={rosterSearch}
+                  onChange={e => setRosterSearch(e.target.value)}
+                  className="h-8 pl-8 pr-7 text-xs bg-background"
+                />
+                {rosterSearch && (
+                  <button 
+                    type="button" 
+                    onClick={() => setRosterSearch('')}
+                    className="absolute right-2 top-2 text-muted-foreground hover:text-foreground"
+                    title="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1324,8 +1482,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                 <thead className="bg-muted/50 border-b text-xs uppercase font-bold text-muted-foreground">
                   <tr>
                     <th className="p-3">Member ID</th>
-                    <th className="p-3">Member Name</th>
-                    <th className="p-3">Session / Class</th>
+                    <th className="p-3">Member Name & Sessions</th>
+                    <th className="p-3">Session / Class {searchScope === 'all' && ' & Date'}</th>
                     <th className="p-3 text-center">Status</th>
                     <th className="p-3 text-right">Reconciliation Action</th>
                   </tr>
@@ -1334,27 +1492,73 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   {dailyRoster.map((item) => {
                     const isBusy = actionLoadingAttendeeId === item.clientId;
                     return (
-                      <tr key={`${item.sessionId || 'nosess'}_${item.clientId}`} className="hover:bg-muted/30 transition-colors">
+                      <tr key={`${item.sessionId || 'nosess'}_${item.sessionDate || 'nodate'}_${item.clientId}`} className="hover:bg-muted/30 transition-colors">
                         <td className="p-3 font-mono font-bold text-muted-foreground">#{item.memberId}</td>
                         <td className="p-3">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveTab('clients');
-                              setActiveClientId(item.clientId);
-                            }}
-                            className="font-bold text-foreground hover:text-primary hover:underline text-left block"
-                            title="Open member CRM profile"
-                          >
-                            {item.name}
-                          </button>
-                          {item.phone && (
-                            <a href={`tel:${item.phone}`} className="text-[11px] text-muted-foreground flex items-center gap-1 hover:text-primary">
-                              <Phone className="h-3 w-3" /> {item.phone}
-                            </a>
-                          )}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveTab('clients');
+                                setActiveClientId(item.clientId);
+                              }}
+                              className="font-bold text-foreground hover:text-primary hover:underline text-left"
+                              title="Open member CRM profile"
+                            >
+                              {item.name}
+                            </button>
+
+                            {/* Remaining Sessions Badge Option */}
+                            {item.sessionsRemaining !== undefined && item.sessionsRemaining !== null && item.sessionsRemaining !== '—' ? (
+                              Number(item.sessionsRemaining) <= 0 ? (
+                                <Badge variant="outline" className="border-rose-500/40 text-rose-600 bg-rose-500/10 text-[10px] font-bold px-1.5 py-0 h-4 inline-flex items-center gap-0.5">
+                                  <AlertCircle className="h-2.5 w-2.5 inline" /> 0 sessions left
+                                </Badge>
+                              ) : Number(item.sessionsRemaining) <= 2 ? (
+                                <Badge variant="outline" className="border-amber-500/40 text-amber-600 bg-amber-500/10 text-[10px] font-bold px-1.5 py-0 h-4 inline-flex items-center gap-0.5">
+                                  <AlertTriangle className="h-2.5 w-2.5 inline" /> {item.sessionsRemaining} left (Low)
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-emerald-500/30 text-emerald-600 bg-emerald-500/5 text-[10px] font-bold px-1.5 py-0 h-4">
+                                  {item.sessionsRemaining} sessions left
+                                </Badge>
+                              )
+                            ) : item.client?.membershipExpiry ? (
+                              <Badge variant="outline" className="border-primary/30 text-primary bg-primary/5 text-[10px] font-bold px-1.5 py-0 h-4">
+                                Exp: {safeFormatDate(item.client.membershipExpiry, 'dd/MM/yyyy')}
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-[10px] font-semibold px-1.5 py-0 h-4 opacity-75">
+                                Active Pass
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {item.phone && (
+                              <a href={`tel:${item.phone}`} className="text-[11px] text-muted-foreground flex items-center gap-1 hover:text-primary">
+                                <Phone className="h-3 w-3" /> {item.phone}
+                              </a>
+                            )}
+                            {item.packageType && (
+                              <span className="text-[10px] text-muted-foreground/75 font-medium truncate max-w-[200px]" title={item.packageType}>
+                                • {item.packageType}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3">
+                          {searchScope === 'all' && item.sessionDate && (
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <Badge variant="secondary" className="text-[10px] font-bold px-1.5 py-0 h-4 bg-muted">
+                                <CalendarDays className="h-3 w-3 mr-1 text-primary inline" />
+                                {safeFormatDate(item.sessionDate, 'EEE, MMM d, yyyy')}
+                              </Badge>
+                              <span className="text-[10px] text-muted-foreground">
+                                ({safeFormatDistanceToNow(item.sessionDate, { addSuffix: true })})
+                              </span>
+                            </div>
+                          )}
                           <span className="font-semibold block text-foreground">{item.slot}</span>
                           <span className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
                             <MapPin className="h-3 w-3" /> {item.branch || selectedBranch || 'Main Studio'}
@@ -1368,7 +1572,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                               </Badge>
                               {item.checkinTime && (
                                 <span className="text-[10px] text-muted-foreground mt-0.5">
-                                  {item.checkinTime.length > 10 ? format(parseISO(item.checkinTime), 'h:mm a') : item.checkinTime}
+                                  {safeFormatDate(item.checkinTime, 'h:mm a', 'Checked In')}
                                 </span>
                               )}
                             </div>
@@ -1416,7 +1620,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   {dailyRoster.length === 0 && (
                     <tr>
                       <td colSpan={5} className="p-10 text-center text-muted-foreground italic">
-                        No members scheduled or checked in for {rosterDate}.
+                        {searchScope === 'all' 
+                          ? (rosterSearch.trim() ? `No attendance records found matching "${rosterSearch}" across the system.` : 'No attendance records found.')
+                          : `No members scheduled or checked in for ${rosterDate}.`
+                        }
                       </td>
                     </tr>
                   )}
@@ -1441,15 +1648,18 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold uppercase text-muted-foreground">Select Session ({rosterDate})</Label>
+              <Label className="text-xs font-bold uppercase text-muted-foreground">Select Attendance Target ({rosterDate})</Label>
               <Select value={quickAddSessionId} onValueChange={(val) => { if (val) setQuickAddSessionId(val); }}>
                 <SelectTrigger className="h-9 text-xs bg-background">
-                  <SelectValue placeholder="Choose class..." />
+                  <SelectValue placeholder="Choose class or walk-in..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {classesOnSelectedDate.map(c => (
+                  <SelectItem value="walkin_general">
+                    🏢 Open Gym / Facility Walk-In ({rosterDate})
+                  </SelectItem>
+                  {availableQuickAddClasses.map(c => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.time} — {c.name} ({c.branch || 'Main Studio'})
+                      {c.date === rosterDate ? '' : `[${c.date}] `}{c.time} — {c.name} ({c.branch || 'Main Studio'})
                     </SelectItem>
                   ))}
                 </SelectContent>

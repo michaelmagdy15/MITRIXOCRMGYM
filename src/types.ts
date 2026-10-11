@@ -492,6 +492,7 @@ export interface Attendance {
   date: string; // ISO string
   recordedBy: string; // userId
   packageName?: string;
+  sessionId?: string;
 }
 
 export type TaskStatus = 'Pending' | 'In Progress' | 'Completed';

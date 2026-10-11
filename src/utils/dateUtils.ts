@@ -209,3 +209,30 @@ export function safeFormatDistanceToNow(
   }
 }
 
+/**
+ * Safely constructs a valid ISO datetime string from a date string (YYYY-MM-DD)
+ * and an arbitrary time string (e.g. "8:00 PM", "20:00", "8:00 PM - 9:00 PM", "10:30 AM").
+ * Never produces NaN or invalid ISO datetime.
+ */
+export function toSafeIsoDateTime(dateStr?: string, timeStr?: string): string {
+  const safeDate = dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())
+    ? dateStr.trim()
+    : new Date().toISOString().substring(0, 10);
+
+  if (timeStr) {
+    const trimmed = String(timeStr).trim();
+    const match = trimmed.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (match) {
+      let hours = parseInt(match[1] || '12', 10);
+      const minutes = match[2] || '00';
+      const meridiem = match[4]?.toUpperCase();
+      if (meridiem === 'PM' && hours < 12) hours += 12;
+      if (meridiem === 'AM' && hours === 12) hours = 0;
+      const hh = String(hours).padStart(2, '0');
+      return `${safeDate}T${hh}:${minutes}:00.000Z`;
+    }
+  }
+  return `${safeDate}T12:00:00.000Z`;
+}
+
+
