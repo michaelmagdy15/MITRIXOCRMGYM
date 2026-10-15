@@ -32,9 +32,17 @@ import {
   Globe,
   CalendarDays,
   ExternalLink,
-  MessageCircle
+  MessageCircle,
+  ShieldAlert,
+  Unlock,
+  CreditCard,
+  MessageSquare,
+  Users,
+  QrCode,
+  Ticket,
+  Briefcase
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { 
   safeFormatDate, 
   safeFormatTime, 
@@ -52,6 +60,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toCanonicalBranchId } from './utils/memberCategories';
 import { toast } from 'sonner';
+import {
+  parseUniversalQrCode,
+  evaluateCheckinGatekeeper,
+  computeLiveFloorOccupancy,
+  CheckinLookupMode,
+  CheckinGatekeeperEvaluation,
+  WrongEntryLogRecord,
+} from './utils/universalQr';
+import { getCachedDeviceFingerprint } from './utils/deviceFingerprint';
+import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const {
@@ -64,11 +82,17 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     branding,
     features,
     clients,
+    payments,
+    addClient,
+    updateClient,
     attendances,
     recordAttendance,
   } = useAppContext();
   const isInzan = getTenantId() === 'inzanathletics' || features?.shiftHandover === true || features?.commercialGymWorkspaces === true;
   const [isShiftHandoverOpen, setIsShiftHandoverOpen] = useState(false);
+  const [isGuestInviteOpen, setIsGuestInviteOpen] = useState(false);
+  const [guestName, setGuestName] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
   const { t, language, isRtl } = useLanguage();
 
   const [classes, setClasses] = useState<any[]>([]);
@@ -620,6 +644,49 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const [lastScannedMember, setLastScannedMember] = useState<any>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [lookupMode, setLookupMode] = useState<CheckinLookupMode>('member_id');
+  const [gatekeeperEval, setGatekeeperEval] = useState<CheckinGatekeeperEvaluation | null>(null);
+  const [selectedPackageName, setSelectedPackageName] = useState<string>('');
+  const [checkedOutClientIds, setCheckedOutClientIds] = useState<Set<string>>(() => new Set());
+  const [wrongEntryLogs, setWrongEntryLogs] = useState<WrongEntryLogRecord[]>(() => {
+    try {
+      const todayKey = 'mitrixo_wrong_entries_' + new Date().toISOString().slice(0, 10);
+      const saved = localStorage.getItem(todayKey);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const stationFingerprint = useMemo(() => getCachedDeviceFingerprint(), []);
+
+  const floorOccupancy = useMemo(
+    () => computeLiveFloorOccupancy(attendances, clients, selectedBranch, checkedOutClientIds),
+    [attendances, clients, selectedBranch, checkedOutClientIds]
+  );
+
+  const appendWrongEntryLog = (entry: Omit<WrongEntryLogRecord, 'id' | 'timestamp' | 'stationFingerprint'>) => {
+    const newRecord: WrongEntryLogRecord = {
+      ...entry,
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      timestamp: new Date().toISOString(),
+      stationFingerprint: stationFingerprint.fingerprintId,
+    };
+    setWrongEntryLogs((prev) => {
+      const next = [newRecord, ...prev].slice(0, 50);
+      try {
+        const todayKey = 'mitrixo_wrong_entries_' + new Date().toISOString().slice(0, 10);
+        localStorage.setItem(todayKey, JSON.stringify(next));
+      } catch {
+        // ignore quota errors
+      }
+      return next;
+    });
+  };
+
+  const handleAutoCheckOutFloor = () => {
+    setCheckedOutClientIds(new Set(floorOccupancy.activeClientIds));
+  };
 
   const [kioskOverlay, setKioskOverlay] = useState<{
     show: boolean;
@@ -685,13 +752,60 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     };
   };
 
+  const handleBreakFreezeAndCheckin = async () => {
+    if (!lastScannedMember || isRecording) return;
+    setIsRecording(true);
+    setError(null);
+    try {
+      const updatedPackages = (lastScannedMember.packages || []).map((pkg: any) =>
+        pkg.status === 'Hold' || pkg.isOnHold
+          ? { ...pkg, status: 'Active', isOnHold: false, holdReason: undefined }
+          : pkg
+      );
+      await updateClient(lastScannedMember.id, {
+        status: 'Active',
+        packages: updatedPackages,
+      });
+      await recordAttendance(lastScannedMember.id, selectedBranch);
+      setSuccessMessage(`Freeze cancelled & check-in recorded for ${lastScannedMember.name}`);
+      setGatekeeperEval(null);
+      setTimeout(() => {
+        setLastScannedMember(null);
+        setSuccessMessage(null);
+      }, 3000);
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : 'Failed to break freeze and record attendance');
+    } finally {
+      setIsRecording(false);
+    }
+  };
+
   const handleScanSuccess = async (decodedId: string) => {
     const isArabic = language === 'ar';
-    // Clear error
     setError(null);
 
-    const member = clients.find(c => c.id === decodedId || c.memberId === decodedId || c.phone === decodedId);
+    const parsedQr = parseUniversalQrCode(decodedId);
+    const lookupToken = parsedQr.tokenOrMemberId;
+    if (!lookupToken) return;
+
+    const member = clients.find(
+      (c) =>
+        c.id === lookupToken ||
+        c.memberId === lookupToken ||
+        c.phone === lookupToken ||
+        c.barcode === lookupToken ||
+        c.cardId === lookupToken ||
+        c.guestSerial === lookupToken
+    );
     if (!member) {
+      appendWrongEntryLog({
+        memberId: lookupToken,
+        clientName: parsedQr.isUniversal ? `Universal QR (${parsedQr.originHost})` : 'Unknown Member',
+        branch: selectedBranch || 'MAIN',
+        lookupMode: parsedQr.isUniversal ? 'qr_code' : lookupMode,
+        reasonCode: 'NOT_FOUND',
+        reasonMessage: 'Member ID, QR token, or Invitation serial not found in directory.',
+      });
       if (isKiosk) {
         setKioskOverlay({
           show: true,
@@ -713,10 +827,28 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       return;
     }
 
+    const evaluation = evaluateCheckinGatekeeper(member, payments || []);
+    setGatekeeperEval(evaluation);
+    setSelectedPackageName(
+      evaluation.activePackages[0]?.packageName || member.packageType || ''
+    );
+
+    if (!evaluation.allowed && evaluation.denialReasonCode && evaluation.denialMessage) {
+      appendWrongEntryLog({
+        memberId: member.memberId || member.id,
+        clientName: member.name,
+        clientId: member.id,
+        branch: selectedBranch || 'MAIN',
+        lookupMode: parsedQr.isUniversal ? 'qr_code' : lookupMode,
+        reasonCode: evaluation.denialReasonCode,
+        reasonMessage: evaluation.denialMessage,
+      });
+    }
+
     if (isKiosk) {
       setIsScanning(false);
       const statusCheck = checkMemberStatus(member);
-      if (statusCheck.valid) {
+      if (statusCheck.valid && evaluation.allowed) {
         setIsRecording(true);
         try {
           await recordAttendance(member.id, selectedBranch);
@@ -740,11 +872,11 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       } else {
         setKioskOverlay({
           show: true,
-          type: statusCheck.reason === 'Hold' ? 'warning' : 'error',
-          title: statusCheck.reason === 'Hold' 
+          type: statusCheck.reason === 'Hold' || evaluation.isFrozen ? 'warning' : 'error',
+          title: statusCheck.reason === 'Hold' || evaluation.isFrozen
             ? (isArabic ? 'حسابك معلق' : 'Membership on Hold') 
-            : (isArabic ? 'الاشتراك منتهٍ' : 'Membership Expired'),
-          message: statusCheck.message
+            : (isArabic ? 'الاشتراك منتهٍ' : 'Entry Blocked'),
+          message: evaluation.denialMessage || statusCheck.message
         });
       }
 
@@ -755,17 +887,31 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       }, 3000);
 
     } else {
-      // Normal admin checkin flow - auto record attendance immediately!
+      // Front-desk admin checkin flow with 6-stage gatekeeper
       setLastScannedMember(member);
       setIsScanning(false);
       setError(null);
       setSuccessMessage(null);
+      setIsGuestInviteOpen(lookupMode === 'invitation_id');
+
+      // If gatekeeper requires staff attention (Frozen, Expired, Unconfirmed, Multiple Packages, or Overdue Debt), pause for 1-click confirmation
+      if (!evaluation.allowed) {
+        setError(evaluation.denialMessage || 'Check-in blocked by membership gatekeeper.');
+        return;
+      }
+
+      if (evaluation.hasMultiplePackages || evaluation.hasOverdueDebt || evaluation.stickyNote || lookupMode === 'invitation_id') {
+        // Hold member card open so reception sees the debt / sticky note / package choice / guest invite and confirms
+        return;
+      }
+
       setIsRecording(true);
       try {
         await recordAttendance(member.id, selectedBranch);
         setSuccessMessage(t('attendance.attendance_recorded').replace('{name}', member.name));
         setTimeout(() => {
           setLastScannedMember(null);
+          setGatekeeperEval(null);
           setSuccessMessage(null);
           if (manualInputRef.current) manualInputRef.current.value = '';
         }, 3000);
@@ -773,6 +919,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         setError(err instanceof Error ? err.message : t('attendance.failed_record_attendance'));
         setTimeout(() => {
           setLastScannedMember(null);
+          setGatekeeperEval(null);
           setError(null);
           if (manualInputRef.current) manualInputRef.current.value = '';
         }, 4000);
@@ -926,6 +1073,75 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     }
   };
 
+  const handleRedeemGuestInvitation = async () => {
+    if (!lastScannedMember || isRecording) return;
+    const trimmedName = guestName.trim();
+    const trimmedPhone = guestPhone.trim();
+    if (!trimmedName || !trimmedPhone) {
+      setError('Please enter both the Guest Name and Guest Mobile Number.');
+      return;
+    }
+
+    const totalInvites = Number((lastScannedMember as any).invitationsTotal ?? 3);
+    const usedInvites = Number((lastScannedMember as any).invitationsUsed ?? 0);
+    if (totalInvites - usedInvites <= 0) {
+      setError(`${lastScannedMember.name} has 0 remaining invitation passes (${usedInvites}/${totalInvites} used).`);
+      return;
+    }
+
+    setIsRecording(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const inviteSerial = `INV-${Date.now().toString().slice(-6)}`;
+      await updateClient(lastScannedMember.id, {
+        invitationsTotal: totalInvites,
+        invitationsUsed: usedInvites + 1,
+      } as any);
+
+      // Auto-create a Sales Lead if phone does not already exist
+      const existingLeadOrMember = clients.find((c) => c.phone === trimmedPhone);
+      let guestClientId = existingLeadOrMember?.id;
+      if (!guestClientId) {
+        guestClientId = await addClient({
+          id: '',
+          name: trimmedName,
+          phone: trimmedPhone,
+          status: 'Lead',
+          branch: selectedBranch || lastScannedMember.branch || branches[0] || 'MAIN',
+          interest: 'Interested',
+          category: 'None',
+          source: 'Word Of Mouth',
+          stage: 'Trial',
+          advertisingSource: 'Member Invitation',
+          invitedByType: 'Member',
+          invitedById: lastScannedMember.id,
+          referredByName: lastScannedMember.name,
+          guestSerial: inviteSerial,
+          trialDate: new Date().toISOString().slice(0, 10),
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      await recordAttendance(lastScannedMember.id, selectedBranch);
+      setSuccessMessage(
+        `Guest "${trimmedName}" checked in (Pass ${usedInvites + 1}/${totalInvites}) & added to Sales Leads!`
+      );
+      setGuestName('');
+      setGuestPhone('');
+      setIsGuestInviteOpen(false);
+      setTimeout(() => {
+        setLastScannedMember(null);
+        setGatekeeperEval(null);
+        setSuccessMessage(null);
+      }, 3500);
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : 'Failed to redeem guest invitation pass');
+    } finally {
+      setIsRecording(false);
+    }
+  };
+
   return (
     <div className="space-y-4 max-w-4xl mx-auto px-1 sm:px-0">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 no-print">
@@ -935,7 +1151,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         </div>
         
         <div className="flex items-center gap-2">
-          {isInzan && (
+          {isInzan && !isKiosk && (
             <Button
               variant="outline"
               size="sm"
@@ -969,6 +1185,50 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           </div>
         </div>
       </div>
+
+      {/* Live Floor Occupancy Banner (RedGITS v17.12 Parity) */}
+      {isInzan && !isKiosk && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border bg-card shadow-sm no-print">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              <span className="text-sm font-bold">
+                Active Members Now: <span className="text-primary">{floorOccupancy.totalActive}</span>
+              </span>
+            </div>
+            <Badge variant="secondary" className="text-xs font-semibold">
+              Male: {floorOccupancy.male}
+            </Badge>
+            <Badge variant="secondary" className="text-xs font-semibold">
+              Female: {floorOccupancy.female}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] font-mono opacity-75">
+              {stationFingerprint.fingerprintId}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            {checkedOutClientIds.size > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setCheckedOutClientIds(new Set())}
+              >
+                Restore ({checkedOutClientIds.size})
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-semibold"
+              onClick={handleAutoCheckOutFloor}
+              disabled={floorOccupancy.totalActive === 0}
+            >
+              Auto Check-Out ({floorOccupancy.totalActive})
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 no-print">
         {/* Scanner Section */}
@@ -1019,13 +1279,60 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             )}
           </CardContent>
           
-          <div className="bg-muted/30 p-6 border-t">
+          <div className="bg-muted/30 p-6 border-t space-y-3">
+            {/* 4-Mode Lookup Selector (Member ID, Universal QR, Invitation ID, Service Member ID) */}
+            {isInzan && !isKiosk && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {([
+                  { id: 'member_id', label: 'Member ID', icon: User },
+                  { id: 'qr_code', label: 'QR / Universal', icon: QrCode },
+                  { id: 'invitation_id', label: 'Invitation ID', icon: Ticket },
+                  { id: 'service_member_id', label: 'Service ID', icon: Briefcase },
+                ] as const).map((mode) => {
+                  const Icon = mode.icon;
+                  const active = lookupMode === mode.id;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => {
+                        setLookupMode(mode.id);
+                        manualInputRef.current?.focus();
+                      }}
+                      className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                        active
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                          : 'bg-background text-muted-foreground border-border hover:border-primary/40'
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {mode.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <div className="flex flex-col space-y-2">
-              <Label className="text-xs font-bold uppercase text-muted-foreground ml-1">{t('attendance.manual_entry')}</Label>
+              <Label className="text-xs font-bold uppercase text-muted-foreground ml-1">
+                {lookupMode === 'qr_code'
+                  ? 'Scan QR or Universal Cross-Branch Token (UC|host|token)'
+                  : lookupMode === 'invitation_id'
+                  ? 'Enter Guest / Invitation Serial or Phone'
+                  : lookupMode === 'service_member_id'
+                  ? 'Enter Service / PT Member ID'
+                  : t('attendance.manual_entry')}
+              </Label>
               <div className="flex gap-2">
                 <Input
                   ref={manualInputRef}
-                  placeholder={t('attendance.enter_member_id')}
+                  placeholder={
+                    lookupMode === 'qr_code'
+                      ? 'Scan QR or UC|branch|token...'
+                      : lookupMode === 'invitation_id'
+                      ? 'Enter Invitation Serial or Guest Phone...'
+                      : t('attendance.enter_member_id')
+                  }
                   className="bg-background h-11"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleScanSuccess(e.currentTarget.value);
@@ -1055,7 +1362,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             <div className="bg-red-600 border-2 border-red-700 text-white p-4 rounded-xl flex items-start gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-bold uppercase tracking-wide">Error</p>
+                <p className="text-sm font-bold uppercase tracking-wide">Gatekeeper Alert</p>
                 <p className="text-sm font-medium text-white/95">{error}</p>
               </div>
             </div>
@@ -1074,10 +1381,111 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           {lastScannedMember ? (
             <Card className="border-2 border-green-500/20 shadow-xl animate-in zoom-in-95 duration-200">
               <CardHeader className="pb-2">
-                <Badge className="w-fit mb-2 bg-green-500 hover:bg-green-600">{t('attendance.scan_successful')}</Badge>
+                <Badge
+                  className={`w-fit mb-2 ${
+                    gatekeeperEval && !gatekeeperEval.allowed
+                      ? 'bg-destructive hover:bg-destructive/90'
+                      : 'bg-green-500 hover:bg-green-600'
+                  }`}
+                >
+                  {gatekeeperEval && !gatekeeperEval.allowed
+                    ? `Blocked: ${gatekeeperEval.denialReasonCode}`
+                    : t('attendance.scan_successful')}
+                </Badge>
                 <CardTitle className="text-2xl">{lastScannedMember.name}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-4">
+                {/* Stage 1: Multi-Package Selector */}
+                {gatekeeperEval?.hasMultiplePackages && (
+                  <div className="p-3 rounded-xl border bg-muted/40 space-y-2">
+                    <Label className="text-xs font-bold uppercase text-primary">
+                      Select Active Package for Check-In ({gatekeeperEval.activePackages.length})
+                    </Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {gatekeeperEval.activePackages.map((pkg) => (
+                        <button
+                          key={pkg.id || pkg.packageName}
+                          type="button"
+                          onClick={() => setSelectedPackageName(pkg.packageName)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                            selectedPackageName === pkg.packageName
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background border-border hover:border-primary/50'
+                          }`}
+                        >
+                          {pkg.packageName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Stage 2: Freeze Interception with 1-Click Break Freeze */}
+                {gatekeeperEval?.isFrozen && (
+                  <div className="bg-blue-600/10 border-2 border-blue-500/40 text-blue-700 dark:text-blue-300 p-3.5 rounded-xl space-y-2.5">
+                    <div className="flex items-start gap-2.5">
+                      <Unlock className="h-5 w-5 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-extrabold uppercase tracking-wide">
+                          Membership Frozen / On Hold
+                        </p>
+                        <p className="text-xs mt-0.5">
+                          {gatekeeperEval.freezeReason
+                            ? `Reason: ${gatekeeperEval.freezeReason}`
+                            : 'This member is currently in a freeze window.'}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold gap-1.5"
+                      onClick={handleBreakFreezeAndCheckin}
+                      disabled={isRecording}
+                    >
+                      <Unlock className="h-4 w-4" />
+                      Break / Cancel Freeze & Check In Now
+                    </Button>
+                  </div>
+                )}
+
+                {/* Stage 3: Overdue Installment / Debt Alert */}
+                {gatekeeperEval?.hasOverdueDebt && (
+                  <div className="bg-rose-500/10 border-2 border-rose-500/40 text-rose-700 dark:text-rose-300 p-3.5 rounded-xl flex items-center justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      <CreditCard className="h-5 w-5 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-extrabold uppercase tracking-wide">
+                          Member Must Pay Installment / Debt
+                        </p>
+                        <p className="text-xs font-bold mt-0.5">
+                          Remaining Balance: LE {gatekeeperEval.unpaidAmount.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-rose-500/50 text-rose-700 dark:text-rose-300 text-xs font-bold shrink-0"
+                      onClick={() => setActiveTab('debtors')}
+                    >
+                      Pay Debt
+                    </Button>
+                  </div>
+                )}
+
+                {/* Stage 4: Sticky Reception Note */}
+                {gatekeeperEval?.stickyNote && (
+                  <div className="bg-amber-500/10 border border-amber-500/40 text-amber-800 dark:text-amber-200 p-3 rounded-xl flex items-start gap-2.5">
+                    <MessageSquare className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div className="text-xs">
+                      <span className="font-bold uppercase block">Front-Desk Note:</span>
+                      <span>{gatekeeperEval.stickyNote}</span>
+                    </div>
+                  </div>
+                )}
+
                 {(lastScannedMember.status === 'Nearly Expired' || (typeof lastScannedMember.sessionsRemaining === 'number' && lastScannedMember.sessionsRemaining > 0 && lastScannedMember.sessionsRemaining <= 3)) && (
                   <div className="bg-amber-500 border-2 border-amber-600 text-white p-3 rounded-xl flex items-start gap-3 shadow">
                     <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
@@ -1106,7 +1514,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.package')}</Label>
-                    <p className="text-sm font-medium truncate">{lastScannedMember.packageType || '-'}</p>
+                    <p className="text-sm font-medium truncate">{selectedPackageName || lastScannedMember.packageType || '-'}</p>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.packages_left')}</Label>
@@ -1118,7 +1526,76 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       </p>
                     )}
                   </div>
+                  {isInzan && (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Invitation Passes</Label>
+                      <p className="text-sm font-bold text-primary">
+                        {Math.max(0, Number((lastScannedMember as any).invitationsTotal ?? 3) - Number((lastScannedMember as any).invitationsUsed ?? 0))} / {Number((lastScannedMember as any).invitationsTotal ?? 3)} left
+                      </p>
+                    </div>
+                  )}
                 </div>
+
+                {/* RedGITS v17.12 Parity: 1-Click Guest Invitation Pass Redemption */}
+                {isInzan && !isKiosk && (
+                  <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                        <Ticket className="h-3.5 w-3.5" />
+                        Guest Invitation Pass (RedGITS Parity)
+                      </span>
+                      <Button
+                        type="button"
+                        variant={isGuestInviteOpen ? 'secondary' : 'outline'}
+                        size="sm"
+                        className="h-7 text-xs font-bold"
+                        onClick={() => setIsGuestInviteOpen((prev) => !prev)}
+                      >
+                        {isGuestInviteOpen ? 'Close' : '+ Bring Guest'}
+                      </Button>
+                    </div>
+
+                    {isGuestInviteOpen && (
+                      <div className="space-y-2 pt-1 border-t border-primary/15">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <Input
+                            placeholder="Guest Full Name..."
+                            value={guestName}
+                            onChange={(e) => setGuestName(e.target.value)}
+                            className="h-9 bg-background text-xs"
+                          />
+                          <Input
+                            placeholder="Guest Mobile (01XXXXXXXXX)..."
+                            value={guestPhone}
+                            onChange={(e) => setGuestPhone(e.target.value)}
+                            className="h-9 bg-background text-xs font-mono"
+                          />
+                        </div>
+                        {(() => {
+                          if (!guestPhone || guestPhone.replace(/\D/g, '').length < 8) return null;
+                          const simMatches = checkPhoneSimilarityForCandidate(guestPhone, clients);
+                          if (simMatches.length === 0) return null;
+                          return (
+                            <div className="p-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-800 dark:text-amber-300">
+                              <span className="font-bold">⚠️ RedGITS 7-Digit Phone Match:</span>{' '}
+                              {simMatches.slice(0, 2).map((m) => `${m.matchedClient.name} (${maskEgyptianPhone(m.matchedClient.phone)})`).join(', ')}
+                            </div>
+                          );
+                        })()}
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="w-full font-bold text-xs gap-1.5"
+                          onClick={handleRedeemGuestInvitation}
+                          disabled={isRecording}
+                        >
+                          <Ticket className="h-3.5 w-3.5" />
+                          Redeem 1 Guest Pass, Create Lead & Check-In
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-3 pt-2">
                   <Button 
@@ -1133,7 +1610,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                     className="w-full text-muted-foreground"
                     onClick={() => {
                       setLastScannedMember(null);
+                      setGatekeeperEval(null);
                       setError(null);
+                      setIsGuestInviteOpen(false);
                     }}
                   >
                     {t('attendance.dismiss_clear')}
@@ -1199,6 +1678,52 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       {t('attendance.no_records')}
                     </div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Stage 6: Wrong Entry / Denied Scan Audit Log (RedGITS checkerror Parity) */}
+          {isInzan && !isKiosk && wrongEntryLogs.length > 0 && (
+            <Card className="border-rose-500/30">
+              <CardHeader className="py-3 border-b bg-rose-500/5 flex flex-row items-center justify-between">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-rose-600 flex items-center gap-1.5">
+                  <ShieldAlert className="h-4 w-4" />
+                  Wrong Entry / Denied Check-In Log ({wrongEntryLogs.length})
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-[10px] text-muted-foreground"
+                  onClick={() => {
+                    setWrongEntryLogs([]);
+                    try {
+                      const todayKey = 'mitrixo_wrong_entries_' + new Date().toISOString().slice(0, 10);
+                      localStorage.removeItem(todayKey);
+                    } catch {}
+                  }}
+                >
+                  Clear
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-[180px] overflow-y-auto divide-y">
+                  {wrongEntryLogs.map((log) => (
+                    <div key={log.id} className="p-2.5 text-xs flex items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <span>{log.clientName}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">#{log.memberId}</span>
+                        </div>
+                        <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                          {log.reasonMessage}
+                        </p>
+                      </div>
+                      <Badge variant="destructive" className="text-[9px] shrink-0">
+                        {log.reasonCode}
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

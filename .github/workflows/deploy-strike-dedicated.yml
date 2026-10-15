@@ -1,14 +1,13 @@
 name: Deploy Strike Gym Dedicated Updates
 
 on:
-  push:
-    branches:
-      - master
-    paths-ignore:
-      - 'docs/**'
-      - 'README.md'
-      - '.gitignore'
   workflow_dispatch:
+    inputs:
+      confirm_strike_deploy:
+        description: 'Type DEPLOY_STRIKE to confirm deploying to Strike production'
+        required: true
+        default: ''
+        type: string
 
 concurrency:
   group: deploy-strike-dedicated
@@ -16,6 +15,7 @@ concurrency:
 
 jobs:
   validate-and-deploy:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_strike_deploy == 'DEPLOY_STRIKE'
     runs-on: ubuntu-latest
     env:
       HAS_STRIKE_SECRET: ${{ secrets.STRIKE_GCP_SA_KEY != '' }}

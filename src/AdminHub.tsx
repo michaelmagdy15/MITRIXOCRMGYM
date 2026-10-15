@@ -7,12 +7,16 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
-import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, FileText, Coffee, Package, Smartphone, Phone, Search as SearchIcon, MessageSquare, Star, ClipboardList, Target } from 'lucide-react';
+import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, FileText, Coffee, Package, Smartphone, Phone, Search as SearchIcon, MessageSquare, Star, ClipboardList, Target, Database } from 'lucide-react';
+import ImportData from './ImportData';
+import ImportHistory from './ImportHistory';
 
 import { activeConfig } from './firebase';
+import { isTenantInzan } from './utils/inzanOrg';
 
 export default function AdminHub() {
-  const { features, updateFeatures, bookingWindow, updateBookingWindow } = useSettings();
+  const { branding, features, updateFeatures, bookingWindow, updateBookingWindow } = useSettings();
+  const isInzanTenant = isTenantInzan(branding.companyName);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -458,6 +462,29 @@ export default function AdminHub() {
               </div>
             </CardContent>
           </Card>
+
+          {isInzanTenant && (
+            <Card className="border-amber-500/30 shadow-md bg-amber-500/5">
+              <CardHeader>
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <Database className="h-5 w-5 text-amber-500" />
+                  RedGITS v17.12 Migration Center
+                </CardTitle>
+                <CardDescription>
+                  One-click CSV / Excel migration for active members, printed barcode IDs, remaining sessions, freeze quotas, unpaid debt installments, and sales leads.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <ImportData type="Active" />
+                  <ImportData type="Lead" />
+                </div>
+                <div className="pt-2 border-t border-border/50">
+                  <ImportHistory />
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

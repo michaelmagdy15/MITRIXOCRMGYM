@@ -25,9 +25,11 @@ import {
   User,
   History
 } from 'lucide-react';
+import { isTenantInzan } from './utils/inzanOrg';
 
 export default function PTPackages() {
-  const { currentUser, users, clients, updateClient, ptPackageRecords, addPTPackageRecord, updatePTPackageRecord, coaches, branches } = useAppContext();
+  const { currentUser, users, clients, updateClient, ptPackageRecords, addPTPackageRecord, updatePTPackageRecord, coaches, branches, payments, packages, branding } = useAppContext();
+  const isInzanTenant = isTenantInzan(branding?.companyName);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [isNewPackageOpen, setIsNewPackageOpen] = useState(false);
   const [newPackageClientId, setNewPackageClientId] = useState('');
@@ -39,9 +41,14 @@ export default function PTPackages() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyClientId, setHistoryClientId] = useState('');
 
+  // RedGITS v17.12 Parity: Trainer Commission Split (Sales % vs Executed Session %)
+  const [salesCommissionPct, setSalesCommissionPct] = useState<number>(10);
+  const [sessionExecutionPct, setSessionExecutionPct] = useState<number>(35);
+  const [defaultSessionPrice, setDefaultSessionPrice] = useState<number>(350);
+
   // Analytics
   const monthStats = useMemo(() => {
-    const now = new Date();
+    const now = selectedDate || new Date();
     const start = startOfMonth(now);
     const end = endOfMonth(now);
     
@@ -62,7 +69,95 @@ export default function PTPackages() {
       scheduled,
       rate: monthPackages.length > 0 ? Math.round((attended / (attended + noShow || 1)) * 100) : 0
     };
-  }, [ptPackageRecords]);
+  }, [ptPackageRecords, selectedDate]);
+
+  // RedGITS Trainer Commission & PT Session Deduction Ledger (MTD for selectedDate month)
+  const trainerCommissionRows = useMemo(() => {
+    const baseDate = selectedDate || new Date();
+    const start = startOfMonth(baseDate);
+    const end = endOfMonth(baseDate);
+
+    const mtdPayments = (payments || []).filter((p) => {
+      if (p.status === 'refunded') return false;
+      const d = toValidDate(p.date);
+      if (!d || !isWithinInterval(d, { start, end })) return false;
+      if (filterBranch !== 'All' && p.branch !== filterBranch) return false;
+      return Boolean(p.coachName || p.package_category_type === 'PT');
+    });
+
+    const mtdRecords = ptPackageRecords.filter((r) => {
+      const d = toValidDate(r.date);
+      if (!d || !isWithinInterval(d, { start, end })) return false;
+      if (filterBranch !== 'All' && r.branch !== filterBranch) return false;
+      return r.status === 'Attended' || r.status === 'No Show';
+    });
+
+    const trainerMap = new Map<
+      string,
+      {
+        trainerName: string;
+        packagesSoldCount: number;
+        packagesSoldRevenue: number;
+        attendedSessions: number;
+        noShowSessions: number;
+        executedSessionValue: number;
+      }
+    >();
+
+    const ensureTrainer = (name: string) => {
+      const key = name.trim();
+      if (!trainerMap.has(key)) {
+        trainerMap.set(key, {
+          trainerName: key,
+          packagesSoldCount: 0,
+          packagesSoldRevenue: 0,
+          attendedSessions: 0,
+          noShowSessions: 0,
+          executedSessionValue: 0,
+        });
+      }
+      return trainerMap.get(key)!;
+    };
+
+    coaches.filter((c) => c.active).forEach((c) => ensureTrainer(c.name));
+
+    for (const p of mtdPayments) {
+      const cName = p.coachName || 'Unassigned Trainer';
+      const row = ensureTrainer(cName);
+      row.packagesSoldCount += 1;
+      row.packagesSoldRevenue += Number(p.amount_paid ?? p.amount) || 0;
+    }
+
+    for (const r of mtdRecords) {
+      const trainerUser = users.find((u) => u.id === r.trainerId);
+      const cName = trainerUser?.name || 'Unassigned Trainer';
+      const row = ensureTrainer(cName);
+      if (r.status === 'Attended') row.attendedSessions += 1;
+      if (r.status === 'No Show') row.noShowSessions += 1;
+
+      const client = clients.find((c) => c.id === r.clientId);
+      const matchedPkg = packages.find((pkg) => pkg.name === client?.packageType);
+      const unitSessionValue =
+        matchedPkg && matchedPkg.sessions > 0
+          ? Math.round(matchedPkg.price / matchedPkg.sessions)
+          : defaultSessionPrice;
+      row.executedSessionValue += unitSessionValue;
+    }
+
+    return Array.from(trainerMap.values())
+      .map((row) => {
+        const salesCommission = Math.round((row.packagesSoldRevenue * salesCommissionPct) / 100);
+        const executionCommission = Math.round((row.executedSessionValue * sessionExecutionPct) / 100);
+        return {
+          ...row,
+          salesCommission,
+          executionCommission,
+          totalCommission: salesCommission + executionCommission,
+        };
+      })
+      .filter((r) => r.packagesSoldCount > 0 || r.attendedSessions > 0 || r.noShowSessions > 0)
+      .sort((a, b) => b.totalCommission - a.totalCommission);
+  }, [selectedDate, payments, ptPackageRecords, filterBranch, coaches, users, clients, packages, salesCommissionPct, sessionExecutionPct, defaultSessionPrice]);
 
   const handleAddPackageUsage = () => {
     if (newPackageClientId && selectedDate) {
@@ -96,8 +191,15 @@ export default function PTPackages() {
           const match = client.packageType?.match(/(\d+)\s*S/i) || client.packageType?.match(/(\d+)\s*Session/i);
           currentSessions = match && match[1] ? parseInt(match[1], 10) : 0;
         }
+        const updates: Record<string, any> = {};
         if (typeof currentSessions === 'number') {
-          updateClient(client.id, { sessionsRemaining: currentSessions - 1 });
+          updates.sessionsRemaining = Math.max(0, currentSessions - 1);
+        }
+        if (typeof client.ptSessionsRemaining === 'number') {
+          updates.ptSessionsRemaining = Math.max(0, client.ptSessionsRemaining - 1);
+        }
+        if (Object.keys(updates).length > 0) {
+          updateClient(client.id, updates);
         }
       }
     }
@@ -189,6 +291,102 @@ export default function PTPackages() {
           </CardContent>
         </Card>
       </div>
+
+      {/* RedGITS v17.12 Parity: Trainer Commission & PT Session Deduction Split */}
+      {isInzanTenant && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                Trainer Commission & PT Session Deduction Split (RedGITS Parity)
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Separates PT Sales Commission (% on sold package revenue) from Per-Session Execution Commission (% earned as each session is attended)
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-background border rounded-lg px-2.5 py-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Sales %</Label>
+                <Input
+                  type="number"
+                  value={salesCommissionPct}
+                  onChange={(e) => setSalesCommissionPct(Math.max(0, Number(e.target.value) || 0))}
+                  className="h-6 w-14 text-xs font-mono font-bold px-1.5"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 bg-background border rounded-lg px-2.5 py-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Session Exec %</Label>
+                <Input
+                  type="number"
+                  value={sessionExecutionPct}
+                  onChange={(e) => setSessionExecutionPct(Math.max(0, Number(e.target.value) || 0))}
+                  className="h-6 w-14 text-xs font-mono font-bold px-1.5"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 bg-background border rounded-lg px-2.5 py-1">
+                <Label className="text-[10px] font-bold uppercase text-muted-foreground">Default Session LE</Label>
+                <Input
+                  type="number"
+                  value={defaultSessionPrice}
+                  onChange={(e) => setDefaultSessionPrice(Math.max(0, Number(e.target.value) || 0))}
+                  className="h-6 w-16 text-xs font-mono font-bold px-1.5"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {trainerCommissionRows.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">
+                No PT sales or attended PT sessions recorded for {selectedDate ? format(selectedDate, 'MMMM yyyy') : 'this month'}.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border bg-background">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/40">
+                      <TableHead className="text-xs">Trainer</TableHead>
+                      <TableHead className="text-xs text-right">PT Sold (LE)</TableHead>
+                      <TableHead className="text-xs text-right">Sales Comm ({salesCommissionPct}%)</TableHead>
+                      <TableHead className="text-xs text-center">Attended / Deducted</TableHead>
+                      <TableHead className="text-xs text-right">Exec Value (LE)</TableHead>
+                      <TableHead className="text-xs text-right">Exec Comm ({sessionExecutionPct}%)</TableHead>
+                      <TableHead className="text-xs text-right font-bold">Total Payout</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {trainerCommissionRows.map((row) => (
+                      <TableRow key={row.trainerName}>
+                        <TableCell className="font-bold text-xs">{row.trainerName}</TableCell>
+                        <TableCell className="text-xs text-right font-mono">
+                          {row.packagesSoldRevenue.toLocaleString()} LE ({row.packagesSoldCount})
+                        </TableCell>
+                        <TableCell className="text-xs text-right font-mono text-blue-600 font-semibold">
+                          {row.salesCommission.toLocaleString()} LE
+                        </TableCell>
+                        <TableCell className="text-xs text-center">
+                          <Badge variant="secondary" className="text-[10px] font-mono">
+                            {row.attendedSessions} att / {row.noShowSessions} no-show
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-right font-mono">
+                          {row.executedSessionValue.toLocaleString()} LE
+                        </TableCell>
+                        <TableCell className="text-xs text-right font-mono text-emerald-600 font-semibold">
+                          {row.executionCommission.toLocaleString()} LE
+                        </TableCell>
+                        <TableCell className="text-xs text-right font-mono font-extrabold text-primary">
+                          {row.totalCommission.toLocaleString()} LE
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid lg:grid-cols-[350px_1fr] gap-6">
         <div className="space-y-6">

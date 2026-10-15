@@ -15,8 +15,9 @@ import { useAuth } from './contexts/AuthContext';
 import { useLanguage } from './contexts/LanguageContext';
 import { useSettings } from './contexts/SettingsContext';
 import { format, parseISO, isAfter, isBefore, differenceInDays, subDays } from 'date-fns';
-import { Download, Star, Users, DollarSign, TrendingUp, UserPlus, Activity, Award, Globe, Briefcase, BarChart3 } from 'lucide-react';
+import { Download, Star, Users, DollarSign, TrendingUp, UserPlus, Activity, Award, Globe, Briefcase, BarChart3, ShieldAlert, Camera } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
+import { findSimilarPhoneClusters } from './utils/phoneSimilarity';
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
 
@@ -36,7 +37,9 @@ type ReportId =
   | 'member-points'
   | 'referrals'
   | 'national-members'
-  | 'staff-logs';
+  | 'staff-logs'
+  | 'similarity-mobile'
+  | 'missing-photos';
 
 interface ReportTab {
   id: ReportId;
@@ -138,6 +141,8 @@ export default function AdvancedReports() {
     { id: 'referrals', label: 'Referrals', icon: UserPlus },
     { id: 'national-members', label: 'National Members', icon: Globe },
     { id: 'staff-logs', label: 'Staff Logs', icon: Briefcase },
+    { id: 'similarity-mobile', label: 'Phone Similarity (7-Digit)', icon: ShieldAlert },
+    { id: 'missing-photos', label: 'Missing Member Photos', icon: Camera },
   ];
 
   // --- Unique branch list ---
@@ -1277,6 +1282,151 @@ export default function AdvancedReports() {
     </>
   );
 
+  const similarityClusters = useMemo(() => {
+    const filteredClients = (clients || []).filter(c => matchBranch(c.branch));
+    return findSimilarPhoneClusters(filteredClients, 7);
+  }, [clients, branchFilter]);
+
+  const missingPhotosData = useMemo(() => {
+    return (clients || []).filter(c => {
+      if (c.isDeleted) return false;
+      if (!matchBranch(c.branch)) return false;
+      const status = (c.status || '').toLowerCase();
+      if (status === 'lead') return false;
+      return !c.photoURL || !String(c.photoURL).trim();
+    });
+  }, [clients, branchFilter]);
+
+  const renderSimilarityMobile = () => {
+    const flattenedExport = similarityClusters.flatMap(cluster =>
+      cluster.members.map(m => ({
+        Shared7Digits: cluster.shared7Digits,
+        MemberID: m.memberId,
+        Name: m.name,
+        Phone: m.phone,
+        BackupPhone: m.backupPhone || '—',
+        Status: m.status,
+        Branch: m.branch || '—',
+        SalesRep: m.salesRep || '—',
+      }))
+    );
+    return (
+      <>
+        <FilterRow />
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Badge variant="destructive">{similarityClusters.length} similar 7-digit clusters</Badge>
+            <span className="text-xs text-muted-foreground">
+              Flags distinct members sharing 7 consecutive digits across Mobile 1 or Mobile 2
+            </span>
+          </div>
+          <ExportMenu data={flattenedExport} filename="phone_similarity_7digit">
+            <Download className="h-4 w-4 mr-1" /> Export
+          </ExportMenu>
+        </div>
+        {similarityClusters.length === 0 ? (
+          <EmptyState message="No 7-digit consecutive phone similarity conflicts detected." />
+        ) : (
+          <TableWrapper>
+            <thead>
+              <tr>
+                <Th>Shared 7 Digits</Th>
+                <Th>Matched Accounts</Th>
+                <Th>Phones (Primary / Backup)</Th>
+                <Th>Status & Branch</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {similarityClusters.map(cluster => (
+                <tr key={cluster.clusterKey} className="border-t border-border hover:bg-muted/30 transition-colors">
+                  <Td className="font-mono font-bold text-rose-600">*{cluster.shared7Digits}*</Td>
+                  <Td>
+                    <div className="space-y-1">
+                      {cluster.members.map(m => (
+                        <div key={m.id} className="text-xs font-semibold">
+                          #{m.memberId} — {m.name}
+                        </div>
+                      ))}
+                    </div>
+                  </Td>
+                  <Td>
+                    <div className="space-y-1 font-mono text-xs">
+                      {cluster.members.map(m => (
+                        <div key={m.id}>
+                          {m.phone} {m.backupPhone ? `/ ${m.backupPhone}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </Td>
+                  <Td>
+                    <div className="space-y-1">
+                      {cluster.members.map(m => (
+                        <div key={m.id} className="flex items-center gap-1.5 text-xs">
+                          <Badge variant="outline" className="text-[10px]">{m.status}</Badge>
+                          <span className="text-muted-foreground">{m.branch || '—'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrapper>
+        )}
+      </>
+    );
+  };
+
+  const renderMissingPhotos = () => (
+    <>
+      <FilterRow />
+      <div className="flex items-center justify-between mb-3">
+        <Badge variant="secondary">{missingPhotosData.length} members missing profile photo</Badge>
+        <ExportMenu
+          data={missingPhotosData.map(c => ({
+            MemberID: c.memberId || c.id,
+            Name: c.name,
+            Phone: c.phone,
+            Status: c.status,
+            Package: c.packageType || '—',
+            Branch: c.branch || '—',
+          }))}
+          filename="missing_member_photos"
+        >
+          <Download className="h-4 w-4 mr-1" /> Export
+        </ExportMenu>
+      </div>
+      {missingPhotosData.length === 0 ? (
+        <EmptyState message="All members have profile photos uploaded!" />
+      ) : (
+        <TableWrapper>
+          <thead>
+            <tr>
+              <Th>Member ID</Th>
+              <Th>Name</Th>
+              <Th>Phone</Th>
+              <Th>Status</Th>
+              <Th>Package</Th>
+              <Th>Branch</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {missingPhotosData.slice(0, 200).map(c => (
+              <tr key={c.id} className="border-t border-border hover:bg-muted/30 transition-colors">
+                <Td className="font-mono text-xs">#{c.memberId || c.id.slice(0, 6)}</Td>
+                <Td className="font-medium">{c.name}</Td>
+                <Td className="font-mono text-xs">{c.phone || '—'}</Td>
+                <Td><Badge variant="outline" className="text-xs">{c.status}</Badge></Td>
+                <Td>{c.packageType || '—'}</Td>
+                <Td>{c.branch || '—'}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </TableWrapper>
+      )}
+    </>
+  );
+
   // ============================================================
   // Report router
   // ============================================================
@@ -1298,6 +1448,8 @@ export default function AdvancedReports() {
       case 'referrals': return renderReferrals();
       case 'national-members': return renderNationalMembers();
       case 'staff-logs': return renderStaffLogs();
+      case 'similarity-mobile': return renderSimilarityMobile();
+      case 'missing-photos': return renderMissingPhotos();
       default: return <EmptyState message="Select a report from the sidebar." />;
     }
   };

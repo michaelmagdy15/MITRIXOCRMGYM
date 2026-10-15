@@ -14,13 +14,15 @@ import { Input } from '@/components/ui/input';
 import { addDays, isBefore, parseISO, parse, isValid, isAfter, format } from 'date-fns';
 import { PACKAGES, SALES_NAME_MAPPING } from './constants';
 import { resolvePaymentCategory } from './utils/paymentCategories';
+import { isTenantInzan } from './utils/inzanOrg';
 
 interface ImportDataProps {
   type: 'Lead' | 'Active';
 }
 
 export default function ImportData({ type }: ImportDataProps) {
-  const { bulkAddPayments, currentUser, users, addClient, bulkAddClients, addImportBatch } = useAppContext();
+  const { bulkAddPayments, currentUser, users, addClient, bulkAddClients, addImportBatch, branding } = useAppContext();
+  const isInzanTenant = isTenantInzan(branding?.companyName);
   const { packages } = usePackages();
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -38,12 +40,19 @@ export default function ImportData({ type }: ImportDataProps) {
   const fields = [
     { key: 'name', label: 'Name (Required)', required: true },
     { key: 'phone', label: 'Phone / Number (Required)', required: true },
+    { key: 'memberNumber', label: 'RedGITS Member ID / Barcode' },
     { key: 'startDate', label: 'Start Date' },
     { key: 'membershipExpiry', label: 'Expiry Date' },
     { key: 'packageType', label: 'Package Type' },
     { key: 'sessionsRemaining', label: 'Sessions Remaining' },
-    { key: 'paid', label: 'Payment' },
-    { key: 'typeOfClient', label: 'Type Of Client' },
+    { key: 'paid', label: 'Amount Paid (EGP)' },
+    { key: 'remainingDebt', label: 'Remaining Debt / Unpaid Balance (EGP)' },
+    { key: 'dueDate', label: 'Debt / Installment Due Date' },
+    { key: 'gender', label: 'Gender (Male / Female)' },
+    { key: 'invitationsTotal', label: 'Guest Invitations Balance' },
+    { key: 'freezeCoins', label: 'Freeze Days Balance' },
+    { key: 'frontDeskNote', label: 'Reception Sticky Note' },
+    { key: 'typeOfClient', label: 'Type Of Client / Status' },
     { key: 'branch', label: 'Branch' },
     { key: 'salesName', label: 'Sales Name' },
     { key: 'source', label: 'Source' },
@@ -53,6 +62,78 @@ export default function ImportData({ type }: ImportDataProps) {
     { key: 'advertisingSource', label: 'Advertising Source / Come From' },
     { key: 'isBlacklisted', label: 'Is Blacklisted' },
   ];
+
+  const downloadRedgitsTemplate = () => {
+    const sampleRows = [
+      [
+        'Member ID',
+        'Full Name',
+        'Mobile',
+        'Gender',
+        'Branch',
+        'Package',
+        'Start Date',
+        'End Date',
+        'Sessions Left',
+        'Amount Paid',
+        'Remaining Debt',
+        'Due Date',
+        'Guest Invitations',
+        'Freeze Days',
+        'Sales Rep',
+        'Come From',
+        'Reception Note',
+        'National ID'
+      ].join(','),
+      [
+        '10452',
+        'Ahmed Mahmoud Hassan',
+        '01012345678',
+        'Male',
+        'Mivida Compound',
+        'Annual Membership',
+        '2026-01-01',
+        '2027-01-01',
+        '365',
+        '8000',
+        '2000',
+        '2026-11-01',
+        '5',
+        '30',
+        'Sama',
+        'Walk-in',
+        'VIP Member - prefers morning locker',
+        '29501011234567'
+      ].join(','),
+      [
+        '10453',
+        'Nourhan Tarek Ali',
+        '01123456789',
+        'Female',
+        'Maxim Compound',
+        '3 Months Transformation',
+        '2026-09-01',
+        '2026-12-01',
+        '36',
+        '4500',
+        '0',
+        '',
+        '2',
+        '14',
+        'Sama',
+        'Instagram',
+        '',
+        '29805051234567'
+      ].join(',')
+    ].join('\n');
+
+    const blob = new Blob([sampleRows], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `RedGITS_to_Mitrixo_Migration_Template_${type}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -106,39 +187,47 @@ export default function ImportData({ type }: ImportDataProps) {
     }
   };
 
+  const REDGITS_FIELD_ALIASES: Record<string, string[]> = {
+    name: ['name', 'full name', 'member name', 'client', 'customer', 'member', 'lead', 'اسم', 'الاسم'],
+    phone: ['phone', 'mobile', 'number', 'tel', 'contact', 'whatsapp', 'رقم', 'تليفون', 'موبايل'],
+    memberNumber: ['member id', 'member_id', 'memberid', 'member number', 'membernumber', 'legacy id', 'redgits id', 'barcode', 'card id', 'code', 'id', 'رقم العضوية', 'كود'],
+    sessionsRemaining: ['session', 'sessions left', 'remaining', 'left', 'balance', 'count', 'pt sessions', 'جلسات'],
+    startDate: ['start date', 'start', 'begin', 'join date', 'بداية'],
+    membershipExpiry: ['expiry', 'end date', 'valid until', 'expires', 'date', 'انتهاء'],
+    packageType: ['package', 'plan', 'membership', 'type', 'subscription', 'offer', 'باقة', 'الاشتراك'],
+    typeOfClient: ['type of client', 'client type', 'category', 'status', 'نوع', 'الحالة'],
+    branch: ['branch', 'location', 'gym', 'club', 'فرع'],
+    salesName: ['sales name', 'sales', ' sales rep', 'rep', 'assigned to', 'agent', 'created by', 'مبيعات'],
+    paid: ['amount paid', 'payment', 'paid', 'is paid', 'status paid', 'collected', 'دفع', 'المدفوع'],
+    remainingDebt: ['remaining debt', 'debt', 'remaining amount', 'unpaid', 'rest', 'balance due', 'amount due', 'متبقي', 'مديونية'],
+    dueDate: ['due date', 'installment date', 'next due', 'next installment', 'تاريخ الاستحقاق'],
+    gender: ['gender', 'sex', 'النوع'],
+    invitationsTotal: ['guest invitations', 'invitations', 'guest passes', 'free passes', 'دعوات'],
+    freezeCoins: ['freeze days', 'freeze balance', 'freeze quota', 'freeze', 'أيام التجميد'],
+    frontDeskNote: ['reception note', 'front desk note', 'sticky note', 'note', 'notes', 'comment', 'ملاحظات'],
+    source: ['source', 'how did you hear', 'referral', 'origin', 'مصدر'],
+    nationalId: ['national id', 'national_id', 'nationalid', 'national', 'ssn', 'الرقم القومي'],
+    email: ['email', 'e-mail', 'email address'],
+    backupPhone: ['backup mobile', 'backup phone', 'secondary mobile', 'emergency phone'],
+    advertisingSource: ['come from', 'source', 'advertising source', 'ad source', 'channel'],
+    isBlacklisted: ['blacklist', 'black list', 'black-list'],
+  };
+
   const processParsedData = (results: Papa.ParseResult<any>) => {
     const parsedHeaders = results.meta.fields || [];
     setHeaders(parsedHeaders);
     setData(results.data);
     
-    // Auto-map based on common names and fuzzy matching
+    // Auto-map based on common names and RedGITS v17.12 aliases
     const newMapping: Record<string, string> = {};
-    const fieldAliases: Record<string, string[]> = {
-      name: ['name', 'full name', 'client', 'customer', 'member', 'lead', 'اسم'],
-      phone: ['phone', 'mobile', 'number', 'tel', 'contact', 'whatsapp', 'رقم', 'تليفون'],
-      sessionsRemaining: ['session', 'remaining', 'left', 'balance', 'count', 'جلسات'],
-      startDate: ['start date', 'start', 'begin', 'بداية'],
-      membershipExpiry: ['expiry', 'end date', 'valid until', 'expires', 'date', 'انتهاء'],
-      packageType: ['package', 'plan', 'membership', 'type', 'subscription', 'باقة'],
-      typeOfClient: ['type of client', 'client type', 'category', 'نوع'],
-      branch: ['branch', 'location', 'gym', 'فرع'],
-      salesName: ['sales name', 'sales', 'rep', 'assigned to', 'agent', 'مبيعات'],
-      paid: ['payment', 'paid', 'is paid', 'status paid', 'دفع'],
-      source: ['source', 'how did you hear', 'referral', 'origin', 'مصدر'],
-      nationalId: ['national id', 'national_id', 'nationalid', 'national'],
-      email: ['email', 'e-mail', 'email address'],
-      backupPhone: ['backup mobile', 'backup phone', 'secondary mobile'],
-      advertisingSource: ['come from', 'source', 'advertising source', 'ad source'],
-      isBlacklisted: ['blacklist', 'black list', 'black-list'],
-    };
 
     fields.forEach(field => {
-      const aliases = fieldAliases[field.key] || [field.key];
+      const aliases = REDGITS_FIELD_ALIASES[field.key] || [field.key];
       // Try exact match first
-      let match = parsedHeaders.find(h => aliases.some(alias => h.toLowerCase() === alias));
+      let match = parsedHeaders.find(h => aliases.some(alias => h.trim().toLowerCase() === alias));
       // Then try partial match
       if (!match) {
-        match = parsedHeaders.find(h => aliases.some(alias => h.toLowerCase().includes(alias)));
+        match = parsedHeaders.find(h => aliases.some(alias => h.trim().toLowerCase().includes(alias)));
       }
       
       if (match) {
@@ -183,32 +272,14 @@ export default function ImportData({ type }: ImportDataProps) {
             return;
           }
 
-          // 1. Auto-map
+          // 1. Auto-map using REDGITS_FIELD_ALIASES
           const parsedHeaders = results.meta.fields || [];
           const newMapping: Record<string, string> = {};
-          const fieldAliases: Record<string, string[]> = {
-            name: ['name', 'full name', 'client', 'customer', 'member', 'lead', 'اسم'],
-            phone: ['phone', 'mobile', 'number', 'tel', 'contact', 'whatsapp', 'رقم', 'تليفون'],
-            sessionsRemaining: ['session', 'remaining', 'left', 'balance', 'count', 'جلسات'],
-            startDate: ['start date', 'start', 'begin', 'بداية'],
-            membershipExpiry: ['expiry', 'end date', 'valid until', 'expires', 'date', 'انتهاء'],
-            packageType: ['package', 'plan', 'membership', 'type', 'subscription', 'باقة'],
-            typeOfClient: ['type of client', 'client type', 'category', 'نوع'],
-            branch: ['branch', 'location', 'gym', 'فرع'],
-            salesName: ['sales name', 'sales', 'rep', 'assigned to', 'agent', 'مبيعات'],
-            paid: ['payment', 'paid', 'is paid', 'status paid', 'دفع'],
-            source: ['source', 'how did you hear', 'referral', 'origin', 'مصدر'],
-            nationalId: ['national id', 'national_id', 'nationalid', 'national'],
-            email: ['email', 'e-mail', 'email address'],
-            backupPhone: ['backup mobile', 'backup phone', 'secondary mobile'],
-            advertisingSource: ['come from', 'source', 'advertising source', 'ad source'],
-            isBlacklisted: ['blacklist', 'black list', 'black-list'],
-          };
 
           fields.forEach(field => {
-            const aliases = fieldAliases[field.key] || [field.key];
-            let match = parsedHeaders.find(h => aliases.some(alias => h.toLowerCase() === alias));
-            if (!match) match = parsedHeaders.find(h => aliases.some(alias => h.toLowerCase().includes(alias)));
+            const aliases = REDGITS_FIELD_ALIASES[field.key] || [field.key];
+            let match = parsedHeaders.find(h => aliases.some(alias => h.trim().toLowerCase() === alias));
+            if (!match) match = parsedHeaders.find(h => aliases.some(alias => h.trim().toLowerCase().includes(alias)));
             if (match) newMapping[field.key] = match;
           });
 
@@ -226,8 +297,6 @@ export default function ImportData({ type }: ImportDataProps) {
           // 3. Import with correlation (reuse logic)
           setData(results.data);
           setMapping(newMapping);
-          // We need to call handleImport but it's async and depends on state
-          // So I'll move the import logic to a shared function
           await performImport(results.data, newMapping);
         }
       });
@@ -262,6 +331,7 @@ export default function ImportData({ type }: ImportDataProps) {
       try {
         let name = (row[importMapping['name'] || ''] || '').toString().trim();
         let phone = (row[importMapping['phone'] || ''] || '').toString().replace(/[^\d+]/g, '');
+        let memberNumberRaw = importMapping['memberNumber'] ? (row[importMapping['memberNumber']] || '').toString().trim() : '';
         let branchRaw = (row[importMapping['branch'] || ''] || '').toString().trim().toUpperCase();
         let source = (row[importMapping['source'] || ''] || 'Other').toString().trim();
         let packageType = (row[importMapping['packageType'] || ''] || '').toString().trim();
@@ -269,6 +339,12 @@ export default function ImportData({ type }: ImportDataProps) {
         let startDateRaw = row[importMapping['startDate'] || ''];
         let membershipExpiryRaw = row[importMapping['membershipExpiry'] || ''];
         let paidRaw = row[importMapping['paid'] || ''];
+        let remainingDebtRaw = importMapping['remainingDebt'] ? row[importMapping['remainingDebt']] : '';
+        let dueDateRaw = importMapping['dueDate'] ? row[importMapping['dueDate']] : '';
+        let genderRaw = importMapping['gender'] ? (row[importMapping['gender']] || '').toString().trim() : '';
+        let invitationsRaw = importMapping['invitationsTotal'] ? row[importMapping['invitationsTotal']] : '';
+        let freezeCoinsRaw = importMapping['freezeCoins'] ? row[importMapping['freezeCoins']] : '';
+        let frontDeskNoteRaw = importMapping['frontDeskNote'] ? (row[importMapping['frontDeskNote']] || '').toString().trim() : '';
         let typeOfClient = (row[importMapping['typeOfClient'] || ''] || '').toString().trim();
         let salesName = (row[importMapping['salesName'] || ''] || '').toString().trim();
 
@@ -358,9 +434,11 @@ export default function ImportData({ type }: ImportDataProps) {
           membershipExpiry = parsedExpiryDate.toISOString();
         }
 
-        let rawStatus = (typeOfClient || 'Lead').toString().trim();
+        let rawStatus = (typeOfClient || (type === 'Active' ? 'Active' : 'Lead')).toString().trim();
         rawStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
-        let status: any = ["Lead", "Active", "Nearly Expired", "Expired", "Hold"].includes(rawStatus) ? rawStatus : 'Lead';
+        let status: any = ["Lead", "Active", "Nearly Expired", "Expired", "Hold"].includes(rawStatus)
+          ? rawStatus
+          : (type === 'Active' ? 'Active' : 'Lead');
         
         if (isHold) {
           status = 'Hold';
@@ -380,6 +458,7 @@ export default function ImportData({ type }: ImportDataProps) {
         if (branchRaw.includes('COMPLEX') || branchRaw.includes('MAXIM')) branch = 'Maxim Compound';
         else if (branchRaw.includes('MIVIDA') || branchRaw.includes('MVIDA')) branch = 'Mivida Compound';
         else if (branchRaw.includes('IMPACT') || branchRaw.includes('STRIKE')) branch = 'Impact by Strike';
+        else if (branchRaw) branch = (row[importMapping['branch'] || ''] || '').toString().trim();
 
         let paid = false;
         let paidAmount = 0;
@@ -395,11 +474,26 @@ export default function ImportData({ type }: ImportDataProps) {
           }
         }
 
-        if (!name || !phone) {
-          failedCount++;
-          errors.push({ row: i + 1, reason: 'Name and Phone are required' });
-          continue;
+        let remainingDebt = 0;
+        if (remainingDebtRaw !== undefined && remainingDebtRaw !== '') {
+          const parsedDebt = parseFloat(remainingDebtRaw.toString().replace(/[^\d.-]/g, ''));
+          if (!isNaN(parsedDebt) && parsedDebt > 0) {
+            remainingDebt = parsedDebt;
+          }
         }
+
+        let parsedDueDate: Date | null = dueDateRaw ? robustParse(dueDateRaw) : null;
+        const dueDateIso = parsedDueDate ? format(parsedDueDate, 'yyyy-MM-dd') : format(addDays(now, 14), 'yyyy-MM-dd');
+
+        let gender: 'Male' | 'Female' | 'Other' | undefined;
+        if (genderRaw) {
+          const g = genderRaw.toLowerCase();
+          if (g.startsWith('f') || g.includes('انثى') || g.includes('أنثى')) gender = 'Female';
+          else if (g.startsWith('m') || g.includes('ذكر')) gender = 'Male';
+        }
+
+        const invitationsTotal = invitationsRaw !== undefined && invitationsRaw !== '' ? Math.max(0, parseInt(invitationsRaw.toString(), 10) || 0) : undefined;
+        const freezeCoins = freezeCoinsRaw !== undefined && freezeCoinsRaw !== '' ? Math.max(0, parseInt(freezeCoinsRaw.toString(), 10) || 0) : undefined;
 
         const clientId = Math.random().toString(36).substr(2, 9);
         const trimmedSalesName = (salesName || '').trim();
@@ -420,29 +514,72 @@ export default function ImportData({ type }: ImportDataProps) {
         const finalAssignedTo = systemUser ? systemUser.id : (mappedName || (currentUser?.role === 'rep' ? currentUser.id : undefined));
         const finalSalesName = systemUser?.name || mappedName;
 
-        clientsToImport.push({
+        const importedClient: any = {
           id: clientId,
-          name, phone, status: status as any, source, branch,
+          name,
+          phone,
+          status: status as any,
+          source,
+          branch,
           packageType: packageType || 'Unknown',
-          sessionsRemaining, membershipExpiry, startDate,
-          typeOfClient, salesName: finalSalesName,
-          comments: [], lastContactDate: now.toISOString(),
+          sessionsRemaining,
+          membershipExpiry,
+          startDate,
+          typeOfClient,
+          salesName: finalSalesName,
+          comments: frontDeskNoteRaw
+            ? [{ id: `note-${Date.now()}-${i}`, text: `[RedGITS Sticky Note] ${frontDeskNoteRaw}`, author: 'RedGITS Import', date: now.toISOString() }]
+            : [],
+          lastContactDate: now.toISOString(),
           assignedTo: finalAssignedTo,
           importBatchId: batchId,
-          paid: paid,
+          paid: paid && remainingDebt === 0,
           nationalId,
           email,
           backupPhone,
           advertisingSource,
-          isBlacklisted
-        });
+          isBlacklisted,
+        };
 
-        if (paidAmount > 0) {
-          paymentsToImport.push({
+        if (memberNumberRaw) {
+          importedClient.memberId = memberNumberRaw;
+          importedClient.memberNumber = Number(memberNumberRaw.replace(/\D/g, '')) || undefined;
+          importedClient.legacyRedgitsId = memberNumberRaw;
+        }
+        if (gender) importedClient.gender = gender;
+        if (invitationsTotal !== undefined) {
+          importedClient.invitationsTotal = invitationsTotal;
+          importedClient.guestPassesRemaining = invitationsTotal;
+        }
+        if (freezeCoins !== undefined) {
+          importedClient.freezeCoins = freezeCoins;
+        }
+        if (frontDeskNoteRaw) {
+          importedClient.frontDeskNote = frontDeskNoteRaw;
+        }
+        if (packageType && packageType !== 'Unknown') {
+          importedClient.packages = [{
+            id: `pkg-${clientId}`,
+            packageName: packageType,
+            startDate: startDate || now.toISOString(),
+            endDate: membershipExpiry || addDays(now, 30).toISOString(),
+            sessionsTotal: typeof sessionsRemaining === 'number' ? sessionsRemaining : 30,
+            sessionsRemaining: typeof sessionsRemaining === 'number' ? sessionsRemaining : 30,
+            status: status === 'Hold' ? 'Hold' : status === 'Expired' ? 'Expired' : 'Active',
+            invitationsTotal: invitationsTotal,
+            invitationsUsed: 0,
+          }];
+        }
+
+        clientsToImport.push(importedClient as Client);
+
+        if (paidAmount > 0 || remainingDebt > 0) {
+          const totalAmount = paidAmount + remainingDebt;
+          const paymentDoc: any = {
             id: '', // Will be set by Firestore docRef in bulkAddPayments
             clientId: clientId,
             client_name: name,
-            amount: paidAmount,
+            amount: totalAmount,
             amount_paid: paidAmount,
             date: startDate || now.toISOString(), // Use start date if available
             method: 'Other',
@@ -452,8 +589,21 @@ export default function ImportData({ type }: ImportDataProps) {
             sales_rep_id: systemUser?.id || (typeof finalAssignedTo === 'string' && finalAssignedTo.length > 15 ? finalAssignedTo : 'system-import'),
             salesName: finalSalesName,
             created_at: now.toISOString(),
-            deleted_at: null
-          } as Payment);
+            deleted_at: null,
+          };
+          if (remainingDebt > 0) {
+            paymentDoc.due_date = dueDateIso;
+            paymentDoc.installments = [
+              {
+                id: `inst-${clientId}-1`,
+                amount: remainingDebt,
+                dueDate: dueDateIso,
+                status: 'pending',
+                notes: 'Imported from RedGITS',
+              }
+            ];
+          }
+          paymentsToImport.push(paymentDoc as Payment);
         }
       } catch (err) {
         failedCount++;
@@ -514,16 +664,32 @@ export default function ImportData({ type }: ImportDataProps) {
       />
       <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
         <DialogHeader>
-          <DialogTitle className="text-xl md:text-2xl font-bold">Import {type}s from CSV / Google Sheets</DialogTitle>
+          <DialogTitle className="text-xl md:text-2xl font-bold">
+            {isInzanTenant ? `Import ${type}s (RedGITS / CSV / Google Sheets)` : `Import ${type}s from CSV / Google Sheets`}
+          </DialogTitle>
         </DialogHeader>
 
         {step === 'upload' && (
           <div className="space-y-6 py-4">
+            {isInzanTenant && (
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                <div>
+                  <p className="text-sm font-bold text-amber-600 dark:text-amber-400">RedGITS v17.12 One-Click Migration Ready</p>
+                  <p className="text-xs text-muted-foreground">
+                    Preserves RedGITS Member IDs / Barcodes, Remaining Sessions, Freeze Quotas, Guest Invitations, and Unpaid Debtor Installments.
+                  </p>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={downloadRedgitsTemplate} className="shrink-0 border-amber-500/40 text-amber-600 dark:text-amber-400">
+                  <Download className="h-4 w-4 mr-1.5" />
+                  RedGITS CSV Template
+                </Button>
+              </div>
+            )}
             <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 space-y-4">
               <Upload className="h-12 w-12 text-muted-foreground" />
               <div className="text-center">
-                <p className="font-medium">Upload your CSV file</p>
-                <p className="text-sm text-muted-foreground">Select a local .csv file</p>
+                <p className="font-medium">Upload your RedGITS or Excel CSV export</p>
+                <p className="text-sm text-muted-foreground">Select a local .csv file (English or Arabic column headers supported)</p>
               </div>
               <input 
                 type="file" 

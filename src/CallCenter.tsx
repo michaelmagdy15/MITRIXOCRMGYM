@@ -167,20 +167,8 @@ export default function CallCenter() {
   /* ── Fetch tenant call logs ── */
   const fetchCallLogs = useCallback(async () => {
     try {
-      let logs: CallCenterLog[];
-      if (isInzan) {
-        const token = await auth.currentUser?.getIdToken();
-        if (!token) throw new Error('Your session expired. Please sign in again.');
-        const response = await fetch('/api/call-center/logs', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Failed to load call history.');
-        logs = Array.isArray(result.logs) ? result.logs as CallCenterLog[] : [];
-      } else {
-        const snap = await getDocs(query(collection(db, 'callCenterLog')));
-        logs = snap.docs.map((d) => ({ ...d.data(), id: d.id } as CallCenterLog));
-      }
+      const snap = await getDocs(query(collection(db, 'callCenterLog')));
+      const logs = snap.docs.map((d) => ({ ...d.data(), id: d.id } as CallCenterLog));
       // Sort by createdAt desc locally (if missing index)
       logs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       setCallLogs(logs);
@@ -188,7 +176,7 @@ export default function CallCenter() {
       console.error('Error fetching call logs:', error);
       toast.error('Failed to load call logs');
     }
-  }, [isInzan]);
+  }, []);
 
   useEffect(() => {
     fetchCallLogs();
@@ -379,45 +367,32 @@ export default function CallCenter() {
 
     setIsSaving(true);
     try {
-      let logEntry: CallCenterLog;
-      if (isInzan) {
-        const token = await auth.currentUser?.getIdToken();
-        if (!token) throw new Error('Your session expired. Please sign in again.');
-        const response = await fetch('/api/call-center/logs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            clientDocId: selectedClient.id,
-            callType,
-            comment: comment.trim(),
-            reminderDate: callType === 'Call Later' ? reminderDate : undefined,
-          }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Failed to save call log.');
-        logEntry = result.log as CallCenterLog;
-      } else {
-        const newId = crypto.randomUUID();
-        logEntry = {
-          id: newId,
-          memberId: selectedClient.memberId || selectedClient.id,
-          memberName: selectedClient.name || '',
-          memberPhone: selectedClient.phone || '',
-          memberStatus: selectedClient.status || '',
-          packageData: selectedClient.packageType || '',
-          callType: callType as CallCenterLog['callType'],
-          comment: comment.trim(),
-          source: selectedClient.source || '',
-          createdBy: currentUser?.id || '',
-          createdByName: currentUser?.name || '',
-          createdAt: new Date().toISOString(),
-          branch: selectedClient.branch || '',
-        };
-        await setDoc(doc(db, 'callCenterLog', logEntry.id), logEntry);
-      }
+      const newId = crypto.randomUUID();
+      const cooldownUntil =
+        callType === 'Not Interested'
+          ? new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString()
+          : undefined;
+      const logEntry: CallCenterLog = {
+        id: newId,
+        clientDocId: selectedClient.id,
+        memberId: selectedClient.memberId || selectedClient.id,
+        memberName: selectedClient.name || '',
+        memberPhone: selectedClient.phone || '',
+        memberStatus: selectedClient.status || '',
+        packageData: selectedClient.packageType || '',
+        callType: callType as CallCenterLog['callType'],
+        comment: comment.trim(),
+        source: selectedClient.source || '',
+        createdBy: currentUser?.id || '',
+        createdByName: currentUser?.name || '',
+        createdAt: new Date().toISOString(),
+        branch: selectedClient.branch || '',
+        ...(cooldownUntil ? { cooldownUntil } : {}),
+        ...(callType === 'Call Later' && reminderDate
+          ? { reminderDate, reminderStatus: 'pending' as const }
+          : {}),
+      };
+      await setDoc(doc(db, 'callCenterLog', logEntry.id), logEntry);
       
       // Update local state immediately
       setCallLogs((previousLogs) => [
@@ -833,6 +808,21 @@ export default function CallCenter() {
 
             {/* Comment + Save */}
             <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-medium text-muted-foreground mr-1">Quick Tags:</span>
+                {(['[+1 min]', '[Thinking]', '[Busy]', '[WhatsApp Sent]', '[Price Inquiry]'] as const).map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() =>
+                      setComment((prev) => (prev.includes(tag) ? prev : `${tag} ${prev}`.trim()))
+                    }
+                    className="px-2 py-0.5 rounded-md border bg-muted/40 hover:bg-muted text-xs font-mono font-medium transition-colors"
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
               <Textarea
                 placeholder="Add your call notes here..."
                 value={comment}

@@ -13,7 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Search, DollarSign, Download, User, Calendar, Phone, MapPin, CreditCard, ArrowUpDown } from 'lucide-react';
+import { Search, DollarSign, Download, User, Calendar, Phone, MapPin, CreditCard, ArrowUpDown, Plus, Calculator } from 'lucide-react';
+import {
+  splitInstallmentsEvenly,
+  addInstallmentRowAndResplit,
+  calculateCorporateVatInvoice,
+  InstallmentRow,
+} from './utils/installmentSplitter';
 
 const LOCALES = {
   en: {
@@ -27,6 +33,7 @@ const LOCALES = {
     mobile: "Mobile",
     salesRep: "Sales Rep",
     paymentDate: "Payment Date",
+    lastSeen: "Last Seen",
     packageName: "Package Name",
     total: "Total",
     paid: "Paid",
@@ -67,6 +74,7 @@ const LOCALES = {
     mobile: "رقم الموبايل",
     salesRep: "مندوب المبيعات",
     paymentDate: "تاريخ الدفع",
+    lastSeen: "آخر حضور",
     packageName: "اسم الباقة",
     total: "الإجمالي",
     paid: "المدفوع",
@@ -100,7 +108,7 @@ const LOCALES = {
 
 export default function Debtors() {
   const { language, isRtl } = useLanguage();
-  const { payments, clients, users, updatePayment, branches, setActiveTab, setActiveClientId } = useAppContext();
+  const { payments, clients, users, attendances, updatePayment, branches, setActiveTab, setActiveClientId } = useAppContext();
 
   const currentLoc = LOCALES[language as 'en' | 'ar'] || LOCALES.en;
 
@@ -117,6 +125,28 @@ export default function Debtors() {
   const [payNotes, setPayNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [installmentRows, setInstallmentRows] = useState<InstallmentRow[]>([]);
+  const [showVatCalc, setShowVatCalc] = useState(false);
+  const [vatSubtotal, setVatSubtotal] = useState('');
+  const [vatCompany, setVatCompany] = useState('');
+  const [vatTaxCode, setVatTaxCode] = useState('');
+
+  const lastSeenByClient = useMemo(() => {
+    const map = new Map<string, string>();
+    (attendances || []).forEach((att) => {
+      if (!att.clientId || !att.date) return;
+      const existing = map.get(att.clientId);
+      if (!existing || att.date > existing) {
+        map.set(att.clientId, att.date);
+      }
+    });
+    return map;
+  }, [attendances]);
+
+  const corporateVat = useMemo(
+    () => calculateCorporateVatInvoice(Number(vatSubtotal) || 0, vatCompany, vatTaxCode, 14),
+    [vatSubtotal, vatCompany, vatTaxCode]
+  );
 
   // 1. Filter debtors where amount_paid < amount and deleted_at is null
   const allDebtors = useMemo(() => {
@@ -223,6 +253,7 @@ export default function Debtors() {
     setInstapayRef('');
     setPayNotes('');
     setErrorMsg('');
+    setInstallmentRows(splitInstallmentsEvenly(remaining, 2));
   };
 
   const handleConfirmPayment = async () => {
@@ -288,15 +319,77 @@ export default function Debtors() {
             {language === 'ar' ? 'إدارة وتحصيل المبالغ المستحقة من الأعضاء المشتركين.' : 'Manage and collect outstanding payments from gym members.'}
           </p>
         </div>
-        <Button 
-          variant="outline" 
-          onClick={exportToCSV}
-          className="rounded-xl border-primary/20 hover:border-primary/50 flex items-center gap-2 hover:bg-muted/40 transition-colors h-11 self-start md:self-auto"
-        >
-          <Download className="h-4 w-4" />
-          <span>{currentLoc.exportCsv}</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          <Button
+            variant="outline"
+            onClick={() => setShowVatCalc((v) => !v)}
+            className="rounded-xl border-primary/20 hover:border-primary/50 flex items-center gap-2 h-11"
+          >
+            <Calculator className="h-4 w-4 text-primary" />
+            <span>14% VAT Corporate Invoice</span>
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={exportToCSV}
+            className="rounded-xl border-primary/20 hover:border-primary/50 flex items-center gap-2 hover:bg-muted/40 transition-colors h-11"
+          >
+            <Download className="h-4 w-4" />
+            <span>{currentLoc.exportCsv}</span>
+          </Button>
+        </div>
       </div>
+
+      {/* Corporate Financial Request 14% Egyptian VAT Calculator (RedGITS /admin/incomes/financial_requests Parity) */}
+      {showVatCalc && (
+        <Card className="border border-primary/30 bg-primary/5 rounded-2xl shadow-sm">
+          <CardHeader className="py-3 pb-1">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-primary" />
+              Corporate Financial Request — 14% Egyptian VAT Calculator (ETA Tax Invoice)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-2 grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Company Name</Label>
+              <Input
+                value={vatCompany}
+                onChange={(e) => setVatCompany(e.target.value)}
+                placeholder="e.g. Vodafone Egypt"
+                className="h-9 bg-background"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">ETA Tax Registration Code</Label>
+              <Input
+                value={vatTaxCode}
+                onChange={(e) => setVatTaxCode(e.target.value)}
+                placeholder="e.g. 100-200-300"
+                className="h-9 bg-background font-mono"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold">Package Subtotal (LE)</Label>
+              <Input
+                type="number"
+                value={vatSubtotal}
+                onChange={(e) => setVatSubtotal(e.target.value)}
+                placeholder="0.00"
+                className="h-9 bg-background font-semibold"
+              />
+            </div>
+            <div className="p-2.5 rounded-xl bg-background border flex flex-col justify-center">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>14% VAT:</span>
+                <span className="font-mono font-semibold">+{corporateVat.vatAmount.toLocaleString()} LE</span>
+              </div>
+              <div className="flex justify-between text-sm font-extrabold text-primary">
+                <span>Grand Total:</span>
+                <span className="font-mono">{corporateVat.grandTotal.toLocaleString()} LE</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -394,6 +487,7 @@ export default function Debtors() {
                 <TableHead className={isRtl ? 'text-right' : 'text-left'}>{currentLoc.mobile}</TableHead>
                 <TableHead className={isRtl ? 'text-right' : 'text-left'}>{currentLoc.salesRep}</TableHead>
                 <TableHead className={isRtl ? 'text-right' : 'text-left'}>{currentLoc.paymentDate}</TableHead>
+                <TableHead className={isRtl ? 'text-right' : 'text-left'}>{currentLoc.lastSeen}</TableHead>
                 <TableHead className={isRtl ? 'text-right' : 'text-left'}>{currentLoc.packageName}</TableHead>
                 <TableHead className={isRtl ? 'text-right' : 'text-left'}>{currentLoc.total}</TableHead>
                 <TableHead className={isRtl ? 'text-right' : 'text-left'}>{currentLoc.paid}</TableHead>
@@ -404,7 +498,7 @@ export default function Debtors() {
             <TableBody>
               {filteredDebtors.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={11} className="h-32 text-center text-muted-foreground">
                     {currentLoc.noDebtors}
                   </TableCell>
                 </TableRow>
@@ -413,6 +507,7 @@ export default function Debtors() {
                   const client = clients.find(c => c.id === d.clientId);
                   const remaining = (d.amount ?? 0) - (d.amount_paid ?? 0);
                   const resolvedRep = resolveUserDisplay(d.salesName, users, d.salesName || '');
+                  const lastSeenIso = lastSeenByClient.get(d.clientId);
                   
                   return (
                     <TableRow key={d.id} className="hover:bg-muted/20 transition-colors">
@@ -474,6 +569,9 @@ export default function Debtors() {
                           {formatDate(d.date)}
                         </span>
                       </TableCell>
+                      <TableCell className="text-xs font-mono text-muted-foreground">
+                        {lastSeenIso ? formatDate(lastSeenIso) : '—'}
+                      </TableCell>
                       <TableCell className="text-xs max-w-[150px] truncate" title={d.packageType}>
                         {d.packageType || 'N/A'}
                       </TableCell>
@@ -532,6 +630,48 @@ export default function Debtors() {
                   <span className="font-bold text-destructive">
                     {((selectedPayment.amount ?? 0) - (selectedPayment.amount_paid ?? 0)).toLocaleString()} LE
                   </span>
+                </div>
+              </div>
+
+              {/* Dynamic Installment Row Splitter (RedGITS v17.5 / v17.12 Parity) */}
+              <div className="rounded-xl border bg-muted/20 p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Installment Row Splitter ({installmentRows.length} rows)
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1 font-semibold"
+                    onClick={() => {
+                      const rem = (selectedPayment.amount ?? 0) - (selectedPayment.amount_paid ?? 0);
+                      setInstallmentRows((prev) => addInstallmentRowAndResplit(prev, rem));
+                    }}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add Row & Split Evenly
+                  </Button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {installmentRows.map((row) => (
+                    <button
+                      key={row.index}
+                      type="button"
+                      onClick={() => {
+                        setPayAmount(String(row.amount));
+                        setPayNotes(`Installment #${row.index}/${installmentRows.length} (Due ${row.dueDate})`);
+                      }}
+                      className="flex items-center justify-between p-2 rounded-lg border bg-background hover:border-primary text-xs transition-all"
+                    >
+                      <span className="font-semibold">
+                        #{row.index} · {row.dueDate}
+                      </span>
+                      <Badge variant="secondary" className="font-mono font-bold">
+                        {row.amount.toLocaleString()} LE
+                      </Badge>
+                    </button>
+                  ))}
                 </div>
               </div>
 

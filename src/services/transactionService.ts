@@ -72,6 +72,10 @@ export interface PaymentTransactionParams {
   discountReason?: string;
   paymentStatus?: 'paid' | 'pending' | 'failed';
   isComplimentary?: boolean;
+  installments?: any[];
+  secondaryMethod?: Payment['method'];
+  primaryTenderAmount?: number;
+  secondaryTenderAmount?: number;
   /** Idempotency key. If a payment already exists with this key, the transaction is skipped. */
   operationId?: string;
 }
@@ -345,11 +349,15 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       holdReason: params.isMemberOnHold ? (params.notes || 'Placed on hold at payment checkout') : undefined,
       holdDate: params.isMemberOnHold ? new Date().toISOString() : undefined,
       heldBy: params.isMemberOnHold ? params.recordedBy : undefined,
+      installments: params.installments && params.installments.length > 0 ? params.installments : undefined,
+      secondaryMethod: params.secondaryMethod || undefined,
+      primaryTenderAmount: params.primaryTenderAmount,
+      secondaryTenderAmount: params.secondaryTenderAmount,
       operationId: params.operationId,
       linkedEntitlementId: (!isPendingOrFailed && entitlementRef) ? entitlementRef.id : undefined,
       created_at: new Date().toISOString(),
       deleted_at: null
-    };
+    } as any;
 
     if (lockRef) {
       transaction.set(lockRef, {

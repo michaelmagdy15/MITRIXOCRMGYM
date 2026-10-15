@@ -49,6 +49,7 @@ import { isTenantInzan } from './utils/inzanOrg';
 import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
+import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
 
 const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => utilsSafeFormatDate(dateStr, formatStr, fallback);
 
@@ -329,6 +330,7 @@ export default function Clients() {
   const [newDocUrl, setNewDocUrl] = useState<string>('');
   const [transferPackageId, setTransferPackageId] = useState<string>('');
   const [transferRecipientId, setTransferRecipientId] = useState<string>('');
+  const [transferFee, setTransferFee] = useState<string>('');
   const [accountRecipientId, setAccountRecipientId] = useState<string>('');
 
   const deferredSearchTerm = useDeferredValue(searchTerm);
@@ -573,6 +575,25 @@ export default function Clients() {
         discountReason: upgradePricing.discountReason !== 'Standard' ? upgradePricing.discountReason : undefined,
         operationId: upgradeOperationId,
       });
+
+      if (isInzanTenant) {
+        await addDoc(collection(db, 'upgrades'), {
+          clientId: client.id,
+          clientName: client.name,
+          memberId: client.memberId || '',
+          fromPackage: prevActive?.packageName || client.packageType || 'Previous Package',
+          toPackage: pkg.name,
+          oldPrice: upgradeCredit,
+          newPrice: grossAmount,
+          priceDifference: upgradePricingResult.netAmount,
+          amountPaid: upgradePricingResult.amountPaid,
+          method: upgradePaymentMethod,
+          branch: client.branch || '',
+          salesName: repName || currentUser?.name || 'Staff',
+          createdBy: currentUser?.name || 'Staff',
+          date: new Date().toISOString(),
+        });
+      }
     } catch (error) {
       console.error("Error during upgrade transaction:", error);
       alert(error instanceof Error ? error.message : "Failed to process upgrade. Please try again.");
@@ -1035,12 +1056,31 @@ export default function Clients() {
       await updateClient(activeClient.id, { packages: updatedSourcePkgs });
       await updateClient(recipient.id, { packages: recipientPkgs, status: 'Active' });
 
+      const parsedFee = isInzanTenant && transferFee ? Math.max(0, parseFloat(transferFee) || 0) : 0;
+
+      if (isInzanTenant) {
+        await addDoc(collection(db, 'transfers'), {
+          fromClientId: activeClient.id,
+          fromClientName: activeClient.name,
+          fromMemberId: activeClient.memberId || '',
+          toClientId: recipient.id,
+          toClientName: recipient.name,
+          toMemberId: recipient.memberId || '',
+          packageName: transferPkg.packageName,
+          sessionsTransferred: transferPkg.sessionsRemaining ?? 0,
+          transferFee: parsedFee,
+          branch: activeClient.branch || recipient.branch || '',
+          createdBy: currentUser?.name || 'Staff',
+          date: new Date().toISOString(),
+        });
+      }
+
       // Log audit events
       await addDoc(collection(db, 'auditLogs'), {
         action: 'UPDATE',
         entityType: 'client',
         entityId: activeClient.id,
-        details: `Transferred package "${transferPkg.packageName}" to ${recipient.name} (ID: ${recipient.memberId || 'None'}).`,
+        details: `Transferred package "${transferPkg.packageName}" to ${recipient.name} (ID: ${recipient.memberId || 'None'})${parsedFee > 0 ? ` • Transfer Fee: ${parsedFee} EGP` : ''}.`,
         timestamp: new Date().toISOString(),
         userId: currentUser?.id || 'staff',
         userName: currentUser?.name || 'Staff'
@@ -1059,6 +1099,7 @@ export default function Clients() {
       alert(`Package successfully transferred to ${recipient.name}.`);
       setTransferPackageId('');
       setTransferRecipientId('');
+      setTransferFee('');
       loadClientDetails(activeClient.id);
     } catch (error) {
       console.error("Package transfer error:", error);
@@ -1857,6 +1898,34 @@ export default function Clients() {
                     value={newMemberPhone} 
                     onChange={(val) => setNewMemberPhone(val)} 
                   />
+                  {(() => {
+                    if (!isInzanTenant || !newMemberPhone || newMemberPhone.replace(/\D/g, '').length < 7) return null;
+                    const simMatches = checkPhoneSimilarityForCandidate(newMemberPhone, clients);
+                    if (simMatches.length === 0) return null;
+                    return (
+                      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs space-y-1.5">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400">
+                          <AlertTriangle className="h-4 w-4 shrink-0" />
+                          <span>
+                            {`RedGITS 7-Digit Phone Similarity Alert (${simMatches.length})`}
+                          </span>
+                        </div>
+                        <div className="space-y-1 max-h-28 overflow-y-auto">
+                          {simMatches.map(({ matchedClient: m, sharedDigits }) => (
+                            <div key={m.id} className="flex items-center justify-between bg-background/70 px-2.5 py-1.5 rounded border border-amber-500/20">
+                              <span className="font-semibold">{m.name} {m.memberId ? `(#${m.memberId})` : ''}</span>
+                              <span className="text-muted-foreground">{m.status} • {maskEgyptianPhone(m.phone, true)} (<code className="font-mono text-amber-600 dark:text-amber-400">{sharedDigits}</code>)</span>
+                            </div>
+                          ))}
+                        </div>
+                        {!newMemberLinked && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Verify this is not a duplicate account or unpaid debtor. Check "Linked family account" below if sharing a family phone.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="space-y-3">
                   <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.branch')}</Label>
@@ -3218,10 +3287,10 @@ export default function Clients() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 text-[10px] px-2 shrink-0"
+                                    className="h-7 text-[10px] px-2 shrink-0 border-amber-500/40 text-amber-600 dark:text-amber-400"
                                     onClick={() => setDateAdjustIdx(idx)}
                                   >
-                                    <Calendar className="h-3 w-3 mr-1" /> Adjust Dates
+                                    <Calendar className="h-3 w-3 mr-1" /> Dates / +/- Days
                                   </Button>
                                 )}
                               </div>
@@ -4015,6 +4084,20 @@ export default function Clients() {
                             ))}
                         </select>
                       </div>
+
+                      {isInzanTenant && (
+                        <div className="space-y-1 md:col-span-2">
+                          <Label className="text-xs font-semibold text-muted-foreground">Transfer Fee (EGP — Optional, Logged to Transfer Report)</Label>
+                          <Input
+                            type="number"
+                            min="0"
+                            className="h-9 bg-background"
+                            placeholder="0.00"
+                            value={transferFee}
+                            onChange={(e) => setTransferFee(e.target.value)}
+                          />
+                        </div>
+                      )}
                     </div>
                     <Button className="w-full text-xs font-bold" onClick={handleTransferPackage}>
                       Execute Package Transfer

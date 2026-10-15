@@ -30,6 +30,7 @@ import { MessageCircle } from 'lucide-react';
 import { downloadFile } from './utils/download';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { addAuditLog } from './services/auditService';
+import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
 
 export default function Leads() {
   const {
@@ -1548,6 +1549,34 @@ export default function Leads() {
                     value={newLeadPhone} 
                     onChange={(val) => setNewLeadPhone(val)} 
                   />
+                  {(() => {
+                    if (!isInzan || !newLeadPhone || newLeadPhone.replace(/\D/g, '').length < 7) return null;
+                    const simMatches = checkPhoneSimilarityForCandidate(newLeadPhone, clients);
+                    if (simMatches.length === 0) return null;
+                    return (
+                      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs space-y-1.5">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          <span>
+                            {`RedGITS 7-Digit Phone Similarity Alert (${simMatches.length})`}
+                          </span>
+                        </div>
+                        <div className="space-y-1 max-h-28 overflow-y-auto">
+                          {simMatches.map(({ matchedClient: m, sharedDigits }) => (
+                            <div key={m.id} className="flex items-center justify-between bg-background/70 px-2.5 py-1.5 rounded border border-amber-500/20">
+                              <span className="font-semibold">{m.name} {m.memberId ? `(#${m.memberId})` : ''}</span>
+                              <span className="text-muted-foreground">{m.status} • {maskEgyptianPhone(m.phone, true)} (<code className="font-mono text-amber-600 dark:text-amber-400">{sharedDigits}</code>)</span>
+                            </div>
+                          ))}
+                        </div>
+                        {!newLeadLinked && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Verify this is not a duplicate trial or unpaid debtor account. Check "Linked family account" below if sharing a family phone.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="space-y-2">
                   <Label>{t('leads.table.source')}</Label>

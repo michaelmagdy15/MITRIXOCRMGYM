@@ -34,6 +34,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { addAuditLog } from './services/auditService';
 import { useOperationId } from './hooks/useOperationId';
 import { ShieldAlert, Paperclip } from 'lucide-react';
+import { calculateSplitTenderRemaining, splitInstallmentsEvenly } from './utils/installmentSplitter';
 
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
@@ -72,6 +73,13 @@ export default function Payments() {
   const isInzan = isTenantInzan(branding?.companyName) || getTenantId() === 'inzanathletics';
   const isCurrentUserAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin';
   const isSalesManager = canReassignMemberSalesRep(currentUser);
+
+  // RedGITS v17.12 Parity: Dual-Tender Split Payment + Even Installment Schedule Builder State
+  const [useSplitTender, setUseSplitTender] = useState(false);
+  const [secondaryMethod, setSecondaryMethod] = useState<Payment['method']>('Credit Card');
+  const [primaryTenderAmount, setPrimaryTenderAmount] = useState('');
+  const [installmentCount, setInstallmentCount] = useState(2);
+  const [firstInstallmentDueDate, setFirstInstallmentDueDate] = useState(() => format(addDays(new Date(), 30), 'yyyy-MM-dd'));
 
   // Corporate Discount Verification State
   const [discountReason, setDiscountReason] = useState<'Standard' | 'Corporate' | 'Referral' | 'Promotional'>('Standard');
@@ -525,6 +533,33 @@ export default function Payments() {
 
       const effectiveBranch = normalizeBranchName(paymentBranch || newClientBranch || selectedClient?.branch || currentUser?.branch || (branches.length > 0 ? branches[0] : ''));
 
+      const parsedPrimaryTender = useSplitTender
+        ? Math.min(pricingBreakdown.amountPaid, Math.max(0, parseFloat(primaryTenderAmount) || 0))
+        : pricingBreakdown.amountPaid;
+      const parsedSecondaryTender = useSplitTender
+        ? calculateSplitTenderRemaining(pricingBreakdown.amountPaid, parsedPrimaryTender).remainingDebt
+        : 0;
+
+      const generatedInstallments =
+        pricingBreakdown.remainingBalance > 0
+          ? splitInstallmentsEvenly(
+              pricingBreakdown.remainingBalance,
+              installmentCount,
+              firstInstallmentDueDate || format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+              30
+            ).map((inst) => ({
+              id: `inst_${inst.index}_${Date.now()}`,
+              amount: inst.amount,
+              dueDate: inst.dueDate,
+              status: 'pending' as const,
+            }))
+          : undefined;
+
+      const splitNoteSuffix =
+        useSplitTender && parsedSecondaryTender > 0
+          ? ` [Split Tender: ${method} ${parsedPrimaryTender} LE + ${secondaryMethod} ${parsedSecondaryTender} LE]`
+          : '';
+
       await processPaymentTransaction({
         clientId: isGuest ? 'WALK-IN-GUEST' : clientId,
         clientName: effectiveClientName,
@@ -542,7 +577,7 @@ export default function Payments() {
         packageType: finalPackageType,
         packageCategory: finalCategory,
         coachName: isPT ? resolvedCoachName : undefined,
-        notes,
+        notes: `${notes || ''}${splitNoteSuffix}`.trim(),
         receiptSerial: receiptNumber.trim() || undefined,
         sales_rep_id: effectiveSalesRepId || '',
         salesName: effectiveSalesName || '',
@@ -560,6 +595,10 @@ export default function Payments() {
         previousPackageName: isRenewalPayment ? finalPackageType : undefined,
         corporateProofUrl: discountReason === 'Corporate' ? corporateProofUrl : undefined,
         discountReason: discountReason !== 'Standard' ? discountReason : undefined,
+        installments: generatedInstallments,
+        secondaryMethod: useSplitTender && parsedSecondaryTender > 0 ? secondaryMethod : undefined,
+        primaryTenderAmount: useSplitTender ? parsedPrimaryTender : undefined,
+        secondaryTenderAmount: useSplitTender && parsedSecondaryTender > 0 ? parsedSecondaryTender : undefined,
         operationId: newPaymentOperationId
       });
       if (isInzan && !isGuest && clientId && discountReason === 'Corporate' && corporateProofUrl) {
@@ -607,6 +646,10 @@ export default function Payments() {
       setCorporateProofFileName('');
       setInlineNationalId('');
       setNewClientNationalId('');
+      setUseSplitTender(false);
+      setPrimaryTenderAmount('');
+      setSecondaryMethod('Credit Card');
+      setInstallmentCount(2);
   };
 
   const handleHoldPayment = async () => {
@@ -955,6 +998,188 @@ export default function Payments() {
     win.document.close();
   };
 
+  const printThermal80mmReceipt = (payment: Payment, client: any) => {
+    const win = window.open('', '_blank', 'width=360,height=640');
+    if (!win) {
+      setAlertTitle('Popups Blocked');
+      setAlertDescription('Please allow popups to print 80mm thermal receipts.');
+      setAlertOpen(true);
+      return;
+    }
+
+    const paidNow = Number(payment.amount_paid ?? payment.amount) || 0;
+    const netTotal = Number(payment.amount) || 0;
+    const remBalance = Math.max(0, netTotal - paidNow);
+    const splitSecondaryMethod = (payment as any).secondaryMethod;
+    const splitPrimaryAmt = (payment as any).primaryTenderAmount;
+    const splitSecondaryAmt = (payment as any).secondaryTenderAmount;
+    const installmentsList: any[] = Array.isArray((payment as any).installments) ? (payment as any).installments : [];
+    const cashierName = users.find(u => u.id === payment.recordedBy)?.name || (payment as any).recordedByName || currentUser?.name || 'Reception';
+    const branchLabel = resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : 'MAIN';
+    const serialNo = payment.receiptSerial || payment.id.substring(0, 8).toUpperCase();
+
+    win.document.write(`
+      <html>
+        <head>
+          <title>80mm Receipt - ${serialNo}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              width: 72mm;
+              margin: 0 auto;
+              padding: 4mm 2mm;
+              font-size: 12px;
+              color: #000;
+              background: #fff;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-top: 1px dashed #000; margin: 6px 0; }
+            .row { display: flex; justify-content: space-between; margin: 3px 0; }
+            .small { font-size: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="center bold" style="font-size: 15px;">${branding.companyName || 'MITRIXO GYM'}</div>
+          <div class="center small">Branch: ${branchLabel} | 80mm POS Thermal Receipt</div>
+          <div class="center small">Receipt #: ${serialNo}</div>
+          <div class="center small">${safeFormatDate(getEgyptDate(payment.date), 'yyyy-MM-dd hh:mm a')}</div>
+          <div class="line"></div>
+          <div class="row"><span>Member:</span><span class="bold">${client?.name || payment.clientName || payment.client_name || 'Walk-in'}</span></div>
+          <div class="row"><span>Member ID:</span><span>#${client?.memberId || (payment as any).memberId || 'N/A'}</span></div>
+          <div class="row"><span>Cashier:</span><span>${cashierName}</span></div>
+          ${payment.salesName ? `<div class="row"><span>Sales Rep:</span><span>${payment.salesName}</span></div>` : ''}
+          <div class="line"></div>
+          <div class="bold">${payment.packageType}</div>
+          ${payment.coachName ? `<div class="small">Trainer: ${payment.coachName}</div>` : ''}
+          <div class="row"><span>Net Package Total:</span><span>${netTotal.toLocaleString()} LE</span></div>
+          <div class="row bold"><span>PAID NOW:</span><span>${paidNow.toLocaleString()} LE</span></div>
+          ${
+            splitSecondaryMethod && splitSecondaryAmt > 0
+              ? `<div class="row small"><span>- ${payment.method}:</span><span>${Number(splitPrimaryAmt || 0).toLocaleString()} LE</span></div>
+                 <div class="row small"><span>- ${splitSecondaryMethod}:</span><span>${Number(splitSecondaryAmt).toLocaleString()} LE</span></div>`
+              : `<div class="row small"><span>Method:</span><span>${payment.method}${payment.instapayRef ? ' (' + payment.instapayRef + ')' : ''}</span></div>`
+          }
+          ${
+            remBalance > 0
+              ? `<div class="line"></div>
+                 <div class="row bold"><span>REMAINING DEBT:</span><span>${remBalance.toLocaleString()} LE</span></div>
+                 ${installmentsList
+                   .map(
+                     (inst, idx) =>
+                       `<div class="row small"><span>Inst #${idx + 1} (${inst.dueDate}):</span><span>${Number(inst.amount).toLocaleString()} LE</span></div>`
+                   )
+                   .join('')}`
+              : ''
+          }
+          <div class="line"></div>
+          <div class="center small">Thank you for training with us!</div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
+  const printCashierShiftZReport = () => {
+    const win = window.open('', '_blank', 'width=360,height=680');
+    if (!win) {
+      setAlertTitle('Popups Blocked');
+      setAlertDescription('Please allow popups to print the Cashier Shift Z-Report.');
+      setAlertOpen(true);
+      return;
+    }
+
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const sourcePayments =
+      deferredFilterDateFrom || deferredFilterDateTo
+        ? filteredPayments
+        : filteredPayments.filter((p) => (p.date || '').substring(0, 10) === todayStr);
+
+    const activePayments = sourcePayments.filter((p) => p.status !== 'refunded');
+    const totalsByMethod: Record<string, number> = {
+      Cash: 0,
+      'Credit Card': 0,
+      'Bank Transfer': 0,
+      Instapay: 0,
+      Other: 0,
+    };
+
+    let grandTotalCollected = 0;
+    for (const p of activePayments) {
+      const paidVal = Number(p.amount_paid ?? p.amount) || 0;
+      const secMethod = (p as any).secondaryMethod as string | undefined;
+      const priAmt = Number((p as any).primaryTenderAmount) || 0;
+      const secAmt = Number((p as any).secondaryTenderAmount) || 0;
+
+      if (secMethod && secAmt > 0) {
+        totalsByMethod[p.method] = (totalsByMethod[p.method] || 0) + priAmt;
+        totalsByMethod[secMethod] = (totalsByMethod[secMethod] || 0) + secAmt;
+      } else {
+        totalsByMethod[p.method] = (totalsByMethod[p.method] || 0) + paidVal;
+      }
+      grandTotalCollected += paidVal;
+    }
+
+    win.document.write(`
+      <html>
+        <head>
+          <title>Shift Z-Report - ${todayStr}</title>
+          <style>
+            @page { size: 80mm auto; margin: 0; }
+            body {
+              font-family: 'Courier New', Courier, monospace;
+              width: 72mm;
+              margin: 0 auto;
+              padding: 4mm 2mm;
+              font-size: 12px;
+              color: #000;
+              background: #fff;
+            }
+            .center { text-align: center; }
+            .bold { font-weight: bold; }
+            .line { border-top: 1px dashed #000; margin: 6px 0; }
+            .row { display: flex; justify-content: space-between; margin: 3px 0; }
+            .small { font-size: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="center bold" style="font-size: 15px;">${branding.companyName || 'MITRIXO GYM'}</div>
+          <div class="center bold">CASHIER SHIFT Z-REPORT (80MM)</div>
+          <div class="center small">Date: ${todayStr} | Cashier: ${currentUser?.name || 'Admin'}</div>
+          <div class="center small">Branch Filter: ${deferredFilterBranch}</div>
+          <div class="line"></div>
+          <div class="row"><span>Transactions Count:</span><span class="bold">${activePayments.length}</span></div>
+          <div class="line"></div>
+          ${Object.entries(totalsByMethod)
+            .map(
+              ([m, val]) =>
+                `<div class="row"><span>${m}:</span><span class="bold">${val.toLocaleString()} LE</span></div>`
+            )
+            .join('')}
+          <div class="line"></div>
+          <div class="row bold" style="font-size: 14px;"><span>TOTAL COLLECTED:</span><span>${grandTotalCollected.toLocaleString()} LE</span></div>
+          <div class="line"></div>
+          <div class="small" style="margin-top: 14px;">Outgoing Cashier Sign: _______________</div>
+          <div class="small" style="margin-top: 14px;">Incoming Cashier Sign: _______________</div>
+          <script>
+            window.onload = function() {
+              window.print();
+              setTimeout(function() { window.close(); }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
   const getMethodIcon = (method: Payment['method']) => {
     switch (method) {
       case 'Cash': return <Banknote className="h-4 w-4 mr-2 text-green-600" />;
@@ -1238,13 +1463,26 @@ export default function Payments() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-2">
         <h2 className="text-2xl font-bold tracking-tight">{t('payments.title')}</h2>
-        <Dialog open={isNewPaymentOpen} onOpenChange={setIsNewPaymentOpen}>
-          <DialogTrigger render={<Button />}>
-            <Plus className="mr-2 h-4 w-4" /> {t('payments.record_payment')}
-          </DialogTrigger>
-          <DialogContent className="w-full max-w-full md:max-w-[1400px] h-[100dvh] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-none md:rounded-3xl bg-background/95 backdrop-blur-xl">
+        <div className="flex items-center gap-2">
+          {isInzan && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={printCashierShiftZReport}
+              className="gap-1.5 font-semibold border-primary/30 hover:bg-primary/5"
+              title="Print 80mm Thermal Cashier Shift Z-Report (Cash + Card + Instapay totals)"
+            >
+              <Receipt className="h-4 w-4 text-primary" />
+              Shift Z-Report (80mm)
+            </Button>
+          )}
+          <Dialog open={isNewPaymentOpen} onOpenChange={setIsNewPaymentOpen}>
+            <DialogTrigger render={<Button />}>
+              <Plus className="mr-2 h-4 w-4" /> {t('payments.record_payment')}
+            </DialogTrigger>
+            <DialogContent className="w-full max-w-full md:max-w-[1400px] h-[100dvh] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-none md:rounded-3xl bg-background/95 backdrop-blur-xl">
             <DialogHeader className="p-5 md:p-10 pb-4 md:pb-6 pt-12 md:pt-10 bg-muted/30 border-b">
               <DialogTitle className="text-xl md:text-3xl font-extrabold tracking-tight flex items-center gap-2 md:gap-3">
                 <CreditCard className="h-6 w-6 md:h-8 md:w-8 text-primary" />
@@ -1576,9 +1814,54 @@ export default function Payments() {
                       value={amountPaid}
                       onChange={(e) => setAmountPaid(e.target.value)}
                     />
-                    {amountPaid && pricingBreakdown.remainingBalance > 0 && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400 ml-1">
-                        Partial payment — remaining balance: {formatCurrencyAmount(pricingBreakdown.remainingBalance)}
+                    {isInzan && amountPaid && pricingBreakdown.remainingBalance > 0 && (
+                      <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 space-y-2 mt-2">
+                        <div className="flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
+                          <span>Remaining Debt (Installment Schedule)</span>
+                          <span>{formatCurrencyAmount(pricingBreakdown.remainingBalance)}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Split Installments</Label>
+                            <select
+                              value={installmentCount}
+                              onChange={(e) => setInstallmentCount(Number(e.target.value))}
+                              className="w-full h-8 rounded-lg bg-background border px-2 text-xs font-bold"
+                            >
+                              <option value={1}>1 Installment</option>
+                              <option value={2}>2 Even Installments</option>
+                              <option value={3}>3 Even Installments</option>
+                              <option value={4}>4 Even Installments</option>
+                            </select>
+                          </div>
+                          <div>
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">1st Due Date</Label>
+                            <Input
+                              type="date"
+                              value={firstInstallmentDueDate}
+                              onChange={(e) => setFirstInstallmentDueDate(e.target.value)}
+                              className="h-8 text-xs bg-background px-2"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1 pt-1 border-t border-amber-500/20 text-[11px] font-mono">
+                          {splitInstallmentsEvenly(
+                            pricingBreakdown.remainingBalance,
+                            installmentCount,
+                            firstInstallmentDueDate || format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+                            30
+                          ).map((inst, idx) => (
+                            <div key={inst.index} className="flex justify-between">
+                              <span>Installment #{idx + 1} ({inst.dueDate}):</span>
+                              <span className="font-bold">{inst.amount.toLocaleString()} LE</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!isInzan && amountPaid && pricingBreakdown.remainingBalance > 0 && (
+                      <p className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-1">
+                        Remaining Debt: {formatCurrencyAmount(pricingBreakdown.remainingBalance)}
                       </p>
                     )}
                   </div>
@@ -1659,7 +1942,28 @@ export default function Payments() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_method')}</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_method')}</Label>
+                    {isInzan && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !useSplitTender;
+                          setUseSplitTender(next);
+                          if (next && !primaryTenderAmount) {
+                            setPrimaryTenderAmount(String(Math.round(pricingBreakdown.amountPaid / 2)));
+                          }
+                        }}
+                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+                          useSplitTender
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-muted/50 text-muted-foreground border-border hover:border-primary/40'
+                        }`}
+                      >
+                        {useSplitTender ? '✓ Split Tender (2 Methods)' : '+ Split Tender (Pay Type 1 + 2)'}
+                      </button>
+                    )}
+                  </div>
                   <Select value={method} onValueChange={(v) => v && setMethod(v as Payment['method'])}>
                     <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
                       <SelectValue placeholder={t('payments.payment_method')} />
@@ -1672,6 +1976,53 @@ export default function Payments() {
                       <SelectItem value="Other" className="rounded-xl py-3 px-4">{t('leads.tabs.other')}</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  {isInzan && useSplitTender && (
+                    <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 space-y-2.5">
+                      <div className="text-[11px] font-bold uppercase text-primary">
+                        RedGITS Dual-Tender Split (Pay Type 1 + Pay Type 2)
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">
+                            {method} Amount (LE)
+                          </Label>
+                          <Input
+                            type="number"
+                            value={primaryTenderAmount}
+                            onChange={(e) => setPrimaryTenderAmount(e.target.value)}
+                            placeholder="0"
+                            className="h-9 bg-background font-mono text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">
+                            Pay Type 2 Method
+                          </Label>
+                          <select
+                            value={secondaryMethod}
+                            onChange={(e) => setSecondaryMethod(e.target.value as Payment['method'])}
+                            className="w-full h-9 rounded-md bg-background border px-2 text-xs font-bold"
+                          >
+                            <option value="Credit Card">Visa / Credit Card</option>
+                            <option value="Instapay">Instapay</option>
+                            <option value="Cash">Cash</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-primary/15">
+                        <span className="text-muted-foreground">Auto-calculated {secondaryMethod}:</span>
+                        <span className="font-mono font-bold text-primary">
+                          {calculateSplitTenderRemaining(
+                            pricingBreakdown.amountPaid,
+                            parseFloat(primaryTenderAmount) || 0
+                          ).remainingDebt.toLocaleString()}{' '}
+                          LE
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {method === 'Instapay' && (
@@ -1924,6 +2275,7 @@ export default function Payments() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4 mb-6 bg-card p-4 rounded-xl border shadow-sm">
@@ -2268,6 +2620,17 @@ export default function Payments() {
                         <TableCell className="text-muted-foreground text-xs hidden xl:table-cell">{payment.notes || '-'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {isInzan && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => printThermal80mmReceipt(payment, client)}
+                                title="Print 80mm Thermal POS Receipt"
+                                className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                              >
+                                <Receipt className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="sm" onClick={() => printInvoice(payment, client)} title={t('payments.print_invoice')}>
                               <Printer className="h-4 w-4" />
                             </Button>
