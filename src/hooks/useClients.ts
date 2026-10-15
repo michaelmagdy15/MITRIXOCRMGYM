@@ -196,10 +196,30 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         collection(db, 'clients'),
         where('status', 'in', ['Expired', 'expired'])
       );
+      const isInzan = getTenantId() === 'inzanathletics';
+      const cacheKey = 'inzan_expired_sync_ts';
+      const lastSync = Number(localStorage.getItem(cacheKey) || '0');
+      const twelveHoursMs = 12 * 60 * 60 * 1000;
+      if (isInzan && Date.now() - lastSync < twelveHoursMs) {
+        try {
+          const { getDocsFromCache } = await import('firebase/firestore');
+          const cachedSnap = await getDocsFromCache(q);
+          if (!cachedSnap.empty) {
+            setExpiredMembersList(
+              cachedSnap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
+            );
+            setExpiredLoaded(true);
+            return;
+          }
+        } catch {}
+      }
       const snap = await getDocs(q);
       setExpiredMembersList(
         snap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
       );
+      if (isInzan && !snap.empty) {
+        localStorage.setItem(cacheKey, String(Date.now()));
+      }
       setExpiredLoaded(true);
     } catch (error) {
       console.error('Error fetching expired members:', error);
