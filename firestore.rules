@@ -115,6 +115,22 @@ service cloud.firestore {
         allow update: if isStaff() || ownsClientProfile(clientId);
         allow delete: if isStaff();
       }
+
+      match /attendance_history/{recordId} {
+        allow read: if isStaff() || ownsClientProfile(clientId);
+        allow create, update: if isStaff();
+        allow delete: if isManager();
+      }
+
+      match /comments/{commentId} {
+        allow read, create, update: if isStaff();
+        allow delete: if isManager();
+      }
+
+      match /interactions/{interactionId} {
+        allow read, create, update: if isStaff();
+        allow delete: if isManager();
+      }
     }
     
     // PAYMENTS (Financial Transactions)

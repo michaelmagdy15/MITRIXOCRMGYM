@@ -390,6 +390,22 @@ service cloud.firestore {
         allow update: if isTenantStaff() || isOwnClientRecord(clientId);
         allow delete: if isTenantStaff();
       }
+
+      match /attendance_history/{recordId} {
+        allow read: if isTenantStaff() || isOwnClientRecord(clientId);
+        allow create, update: if isTenantStaff();
+        allow delete: if isTenantAdmin();
+      }
+
+      match /comments/{commentId} {
+        allow read, create, update: if isTenantStaff();
+        allow delete: if isTenantAdmin();
+      }
+
+      match /interactions/{interactionId} {
+        allow read, create, update: if isTenantStaff();
+        allow delete: if isTenantAdmin();
+      }
     }
 
     match /packages/{packageId} {
