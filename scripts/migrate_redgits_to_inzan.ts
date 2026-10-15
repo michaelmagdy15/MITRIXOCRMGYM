@@ -124,7 +124,7 @@ async function main() {
     const idTagMatch = String(rawMemberName || '').match(/\[ID:(\d+)\]/);
     const cleanPhone = normalizePhone(rawMobile);
     if (cleanPhone && memberId) phoneByMemberId.set(String(memberId).trim(), cleanPhone);
-    if (cleanPhone && idTagMatch) phoneByMemberId.set(idTagMatch[1], cleanPhone);
+    if (cleanPhone && idTagMatch?.[1]) phoneByMemberId.set(idTagMatch[1], cleanPhone);
     if (cleanPhone && memberName) phoneByName.set(memberName.toLowerCase(), cleanPhone);
     const subRecord = {
       createdAt,
@@ -146,8 +146,8 @@ async function main() {
       arr.push(subRecord);
       subscriptionsByMemberId.set(key, arr);
     }
-    if (idTagMatch && idTagMatch[1] !== String(memberId).trim()) {
-      const key2 = idTagMatch[1];
+    if (idTagMatch?.[1] && idTagMatch[1] !== String(memberId).trim()) {
+      const key2: string = idTagMatch[1];
       const arr2 = subscriptionsByMemberId.get(key2) || [];
       arr2.push(subRecord);
       subscriptionsByMemberId.set(key2, arr2);
@@ -208,7 +208,7 @@ async function main() {
     if (!Array.isArray(row) || row.length < 6) continue;
     const joined = row.join(' ');
     const idMatch = joined.match(/\[ID:(\d+)\]/);
-    const rId = idMatch ? idMatch[1] : /^\d+$/.test(row[0]) ? row[0] : '';
+    const rId = idMatch?.[1] ? idMatch[1] : /^\d+$/.test(row[0] || '') ? String(row[0]) : '';
     if (!rId) continue;
     const isActiveRow = row.length >= 11 && (row[4] === 'Active' || /^\d{4}-\d{2}-\d{2}$/.test(row[5] || ''));
     if (!listByRedgitsId.has(rId) || isActiveRow) {
