@@ -1,73 +1,187 @@
-/* Inzan-only palette. Portalled dialogs inherit these root tokens too. */
+/* Inzan-only palette. Portalled dialogs inherit these root tokens too.
+ *
+ * Readability goals (Inzan is locked to dark mode in ThemeContext):
+ *  - No pure #000 surfaces or pure #fff text: soft charcoal + off-white cuts glare.
+ *  - Body text ~13-15:1 contrast, secondary text >= 7:1, status colours >= 4.5:1.
+ *  - Three clearly separated surface levels: page < card < raised/popover.
+ */
 html[data-tenant-theme="inzanathletics"] {
   color-scheme: dark;
-  --background: #000000;
-  --foreground: #f5f5f5;
-  --card: #1a1a1a;
-  --card-foreground: #f5f5f5;
-  --popover: #1a1a1a;
-  --popover-foreground: #f5f5f5;
-  --primary: #f5f5f5;
-  --primary-foreground: #000000;
-  --secondary: #2b2b2b;
-  --secondary-foreground: #f5f5f5;
-  --muted: #2b2b2b;
-  --muted-foreground: #bdbdbd;
-  --accent: #2b2b2b;
-  --accent-foreground: #ffffff;
-  --border: #444444;
-  --input: #444444;
-  --ring: #d4d4d4;
-  --sidebar: #1a1a1a;
-  --sidebar-foreground: #f5f5f5;
-  --sidebar-primary: #f5f5f5;
-  --sidebar-primary-foreground: #000000;
-  --sidebar-accent: #2b2b2b;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #444444;
-  --sidebar-ring: #d4d4d4;
-  --chrome: linear-gradient(135deg, #2b2b2b, #1a1a1a, #000000);
-  --chrome-deep: #2b2b2b;
-  --chrome-shine: #ffffff26;
-  --strike-warm: #1a1a1a;
-  --brand-accent: #2b2b2b !important;
-  --brand-accent-muted: #2b2b2b !important;
-  --color-zinc-950: #000000;
-  --color-zinc-900: #1a1a1a;
-  --color-zinc-800: #2b2b2b;
-  --color-neutral-950: #000000;
-  --color-neutral-900: #1a1a1a;
-  --color-neutral-800: #2b2b2b;
+
+  /* Surfaces */
+  --inzan-bg: #131315;
+  --inzan-surface: #1c1c1f;
+  --inzan-raised: #232327;
+  --inzan-subtle: #2b2b30;
+  --inzan-line: #36363c;
+  --inzan-line-strong: #4a4a52;
+
+  /* Text */
+  --inzan-text: #e6e6e9;
+  --inzan-text-muted: #a8a8b0;
+  --inzan-text-faint: #8a8a93;
+
+  /* Status (tuned for dark surfaces) */
+  --inzan-red: #f28b8b;
+  --inzan-green: #6fd69a;
+  --inzan-amber: #f2c46d;
+  --inzan-blue: #7fb2f5;
+  --inzan-violet: #c4a3f5;
+  --inzan-pink: #f29bc4;
+  --inzan-teal: #6fd3c8;
+  --inzan-orange: #f5a76f;
+
+  --background: var(--inzan-bg);
+  --foreground: var(--inzan-text);
+  --card: var(--inzan-surface);
+  --card-foreground: var(--inzan-text);
+  --popover: var(--inzan-raised);
+  --popover-foreground: var(--inzan-text);
+  --primary: var(--inzan-text);
+  --primary-foreground: var(--inzan-bg);
+  --secondary: var(--inzan-subtle);
+  --secondary-foreground: var(--inzan-text);
+  --muted: var(--inzan-subtle);
+  --muted-foreground: var(--inzan-text-muted);
+  --accent: var(--inzan-subtle);
+  --accent-foreground: var(--inzan-text);
+  --destructive: var(--inzan-red);
+  --border: var(--inzan-line);
+  --input: var(--inzan-line);
+  --ring: #8c8c96;
+  --sidebar: #18181b;
+  --sidebar-foreground: var(--inzan-text);
+  --sidebar-primary: var(--inzan-text);
+  --sidebar-primary-foreground: var(--inzan-bg);
+  --sidebar-accent: var(--inzan-subtle);
+  --sidebar-accent-foreground: var(--inzan-text);
+  --sidebar-border: var(--inzan-line);
+  --sidebar-ring: #8c8c96;
+  --chart-1: #e6e6e9;
+  --chart-2: #b4b4bc;
+  --chart-3: #8a8a93;
+  --chart-4: #64646c;
+  --chart-5: #45454c;
+  --chrome: linear-gradient(135deg, var(--inzan-subtle), var(--inzan-surface), var(--inzan-bg));
+  --chrome-deep: var(--inzan-subtle);
+  --chrome-shine: #ffffff1f;
+  --strike-warm: var(--inzan-surface);
+  --brand-accent: var(--inzan-subtle) !important;
+  --brand-accent-muted: var(--inzan-subtle) !important;
+  --color-zinc-950: var(--inzan-bg);
+  --color-zinc-900: var(--inzan-surface);
+  --color-zinc-800: var(--inzan-subtle);
+  --color-neutral-950: var(--inzan-bg);
+  --color-neutral-900: var(--inzan-surface);
+  --color-neutral-800: var(--inzan-subtle);
 }
+
 html[data-tenant-theme="inzanathletics"] body {
-  background: #000000;
+  background: var(--inzan-bg);
+  color: var(--inzan-text);
 }
-/* Legacy surfaces which predate semantic tokens. Keep QR canvases/SVGs intact. */
+
+/* ── Legacy light-mode surfaces which predate semantic tokens. QR canvases/SVGs stay intact. ── */
 html[data-tenant-theme="inzanathletics"] :is(.bg-white, .bg-zinc-50, .bg-gray-50, .bg-slate-50, .bg-neutral-50) {
-  background-color: #1a1a1a;
-  color: #f5f5f5;
+  background-color: var(--inzan-surface);
+  color: var(--inzan-text);
 }
 html[data-tenant-theme="inzanathletics"] :is(.bg-zinc-100, .bg-gray-100, .bg-slate-100, .bg-neutral-100) {
-  background-color: #2b2b2b;
+  background-color: var(--inzan-subtle);
 }
-html[data-tenant-theme="inzanathletics"] :is(.text-black, .text-zinc-900, .text-gray-900, .text-slate-900, .text-neutral-900, .text-zinc-800, .text-zinc-700, .text-gray-700) {
-  color: #f5f5f5;
+html[data-tenant-theme="inzanathletics"] :is(.bg-black, .bg-zinc-950, .bg-neutral-950) {
+  background-color: var(--inzan-bg);
 }
-html[data-tenant-theme="inzanathletics"] :is(.text-zinc-500, .text-zinc-600, .text-gray-500, .text-gray-600) {
-  color: #bdbdbd;
+html[data-tenant-theme="inzanathletics"] :is(.text-black, .text-zinc-900, .text-gray-900, .text-slate-900, .text-neutral-900, .text-zinc-800, .text-gray-800, .text-slate-800, .text-zinc-700, .text-gray-700, .text-slate-700) {
+  color: var(--inzan-text);
 }
-html[data-tenant-theme="inzanathletics"] img[src="/inzanlogo.png"] { filter: invert(1); }
-html[data-tenant-theme="inzanathletics"] #mobile-splash { background: #000000; }
-html[data-tenant-theme="inzanathletics"] :is(.mobile-splash-bg, .mobile-splash-overlay) { background: #000000; }
+html[data-tenant-theme="inzanathletics"] :is(.text-zinc-500, .text-zinc-600, .text-gray-500, .text-gray-600, .text-slate-500, .text-slate-600, .text-neutral-500, .text-neutral-600) {
+  color: var(--inzan-text-muted);
+}
+html[data-tenant-theme="inzanathletics"] :is(.text-zinc-400, .text-gray-400, .text-slate-400, .text-neutral-400) {
+  color: var(--inzan-text-faint);
+}
+
+/* ── Disabled / read-only form fields: stay legible instead of fading to 50%. ── */
+html[data-tenant-theme="inzanathletics"] :is(input, textarea, select, button[data-slot="select-trigger"]):is(:disabled, [readonly]) {
+  opacity: 1;
+  color: #c9c9cf;
+  background-color: var(--inzan-raised);
+  border-color: var(--inzan-line);
+  -webkit-text-fill-color: #c9c9cf;
+}
+html[data-tenant-theme="inzanathletics"] :is(input, textarea)::placeholder {
+  color: var(--inzan-text-faint);
+  opacity: 1;
+}
+
+/* ── Light-mode pastel pills (bg-*-50/100 + text-*-600/700/800) → tinted dark chips. ── */
+html[data-tenant-theme="inzanathletics"] :is(.bg-red-50, .bg-red-100, .bg-rose-50, .bg-rose-100) { background-color: rgb(242 139 139 / 0.14); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-green-50, .bg-green-100, .bg-emerald-50, .bg-emerald-100) { background-color: rgb(111 214 154 / 0.14); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-amber-50, .bg-amber-100, .bg-yellow-50, .bg-yellow-100) { background-color: rgb(242 196 109 / 0.14); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-orange-50, .bg-orange-100) { background-color: rgb(245 167 111 / 0.14); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-blue-50, .bg-blue-100, .bg-sky-50, .bg-sky-100, .bg-indigo-50, .bg-indigo-100) { background-color: rgb(127 178 245 / 0.14); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-purple-50, .bg-purple-100, .bg-violet-50, .bg-violet-100) { background-color: rgb(196 163 245 / 0.14); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-pink-50, .bg-pink-100) { background-color: rgb(242 155 196 / 0.14); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-teal-50, .bg-teal-100, .bg-cyan-50, .bg-cyan-100) { background-color: rgb(111 211 200 / 0.14); }
+
+html[data-tenant-theme="inzanathletics"] :is(.text-red-500, .text-red-600, .text-red-700, .text-red-800, .text-rose-500, .text-rose-600, .text-rose-700, .text-destructive) { color: var(--inzan-red); }
+html[data-tenant-theme="inzanathletics"] :is(.text-green-500, .text-green-600, .text-green-700, .text-green-800, .text-emerald-500, .text-emerald-600, .text-emerald-700, .text-emerald-800) { color: var(--inzan-green); }
+html[data-tenant-theme="inzanathletics"] :is(.text-amber-500, .text-amber-600, .text-amber-700, .text-amber-800, .text-yellow-500, .text-yellow-600, .text-yellow-700, .text-yellow-800) { color: var(--inzan-amber); }
+html[data-tenant-theme="inzanathletics"] :is(.text-orange-500, .text-orange-600, .text-orange-700, .text-orange-800) { color: var(--inzan-orange); }
+html[data-tenant-theme="inzanathletics"] :is(.text-blue-500, .text-blue-600, .text-blue-700, .text-blue-800, .text-sky-600, .text-sky-700, .text-indigo-500, .text-indigo-600, .text-indigo-700) { color: var(--inzan-blue); }
+html[data-tenant-theme="inzanathletics"] :is(.text-purple-500, .text-purple-600, .text-purple-700, .text-violet-500, .text-violet-600, .text-violet-700) { color: var(--inzan-violet); }
+html[data-tenant-theme="inzanathletics"] :is(.text-pink-500, .text-pink-600, .text-pink-700) { color: var(--inzan-pink); }
+html[data-tenant-theme="inzanathletics"] :is(.text-teal-500, .text-teal-600, .text-teal-700, .text-cyan-600, .text-cyan-700) { color: var(--inzan-teal); }
+
+html[data-tenant-theme="inzanathletics"] :is(.border-red-200, .border-red-300, .border-rose-200) { border-color: rgb(242 139 139 / 0.35); }
+html[data-tenant-theme="inzanathletics"] :is(.border-green-200, .border-green-300, .border-emerald-200) { border-color: rgb(111 214 154 / 0.35); }
+html[data-tenant-theme="inzanathletics"] :is(.border-amber-200, .border-amber-300, .border-yellow-200) { border-color: rgb(242 196 109 / 0.35); }
+html[data-tenant-theme="inzanathletics"] :is(.border-blue-200, .border-blue-300, .border-sky-200, .border-indigo-200) { border-color: rgb(127 178 245 / 0.35); }
+html[data-tenant-theme="inzanathletics"] :is(.border-purple-200, .border-violet-200) { border-color: rgb(196 163 245 / 0.35); }
+
+/* ── Solid saturated status badges (e.g. Active / Expiring / Hold) → calm tinted chips. ── */
+html[data-tenant-theme="inzanathletics"] [class*="group/badge"]:is(.bg-green-500, .bg-green-600, .bg-emerald-500, .bg-emerald-600) {
+  background-color: rgb(111 214 154 / 0.16); color: var(--inzan-green); border-color: rgb(111 214 154 / 0.38);
+}
+html[data-tenant-theme="inzanathletics"] [class*="group/badge"]:is(.bg-amber-500, .bg-amber-600, .bg-yellow-500, .bg-orange-500) {
+  background-color: rgb(242 196 109 / 0.16); color: var(--inzan-amber); border-color: rgb(242 196 109 / 0.38);
+}
+html[data-tenant-theme="inzanathletics"] [class*="group/badge"]:is(.bg-blue-500, .bg-blue-600, .bg-sky-500, .bg-indigo-500) {
+  background-color: rgb(127 178 245 / 0.16); color: var(--inzan-blue); border-color: rgb(127 178 245 / 0.38);
+}
+html[data-tenant-theme="inzanathletics"] [class*="group/badge"]:is(.bg-red-500, .bg-red-600, .bg-rose-500) {
+  background-color: rgb(242 139 139 / 0.16); color: var(--inzan-red); border-color: rgb(242 139 139 / 0.38);
+}
+html[data-tenant-theme="inzanathletics"] [class*="group/badge"]:is(.bg-purple-500, .bg-violet-500) {
+  background-color: rgb(196 163 245 / 0.16); color: var(--inzan-violet); border-color: rgb(196 163 245 / 0.38);
+}
+
+/* Solid destructive fills keep a dark, readable red with light text (token is now a light red). */
+html[data-tenant-theme="inzanathletics"] :is(.bg-destructive, .bg-red-500, .bg-red-600):not([class*="group/badge"]) {
+  background-color: #b83c3c;
+  color: #fdf2f2;
+}
+
+/* ── Buttons ── */
+html[data-tenant-theme="inzanathletics"] [data-slot="button"].bg-primary,
+html[data-tenant-theme="inzanathletics"] [data-slot="button"][class*="bg-gradient-"] {
+  background: var(--inzan-subtle);
+  color: var(--inzan-text);
+  border-color: var(--inzan-line-strong);
+}
+html[data-tenant-theme="inzanathletics"] [data-slot="button"].bg-primary:hover { background: #34343a; }
+
+/* ── Logo & splash ── */
+html[data-tenant-theme="inzanathletics"] img[src="/inzanlogo.png"] { filter: invert(1); opacity: 0.92; }
+html[data-tenant-theme="inzanathletics"] #mobile-splash { background: var(--inzan-bg); }
+html[data-tenant-theme="inzanathletics"] :is(.mobile-splash-bg, .mobile-splash-overlay) { background: var(--inzan-bg); }
+html[data-tenant-theme="inzanathletics"] .mobile-splash-glow { background: radial-gradient(circle, var(--inzan-subtle), transparent); }
+html[data-tenant-theme="inzanathletics"] .mobile-splash-bar-fill { background: var(--inzan-text); }
+
+/* ── Text selection ── */
+html[data-tenant-theme="inzanathletics"] ::selection { background: rgb(127 178 245 / 0.35); color: #ffffff; }
+
 @media print {
   html[data-tenant-theme="inzanathletics"] body { background: white; color: black; }
 }
-html[data-tenant-theme="inzanathletics"] [data-slot="button"].bg-primary,
-html[data-tenant-theme="inzanathletics"] [data-slot="button"][class*="bg-gradient-"] {
-  background: #2b2b2b;
-  color: #ffffff;
-  border-color: #666666;
-}
-html[data-tenant-theme="inzanathletics"] [data-slot="button"].bg-primary:hover { background: #1a1a1a; }
-html[data-tenant-theme="inzanathletics"] .mobile-splash-glow { background: radial-gradient(circle, #2b2b2b, transparent); }
-html[data-tenant-theme="inzanathletics"] .mobile-splash-bar-fill { background: #ffffff; }
