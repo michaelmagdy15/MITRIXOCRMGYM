@@ -102,6 +102,31 @@ html[data-tenant-theme="inzanathletics"] :is(.text-zinc-400, .text-gray-400, .te
   color: var(--inzan-text-faint);
 }
 
+/* Light gradients (e.g. from-white to-gray-50) would paint a white card under light text. */
+html[data-tenant-theme="inzanathletics"] :is([class*="from-white"], [class*="from-gray-50"], [class*="from-slate-50"], [class*="from-zinc-50"], [class*="from-gray-100"], [class*="from-slate-100"]):is([class*="bg-gradient-"], [class*="bg-linear-"]) {
+  background-image: none;
+  background-color: var(--inzan-surface);
+}
+/* Translucent light surfaces at >= 50% opacity read as solid white/gray on dark. Low-alpha (/5–/30) highlights are intentional and left alone. */
+html[data-tenant-theme="inzanathletics"] :is(.bg-white\/50, .bg-white\/60, .bg-white\/70, .bg-white\/80, .bg-white\/90, .bg-white\/95) {
+  background-color: var(--inzan-surface);
+}
+html[data-tenant-theme="inzanathletics"] :is(.bg-gray-50\/50, .bg-gray-50\/80, .bg-slate-50\/50, .bg-slate-50\/80, .bg-zinc-50\/50, .bg-zinc-50\/80, .bg-zinc-100\/50, .bg-gray-100\/50) {
+  background-color: var(--inzan-raised);
+}
+/* Light pastel tints at partial opacity. */
+html[data-tenant-theme="inzanathletics"] :is(.bg-amber-50\/50, .bg-amber-50\/70) { background-color: rgb(242 196 109 / 0.12); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-red-50\/50) { background-color: rgb(242 139 139 / 0.12); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-emerald-50\/50) { background-color: rgb(111 214 154 / 0.12); }
+html[data-tenant-theme="inzanathletics"] :is(.bg-blue-50\/40, .bg-indigo-50\/30) { background-color: rgb(127 178 245 / 0.10); }
+/* Bright light-mode hairlines look like glowing white lines on dark surfaces. */
+html[data-tenant-theme="inzanathletics"] :is(.border-gray-50, .border-gray-100, .border-gray-200, .border-zinc-100, .border-zinc-200, .border-zinc-200\/50, .border-slate-100, .border-slate-200) {
+  border-color: var(--inzan-line);
+}
+html[data-tenant-theme="inzanathletics"] :is(.divide-gray-100, .divide-gray-200, .divide-slate-50, .divide-slate-100, .divide-zinc-100, .divide-zinc-200) > :not(:last-child) {
+  border-color: var(--inzan-line);
+}
+
 /* ── Disabled / read-only form fields: stay legible instead of fading to 50%. ── */
 html[data-tenant-theme="inzanathletics"] :is(input, textarea, select, button[data-slot="select-trigger"]):is(:disabled, [readonly]) {
   opacity: 1;

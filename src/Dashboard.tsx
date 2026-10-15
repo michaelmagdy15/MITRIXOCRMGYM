@@ -106,6 +106,118 @@ function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], 
   );
 }
 
+// Precomputed once: lowercase alias -> lowercase canonical rep name.
+// Previously every comparison looped over the whole mapping table, which ran
+// hundreds of thousands of times per dashboard render.
+const CANONICAL_NAME_MAP = new Map(
+  Object.entries(SALES_NAME_MAPPING).map(([alias, canonical]) => [alias.trim().toLowerCase(), canonical.trim().toLowerCase()])
+);
+const toCanonicalName = (name?: string | null): string => {
+  if (!name) return '';
+  const key = name.trim().toLowerCase();
+  return CANONICAL_NAME_MAP.get(key) ?? key;
+};
+
+interface SalesTargetValues {
+  targetAmount: number;
+  ptTarget: number;
+  classesTarget: number;
+  membershipsTarget: number;
+}
+
+// Owns its own input state so typing re-renders only this dialog,
+// not the whole Dashboard (charts, leaderboard, member lists).
+const SalesTargetDialog = React.memo(function SalesTargetDialog({
+  initial,
+  onSave,
+}: {
+  initial: SalesTargetValues;
+  onSave: (values: SalesTargetValues) => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState({ targetAmount: '', ptTarget: '', classesTarget: '', membershipsTarget: '' });
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (next) {
+      setDraft({
+        targetAmount: String(initial.targetAmount),
+        ptTarget: String(initial.ptTarget),
+        classesTarget: String(initial.classesTarget),
+        membershipsTarget: String(initial.membershipsTarget),
+      });
+    }
+  };
+
+  const setField = (field: keyof typeof draft) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setDraft(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    const targetAmount = parseFloat(draft.targetAmount);
+    if (isNaN(targetAmount) || targetAmount <= 0) {
+      toast.error('Enter a total target greater than 0.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({
+        targetAmount,
+        ptTarget: parseFloat(draft.ptTarget) || 0,
+        classesTarget: parseFloat(draft.classesTarget) || 0,
+        membershipsTarget: parseFloat(draft.membershipsTarget) || 0,
+      });
+      toast.success('Sales target saved.');
+      setOpen(false);
+    } catch {
+      toast.error('Failed to save sales target. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger
+        render={
+          <Button variant="ghost" size="icon" className="h-6 w-6">
+            <Settings className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        }
+      />
+      <DialogContent className="w-[95vw] sm:max-w-md md:max-w-lg rounded-2xl p-6">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">{t('dashboard.update_sales_target')}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>{t('dashboard.new_target_amount')} (Total)</Label>
+            <Input type="number" inputMode="decimal" value={draft.targetAmount} onChange={setField('targetAmount')} />
+          </div>
+          <div className="space-y-2">
+            <Label>PT Target (LE)</Label>
+            <Input type="number" inputMode="decimal" value={draft.ptTarget} onChange={setField('ptTarget')} />
+          </div>
+          <div className="space-y-2">
+            <Label>Classes Target (LE)</Label>
+            <Input type="number" inputMode="decimal" value={draft.classesTarget} onChange={setField('classesTarget')} />
+          </div>
+          <div className="space-y-2">
+            <Label>Memberships Target (LE)</Label>
+            <Input type="number" inputMode="decimal" value={draft.membershipsTarget} onChange={setField('membershipsTarget')} />
+          </div>
+          <Button onClick={handleSave} className="w-full" disabled={saving}>
+            {saving ? 'Saving…' : t('dashboard.save_target')}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+});
+
 export default function Dashboard() {
   const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, branches, clients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId } = useAppContext();
   const { t, language, isRtl } = useLanguage();
@@ -160,7 +272,6 @@ export default function Dashboard() {
       toast.error('Failed to unfreeze member.');
     }
   };
-  const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false);
   const [isTargetWidgetCollapsed, setIsTargetWidgetCollapsed] = useState(() => localStorage.getItem('isTargetWidgetCollapsed') === 'true');
 
   const toggleTargetWidget = () => {
@@ -171,10 +282,6 @@ export default function Dashboard() {
     });
   };
 
-  const [newTarget, setNewTarget] = useState(salesTarget.targetAmount.toString());
-  const [newPtTarget, setNewPtTarget] = useState((salesTarget.ptTarget || 0).toString());
-  const [newClassesTarget, setNewClassesTarget] = useState((salesTarget.classesTarget || 0).toString());
-  const [newMembershipsTarget, setNewMembershipsTarget] = useState((salesTarget.membershipsTarget || 0).toString());
   const [selectedRepId, setSelectedRepId] = useState<string>('all');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
   const [selectedMonthOffset, setSelectedMonthOffset] = useState(0);
@@ -228,16 +335,14 @@ export default function Dashboard() {
     return map;
   }, [allClients]);
 
-  const getCanonicalName = React.useCallback((name: string) => {
-    if (!name) return '';
-    const trimmed = name.trim().toLowerCase();
-    for (const [key, value] of Object.entries(SALES_NAME_MAPPING)) {
-      if (key.toLowerCase() === trimmed) {
-        return value.toLowerCase().trim();
-      }
-    }
-    return trimmed;
-  }, []);
+  const getCanonicalName = React.useCallback((name: string) => toCanonicalName(name), []);
+
+  // id -> display name (same semantics as resolveUserDisplay, but O(1) instead of users.find per payment).
+  const userDisplayById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    users.forEach(u => map.set(u.id, u.name || u.email || ''));
+    return map;
+  }, [users]);
 
   const isClientAssignedToRep = React.useCallback((client: any, repId: string, repName: string) => {
     if (!client.assignedTo) return false;
@@ -252,7 +357,10 @@ export default function Dashboard() {
     if (payment.sales_rep_id && payment.sales_rep_id === repId) return true;
 
     // 2. Canonical name match on payment fields (some legacy data)
-    const resolvedSalesName = resolveUserDisplay(payment.salesName, users, payment.salesName || '');
+    const rawSalesName: string = payment.salesName || '';
+    const resolvedSalesName = rawSalesName
+      ? (userDisplayById.has(rawSalesName) ? (userDisplayById.get(rawSalesName) || rawSalesName) : rawSalesName)
+      : '';
     const salesName = (resolvedSalesName || payment.assigned_sales_name || '').trim();
     if (salesName) {
       const canonicalSalesName = getCanonicalName(salesName);
@@ -279,7 +387,7 @@ export default function Dashboard() {
     }
 
     return false;
-  }, [clientMap, getCanonicalName, users]);
+  }, [clientMap, getCanonicalName, userDisplayById]);
 
   const clients = React.useMemo(() => {
     let filtered = selectedBranch === 'all' ? allClients : allClients.filter(c => c.branch === selectedBranch);
@@ -317,80 +425,102 @@ export default function Dashboard() {
 
   const now = new Date();
 
-  // Stats
-  const totalLeads = clients.filter(c => c.status === 'Lead').length;
-  const activeMembers = clients.filter(c => c.status === 'Active').length;
-  const nearlyExpiredList = clients.filter(c => c.status === 'Nearly Expired');
-  const nearlyExpired = nearlyExpiredList.length;
-  const expiredList = clients.filter(c => c.status === 'Expired');
-  const expired = expiredList.length;
-  
-  // New workflow specific filters
-  const negativeSessions = clients.filter(c => typeof c.sessionsRemaining === 'number' && c.sessionsRemaining < 0);
-  const noAttendance = clients.filter(c => c.sessionsRemaining === 'no attend');
-  
-  // Reminders
-  const upcomingVisits = clients.filter(c => {
-    if (!c.expectedVisitDate) return false;
-    const d = parseISO(c.expectedVisitDate);
-    if (isNaN(d.getTime())) return false;
-    return isAfter(d, now) && isBefore(d, addDays(now, 3));
-  });
-  
-  const upcomingBirthdays = clients.filter(c => {
-    if (!c.dateOfBirth) return false;
-    const dob = parseISO(c.dateOfBirth);
-    if (isNaN(dob.getTime())) return false;
-    const dobThisYear = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
-    return isAfter(dobThisYear, subDays(now, 1)) && isBefore(dobThisYear, addDays(now, 7));
-  });
+  // Stats — one memoized pass instead of ~10 full scans of the member list on every render.
+  const {
+    totalLeads, activeMembers, nearlyExpiredList, nearlyExpired, expiredList, expired,
+    negativeSessions, noAttendance, upcomingVisits, upcomingBirthdays, attentionLeads,
+  } = React.useMemo(() => {
+    const today = new Date();
+    const visitWindowEnd = addDays(today, 3);
+    const birthdayWindowStart = subDays(today, 1);
+    const birthdayWindowEnd = addDays(today, 7);
+    const currentUserId = currentUser?.id;
 
-  const attentionLeads = clients.filter(c => {
-    if (c.status !== 'Lead' || c.paid) return false;
-    if (c.assignedTo !== currentUser?.id) return false;
-    if (!c.comments || c.comments.length === 0) return false;
-    
-    const latestComment = c.comments.reduce((latest, current) => {
-      if (!latest || !latest.date) return current;
-      if (!current || !current.date) return latest;
-      const l = safeParseISO(latest.date);
-      const cur = safeParseISO(current.date);
-      if (isNaN(l.getTime())) return current;
-      if (isNaN(cur.getTime())) return latest;
-      return isAfter(cur, l) ? current : latest;
-    }, c.comments[0]);
+    let leadCount = 0;
+    let activeCount = 0;
+    const nearlyExpiredArr: typeof clients = [];
+    const expiredArr: typeof clients = [];
+    const negativeArr: typeof clients = [];
+    const noAttendArr: typeof clients = [];
+    const visitsArr: typeof clients = [];
+    const birthdaysArr: typeof clients = [];
+    const attentionArr: typeof clients = [];
 
-    if (!latestComment || !latestComment.date) return false;
+    for (const c of clients) {
+      if (c.status === 'Lead') leadCount++;
+      else if (c.status === 'Active') activeCount++;
+      else if (c.status === 'Nearly Expired') nearlyExpiredArr.push(c);
+      else if (c.status === 'Expired') expiredArr.push(c);
 
-    const p = safeParseISO(latestComment.date);
-    if (isNaN(p.getTime())) return false;
-    const daysSinceComment = differenceInDays(now, p);
-    return daysSinceComment >= 7;
-  });
+      if (typeof c.sessionsRemaining === 'number' && c.sessionsRemaining < 0) negativeArr.push(c);
+      if (c.sessionsRemaining === 'no attend') noAttendArr.push(c);
 
-  const handleUpdateTarget = () => {
-    const target = parseFloat(newTarget);
-    const pt = parseFloat(newPtTarget) || 0;
-    const classes = parseFloat(newClassesTarget) || 0;
-    const memberships = parseFloat(newMembershipsTarget) || 0;
-
-    if (!isNaN(target) && target > 0) {
-      if (canViewGlobalDashboard && effectiveRepId !== 'all') {
-        updateUserTarget(effectiveRepId, currentMonthStr, target, pt, classes, memberships);
-      } else {
-        if (canViewGlobalDashboard) {
-          updateUserTarget('global', currentMonthStr, target, pt, classes, memberships);
-        }
-        updateSalesTarget(target, pt, classes, memberships);
+      if (c.expectedVisitDate) {
+        const d = parseISO(c.expectedVisitDate);
+        if (!isNaN(d.getTime()) && isAfter(d, today) && isBefore(d, visitWindowEnd)) visitsArr.push(c);
       }
-      setIsTargetDialogOpen(false);
+
+      if (c.dateOfBirth) {
+        const dob = parseISO(c.dateOfBirth);
+        if (!isNaN(dob.getTime())) {
+          const dobThisYear = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+          if (isAfter(dobThisYear, birthdayWindowStart) && isBefore(dobThisYear, birthdayWindowEnd)) birthdaysArr.push(c);
+        }
+      }
+
+      if (c.status === 'Lead' && !c.paid && c.assignedTo === currentUserId && c.comments && c.comments.length > 0) {
+        const latestComment = c.comments.reduce((latest, current) => {
+          if (!latest || !latest.date) return current;
+          if (!current || !current.date) return latest;
+          const l = safeParseISO(latest.date);
+          const cur = safeParseISO(current.date);
+          if (isNaN(l.getTime())) return current;
+          if (isNaN(cur.getTime())) return latest;
+          return isAfter(cur, l) ? current : latest;
+        }, c.comments[0]);
+        if (latestComment?.date) {
+          const p = safeParseISO(latestComment.date);
+          if (!isNaN(p.getTime()) && differenceInDays(today, p) >= 7) attentionArr.push(c);
+        }
+      }
     }
-  };
+
+    return {
+      totalLeads: leadCount,
+      activeMembers: activeCount,
+      nearlyExpiredList: nearlyExpiredArr,
+      nearlyExpired: nearlyExpiredArr.length,
+      expiredList: expiredArr,
+      expired: expiredArr.length,
+      negativeSessions: negativeArr,
+      noAttendance: noAttendArr,
+      upcomingVisits: visitsArr,
+      upcomingBirthdays: birthdaysArr,
+      attentionLeads: attentionArr,
+    };
+  }, [clients, currentUser?.id]);
 
   // Filtered statistics for rep performance view
-  const selectedMonth = subMonths(now, selectedMonthOffset);
+  const selectedMonth = React.useMemo(() => subMonths(new Date(), selectedMonthOffset), [selectedMonthOffset]);
   const currentMonthStr = format(selectedMonth, 'yyyy-MM');
-  const reps = users.filter(u => u.role === 'rep' || (u.role as string) === 'sales_rep' || (u.role as string) === 'sales' || u.role === 'manager');
+  // Stable reference: previously a new array every render, which forced the
+  // leaderboard + rep comparison memos to recompute on every keystroke.
+  const reps = React.useMemo(
+    () => users.filter(u => u.role === 'rep' || (u.role as string) === 'sales_rep' || (u.role as string) === 'sales' || u.role === 'manager'),
+    [users]
+  );
+
+  const handleSaveTarget = React.useCallback(async ({ targetAmount, ptTarget, classesTarget, membershipsTarget }: SalesTargetValues) => {
+    if (canViewGlobalDashboard && effectiveRepId !== 'all') {
+      await updateUserTarget(effectiveRepId, currentMonthStr, targetAmount, ptTarget, classesTarget, membershipsTarget);
+      return;
+    }
+    const writes: Promise<void>[] = [updateSalesTarget(targetAmount, ptTarget, classesTarget, membershipsTarget)];
+    if (canViewGlobalDashboard) {
+      writes.push(updateUserTarget('global', currentMonthStr, targetAmount, ptTarget, classesTarget, membershipsTarget));
+    }
+    await Promise.all(writes);
+  }, [canViewGlobalDashboard, effectiveRepId, currentMonthStr, updateUserTarget, updateSalesTarget]);
 
   
   const filteredSalesData = React.useMemo(() => {
@@ -493,6 +623,20 @@ export default function Dashboard() {
     };
   }, [payments, effectiveRepId, canViewGlobalDashboard, salesTarget, userTargets, currentMonthStr, clients]);
 
+  const targetDialogInitial = React.useMemo<SalesTargetValues>(() => ({
+    targetAmount: filteredSalesData.targetAmount,
+    ptTarget: filteredSalesData.ptTarget,
+    classesTarget: filteredSalesData.classesTarget,
+    membershipsTarget: filteredSalesData.membershipsTarget,
+  }), [filteredSalesData.targetAmount, filteredSalesData.ptTarget, filteredSalesData.classesTarget, filteredSalesData.membershipsTarget]);
+
+  // Valid payments in the selected month, computed once and shared by every per-rep calculation
+  // (previously each of ~30 reps re-scanned and re-parsed the full payment list).
+  const selectedMonthPayments = React.useMemo(
+    () => payments.filter(p => isValidPayment(p) && !!p.date && safeFormatDate(p.date, 'yyyy-MM') === currentMonthStr),
+    [payments, currentMonthStr]
+  );
+
   // Always use filteredSalesData which has correct month + rep filtering applied
   const totalCash = filteredSalesData.cash;
   const totalVisa = filteredSalesData.visa;
@@ -563,23 +707,49 @@ export default function Dashboard() {
     });
   }, [payments]);
 
-  // Per-rep revenue vs target for selected month
-  const repComparisonData = React.useMemo(() => {
+  // Per-rep revenue, target and conversion for the selected month — computed once and shared by
+  // the comparison chart and the leaderboard (previously computed twice, each re-scanning all payments).
+  const repStats = React.useMemo(() => {
     if (!canViewGlobalDashboard) return [];
     return reps.map(rep => {
+      const repName = rep.name || '';
       const repTarget = userTargets.find(t => t.userId === rep.id && t.month === currentMonthStr);
-      const repPayments = payments.filter(p => {
-        if (!isValidPayment(p)) return false;
-        if (safeFormatDate(p.date, 'yyyy-MM') !== currentMonthStr) return false;
-        return isPaymentAttributedToRep(p, rep.id, rep.name || '');
-      });
+      const targetAmount = repTarget?.targetAmount || 0;
+
+      let revenue = 0;
+      for (const p of selectedMonthPayments) {
+        if (isPaymentAttributedToRep(p, rep.id, repName)) revenue += getPaymentNet(p);
+      }
+
+      let totalLeadsCount = 0;
+      let convertedThisMonth = 0;
+      for (const c of clients) {
+        if (!isClientAssignedToRep(c, rep.id, repName)) continue;
+        totalLeadsCount++;
+        if (c.status !== 'Lead' && c.startDate && c.startDate.startsWith(currentMonthStr)) convertedThisMonth++;
+      }
+
+      const targetAchievement = targetAmount > 0 ? (revenue / targetAmount) * 100 : 0;
+      const conversionRate = totalLeadsCount > 0 ? (convertedThisMonth / totalLeadsCount) * 100 : 0;
+
       return {
-        name: (rep.name || rep.email || 'Unknown').split(' ')[0],
-        Revenue: repPayments.reduce((s, p) => s + (getPaymentNet(p)), 0),
-        Target: repTarget?.targetAmount || 0,
+        id: rep.id,
+        name: rep.name || rep.email || 'Unknown',
+        revenue,
+        targetAmount,
+        targetAchievement: Math.round(targetAchievement),
+        converted: convertedThisMonth,
+        totalLeads: totalLeadsCount,
+        conversionRate: Math.round(conversionRate * 10) / 10,
       };
     });
-  }, [reps, payments, userTargets, currentMonthStr, canViewGlobalDashboard]);
+  }, [reps, selectedMonthPayments, userTargets, currentMonthStr, clients, canViewGlobalDashboard, isPaymentAttributedToRep, isClientAssignedToRep]);
+
+  // Per-rep revenue vs target for selected month
+  const repComparisonData = React.useMemo(
+    () => repStats.map(r => ({ name: r.name.split(' ')[0], Revenue: r.revenue, Target: r.targetAmount })),
+    [repStats]
+  );
 
   // 6-month payment method breakdown
   const monthlyMethodData = React.useMemo(() => {
@@ -622,45 +792,9 @@ export default function Dashboard() {
     });
   }, [payments]);
 
-  // Leaderboard Data Calculation
+  // Leaderboard Data Calculation — sorting only; the heavy per-rep work lives in repStats.
   const leaderboardData = React.useMemo(() => {
-    if (!canViewGlobalDashboard) return [];
-
-    const data = reps.map(rep => {
-      const repTarget = userTargets.find(t => t.userId === rep.id && t.month === currentMonthStr);
-      const targetAmount = repTarget?.targetAmount || 0;
-
-      const repPayments = payments.filter(p => {
-        if (!isValidPayment(p)) return false;
-        if (safeFormatDate(p.date, 'yyyy-MM') !== currentMonthStr) return false;
-        return isPaymentAttributedToRep(p, rep.id, rep.name || '');
-      });
-      const revenue = repPayments.reduce((s, p) => s + (getPaymentNet(p)), 0);
-
-      const convertedThisMonth = clients.filter(c => 
-        isClientAssignedToRep(c, rep.id, rep.name || '') && 
-        c.status !== 'Lead' && 
-        c.startDate && (c.startDate.startsWith(currentMonthStr))
-      ).length;
-
-      const totalLeadsCount = clients.filter(c => isClientAssignedToRep(c, rep.id, rep.name || '')).length;
-      const targetAchievement = targetAmount > 0 ? (revenue / targetAmount) * 100 : 0;
-      const conversionRate = totalLeadsCount > 0 ? (convertedThisMonth / totalLeadsCount) * 100 : 0;
-
-      return {
-        id: rep.id,
-        name: rep.name || rep.email || 'Unknown',
-        revenue,
-        targetAmount,
-        targetAchievement: Math.round(targetAchievement),
-        converted: convertedThisMonth,
-        totalLeads: totalLeadsCount,
-        conversionRate: Math.round(conversionRate * 10) / 10
-      };
-    });
-
-    // Apply sorting
-    return [...data].sort((a, b) => {
+    return [...repStats].sort((a, b) => {
       const aValue = (a as any)[sortConfig.key];
       const bValue = (b as any)[sortConfig.key];
       
@@ -668,7 +802,7 @@ export default function Dashboard() {
       if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [reps, payments, userTargets, currentMonthStr, clients, canViewGlobalDashboard, sortConfig]);
+  }, [repStats, sortConfig]);
 
   const exportRepLeaderboardCSV = () => {
     const headers = ['Rank', 'Rep Name', 'Revenue', 'Target Amount', 'Target Achievement %', 'Converted Leads', 'Total Leads', 'Conversion Rate %'];
@@ -848,63 +982,7 @@ export default function Dashboard() {
               </CardTitle>
               {!isTargetWidgetCollapsed && canAccessSettings && (
                 <CardAction>
-                  <Dialog open={isTargetDialogOpen} onOpenChange={(open) => {
-                    setIsTargetDialogOpen(open);
-                    if (open) {
-                      setNewTarget(filteredSalesData.targetAmount.toString());
-                      setNewPtTarget(filteredSalesData.ptTarget.toString());
-                      setNewClassesTarget(filteredSalesData.classesTarget.toString());
-                      setNewMembershipsTarget(filteredSalesData.membershipsTarget.toString());
-                    }
-                  }}>
-                    <DialogTrigger
-                      render={
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
-                          <Settings className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      }
-                    />
-                    <DialogContent className="w-[95vw] sm:max-w-md md:max-w-lg rounded-2xl p-6">
-                      <DialogHeader>
-                        <DialogTitle className="text-xl font-bold">{t('dashboard.update_sales_target')}</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label>{t('dashboard.new_target_amount')} (Total)</Label>
-                          <Input 
-                            type="number" 
-                            value={newTarget} 
-                            onChange={(e) => setNewTarget(e.target.value)} 
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>PT Target (LE)</Label>
-                          <Input 
-                            type="number" 
-                            value={newPtTarget} 
-                            onChange={(e) => setNewPtTarget(e.target.value)} 
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Classes Target (LE)</Label>
-                          <Input 
-                            type="number" 
-                            value={newClassesTarget} 
-                            onChange={(e) => setNewClassesTarget(e.target.value)} 
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Memberships Target (LE)</Label>
-                          <Input 
-                            type="number" 
-                            value={newMembershipsTarget} 
-                            onChange={(e) => setNewMembershipsTarget(e.target.value)} 
-                          />
-                        </div>
-                        <Button onClick={handleUpdateTarget} className="w-full">{t('dashboard.save_target')}</Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                  <SalesTargetDialog initial={targetDialogInitial} onSave={handleSaveTarget} />
                 </CardAction>
               )}
             </CardHeader>
@@ -1495,14 +1573,14 @@ export default function Dashboard() {
           </div>
 
           {/* Rep Leaderboard Section */}
-          <Card className="mt-4 overflow-hidden border-none shadow-lg bg-gradient-to-br from-white to-gray-50/50">
-            <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-gray-100 bg-white/50 backdrop-blur-sm">
+          <Card className="mt-4 overflow-hidden border border-border shadow-lg bg-card">
+            <CardHeader className="flex flex-row items-center justify-between pb-4 border-b border-border bg-muted/30">
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-indigo-50 rounded-lg">
-                  <Trophy className="h-5 w-5 text-indigo-600" />
+                <div className="p-2 bg-indigo-500/10 rounded-lg">
+                  <Trophy className="h-5 w-5 text-indigo-600 dark:text-indigo-300" />
                 </div>
                 <div>
-                  <CardTitle className="text-xl font-bold text-gray-900 leading-none">{t('dashboard.leaderboard_title')}</CardTitle>
+                  <CardTitle className="text-xl font-bold text-foreground leading-none">{t('dashboard.leaderboard_title')}</CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">{format(selectedMonth, 'MMMM yyyy')} {language === 'ar' ? 'الإحصائيات' : 'statistics'}</p>
                 </div>
               </div>
@@ -1510,7 +1588,7 @@ export default function Dashboard() {
                 variant="outline" 
                 size="sm" 
                 onClick={exportRepLeaderboardCSV}
-                className="hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all duration-200"
+                className="hover:bg-muted transition-colors duration-200"
               >
                 <Download className="h-4 w-4 mr-2" />
                 {t('dashboard.export_csv')}
@@ -1520,30 +1598,30 @@ export default function Dashboard() {
             <div className="overflow-x-auto -mx-4 md:mx-0 scroll-touch">
                 <table className={`w-full border-collapse ${isRtl ? 'text-right' : 'text-left'}`}>
                   <thead>
-                    <tr className="bg-gray-50/80 border-b border-gray-100">
-                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>{t('dashboard.rank')}</th>
-                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>
-                        <button onClick={() => handleSort('name')} className="flex items-center hover:text-indigo-600 transition-colors">
+                    <tr className="bg-muted/50 border-b border-border">
+                      <th className={`px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>{t('dashboard.rank')}</th>
+                      <th className={`px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <button onClick={() => handleSort('name')} className="flex items-center hover:text-foreground transition-colors">
                           {t('dashboard.rep_name')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
-                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>
-                        <button onClick={() => handleSort('revenue')} className="flex items-center hover:text-indigo-600 transition-colors">
+                      <th className={`px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <button onClick={() => handleSort('revenue')} className="flex items-center hover:text-foreground transition-colors">
                           {t('dashboard.revenue')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
-                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
-                        <button onClick={() => handleSort('targetAchievement')} className="flex items-center hover:text-indigo-600 transition-colors">
+                      <th className={`px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <button onClick={() => handleSort('targetAchievement')} className="flex items-center hover:text-foreground transition-colors">
                           {t('dashboard.target_percent')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
-                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
-                        <button onClick={() => handleSort('converted')} className="flex items-center hover:text-indigo-600 transition-colors">
+                      <th className={`px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <button onClick={() => handleSort('converted')} className="flex items-center hover:text-foreground transition-colors">
                           {t('dashboard.converted')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
-                      <th className={`px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
-                        <button onClick={() => handleSort('conversionRate')} className="flex items-center hover:text-indigo-600 transition-colors">
+                      <th className={`px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap ${isRtl ? 'text-right' : 'text-left'}`}>
+                        <button onClick={() => handleSort('conversionRate')} className="flex items-center hover:text-foreground transition-colors">
                           {t('dashboard.rate_percent')} <ArrowUpDown className="h-3 w-3 ml-1" />
                         </button>
                       </th>
@@ -1556,43 +1634,43 @@ export default function Dashboard() {
                       </tr>
                     ) : (
                       leaderboardData.map((rep, index) => (
-                        <tr key={rep.id} className="border-b border-gray-50 hover:bg-indigo-50/30 transition-colors group">
+                        <tr key={rep.id} className="border-b border-border/60 hover:bg-muted/40 transition-colors group">
                           <td className="px-6 py-4">
-                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-sm font-bold text-gray-700 group-hover:bg-indigo-100 group-hover:text-indigo-700 transition-colors">
+                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-bold text-foreground group-hover:bg-indigo-500/15 group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">
                                 {index + 1}
                             </div>
                           </td>
                           <td className="px-6 py-4">
                             <div>
-                              <div className="text-sm font-semibold text-gray-900">{rep.name}</div>
+                              <div className="text-sm font-semibold text-foreground">{rep.name}</div>
                               <div className="text-[10px] text-muted-foreground uppercase font-medium">{rep.id?.slice(-6) || 'N/A'}</div>
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="text-sm font-bold text-gray-900">{rep.revenue.toLocaleString()} <span className="text-[10px] text-muted-foreground font-normal">LE</span></div>
+                            <div className="text-sm font-bold text-foreground">{rep.revenue.toLocaleString()} <span className="text-[10px] text-muted-foreground font-normal">LE</span></div>
                             <div className="text-[10px] text-muted-foreground">{t('dashboard.goal')}: {rep.targetAmount.toLocaleString()}</div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="flex-1 min-w-[80px] h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="flex-1 min-w-[80px] h-2 bg-muted rounded-full overflow-hidden">
                                 <div 
                                   className={`h-full transition-all duration-500 ${rep.targetAchievement >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
                                   style={{ width: `${Math.min(rep.targetAchievement, 100)}%` }}
                                 />
                               </div>
-                              <span className={`text-xs font-bold ${rep.targetAchievement >= 100 ? 'text-emerald-600' : 'text-gray-700'}`}>
+                              <span className={`text-xs font-bold ${rep.targetAchievement >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
                                 {rep.targetAchievement}%
                               </span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
+                            <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-700 dark:text-indigo-300">
                               {rep.converted} <span className={`text-[10px] opacity-70 font-medium ${isRtl ? 'mr-1' : 'ml-1'}`}>{t('dashboard.leads')}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col">
-                              <span className="text-sm font-bold text-gray-900">{rep.conversionRate}%</span>
+                              <span className="text-sm font-bold text-foreground">{rep.conversionRate}%</span>
                               <span className="text-[10px] text-muted-foreground">{rep.converted} {t('dashboard.of')} {rep.totalLeads} {t('dashboard.total')}</span>
                             </div>
                           </td>

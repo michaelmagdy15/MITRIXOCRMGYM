@@ -11,6 +11,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, subMonths, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 import { SALES_NAME_MAPPING } from '../constants';
 import { resolveUserDisplay } from '../utils/resolveUserDisplay';
+import { toast } from 'sonner';
 
 export const PRIVATE_PACKAGES = [
   'drop session pt',
@@ -66,10 +67,17 @@ export function UserPerformanceDialog({ user, isOpen, onClose }: UserPerformance
     setNewTarget(target?.targetAmount.toString() || '');
   }, [selectedMonthOffset, userTargets, user.id, selectedMonthStr]);
   
-  const handleSaveTarget = () => {
+  const handleSaveTarget = async () => {
     const totalAmt = parseFloat(newTarget);
-    if (!isNaN(totalAmt) && totalAmt >= 0) {
-      updateUserTarget(user.id, selectedMonthStr, totalAmt);
+    if (isNaN(totalAmt) || totalAmt < 0) {
+      toast.error('Enter a valid target amount.');
+      return;
+    }
+    try {
+      await updateUserTarget(user.id, selectedMonthStr, totalAmt);
+      toast.success('Target saved.');
+    } catch {
+      toast.error('Failed to save target. Please try again.');
     }
   };
 

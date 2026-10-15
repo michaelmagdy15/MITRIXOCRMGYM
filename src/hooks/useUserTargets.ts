@@ -51,6 +51,7 @@ export const useUserTargets = (currentUser: User | null) => {
       await addAuditLog('UPDATE', 'TARGET', targetId, `Updated target for user ${userId} for ${month}: ${targetAmount} LE`, currentUser?.name);
     } catch (error) {
       console.error('Failed to update target', error);
+      throw error;
     }
   };
 

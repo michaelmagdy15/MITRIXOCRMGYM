@@ -306,6 +306,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       await addAuditLog('UPDATE', 'SYSTEM', 'sales-target', `Updated global sales target to ${target} LE`);
     } catch (error) {
       console.error('Failed to update sales target', error);
+      throw error;
     }
   }, []);
 
