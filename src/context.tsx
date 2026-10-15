@@ -21,7 +21,7 @@ import { useAttendance } from './hooks/useAttendance';
 import { useImportBatches } from './hooks/useImportBatches';
 import { usePTSessions } from './hooks/usePTSessions';
 import { useUserTargets } from './hooks/useUserTargets';
-import { SALES_NAME_MAPPING } from './constants';
+import { toCanonical } from './constants';
 import { 
   Client, 
   User, 
@@ -352,12 +352,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const getCanonicalName = useCallback((name: string) => {
     if (!name) return '';
-    const trimmed = name.trim().toLowerCase();
-    for (const [key, value] of Object.entries(SALES_NAME_MAPPING)) {
-      if (key.toLowerCase() === trimmed) return value.toLowerCase().trim();
-    }
-    return trimmed;
+    return toCanonical(name).toLowerCase().trim();
   }, []);
+
+  const clientByIdMap = useMemo(() => {
+    const map = new Map<string, Client>();
+    for (const c of clients) {
+      if (c.id) map.set(c.id, c);
+    }
+    return map;
+  }, [clients]);
 
   const isClientAssignedToRep = useCallback((client: any, repId: string, repName: string) => {
     if (!client.assignedTo) return false;
@@ -369,34 +373,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return canonicalAssigned === canonicalRep && canonicalAssigned !== '';
   }, [getCanonicalName]);
 
-  const isPaymentAttributedToRep = useCallback((payment: any, repId: string, repName: string, visibleClientIds: Set<string>) => {
+  const isPaymentAttributedToRep = useCallback((payment: any, repId: string, repName: string, _visibleClientIds: Set<string>) => {
     // 1. Direct ID match (new payments created through the CRM)
     if (payment.sales_rep_id && payment.sales_rep_id === repId) return true;
 
+    const canonicalRep = getCanonicalName(repName);
+
     // 2. Canonical name match on payment fields (legacy data)
     const salesName = (payment.salesName || payment.assigned_sales_name || '').trim();
-    if (salesName) {
+    if (salesName && canonicalRep) {
       const canonicalSalesName = getCanonicalName(salesName);
-      const canonicalRep = getCanonicalName(repName);
-      if (canonicalSalesName === canonicalRep && canonicalSalesName !== '') return true;
+      if (canonicalSalesName === canonicalRep) return true;
     }
 
-    // 3. Transitive: look up the client and check their salesName/assignedTo.
-    // Critical for imported data where sales_rep_id points to the importer,
-    // but the client record has the correct salesName (e.g. "Maisoon").
-    const client = clients.find(c => c.id === payment.clientId);
+    // 3. Transitive: look up the client in O(1) and check their salesName/assignedTo.
+    const client = payment.clientId ? clientByIdMap.get(payment.clientId) : undefined;
     if (client) {
       if (client.assignedTo === repId) return true;
       const clientSalesName = (client.salesName || client.assignedTo || '').trim();
-      if (clientSalesName) {
+      if (clientSalesName && canonicalRep) {
         const canonicalClientSales = getCanonicalName(clientSalesName);
-        const canonicalRep = getCanonicalName(repName);
-        if (canonicalClientSales === canonicalRep && canonicalClientSales !== '') return true;
+        if (canonicalClientSales === canonicalRep) return true;
       }
     }
 
     return false;
-  }, [clients, getCanonicalName]);
+  }, [clientByIdMap, getCanonicalName]);
 
   const visibleClients = useMemo(() => {
     if (!currentUser) return [];

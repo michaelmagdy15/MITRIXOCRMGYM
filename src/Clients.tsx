@@ -1230,49 +1230,101 @@ export default function Clients() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  const now = new Date();
+  // Single-pass memoized classification over context.clients so typing in inputs/dialogs
+  // never re-filters 7,724 records or invalidates filteredMembers.
+  const {
+    members,
+    leadAccounts,
+    activeMembers,
+    nearlyExpired,
+    expired,
+    onHold,
+    maleCount,
+    femaleCount,
+    otherGenderCount,
+    upcomingBirthdays,
+    birthdayClientIds,
+  } = React.useMemo(() => {
+    const nowDate = new Date();
+    const minBday = subDays(nowDate, 1);
+    const maxBday = addDays(nowDate, 7);
+    const curYear = nowDate.getFullYear();
 
-  // context.clients is already visibleClients (rep-filtered via isClientAssignedToRep).
-  const isLeadStatus = (s?: string) => (s || '').toLowerCase().trim() === 'lead';
-  // Inzan: leads/prospects are part of the same account lifecycle and must stay findable.
-  const members = isInzanTenant ? clients : clients.filter(c => !isLeadStatus(c.status));
-  const leadAccounts = isInzanTenant ? clients.filter(c => isLeadStatus(c.status)) : [];
-  
-  const isStatusActive = (s?: string) => (s || '').toLowerCase().trim() === 'active';
-  const isStatusNearlyExpired = (s?: string) => {
-    const v = (s || '').toLowerCase().trim();
-    return v === 'nearly expired' || v === 'nearly_expired';
-  };
-  const isStatusHold = (s?: string) => {
-    const v = (s || '').toLowerCase().trim();
-    return v === 'hold' || v === 'frozen' || v === 'freeze' || v === 'suspended';
-  };
-  const isStatusExpired = (s?: string) => (s || '').toLowerCase().trim() === 'expired';
+    const membersArr: Client[] = [];
+    const leadsArr: Client[] = [];
+    const activeArr: Client[] = [];
+    const nearlyExpArr: Client[] = [];
+    const expiredArr: Client[] = [];
+    const onHoldArr: Client[] = [];
+    const bdayArr: Client[] = [];
+    const bdayIds = new Set<string>();
+    let male = 0;
+    let female = 0;
+    let otherGender = 0;
 
-  const activeMembers = members.filter(c => isStatusActive(c.status));
-  const nearlyExpired = members.filter(c => isStatusNearlyExpired(c.status));
-  const expired = members.filter(c => isStatusExpired(c.status));
-  const onHold = members.filter(c => isStatusHold(c.status));
+    for (const c of clients) {
+      const s = (c.status || '').toLowerCase().trim();
+      const isLead = s === 'lead';
+      if (isLead) {
+        if (isInzanTenant) {
+          leadsArr.push(c);
+          membersArr.push(c);
+        }
+      } else {
+        membersArr.push(c);
+        if (s === 'active') activeArr.push(c);
+        else if (s === 'nearly expired' || s === 'nearly_expired') nearlyExpArr.push(c);
+        else if (s === 'expired') expiredArr.push(c);
+        else if (s === 'hold' || s === 'frozen' || s === 'freeze' || s === 'suspended') onHoldArr.push(c);
+      }
 
-  const maleCount = members.filter(c => c.gender === 'Male').length;
-  const femaleCount = members.filter(c => c.gender === 'Female').length;
-  const otherGenderCount = members.filter(c => c.gender === 'Other' || c.gender === 'Prefer not to say').length;
-  
-  const upcomingBirthdays = members.filter(c => {
-    if (!c.dateOfBirth) return false;
-    const dob = parseISO(c.dateOfBirth);
-    if (isNaN(dob.getTime())) return false;
-    const dobThisYear = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
-    return isAfter(dobThisYear, subDays(now, 1)) && isBefore(dobThisYear, addDays(now, 7));
-  });
+      if (isInzanTenant || !isLead) {
+        if (c.gender === 'Male') male++;
+        else if (c.gender === 'Female') female++;
+        else if (c.gender === 'Other' || c.gender === 'Prefer not to say') otherGender++;
+
+        if (c.dateOfBirth) {
+          const dob = parseISO(c.dateOfBirth);
+          if (!isNaN(dob.getTime())) {
+            const dobThisYear = new Date(curYear, dob.getMonth(), dob.getDate());
+            if (isAfter(dobThisYear, minBday) && isBefore(dobThisYear, maxBday)) {
+              bdayArr.push(c);
+              bdayIds.add(c.id);
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      members: membersArr,
+      leadAccounts: leadsArr,
+      activeMembers: activeArr,
+      nearlyExpired: nearlyExpArr,
+      expired: expiredArr,
+      onHold: onHoldArr,
+      maleCount: male,
+      femaleCount: female,
+      otherGenderCount: otherGender,
+      upcomingBirthdays: bdayArr,
+      birthdayClientIds: bdayIds,
+    };
+  }, [clients, isInzanTenant]);
+
+  const totalPaidByClientId = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of payments) {
+      if (!p.clientId) continue;
+      map.set(p.clientId, (map.get(p.clientId) || 0) + (Number(p.amount) || 0));
+    }
+    return map;
+  }, [payments]);
 
   // ⚡ Bolt Performance Optimization:
   // Wrapped getFilteredMembers logic in a useMemo hook to prevent expensive
   // O(n) filtering and sorting on large member arrays during unrelated re-renders.
-  // Impact: significantly improves UI responsiveness when components interact
-  // (e.g. typing in inputs elsewhere on the page).
   const filteredMembers = React.useMemo(() => {
-    let base = [];
+    let base: Client[] = [];
     if (deferredSearchTerm) {
       // When searching, search across all members so staff never miss an on-hold, active, or expired member
       base = members;
@@ -1316,25 +1368,27 @@ export default function Clients() {
     // Checks both assignedTo (userId) AND salesName (legacy name string from import)
     if (deferredFilterRep !== 'all') {
       if (deferredFilterRep === 'unassigned') {
+        const knownRepCanonicalNames = new Set(
+          users.map(u => (u.name ? toCanonical(u.name).toLowerCase() : '')).filter(Boolean)
+        );
         // Show clients with no assignedTo AND no matching salesName
         filtered = filtered.filter(m => {
           if (m.assignedTo && m.assignedTo !== '') return false;
-          if (m.salesName) {
-            const matchedRep = users.find(u => u.name && toCanonical(m.salesName!).toLowerCase() === toCanonical(u.name).toLowerCase());
-            if (matchedRep) return false; // Has a salesName matching a known rep → not unassigned
+          if (m.salesName && knownRepCanonicalNames.has(toCanonical(m.salesName).toLowerCase())) {
+            return false; // Has a salesName matching a known rep → not unassigned
           }
           return true;
         });
       } else {
-        filtered = filtered.filter(m => {
-          const repUser = users.find(u => u.id === deferredFilterRep);
-          if (!repUser) return false;
-          // Match by userId
-          if (m.assignedTo === deferredFilterRep) return true;
-          // Match by legacy salesName (case-insensitive) for imported records
-          if (m.salesName && repUser.name && toCanonical(m.salesName).toLowerCase() === toCanonical(repUser.name).toLowerCase()) return true;
-          return false;
-        });
+        const repUser = users.find(u => u.id === deferredFilterRep);
+        const repCanonical = repUser?.name ? toCanonical(repUser.name).toLowerCase() : '';
+        filtered = repUser
+          ? filtered.filter(m => {
+              if (m.assignedTo === deferredFilterRep) return true;
+              if (m.salesName && repCanonical && toCanonical(m.salesName).toLowerCase() === repCanonical) return true;
+              return false;
+            })
+          : [];
       }
     }
 
@@ -1355,18 +1409,14 @@ export default function Clients() {
 
     // Coach filter
     if (deferredFilterCoach && deferredFilterCoach !== 'All') {
-      filtered = filtered.filter(m => {
-        // A member matches if any of their active/expired packages are assigned to this coach
-        if (!m.packages) return false;
-        return m.packages.some(pkg => {
-          if (!pkg.trainerName) return false;
-          // check if trainerName matches the selected coach's name or ID
-          // We look up the selected coach object to compare names
-          const coachUser = users.find(u => u.id === deferredFilterCoach);
-          if (coachUser && coachUser.name && pkg.trainerName.toLowerCase() === coachUser.name.toLowerCase()) return true;
-          return false;
-        });
-      });
+      const coachUser = users.find(u => u.id === deferredFilterCoach);
+      const coachNameLower = coachUser?.name?.toLowerCase() || '';
+      filtered = coachNameLower
+        ? filtered.filter(m => {
+            if (!m.packages) return false;
+            return m.packages.some(pkg => pkg.trainerName && pkg.trainerName.toLowerCase() === coachNameLower);
+          })
+        : [];
     }
 
     // Sort
@@ -1384,6 +1434,9 @@ export default function Clients() {
     return filtered;
   }, [
     deferredActiveTab,
+    isInzanTenant,
+    members,
+    leadAccounts,
     activeMembers,
     nearlyExpired,
     onHold,
@@ -1594,7 +1647,6 @@ export default function Clients() {
         {clientList.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">{t('members.no_members')}</div>
         ) : clientList.map(client => {
-          const totalPaid = payments.filter(p => p.clientId === client.id).reduce((s, p) => s + (Number(p.amount) || 0), 0);
           const assignedName = (() => {
             if (!client.assignedTo) return client.salesName || null;
             const u = users.find(u => u.id === client.assignedTo);
@@ -1611,7 +1663,7 @@ export default function Clients() {
                 <div className="flex items-center gap-2 flex-wrap">
                   {client.memberId && <span className="text-[10px] font-bold text-muted-foreground">#{client.memberId}</span>}
                   <span className="font-semibold text-sm truncate">{client.name}</span>
-                  {upcomingBirthdays.some(b => b.id === client.id) && <Gift className="h-3.5 w-3.5 text-pink-500 shrink-0" />}
+                  {birthdayClientIds.has(client.id) && <Gift className="h-3.5 w-3.5 text-pink-500 shrink-0" />}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   {getStatusBadge(client.status)}
@@ -1693,8 +1745,7 @@ export default function Clients() {
         </TableHeader>
         <TableBody>
           {clientList.map(client => {
-            const clientPayments = payments.filter(p => p.clientId === client.id);
-            const totalPaid = clientPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+            const totalPaid = totalPaidByClientId.get(client.id) || 0;
             
             return (
             <TableRow key={client.id}>
@@ -1709,7 +1760,7 @@ export default function Clients() {
               </TableCell>
               <TableCell className="font-medium">
                 {client.name}
-                {upcomingBirthdays.some(b => b.id === client.id) && (
+                {birthdayClientIds.has(client.id) && (
                   <Gift className="inline-block ml-2 h-4 w-4 text-pink-500" />
                 )}
               </TableCell>
@@ -2312,7 +2363,7 @@ export default function Clients() {
             <TabsTrigger value="expired" className="px-4 text-xs sm:text-sm">
               {isInzanTenant ? 'Expired / Inactive' : t('members.tabs.expired')} ({expired.length})
             </TabsTrigger>
-            <TabsTrigger value="renewal" className="px-4 text-xs sm:text-sm bg-blue-500/10 text-blue-700 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">
+            <TabsTrigger value="renewal" className="px-4 text-xs sm:text-sm bg-blue-500/10 text-blue-700 dark:text-blue-400 data-[state=active]:bg-blue-600 data-[state=active]:text-white transition-all">
               {t('members.tabs.renewal_pipeline')}
             </TabsTrigger>
           </TabsList>

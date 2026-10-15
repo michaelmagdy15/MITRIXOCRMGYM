@@ -89,12 +89,13 @@ export const SALES_NAME_MAPPING: Record<string, string> = {
   'Salma Ahmed': 'Salma Ahmed',
 };
 
+const CANONICAL_NAME_LOOKUP = new Map<string, string>(
+  Object.entries(SALES_NAME_MAPPING).map(([key, value]) => [key.trim().toLowerCase(), value])
+);
+
 export function toCanonical(name: string): string {
   if (!name) return '';
-  const lower = name.trim().toLowerCase();
-  for (const [key, value] of Object.entries(SALES_NAME_MAPPING)) {
-    if (key.toLowerCase() === lower) return value;
-  }
-  return name.trim();
+  const trimmed = name.trim();
+  return CANONICAL_NAME_LOOKUP.get(trimmed.toLowerCase()) || trimmed;
 }
 

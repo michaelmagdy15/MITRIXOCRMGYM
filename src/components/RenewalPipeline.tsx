@@ -54,30 +54,30 @@ export default function RenewalPipeline() {
     }
   };
 
-  // Filter members for renewal
-  const renewalMembers = clients.filter(c => c.status === 'Nearly Expired' || c.status === 'Expired');
+  const { expired, urgent, upcoming } = useMemo(() => {
+    const today = startOfDay(new Date());
+    const expArr: Client[] = [];
+    const urgArr: Client[] = [];
+    const upcArr: Client[] = [];
 
-  // Grouping logic
-  const expired = renewalMembers.filter(c => {
-    const expiry = safeParseISO(c.membershipExpiry);
-    if (!expiry) return c.status === 'Expired';
-    return isBefore(expiry, now);
-  });
+    for (const c of clients) {
+      if (c.status !== 'Nearly Expired' && c.status !== 'Expired') continue;
+      const expiry = safeParseISO(c.membershipExpiry);
+      if (!expiry) {
+        if (c.status === 'Expired') expArr.push(c);
+        continue;
+      }
+      if (isBefore(expiry, today)) {
+        expArr.push(c);
+      } else {
+        const diff = differenceInDays(expiry, today);
+        if (diff >= 0 && diff <= 7) urgArr.push(c);
+        else if (diff > 7 && diff <= 30) upcArr.push(c);
+      }
+    }
 
-  const urgent = renewalMembers.filter(c => {
-    const expiry = safeParseISO(c.membershipExpiry);
-    if (!expiry) return false;
-    const diff = differenceInDays(expiry, now);
-    // Includes today (diff === 0) through 7 days
-    return diff >= 0 && diff <= 7;
-  });
-
-  const upcoming = renewalMembers.filter(c => {
-    const expiry = safeParseISO(c.membershipExpiry);
-    if (!expiry) return false;
-    const diff = differenceInDays(expiry, now);
-    return diff > 7 && diff <= 30;
-  });
+    return { expired: expArr, urgent: urgArr, upcoming: upcArr };
+  }, [clients]);
 
   const handleMarkContacted = async (client: Client) => {
     await addComment(client.id, "Contacted regarding renewal", currentUser?.name || 'System');
@@ -180,7 +180,7 @@ export default function RenewalPipeline() {
     setNotes('');
   };
 
-  const PipelineTable = ({ title, members, icon: Icon, colorClass }: { title: string, members: Client[], icon: any, colorClass: string }) => (
+  const renderPipelineTable = (title: string, members: Client[], Icon: any, colorClass: string) => (
     <Card className="mb-6 overflow-hidden">
       <CardHeader className={`bg-gradient-to-r ${colorClass} text-white`}>
         <div className="flex items-center gap-2">
@@ -202,7 +202,7 @@ export default function RenewalPipeline() {
           <TableBody>
             {members.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                   No members in this category
                 </TableCell>
               </TableRow>
@@ -213,39 +213,39 @@ export default function RenewalPipeline() {
                 const lastContactDate = safeParseISO(client.lastContactDate);
 
                 return (
-                  <TableRow key={client.id} className="hover:bg-slate-50 transition-colors">
+                  <TableRow key={client.id} className="hover:bg-muted/40 transition-colors">
                     <TableCell className="pl-6">
-                      <div className="font-medium text-slate-900">{client.name}</div>
-                      <div className="text-xs text-slate-500">#{client.memberId || 'N/A'}</div>
+                      <div className="font-medium text-foreground">{client.name}</div>
+                      <div className="text-xs text-muted-foreground">#{client.memberId || 'N/A'}</div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
-                        <Badge variant={daysLeft < 0 ? 'destructive' : 'outline'} className={daysLeft >= 0 && daysLeft <= 7 ? 'w-fit text-orange-600 border-orange-200 bg-orange-50' : 'w-fit'}>
+                        <Badge variant={daysLeft < 0 ? 'destructive' : 'outline'} className={daysLeft >= 0 && daysLeft <= 7 ? 'w-fit text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-500/30 bg-orange-50 dark:bg-orange-500/10' : 'w-fit'}>
                           {daysLeft < 0
                             ? `Expired ${Math.abs(daysLeft)}d ago`
                             : daysLeft === 0
                               ? 'Expires today'
                               : `${daysLeft} days left`}
                         </Badge>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-muted-foreground">
                           {expiryDate ? format(expiryDate, 'MMM d, yyyy') : 'N/A'}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="text-sm">
+                        <span className="text-sm text-foreground">
                           {lastContactDate ? format(lastContactDate, 'MMM d, yyyy') : 'Never'}
                         </span>
                         {lastContactDate && (
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-muted-foreground">
                             {differenceInDays(now, lastContactDate)} days ago
                           </span>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
+                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         <User className="w-3.5 h-3.5" />
                         {resolveUserDisplay(client.assignedTo, users, client.salesName || 'Unassigned')}
                       </div>
@@ -255,7 +255,7 @@ export default function RenewalPipeline() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          className="h-8 gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+                          className="h-8 gap-1.5 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/30 hover:bg-blue-50 dark:hover:bg-blue-500/10"
                           onClick={() => handleMarkContacted(client)}
                         >
                           <Phone className="w-3.5 h-3.5" />
@@ -264,7 +264,7 @@ export default function RenewalPipeline() {
                         <Button 
                           variant="default" 
                           size="sm" 
-                          className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                          className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
                           onClick={() => handleOpenPayment(client)}
                         >
                           <DollarSign className="w-3.5 h-3.5" />
@@ -285,30 +285,13 @@ export default function RenewalPipeline() {
   return (
     <div className="space-y-6 p-4">
       <div className="flex flex-col gap-1 mb-2">
-        <h2 className="text-2xl font-bold text-slate-800">Renewal Pipeline</h2>
-        <p className="text-slate-500">Manage upcoming and expired memberships to prevent churn.</p>
+        <h2 className="text-2xl font-bold text-foreground">Renewal Pipeline</h2>
+        <p className="text-muted-foreground">Manage upcoming and expired memberships to prevent churn.</p>
       </div>
 
-      <PipelineTable 
-        title="Already Expired" 
-        members={expired} 
-        icon={AlertTriangle} 
-        colorClass="from-rose-500 to-red-600"
-      />
-      
-      <PipelineTable 
-        title="Expiring Soon (1-7 Days)" 
-        members={urgent} 
-        icon={Clock} 
-        colorClass="from-orange-400 to-darkorange-500"
-      />
-      
-      <PipelineTable 
-        title="Upcoming (8-30 Days)" 
-        members={upcoming} 
-        icon={Calendar} 
-        colorClass="from-blue-500 to-indigo-600"
-      />
+      {renderPipelineTable("Already Expired", expired, AlertTriangle, "from-rose-500 to-red-600")}
+      {renderPipelineTable("Expiring Soon (1-7 Days)", urgent, Clock, "from-orange-400 to-amber-600")}
+      {renderPipelineTable("Upcoming (8-30 Days)", upcoming, Calendar, "from-blue-500 to-indigo-600")}
 
       {/* Record Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
@@ -322,10 +305,10 @@ export default function RenewalPipeline() {
           
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label className="text-slate-500 text-xs uppercase tracking-wider font-semibold">Member</Label>
-              <div className="p-2 bg-slate-50 rounded-md border border-slate-100 flex items-center justify-between">
-                <span className="font-medium">{selectedClient?.name}</span>
-                <span className="text-xs text-slate-500">#{selectedClient?.memberId}</span>
+              <Label className="text-muted-foreground text-xs uppercase tracking-wider font-semibold">Member</Label>
+              <div className="p-2 bg-muted/40 rounded-md border border-border flex items-center justify-between">
+                <span className="font-medium text-foreground">{selectedClient?.name}</span>
+                <span className="text-xs text-muted-foreground">#{selectedClient?.memberId}</span>
               </div>
             </div>
 

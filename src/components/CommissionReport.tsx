@@ -125,7 +125,7 @@ const CommissionReport: React.FC = () => {
         };
       }
 
-      const amount = Number(p.amount) || 0;
+      const amount = Number(p.amount_paid ?? p.amount) || 0;
       reps[repId].totalRevenue += amount;
 
       if (p.package_category_type === 'PT' || (p.package_category_type as string) === 'Private Training' || p.packageType?.toLowerCase().includes('pt')) {
@@ -169,53 +169,53 @@ const CommissionReport: React.FC = () => {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-4">
-          <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
+        <div className="bg-card p-6 rounded-2xl shadow-sm border border-border flex items-center space-x-4">
+          <div className="p-3 bg-blue-500/15 rounded-xl text-blue-600 dark:text-blue-400">
             <TrendingUp size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Month Revenue</p>
-            <p className="text-2xl font-bold text-slate-900">{totalMonthRevenue.toLocaleString()} {branding.currencySymbol || 'LE'}</p>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Month Revenue</p>
+            <p className="text-2xl font-bold text-foreground">{totalMonthRevenue.toLocaleString()} {branding.currencySymbol || 'LE'}</p>
           </div>
         </div>
         
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-4">
-          <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
+        <div className="bg-card p-6 rounded-2xl shadow-sm border border-border flex items-center space-x-4">
+          <div className="p-3 bg-emerald-500/15 rounded-xl text-emerald-600 dark:text-emerald-400">
             <DollarSign size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Total Commission</p>
-            <p className="text-2xl font-bold text-slate-900">{totalMonthCommission.toLocaleString()} {branding.currencySymbol || 'LE'}</p>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Total Commission</p>
+            <p className="text-2xl font-bold text-foreground">{totalMonthCommission.toLocaleString()} {branding.currencySymbol || 'LE'}</p>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center space-x-4">
-          <div className="p-3 bg-amber-50 rounded-xl text-amber-600">
+        <div className="bg-card p-6 rounded-2xl shadow-sm border border-border flex items-center space-x-4">
+          <div className="p-3 bg-amber-500/15 rounded-xl text-amber-600 dark:text-amber-400">
             <Users size={24} />
           </div>
           <div>
-            <p className="text-sm font-medium text-slate-500 uppercase tracking-wider">Active Reps</p>
-            <p className="text-2xl font-bold text-slate-900">{reportData.length}</p>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Active Reps</p>
+            <p className="text-2xl font-bold text-foreground">{reportData.length}</p>
           </div>
         </div>
       </div>
 
       {/* Controls */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+      <div className="bg-card p-6 rounded-2xl shadow-sm border border-border">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-4">
             <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <input 
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
+                className="pl-10 pr-4 py-2 bg-muted/40 text-foreground border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none"
               />
             </div>
             <button 
               onClick={exportToCSV}
-              className="flex items-center space-x-2 px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors shadow-sm"
+              className="flex items-center space-x-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl hover:opacity-90 transition-opacity shadow-sm"
             >
               <Download size={18} />
               <span>Export CSV</span>
@@ -225,31 +225,31 @@ const CommissionReport: React.FC = () => {
           {isManager && (
             <div className="flex items-center space-x-4">
               {editingRates ? (
-                <div className="flex items-center space-x-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                <div className="flex items-center space-x-3 bg-muted/40 p-2 rounded-xl border border-border">
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs font-semibold text-slate-500 uppercase">PT:</span>
+                    <span className="text-xs font-semibold text-muted-foreground uppercase">PT:</span>
                     <input 
                       type="number" 
                       value={localRates.ptRate}
                       onChange={(e) => setLocalRates({...localRates, ptRate: Number(e.target.value)})}
-                      className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm"
+                      className="w-16 px-2 py-1 bg-background text-foreground border border-border rounded-lg text-sm"
                     />
-                    <span className="text-slate-400">%</span>
+                    <span className="text-muted-foreground">%</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <span className="text-xs font-semibold text-slate-500 uppercase">Group:</span>
+                    <span className="text-xs font-semibold text-muted-foreground uppercase">Group:</span>
                     <input 
                       type="number" 
                       value={localRates.groupRate}
                       onChange={(e) => setLocalRates({...localRates, groupRate: Number(e.target.value)})}
-                      className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm"
+                      className="w-16 px-2 py-1 bg-background text-foreground border border-border rounded-lg text-sm"
                     />
-                    <span className="text-slate-400">%</span>
+                    <span className="text-muted-foreground">%</span>
                   </div>
                   <button 
                     onClick={handleSaveRates}
                     disabled={saving}
-                    className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                    className="p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
                   >
                     <Save size={16} />
                   </button>
@@ -258,7 +258,7 @@ const CommissionReport: React.FC = () => {
                       setEditingRates(false);
                       setLocalRates(safeCommissionRates);
                     }}
-                    className="p-1.5 bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors"
+                    className="p-1.5 bg-muted text-muted-foreground rounded-lg hover:text-foreground transition-colors"
                   >
                     <SettingsIcon size={16} />
                   </button>
@@ -266,17 +266,17 @@ const CommissionReport: React.FC = () => {
               ) : (
                 <div className="flex items-center space-x-4">
                   {showSuccess && (
-                    <div className="flex items-center space-x-1 text-emerald-600 animate-in fade-in slide-in-from-right-2">
+                    <div className="flex items-center space-x-1 text-emerald-600 dark:text-emerald-400 animate-in fade-in slide-in-from-right-2">
                       <CheckCircle2 size={16} />
                       <span className="text-sm font-medium">Rates updated</span>
                     </div>
                   )}
-                  <div className="text-sm text-slate-500">
-                    Rates: <span className="font-semibold text-slate-900">PT {safeCommissionRates.ptRate}%</span>, Group <span className="font-semibold text-slate-900">{safeCommissionRates.groupRate}%</span>
+                  <div className="text-sm text-muted-foreground">
+                    Rates: <span className="font-semibold text-foreground">PT {safeCommissionRates.ptRate}%</span>, Group <span className="font-semibold text-foreground">{safeCommissionRates.groupRate}%</span>
                   </div>
                   <button 
                     onClick={() => setEditingRates(true)}
-                    className="flex items-center space-x-2 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
+                    className="flex items-center space-x-2 px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg transition-colors border border-border"
                   >
                     <SettingsIcon size={16} />
                     <span className="text-sm font-medium">Adjust Rates</span>
@@ -289,35 +289,35 @@ const CommissionReport: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Representative</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Private Revenue</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Group Revenue</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Total Revenue</th>
-                <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Commission</th>
+              <tr className="bg-muted/40 border-b border-border">
+                <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Representative</th>
+                <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Private Revenue</th>
+                <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Group Revenue</th>
+                <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Total Revenue</th>
+                <th className="px-6 py-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider text-right">Commission</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-border">
               {reportData.length > 0 ? (
                 reportData.map((rep, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                  <tr key={idx} className="hover:bg-muted/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs">
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-foreground font-bold text-xs">
                           {rep.name.charAt(0)}
                         </div>
-                        <span className="font-medium text-slate-900">{rep.name}</span>
+                        <span className="font-medium text-foreground">{rep.name}</span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-right font-medium text-slate-600">{rep.privateRevenue.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right font-medium text-slate-600">{rep.groupRevenue.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right font-bold text-slate-900">{rep.totalRevenue.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right font-medium text-muted-foreground">{rep.privateRevenue.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right font-medium text-muted-foreground">{rep.groupRevenue.toLocaleString()}</td>
+                    <td className="px-6 py-4 text-right font-bold text-foreground">{rep.totalRevenue.toLocaleString()}</td>
                     <td className="px-6 py-4 text-right">
-                      <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-sm font-bold border border-emerald-100">
+                      <span className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-3 py-1 rounded-full text-sm font-bold border border-emerald-500/30">
                         {rep.commission.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {branding.currencySymbol || 'LE'}
                       </span>
                     </td>
@@ -325,7 +325,7 @@ const CommissionReport: React.FC = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
                     <div className="flex flex-col items-center">
                       <FileSpreadsheet size={48} className="mb-2 opacity-20" />
                       <p>No payments found for {format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy')}</p>
@@ -335,13 +335,13 @@ const CommissionReport: React.FC = () => {
               )}
             </tbody>
             {reportData.length > 0 && (
-              <tfoot className="bg-slate-50/80 border-t border-slate-100">
+              <tfoot className="bg-muted/40 border-t border-border">
                 <tr>
-                  <td className="px-6 py-4 font-bold text-slate-900">Monthly Totals</td>
-                  <td className="px-6 py-4 text-right font-bold text-slate-900">{reportData.reduce((s, r) => s + r.privateRevenue, 0).toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-bold text-slate-900">{reportData.reduce((s, r) => s + r.groupRevenue, 0).toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-bold text-blue-600">{totalMonthRevenue.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right font-bold text-emerald-600">{totalMonthCommission.toLocaleString()} {branding.currencySymbol || 'LE'}</td>
+                  <td className="px-6 py-4 font-bold text-foreground">Monthly Totals</td>
+                  <td className="px-6 py-4 text-right font-bold text-foreground">{reportData.reduce((s, r) => s + r.privateRevenue, 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right font-bold text-foreground">{reportData.reduce((s, r) => s + r.groupRevenue, 0).toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right font-bold text-blue-600 dark:text-blue-400">{totalMonthRevenue.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right font-bold text-emerald-600 dark:text-emerald-400">{totalMonthCommission.toLocaleString()} {branding.currencySymbol || 'LE'}</td>
                 </tr>
               </tfoot>
             )}

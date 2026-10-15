@@ -59,7 +59,7 @@ function KPICard({
             <p className="text-2xl font-extrabold">{value}</p>
             <p className="text-xs opacity-60 mt-1">{subtitle}</p>
           </div>
-          <div className="p-2 rounded-lg bg-white/60">
+          <div className="p-2 rounded-lg bg-background/60">
             <Icon className="h-5 w-5" />
           </div>
         </div>
@@ -190,68 +190,72 @@ export default function Reports() {
     return total > 0 ? ((converted / total) * 100).toFixed(0) : '0';
   }, [clients]);
 
-  // --- Lead Source chart data ---
+  // --- Lead Source chart data (O(P + C) via Map instead of O(P * C)) ---
   const sourceROI = useMemo(() => {
     const getDisplaySource = (c: any) => {
-      // Differentiate between intentional 'Other' and unmapped imported data
       if (c.source === 'Other' && c.importBatchId) return 'Imported (Unknown)';
       return c.source;
     };
 
-    const sources = Array.from(new Set(clients.map(getDisplaySource).filter(Boolean))) as string[];
-    return sources
-      .map(source => {
-        const leads = clients.filter(c => getDisplaySource(c) === source);
-        const converted = leads.filter(c => c.status !== 'Lead');
-        const revenue = payments
-          .filter(p => !p.deleted_at && leads.some(c => c.id === p.clientId))
-          .reduce((sum, p) => sum + (Number(p.amount_paid) || Number(p.amount) || 0), 0);
-        return {
-          source,
-          leads: leads.length,
-          converted: converted.length,
-          conversion: leads.length > 0 ? +((converted.length / leads.length) * 100).toFixed(1) : 0,
-          revenue,
-        };
-      })
+    const revenueByClientId = new Map<string, number>();
+    for (const p of payments) {
+      if (p.deleted_at || !p.clientId) continue;
+      const amt = Number(p.amount_paid) || Number(p.amount) || 0;
+      revenueByClientId.set(p.clientId, (revenueByClientId.get(p.clientId) || 0) + amt);
+    }
+
+    const bySource = new Map<string, { leads: number; converted: number; revenue: number }>();
+    for (const c of clients) {
+      const source = getDisplaySource(c);
+      if (!source) continue;
+      let entry = bySource.get(source);
+      if (!entry) {
+        entry = { leads: 0, converted: 0, revenue: 0 };
+        bySource.set(source, entry);
+      }
+      entry.leads++;
+      if (c.status !== 'Lead') entry.converted++;
+      entry.revenue += revenueByClientId.get(c.id) || 0;
+    }
+
+    return Array.from(bySource.entries())
+      .map(([source, { leads, converted, revenue }]) => ({
+        source,
+        leads,
+        converted,
+        conversion: leads > 0 ? +((converted / leads) * 100).toFixed(1) : 0,
+        revenue,
+      }))
       .sort((a, b) => b.revenue - a.revenue);
   }, [clients, payments]);
 
-  // --- Churn Risk ---
+  // --- Churn Risk (O(C + A) via Map instead of O(C * A)) ---
   const churnRisk = useMemo(() => {
-    const activeMembers = clients.filter(c => c.status === 'Active');
-    return activeMembers
-      .filter(member => {
-        const memberAttendances = attendances.filter(a => a.clientId === member.id);
-        if (memberAttendances.length === 0) return true;
-        const last = memberAttendances.sort((a, b) => {
-          const aDate = a.date || '';
-          const bDate = b.date || '';
-          return bDate.localeCompare(aDate);
-        })[0];
-        if (!last) return true;
-        const parsed = safeParseDate(last.date);
-        if (!parsed) return true;
-        return differenceInDays(now, parsed) > 14;
-      })
-      .map(m => {
-        const last = attendances
-          .filter(a => a.clientId === m.id)
-          .sort((a, b) => {
-            const aDate = a.date || '';
-            const bDate = b.date || '';
-            return bDate.localeCompare(aDate);
-          })[0];
-        const parsed = last ? safeParseDate(last.date) : null;
-        const daysAgo = parsed ? differenceInDays(now, parsed) : null;
-        return {
-          id: m.id,
-          name: m.name,
+    const lastAttendanceDateByClientId = new Map<string, string>();
+    for (const a of attendances) {
+      if (!a.clientId || !a.date) continue;
+      const existing = lastAttendanceDateByClientId.get(a.clientId);
+      if (!existing || a.date.localeCompare(existing) > 0) {
+        lastAttendanceDateByClientId.set(a.clientId, a.date);
+      }
+    }
+
+    const result: { id: string; name: string; lastDate: string | null; daysAgo: number | null }[] = [];
+    for (const member of clients) {
+      if (member.status !== 'Active') continue;
+      const lastDateStr = lastAttendanceDateByClientId.get(member.id);
+      const parsed = lastDateStr ? safeParseDate(lastDateStr) : null;
+      const daysAgo = parsed ? differenceInDays(now, parsed) : null;
+      if (daysAgo === null || daysAgo > 14) {
+        result.push({
+          id: member.id,
+          name: member.name,
           lastDate: parsed ? format(parsed, 'MMM d') : null,
           daysAgo,
-        };
-      })
-      .sort((a, b) => (b.daysAgo ?? 9999) - (a.daysAgo ?? 9999));
+        });
+      }
+    }
+    return result.sort((a, b) => (b.daysAgo ?? 9999) - (a.daysAgo ?? 9999));
   }, [clients, attendances]);
 
   // --- Cohort Retention chart data ---
@@ -275,21 +279,27 @@ export default function Reports() {
       .slice(-8);
   }, [clients]);
 
-  // --- Revenue Forecast ---
+  // --- Revenue Forecast (O(C + P) via Map instead of O(C * P)) ---
   const revenueForecast = useMemo(() => {
+    const lastPaymentByClientId = new Map<string, { date: string; amount: number }>();
+    for (const p of payments) {
+      if (p.deleted_at || !p.clientId) continue;
+      const pDate = p.date || '';
+      const amt = Number(p.amount_paid) || Number(p.amount) || 0;
+      const existing = lastPaymentByClientId.get(p.clientId);
+      if (!existing || pDate.localeCompare(existing.date) > 0) {
+        lastPaymentByClientId.set(p.clientId, { date: pDate, amount: amt });
+      }
+    }
+
     const expiringThisMonth = clients.filter(c => {
       if (c.status !== 'Active') return false;
       const parsed = safeParseDate(c.membershipExpiry);
       return parsed ? isSameMonth(parsed, now) : false;
     });
     const sumValue = expiringThisMonth.reduce((sum, c) => {
-      const cp = payments.filter(p => p.clientId === c.id && !p.deleted_at);
-      const last = cp.sort((a, b) => {
-        const aDate = a.date || '';
-        const bDate = b.date || '';
-        return bDate.localeCompare(aDate);
-      })[0];
-      return sum + (last?.amount_paid || last?.amount || 0);
+      const last = lastPaymentByClientId.get(c.id);
+      return sum + (last?.amount || 0);
     }, 0);
     const last3 = [subMonths(now, 1), subMonths(now, 2), subMonths(now, 3)];
     const rates = last3

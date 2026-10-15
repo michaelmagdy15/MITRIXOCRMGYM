@@ -206,11 +206,13 @@ export default function Leads() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  const allLeads = clients.filter(c => {
-    if (c.status !== 'Lead') return false;
-    if (currentUser?.role === 'rep' && c.assignedTo !== currentUser.id) return false;
-    return true;
-  });
+  const allLeads = useMemo(() => {
+    return clients.filter(c => {
+      if (c.status !== 'Lead') return false;
+      if (currentUser?.role === 'rep' && c.assignedTo !== currentUser.id) return false;
+      return true;
+    });
+  }, [clients, currentUser?.role, currentUser?.id]);
 
   const calculateLeadScore = (lead: Client) => {
     let score = 0;

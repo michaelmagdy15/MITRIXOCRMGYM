@@ -220,8 +220,12 @@ export default function Payments() {
 
   const canDeletePayment = canDeletePayments;
 
-  const adminUsers = users.filter(u =>
-    ['admin', 'super_admin', 'crm_admin', 'manager', 'rep', 'sales_rep', 'sales'].includes(u.role?.toLowerCase() || '')
+  const adminUsers = React.useMemo(
+    () =>
+      users.filter(u =>
+        ['admin', 'super_admin', 'crm_admin', 'manager', 'rep', 'sales_rep', 'sales'].includes(u.role?.toLowerCase() || '')
+      ),
+    [users]
   );
 
   const uniqueSalesNames = React.useMemo(() => {
@@ -1609,20 +1613,29 @@ export default function Payments() {
                               </button>
                             )}
                             <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
-                              {clients
-                                .filter(c => {
-                                  if (!clientSearch) return true;
-                                  const t = clientSearch.toLowerCase().trim();
-                                  const cleanId = t.replace(/^#/, '');
-                                  return (
-                                    c.name?.toLowerCase().includes(t) || 
-                                    matchesPhoneSearch(c.phone, t) || 
-                                    matchesPhoneSearch((c as any).parentPhone, t) ||
+                              {(() => {
+                                const term = clientSearch.toLowerCase().trim();
+                                const cleanId = term.replace(/^#/, '');
+                                const matched: Client[] = [];
+                                for (const c of clients) {
+                                  if (!term) {
+                                    matched.push(c);
+                                  } else if (
+                                    c.name?.toLowerCase().includes(term) ||
+                                    matchesPhoneSearch(c.phone, term) ||
+                                    matchesPhoneSearch((c as any).parentPhone, term) ||
                                     (c.memberId && c.memberId.toString().includes(cleanId))
+                                  ) {
+                                    matched.push(c);
+                                  }
+                                  if (matched.length >= 50) break;
+                                }
+                                if (matched.length === 0) {
+                                  return (
+                                    <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('members.no_members')}</div>
                                   );
-                                })
-                                .slice(0, 50)
-                                .map(client => (
+                                }
+                                return matched.map(client => (
                                   <button
                                     key={client.id}
                                     type="button"
@@ -1642,20 +1655,8 @@ export default function Payments() {
                                       <div className="text-xs text-muted-foreground">{[client.phone, client.memberId ? `#${client.memberId}` : null, client.branch].filter(Boolean).join(' · ')}</div>
                                     </div>
                                   </button>
-                                ))}
-                              {clients.filter(c => {
-                                if (!clientSearch) return true;
-                                const t = clientSearch.toLowerCase().trim();
-                                const cleanId = t.replace(/^#/, '');
-                                return (
-                                  c.name?.toLowerCase().includes(t) || 
-                                  matchesPhoneSearch(c.phone, t) || 
-                                  matchesPhoneSearch((c as any).parentPhone, t) ||
-                                  (c.memberId && c.memberId.toString().includes(cleanId))
-                                );
-                              }).length === 0 && (
-                                <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('members.no_members')}</div>
-                              )}
+                                ));
+                              })()}
                             </div>
                           </>
                         )}
