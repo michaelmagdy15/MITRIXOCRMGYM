@@ -7,8 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { useTheme } from '../contexts/ThemeContext';
 import { format, parseISO } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
-import { Activity, Award, Calendar, MessageSquare, TrendingUp, Apple, Dumbbell } from 'lucide-react';
+import { Activity, Award, Calendar, MessageSquare, TrendingUp, Apple, Dumbbell, Flame } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+
+const CORE_MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms & Core', 'Conditioning'] as const;
 
 export default function MemberProgress({ client }: { client: Client | null }) {
   const { theme } = useTheme();
@@ -125,6 +127,74 @@ export default function MemberProgress({ client }: { client: Client | null }) {
     ...data
   })).sort((a, b) => a.exercise.localeCompare(b.exercise));
 
+  // 7-Day Muscle Group Stimulus & Recovery Status (inspect last 14 days of performanceLogs)
+  const nowMs = Date.now();
+  const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+  const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+
+  const muscleMap = CORE_MUSCLE_GROUPS.map((group) => {
+    let sets7d = 0;
+    let volume7d = 0;
+    let lastTrainedMs: number | null = null;
+
+    performanceLogs.forEach((log) => {
+      if (!log.date || !Array.isArray(log.exercises)) return;
+      const logTime = new Date(log.date).getTime();
+      if (isNaN(logTime)) return;
+      const ageMs = nowMs - logTime;
+      if (ageMs < 0 || ageMs > fourteenDaysMs) return;
+
+      log.exercises.forEach((ex: { name?: string; category?: string; sets?: { weightKg?: number; reps?: number }[] }) => {
+        const cat = CORE_MUSCLE_GROUPS.includes(ex.category as any) ? ex.category : 'Conditioning';
+        if (cat !== group) return;
+        const exSets = Array.isArray(ex.sets) ? ex.sets : [];
+        if (exSets.length === 0) return;
+
+        if (lastTrainedMs === null || logTime > lastTrainedMs) {
+          lastTrainedMs = logTime;
+        }
+
+        if (ageMs <= sevenDaysMs) {
+          sets7d += exSets.length;
+          exSets.forEach((s) => {
+            volume7d += (Number(s.weightKg) || 0) * (Number(s.reps) || 0);
+          });
+        }
+      });
+    });
+
+    const hoursSince = lastTrainedMs !== null ? Math.max(0, Math.round((nowMs - lastTrainedMs) / (1000 * 60 * 60))) : null;
+
+    let status: 'Fatigued / Recovering' | 'Fresh / Prime' | 'Detrained / Ready' = 'Detrained / Ready';
+    let badgeClass = 'bg-zinc-500/15 text-zinc-500 dark:text-zinc-400 border-zinc-500/30';
+    if (hoursSince !== null && hoursSince < 48) {
+      status = 'Fatigued / Recovering';
+      badgeClass = 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30';
+    } else if (hoursSince !== null && hoursSince <= 168) {
+      status = 'Fresh / Prime';
+      badgeClass = 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30';
+    }
+
+    const relativeTime =
+      hoursSince === null
+        ? 'No recent sessions'
+        : hoursSince < 1
+        ? 'Just now'
+        : hoursSince < 48
+        ? `${hoursSince}h ago`
+        : `${Math.floor(hoursSince / 24)}d ago`;
+
+    return {
+      group,
+      sets7d,
+      volume7d: Math.round(volume7d),
+      hoursSince,
+      relativeTime,
+      status,
+      badgeClass
+    };
+  });
+
   // Chart configuration colors
   const strokeColor = theme === 'dark' ? '#f4f4f5' : '#09090b';
   const gridColor = theme === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
@@ -201,6 +271,53 @@ export default function MemberProgress({ client }: { client: Client | null }) {
         </CardContent>
       </Card>
 
+      {/* Muscle Recovery & Weekly Stimulus Map */}
+      <Card className="border bg-card/40 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <Flame className="h-4 w-4 text-primary" /> Muscle Recovery & Weekly Stimulus Map
+          </CardTitle>
+          <CardDescription className="text-[11px]">
+            7-day set & volume stimulus with recovery readiness across core muscle zones.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {muscleMap.map((m) => {
+              const barPct = Math.min(100, Math.round((m.sets7d / 12) * 100));
+              return (
+                <div
+                  key={m.group}
+                  className="bg-card border rounded-xl p-3 flex flex-col justify-between gap-2 hover:bg-card/75 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-foreground truncate">{m.group}</span>
+                    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 font-bold shrink-0 ${m.badgeClass}`}>
+                      {m.status}
+                    </Badge>
+                  </div>
+
+                  <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-primary h-full rounded-full transition-all duration-300"
+                      style={{ width: `${barPct}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
+                    <span>
+                      <strong className="text-foreground">{m.sets7d}</strong> sets •{' '}
+                      <strong className="text-foreground">{m.volume7d.toLocaleString()}</strong> kg
+                    </span>
+                    <span>{m.relativeTime}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Personal Records (PRs) */}
       <Card className="border bg-card/40 shadow-sm">
         <CardHeader className="pb-3">
@@ -230,6 +347,11 @@ export default function MemberProgress({ client }: { client: Client | null }) {
                       <span className="text-[10px] text-muted-foreground font-medium block font-sans">
                         for {pr.reps} rep{pr.reps > 1 ? 's' : ''}
                       </span>
+                    )}
+                    {pr.reps > 1 && (
+                      <Badge variant="outline" className="mt-1.5 text-[9px] font-mono bg-primary/5 text-primary border-primary/20 px-1.5 py-0">
+                        Est. 1RM: {Math.round(pr.weight * (1 + (pr.reps || 1) / 30))} kg
+                      </Badge>
                     )}
                   </div>
                   <span className="text-[9px] text-zinc-500 font-mono">

@@ -4,12 +4,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
   Calendar, Users, Dumbbell, User, Clock, Flame, ChevronRight, 
-  Activity, Award, CheckCircle, ArrowRight, DollarSign, Bell, MessageSquare 
+  Activity, Award, CheckCircle, ArrowRight, DollarSign, Bell, MessageSquare,
+  AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { format, parseISO, isToday, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
+import { format, parseISO, isToday, startOfWeek, endOfWeek, isWithinInterval, differenceInDays, isAfter, startOfDay } from 'date-fns';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { ClassSchedule } from '../types/class';
 import { Session, Assessment, Client } from '../types';
@@ -34,6 +35,15 @@ interface CoachStats {
   totalSessionsAllTime: number;
 }
 
+interface RadarClientItem {
+  id: string;
+  name: string;
+  phone?: string;
+  remaining: number | null;
+  lastSessionDaysAgo: number | null;
+  hasUpcomingSession: boolean;
+}
+
 export default function CoachHome({ 
   onNavigate, 
   onStartFloor 
@@ -51,6 +61,8 @@ export default function CoachHome({
   });
   const [todayAgenda, setTodayAgenda] = useState<TodayAgendaItem[]>([]);
   const [pendingAssessments, setPendingAssessments] = useState<Assessment[]>([]);
+  const [lowBalanceClients, setLowBalanceClients] = useState<RadarClientItem[]>([]);
+  const [atRiskClients, setAtRiskClients] = useState<RadarClientItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Greeting based on time
@@ -193,9 +205,88 @@ export default function CoachHome({
         agenda.sort((a, b) => a.time.localeCompare(b.time));
         setTodayAgenda(agenda);
 
+        // Build PT Client Retention & Renewal Radar
+        const clientMap = new Map<string, Client>();
+        clientsSnap.docs.forEach(d => {
+          clientMap.set(d.id, { ...d.data(), id: d.id } as Client);
+        });
+
+        const sessionClientIds = [...new Set(mySessions.map(s => s.clientId).filter(Boolean))];
+        const missingIds = sessionClientIds.filter(id => !clientMap.has(id));
+        for (let i = 0; i < missingIds.length; i += 30) {
+          const batch = missingIds.slice(i, i + 30);
+          if (batch.length > 0) {
+            const extraSnap = await getDocs(query(collection(db, 'clients'), where('__name__', 'in', batch)));
+            extraSnap.docs.forEach(d => {
+              clientMap.set(d.id, { ...d.data(), id: d.id } as Client);
+            });
+          }
+        }
+
+        const lowBalList: RadarClientItem[] = [];
+        const atRiskList: RadarClientItem[] = [];
+        const todayStart = startOfDay(now);
+
+        clientMap.forEach(client => {
+          const rawRem = client.ptSessionsRemaining ?? client.sessionsRemaining;
+          const parsedRem = typeof rawRem === 'number'
+            ? rawRem
+            : (rawRem !== undefined && rawRem !== null && String(rawRem).trim() !== '' ? Number(rawRem) : NaN);
+          const remaining = !isNaN(parsedRem) ? parsedRem : null;
+
+          const clientSessions = mySessions.filter(s => s.clientId === client.id);
+          let lastAttendedDate: Date | null = null;
+          let hasUpcoming = false;
+
+          clientSessions.forEach(s => {
+            if (!s.date) return;
+            try {
+              const d = parseISO(s.date);
+              if (isNaN(d.getTime())) return;
+              const st = s.status as string;
+              if (st === 'Attended' || st === 'Completed') {
+                if (!lastAttendedDate || isAfter(d, lastAttendedDate)) {
+                  lastAttendedDate = d;
+                }
+              }
+              if (st === 'Scheduled' || st === 'Rescheduled') {
+                if (isToday(d) || isAfter(d, todayStart) || s.date >= todayDateStr) {
+                  hasUpcoming = true;
+                }
+              }
+            } catch {}
+          });
+
+          const lastSessionDaysAgo = lastAttendedDate ? differenceInDays(now, lastAttendedDate) : null;
+
+          const radarItem: RadarClientItem = {
+            id: client.id,
+            name: client.name || 'Client',
+            phone: client.phone,
+            remaining,
+            lastSessionDaysAgo,
+            hasUpcomingSession: hasUpcoming,
+          };
+
+          // 1. Low-Balance PT Clients: remaining between 0 and 2 (inclusive)
+          if (remaining !== null && remaining >= 0 && remaining <= 2) {
+            lowBalList.push(radarItem);
+          }
+
+          // 2. At-Risk / Inactive PT Clients: last attended > 10 days ago (or no upcoming scheduled session) while active sessions remaining > 0
+          const hasActiveSessions = remaining !== null && remaining > 0;
+          const isInactiveOver10d = lastSessionDaysAgo !== null ? lastSessionDaysAgo > 10 : true;
+          if (hasActiveSessions && (isInactiveOver10d || !hasUpcoming)) {
+            atRiskList.push(radarItem);
+          }
+        });
+
+        setLowBalanceClients(lowBalList);
+        setAtRiskClients(atRiskList);
+
         setStats(prev => ({
           ...prev,
-          totalClients,
+          totalClients: Math.max(totalClients, clientMap.size),
           sessionsThisWeek: completedThisWeek,
           todayCount: agenda.length,
           totalSessionsAllTime: mySessions.length
@@ -389,6 +480,157 @@ export default function CoachHome({
           </div>
         )}
       </div>
+
+      {/* ─── PT Client Retention & Renewal Radar ─── */}
+      <Card className="border border-zinc-200 dark:border-zinc-800 bg-card shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 pt-4 px-4 border-b border-zinc-100 dark:border-zinc-800/80 flex flex-row items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <CardTitle className="text-xs font-black uppercase tracking-widest text-foreground">
+                PT Client Retention & Renewal Radar
+              </CardTitle>
+            </div>
+            <CardDescription className="text-[11px] mt-0.5">
+              Actionable upsell & retention triggers for your assigned PT roster
+            </CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onNavigate('members')}
+            className="h-7 text-[11px] font-bold px-2.5 text-muted-foreground hover:text-foreground"
+          >
+            View Members <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+          </Button>
+        </CardHeader>
+        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Low-Balance PT Clients (Upsell / Renewal Trigger) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <RefreshCw className="h-3.5 w-3.5" /> Low-Balance (0–2 Left)
+              </span>
+              <Badge variant="outline" className="text-[10px] font-mono border-amber-500/30 text-amber-600 dark:text-amber-400">
+                {lowBalanceClients.length}
+              </Badge>
+            </div>
+
+            {lowBalanceClients.length === 0 ? (
+              <div className="p-3 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 text-center text-xs text-muted-foreground">
+                No clients due for package renewal right now.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {lowBalanceClients.map(client => {
+                  const cleanPhone = (client.phone || '').replace(/[^0-9]/g, '');
+                  return (
+                    <div
+                      key={`low-${client.id}`}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate">{client.name}</p>
+                        <Badge
+                          variant="outline"
+                          className={`mt-1 text-[10px] font-bold px-1.5 py-0 ${
+                            client.remaining === 0
+                              ? 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
+                              : 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          }`}
+                        >
+                          Renewal Due • {client.remaining} left
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {cleanPhone && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
+                            className="h-7 px-2 text-[10px] font-bold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                          >
+                            WhatsApp Follow-up
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onNavigate('members')}
+                          className="h-7 px-2 text-[10px] font-bold"
+                        >
+                          View
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* At-Risk / Inactive PT Clients (Retention Trigger) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5" /> At-Risk / Inactive (&gt;10d)
+              </span>
+              <Badge variant="outline" className="text-[10px] font-mono border-rose-500/30 text-rose-600 dark:text-rose-400">
+                {atRiskClients.length}
+              </Badge>
+            </div>
+
+            {atRiskClients.length === 0 ? (
+              <div className="p-3 rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 text-center text-xs text-muted-foreground">
+                All active PT clients are booked or recently attended.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {atRiskClients.map(client => {
+                  const cleanPhone = (client.phone || '').replace(/[^0-9]/g, '');
+                  return (
+                    <div
+                      key={`risk-${client.id}`}
+                      className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-foreground truncate">{client.name}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {client.lastSessionDaysAgo !== null
+                            ? `Last attended ${client.lastSessionDaysAgo}d ago`
+                            : 'No attended sessions yet'}
+                          {!client.hasUpcomingSession ? ' • No upcoming booking' : ''}
+                          {client.remaining !== null ? ` (${client.remaining} left)` : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onNavigate('schedule')}
+                          className="h-7 px-2 text-[10px] font-bold border-zinc-300 dark:border-zinc-700"
+                        >
+                          Book Session
+                        </Button>
+                        {cleanPhone && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
+                            className="h-7 px-2 text-[10px] font-bold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                          >
+                            WhatsApp
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ─── Coach Command Center Actions (All PRD Modules + Floor Mode) ─── */}
       <div className="space-y-3">

@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Users, Search, Phone, Minus, CheckCircle2, AlertTriangle, Activity, TrendingUp, Flame } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { Users, Search, Phone, Minus, CheckCircle2, AlertTriangle, Activity, TrendingUp, Flame, MessageSquare } from 'lucide-react';
+import { format, parseISO, differenceInDays, isAfter } from 'date-fns';
 import { useTheme } from '../contexts/ThemeContext';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
@@ -23,8 +23,10 @@ export default function CoachClients({
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<'my-clients' | 'all-members'>('my-clients');
+  const [quickFilter, setQuickFilter] = useState<'all' | 'low-balance' | 'inactive'>('all');
   const [myClients, setMyClients] = useState<Client[]>([]);
   const [allMembers, setAllMembers] = useState<Client[]>([]);
+  const [lastSessionMap, setLastSessionMap] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -53,6 +55,20 @@ export default function CoachClients({
     try {
       const sessionsQ = query(collection(db, 'sessions'), where('trainerId', '==', currentUser.id));
       const sessionsSnap = await getDocs(sessionsQ);
+      const lastMap: Record<string, string> = {};
+      sessionsSnap.docs.forEach(d => {
+        const data = d.data();
+        const cid = data.clientId as string;
+        const dt = data.date as string;
+        const st = data.status as string;
+        if (cid && dt && (!st || st === 'Attended' || st === 'Completed')) {
+          if (!lastMap[cid] || dt > lastMap[cid]) {
+            lastMap[cid] = dt;
+          }
+        }
+      });
+      setLastSessionMap(lastMap);
+
       const clientIds = [...new Set(sessionsSnap.docs.map(d => d.data().clientId as string))];
       if (clientIds.length === 0) {
         setMyClients([]);
@@ -247,11 +263,44 @@ export default function CoachClients({
 
   const displayedList = activeTab === 'my-clients' ? myClients : allMembers;
 
-  const filtered = displayedList.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    (c.phone || '').includes(search) ||
-    (c.memberId || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const getClientRemaining = (c: Client): number | null => {
+    const raw = c.ptSessionsRemaining ?? c.sessionsRemaining;
+    if (typeof raw === 'number') return isNaN(raw) ? null : raw;
+    if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+      const parsed = parseInt(String(raw), 10);
+      return isNaN(parsed) ? null : parsed;
+    }
+    return null;
+  };
+
+  const isClientInactiveOver10d = (c: Client): boolean => {
+    const lastIso = lastSessionMap[c.id] || c.lastContactDate;
+    if (!lastIso) return true;
+    try {
+      const d = parseISO(lastIso);
+      if (isNaN(d.getTime())) return true;
+      return differenceInDays(new Date(), d) > 10;
+    } catch {
+      return true;
+    }
+  };
+
+  const filtered = displayedList.filter(c => {
+    const matchesSearch =
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.phone || '').includes(search) ||
+      (c.memberId || '').toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (quickFilter === 'low-balance') {
+      const rem = getClientRemaining(c);
+      return rem !== null && rem <= 2;
+    }
+    if (quickFilter === 'inactive') {
+      return isClientInactiveOver10d(c);
+    }
+    return true;
+  });
 
   if (loading) {
     return <div className="flex items-center justify-center h-48"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
@@ -293,6 +342,31 @@ export default function CoachClients({
         />
       </div>
 
+      {/* Quick Filter Pill Bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { id: 'all', label: 'All' },
+          { id: 'low-balance', label: 'Low Balance (≤2)' },
+          { id: 'inactive', label: 'Inactive (>10d)' },
+        ].map(pill => {
+          const active = quickFilter === pill.id;
+          return (
+            <button
+              key={pill.id}
+              type="button"
+              onClick={() => setQuickFilter(pill.id as 'all' | 'low-balance' | 'inactive')}
+              className={`px-3 py-1 rounded-full text-xs font-bold border transition-all ${
+                active
+                  ? 'bg-zinc-900 text-white border-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:border-zinc-100 shadow-xs'
+                  : 'bg-card text-muted-foreground border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-600 hover:text-foreground'
+              }`}
+            >
+              {pill.label}
+            </button>
+          );
+        })}
+      </div>
+
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
@@ -303,33 +377,58 @@ export default function CoachClients({
       ) : (
         <div className="grid gap-3">
           {filtered.map(client => {
-            const sessionsCount = typeof client.sessionsRemaining === 'number' 
-              ? client.sessionsRemaining 
-              : parseInt(String(client.sessionsRemaining || '0'), 10);
-            const hasSessions = !isNaN(sessionsCount) && sessionsCount > 0;
+            const remaining = getClientRemaining(client);
+            const sessionsCount = remaining ?? 0;
+            const hasSessions = remaining !== null && remaining > 0;
+            const isLowBalance = remaining !== null && remaining <= 2;
+            const cleanPhone = (client.phone || '').replace(/[^0-9]/g, '');
 
             return (
               <Card key={client.id} className="hover:shadow-sm transition-shadow">
-                <CardContent className="p-4 flex items-center justify-between">
+                <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-sm">
                       {client.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-semibold">{client.name}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">{client.name}</p>
+                        {isLowBalance && (
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] font-bold px-2 py-0 ${
+                              sessionsCount <= 0
+                                ? 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400'
+                                : 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                            }`}
+                          >
+                            Renewal Due • {sessionsCount} left
+                          </Badge>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                         <Phone className="h-3 w-3" />
                         <span>{client.phone}</span>
                         {client.memberId && <span className="font-mono text-xs">· {client.memberId}</span>}
+                        {cleanPhone && (
+                          <a
+                            href={`https://wa.me/${cleanPhone}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                          >
+                            <MessageSquare className="h-3 w-3" /> WhatsApp
+                          </a>
+                        )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
                     <div className="flex flex-col items-end gap-1 mr-2">
                       <Badge variant="outline" className={`text-xs ${statusColor[client.status] || ''}`}>{client.status}</Badge>
-                      {client.sessionsRemaining !== undefined && (
+                      {(client.ptSessionsRemaining !== undefined || client.sessionsRemaining !== undefined) && (
                         <span className="text-xs text-muted-foreground">
-                          {client.sessionsRemaining} sessions left
+                          {client.ptSessionsRemaining ?? client.sessionsRemaining} sessions left
                         </span>
                       )}
                     </div>

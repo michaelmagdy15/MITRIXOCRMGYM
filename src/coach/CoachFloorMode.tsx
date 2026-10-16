@@ -20,6 +20,37 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
+export type EquipmentType = 'Barbell' | 'Dumbbell' | 'Cable' | 'Machine' | 'Bodyweight' | 'Kettlebell';
+
+export function inferEquipment(name: string): EquipmentType {
+  const n = name.toLowerCase();
+  if (n.includes('barbell') || n.includes('squat') && !n.includes('split') || n.includes('deadlift') || n.includes('t-bar') || n.includes('skull') || n.includes('upright row')) return 'Barbell';
+  if (n.includes('dumbbell') || n.includes('arnold') || n.includes('rear delt') || n.includes('split squat') || n.includes('walking lunges')) return 'Dumbbell';
+  if (n.includes('cable') || n.includes('face pull') || n.includes('rope pushdown') || n.includes('overhead tricep')) return 'Cable';
+  if (n.includes('kettlebell')) return 'Kettlebell';
+  if (
+    n.includes('machine') ||
+    n.includes('leg press') ||
+    n.includes('leg extension') ||
+    n.includes('leg curl') ||
+    n.includes('lat pulldown') ||
+    n.includes('assault bike') ||
+    n.includes('rowing') ||
+    n.includes('skierg') ||
+    n.includes('sled') ||
+    n.includes('calf raises')
+  ) {
+    return 'Machine';
+  }
+  return 'Bodyweight';
+}
+
+export function calculateEpley1RM(weightKg: number, reps: number): number {
+  if (weightKg <= 0 || reps <= 0) return 0;
+  if (reps === 1) return Math.round(weightKg);
+  return Math.round(weightKg * (1 + reps / 30));
+}
+
 // Categorized Exercise Library
 const EXERCISE_LIBRARY: { category: string; exercises: string[] }[] = [
   {
@@ -223,6 +254,7 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
   const [exercises, setExercises] = useState<WorkoutExercise[]>([]);
   const [addExerciseModalOpen, setAddExerciseModalOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedEquipment, setSelectedEquipment] = useState<'All' | EquipmentType>('All');
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [customExerciseName, setCustomExerciseName] = useState('');
 
@@ -489,6 +521,55 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
     }));
   };
 
+  // Auto-Progression (+2.5kg Overload)
+  const handleApplyOverload = (exerciseId: string) => {
+    setExercises(prev => prev.map(ex => {
+      if (ex.id !== exerciseId || !ex.previousBest) return ex;
+      const targetWeight = ex.previousBest.weight + 2.5;
+      return {
+        ...ex,
+        sets: ex.sets.map(s => {
+          if (s.type !== 'Working') return s;
+          return {
+            ...s,
+            weightKg: targetWeight,
+            isPR: targetWeight > ex.previousBest!.weight
+          };
+        })
+      };
+    }));
+  };
+
+  // Live Muscle Volume & Recovery Breakdown
+  const muscleVolumeMap = useMemo(() => {
+    const categories = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms & Core', 'Conditioning'];
+    const map: Record<string, { sets: number; volumeKg: number; status: 'Warming Up' | 'Optimal Stimulus' | 'High Fatigue' }> = {};
+    categories.forEach(cat => {
+      map[cat] = { sets: 0, volumeKg: 0, status: 'Warming Up' };
+    });
+
+    exercises.forEach(ex => {
+      const entry = map[ex.category] ?? map['Conditioning']!;
+      ex.sets.forEach(s => {
+        if (s.completed) {
+          entry.sets += 1;
+          entry.volumeKg += s.weightKg * s.reps;
+        }
+      });
+    });
+
+    Object.keys(map).forEach(cat => {
+      const entry = map[cat];
+      if (!entry) return;
+      const count = entry.sets;
+      if (count >= 11) entry.status = 'High Fatigue';
+      else if (count >= 4) entry.status = 'Optimal Stimulus';
+      else entry.status = 'Warming Up';
+    });
+
+    return map;
+  }, [exercises]);
+
   // Finish Workout Session
   const handleFinishWorkout = async () => {
     if (!selectedClient || !currentUser) return;
@@ -605,11 +686,14 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
 
   // Filtered exercise catalog
   const filteredCatalog = useMemo(() => {
-    let list: { category: string; name: string }[] = [];
+    let list: { category: string; name: string; equipment: EquipmentType }[] = [];
     EXERCISE_LIBRARY.forEach(cat => {
       if (selectedCategory === 'All' || selectedCategory === cat.category) {
         cat.exercises.forEach(ex => {
-          list.push({ category: cat.category, name: ex });
+          const equipment = inferEquipment(ex);
+          if (selectedEquipment === 'All' || selectedEquipment === equipment) {
+            list.push({ category: cat.category, name: ex, equipment });
+          }
         });
       }
     });
@@ -619,7 +703,7 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
       list = list.filter(item => item.name.toLowerCase().includes(q));
     }
     return list;
-  }, [selectedCategory, exerciseSearch]);
+  }, [selectedCategory, selectedEquipment, exerciseSearch]);
 
   return (
     <div className="space-y-4 pb-12 animate-in fade-in duration-300">
@@ -776,6 +860,52 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
         ))}
       </div>
 
+      {/* Live Trained Muscle Volume & Stimulus Bar */}
+      {exercises.length > 0 && (
+        <Card className="border rounded-2xl bg-card p-3.5 shadow-sm space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+              <Flame className="h-4 w-4 text-primary" /> Trained Muscle Volume & Stimulus
+            </span>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              Live Set & Volume Breakdown
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+            {Object.entries(muscleVolumeMap).map(([cat, stats]) => {
+              const isActive = stats.sets > 0;
+              const badgeColor =
+                stats.status === 'High Fatigue'
+                  ? 'bg-red-500/15 text-red-600 border-red-500/30'
+                  : stats.status === 'Optimal Stimulus'
+                  ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-600 border-amber-500/30';
+              return (
+                <div
+                  key={cat}
+                  className={`p-2 rounded-xl border text-xs transition-all ${
+                    isActive ? 'bg-primary/5 border-primary/30' : 'bg-muted/20 border-border/50 opacity-60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold truncate text-[11px]">{cat}</span>
+                    <span className="font-mono font-black text-[11px] text-primary">{stats.sets}s</span>
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                    {stats.volumeKg.toLocaleString()} kg
+                  </div>
+                  {isActive && (
+                    <Badge variant="outline" className={`mt-1 text-[9px] px-1.5 py-0 font-bold ${badgeColor}`}>
+                      {stats.status}
+                    </Badge>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Main Exercises List or Empty State */}
       {exercises.length === 0 ? (
         <Card className="border-dashed bg-muted/20 p-8 text-center rounded-2xl">
@@ -810,12 +940,22 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap justify-end">
                   {exercise.previousBest && (
-                    <Badge variant="outline" className="text-[10px] font-mono border-amber-300 text-amber-600 bg-amber-50 dark:bg-amber-950/30 gap-1 hidden sm:flex">
-                      <Trophy className="h-3 w-3" />
-                      Best: {exercise.previousBest.weight}kg × {exercise.previousBest.reps}
-                    </Badge>
+                    <>
+                      <Badge variant="outline" className="text-[10px] font-mono border-amber-300 text-amber-600 bg-amber-50 dark:bg-amber-950/30 gap-1">
+                        <Trophy className="h-3 w-3" />
+                        Prev Best: {exercise.previousBest.weight}kg × {exercise.previousBest.reps} (1RM ~{calculateEpley1RM(exercise.previousBest.weight, exercise.previousBest.reps)}kg)
+                      </Badge>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleApplyOverload(exercise.id)}
+                        className="h-6 px-2 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg"
+                      >
+                        +2.5kg Overload
+                      </Button>
+                    </>
                   )}
                   <Button
                     variant="ghost"
@@ -905,8 +1045,11 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
                       </button>
                     </div>
 
-                    {/* PR indicator & 1-Tap Checkbox */}
-                    <div className="col-span-3 sm:col-span-5 flex items-center justify-end gap-2 pr-1">
+                    {/* PR indicator, Epley 1RM & 1-Tap Checkbox */}
+                    <div className="col-span-3 sm:col-span-5 flex items-center justify-end gap-1.5 pr-1">
+                      <Badge variant="outline" className="text-[9px] font-mono text-muted-foreground border-border/80 px-1.5 py-0 hidden sm:flex">
+                        1RM: ~{calculateEpley1RM(set.weightKg, set.reps)}kg
+                      </Badge>
                       {set.isPR && (
                         <Badge className="text-[9px] font-black bg-amber-500 text-black animate-pulse gap-1 px-1.5 py-0 hidden sm:flex">
                           <Trophy className="h-2.5 w-2.5" /> NEW PR!
@@ -1049,6 +1192,7 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
               {['All', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms & Core', 'Conditioning'].map(cat => (
                 <button
                   key={cat}
+                  type="button"
                   onClick={() => setSelectedCategory(cat)}
                   className={`text-[11px] px-2.5 py-1 rounded-lg border font-bold shrink-0 transition-all ${
                     selectedCategory === cat 
@@ -1057,6 +1201,24 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
                   }`}
                 >
                   {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Equipment Filter Bar */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar">
+              {(['All', 'Barbell', 'Dumbbell', 'Cable', 'Machine', 'Bodyweight', 'Kettlebell'] as const).map(eq => (
+                <button
+                  key={eq}
+                  type="button"
+                  onClick={() => setSelectedEquipment(eq)}
+                  className={`text-[10px] px-2 py-0.5 rounded-md border font-semibold shrink-0 transition-all ${
+                    selectedEquipment === eq
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-background hover:bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {eq}
                 </button>
               ))}
             </div>
@@ -1075,7 +1237,7 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
                   >
                     <div>
                       <p className="font-bold text-foreground group-hover:text-primary transition-colors">{item.name}</p>
-                      <span className="text-[10px] text-muted-foreground">{item.category}</span>
+                      <span className="text-[10px] text-muted-foreground">{item.category} • {item.equipment}</span>
                     </div>
                     <Plus className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   </button>
