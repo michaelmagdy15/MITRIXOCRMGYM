@@ -33,8 +33,9 @@ import { getTenantId, storage } from './firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addAuditLog } from './services/auditService';
 import { useOperationId } from './hooks/useOperationId';
-import { ShieldAlert, Paperclip } from 'lucide-react';
+import { ShieldAlert, Paperclip, MessageCircle } from 'lucide-react';
 import { calculateSplitTenderRemaining, splitInstallmentsEvenly } from './utils/installmentSplitter';
+import { buildWhatsAppPaymentReceiptUrl } from './utils/whatsappTemplates';
 
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
@@ -1978,25 +1979,23 @@ export default function Payments() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_method')}</Label>
-                    {isInzan && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = !useSplitTender;
-                          setUseSplitTender(next);
-                          if (next && !primaryTenderAmount) {
-                            setPrimaryTenderAmount(String(Math.round(pricingBreakdown.amountPaid / 2)));
-                          }
-                        }}
-                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
-                          useSplitTender
-                            ? 'bg-primary text-primary-foreground border-primary'
-                            : 'bg-muted/50 text-muted-foreground border-border hover:border-primary/40'
-                        }`}
-                      >
-                        {useSplitTender ? '✓ Split Tender (2 Methods)' : '+ Split Tender (Pay Type 1 + 2)'}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !useSplitTender;
+                        setUseSplitTender(next);
+                        if (next && !primaryTenderAmount) {
+                          setPrimaryTenderAmount(String(Math.round(pricingBreakdown.amountPaid / 2)));
+                        }
+                      }}
+                      className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+                        useSplitTender
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-muted/50 text-muted-foreground border-border hover:border-primary/40'
+                      }`}
+                    >
+                      {useSplitTender ? '✓ Split Tender (2 Methods)' : '+ Split Tender (Cash + Instapay / Visa)'}
+                    </button>
                   </div>
                   <Select value={method} onValueChange={(v) => v && setMethod(v as Payment['method'])}>
                     <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
@@ -2011,10 +2010,10 @@ export default function Payments() {
                     </SelectContent>
                   </Select>
 
-                  {isInzan && useSplitTender && (
+                  {useSplitTender && (
                     <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 space-y-2.5">
                       <div className="text-[11px] font-bold uppercase text-primary">
-                        RedGITS Dual-Tender Split (Pay Type 1 + Pay Type 2)
+                        Dual-Tender Split (Pay Type 1 + Pay Type 2)
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div>
@@ -2703,17 +2702,33 @@ export default function Payments() {
                         <TableCell className="text-muted-foreground text-xs hidden xl:table-cell">{payment.notes || '-'}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {isInzan && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => printThermal80mmReceipt(payment, client)}
-                                title="Print 80mm Thermal POS Receipt"
-                                className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                              >
-                                <Receipt className="h-4 w-4" />
-                              </Button>
-                            )}
+                            {(() => {
+                              const waUrl = buildWhatsAppPaymentReceiptUrl({
+                                payment,
+                                client,
+                                clubName: branding?.companyName || 'Mitrixo Gym',
+                              });
+                              return waUrl ? (
+                                <a
+                                  href={waUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Send Digital Receipt via WhatsApp"
+                                  className="inline-flex items-center justify-center h-8 w-8 rounded-md text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                                >
+                                  <MessageCircle className="h-4 w-4" />
+                                </a>
+                              ) : null;
+                            })()}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => printThermal80mmReceipt(payment, client)}
+                              title="Print 80mm Thermal POS Receipt"
+                              className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                            >
+                              <Receipt className="h-4 w-4" />
+                            </Button>
                             <Button variant="ghost" size="sm" onClick={() => printInvoice(payment, client)} title={t('payments.print_invoice')}>
                               <Printer className="h-4 w-4" />
                             </Button>

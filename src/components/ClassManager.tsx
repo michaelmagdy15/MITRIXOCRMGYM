@@ -44,7 +44,8 @@ import {
   UserX,
   Sparkles,
   FileSpreadsheet,
-  BookOpen
+  BookOpen,
+  MessageCircle
 } from 'lucide-react';
 import AttendanceReconciliationModal from './attendance/AttendanceReconciliationModal';
 import { useAuth } from '../contexts/AuthContext';
@@ -54,6 +55,8 @@ import { format, addWeeks, isToday, isTomorrow, isThisWeek, parseISO } from 'dat
 import { safeFormatDate, safeFormatTime, safeFormatDistanceToNow, toValidDate } from '../utils/dateUtils';
 import { getSessionAllowedTiers, toCanonicalTier, CanonicalTier } from '../utils/memberCategories';
 import { resolveAttendee } from '../utils/attendeeUtils';
+import { promoteNextWaitlistedMember } from '../utils/memberBenefitsWallet';
+import { buildWhatsAppWaitlistPromotionUrl } from '../utils/whatsappTemplates';
 import { toast } from 'sonner';
 
 export const TIER_OPTIONS: { id: CanonicalTier; label: string }[] = [
@@ -138,6 +141,7 @@ export const ClassManager: React.FC = () => {
   const [isReconciliationOpen, setIsReconciliationOpen] = useState(false);
   const [reconcileClassDate, setReconcileClassDate] = useState<string | undefined>(undefined);
   const [reconcileSessionId, setReconcileSessionId] = useState<string | undefined>(undefined);
+  const [lastPromotedWhatsApp, setLastPromotedWhatsApp] = useState<{ memberName: string; url: string } | null>(null);
 
   const activeMasterClasses = useMemo(
     () => (masterClasses || []).filter(mc => mc.status === 'Active'),
@@ -699,12 +703,57 @@ export const ClassManager: React.FC = () => {
     }
   };
 
+  const notifyWaitlistPromotion = (promotedMemberId: string) => {
+    if (!rosterClass) return;
+    const { displayName, displayPhone } = resolveAttendee(promotedMemberId, clients);
+    const waUrl = buildWhatsAppWaitlistPromotionUrl({
+      clientName: displayName,
+      clientPhone: displayPhone,
+      clubName: branding?.companyName || 'Mitrixo Gym',
+      className: rosterClass.name || 'Class Session',
+      classDate: safeFormatDate(rosterClass.date, 'EEE, dd MMM yyyy'),
+      classTime: `${safeFormatTime(rosterClass.startTime)}${rosterClass.endTime ? ` - ${safeFormatTime(rosterClass.endTime)}` : ''}`,
+      branch: rosterClass.branch,
+    });
+
+    if (waUrl) {
+      setLastPromotedWhatsApp({ memberName: displayName, url: waUrl });
+      toast.success(`${displayName} auto-promoted from waitlist to Attending!`, {
+        description: 'Click to notify them on WhatsApp immediately.',
+        action: {
+          label: 'WhatsApp Alert',
+          onClick: () => window.open(waUrl, '_blank', 'noopener,noreferrer'),
+        },
+        duration: 10000,
+      });
+    } else {
+      toast.success(`${displayName} promoted from waiting list to attending roster.`);
+    }
+  };
+
   const handleRemoveAttendeeFromClass = async (attendeeId: string) => {
     if (!rosterClass) return;
     const client = clients.find(c => c.id === attendeeId || c.memberId === attendeeId);
     const clientName = client?.name || attendeeId;
 
-    if (!window.confirm(`Are you sure you want to remove ${clientName} from this class? Their session credit will be refunded.`)) {
+    const promotionPlan = promoteNextWaitlistedMember(
+      rosterClass.attendees || [],
+      rosterClass.waitlist || [],
+      Number(rosterClass.capacity) || 20,
+      attendeeId
+    );
+
+    const nextWaitlistPreview = promotionPlan.promotedMemberId
+      ? resolveAttendee(promotionPlan.promotedMemberId, clients).displayName
+      : null;
+
+    if (
+      !window.confirm(
+        `Are you sure you want to remove ${clientName} from this class? Their session credit will be refunded.${
+          nextWaitlistPreview ? `\n\nNext on waitlist (${nextWaitlistPreview}) will be automatically promoted to Attending.` : ''
+        }`
+      )
+    ) {
       return;
     }
 
@@ -731,20 +780,38 @@ export const ClassManager: React.FC = () => {
         console.warn("Backend call failed, using direct Firestore fallback", e);
       }
 
+      const classRef = doc(db, 'classSchedules', rosterClass.id);
       if (!resOk) {
-        const classRef = doc(db, 'classSchedules', rosterClass.id);
         await updateDoc(classRef, {
-          attendees: arrayRemove(attendeeId),
+          attendees: promotionPlan.updatedAttendees,
+          waitlist: promotionPlan.updatedWaitlist,
           checkedIn: arrayRemove(attendeeId),
           noShows: arrayRemove(attendeeId)
         });
 
-        // Update booking doc
+        // Update booking doc for removed member
         const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${attendeeId}`);
         await updateDoc(bookingDocRef, {
           status: 'cancelled',
           cancelledAt: new Date().toISOString()
         }).catch(() => {});
+      } else if (promotionPlan.promotedMemberId) {
+        // Ensure waitlist #1 is promoted even if within cutoff window when admin removes an attendee
+        await updateDoc(classRef, {
+          waitlist: arrayRemove(promotionPlan.promotedMemberId),
+          attendees: arrayUnion(promotionPlan.promotedMemberId)
+        }).catch(() => {});
+      }
+
+      if (promotionPlan.promotedMemberId) {
+        const promotedBookingRef = doc(db, 'classBookings', `${rosterClass.id}_${promotionPlan.promotedMemberId}`);
+        await updateDoc(promotedBookingRef, {
+          status: 'booked',
+          promotedAt: new Date().toISOString()
+        }).catch(() => {});
+        notifyWaitlistPromotion(promotionPlan.promotedMemberId);
+      } else {
+        toast.success(`Removed ${clientName} from class roster.`);
       }
     } catch (err) {
       console.error("Error removing attendee:", err);
@@ -769,7 +836,7 @@ export const ClassManager: React.FC = () => {
         status: 'booked',
         promotedAt: new Date().toISOString()
       }).catch(() => {});
-      toast.success('Member promoted from waiting list to attending roster.');
+      notifyWaitlistPromotion(waitlistId);
     } catch (err) {
       console.error("Error promoting waitlist member:", err);
       toast.error("Failed to promote member.");
@@ -1544,6 +1611,34 @@ export const ClassManager: React.FC = () => {
                       {actionLoadingId === 'manual-add' ? 'Adding...' : 'Enroll'}
                     </Button>
                   </div>
+                  </div>
+                </div>
+              )}
+
+              {lastPromotedWhatsApp && (
+                <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold">
+                    🎉 <strong>{lastPromotedWhatsApp.memberName}</strong> was promoted from the waitlist to Attending!
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <a
+                      href={lastPromotedWhatsApp.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setLastPromotedWhatsApp(null)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold transition-colors"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      Send WhatsApp Alert
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setLastPromotedWhatsApp(null)}
+                      className="p-1 text-muted-foreground hover:text-foreground"
+                      title="Dismiss"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
               )}

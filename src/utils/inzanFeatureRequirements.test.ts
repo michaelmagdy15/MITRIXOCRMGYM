@@ -138,3 +138,128 @@ describe('Inzan requirements — Member account module', () => {
     assert.strictEqual(out.email, 'new@x.com');
   });
 });
+
+import { computeMemberBenefitsSummary, promoteNextWaitlistedMember } from './memberBenefitsWallet';
+import {
+  normalizeWhatsAppPhone,
+  buildWhatsAppPaymentReceiptUrl,
+  buildWhatsAppRenewalReminderUrl,
+  buildWhatsAppWaitlistPromotionUrl,
+} from './whatsappTemplates';
+
+describe('Core UX Improvements — Benefits Wallet, Waitlist Auto-Promote & WhatsApp Templates', () => {
+  it('computes live member benefits wallet summary from active packages and usage logs', () => {
+    const cataloguePackages: Package[] = [
+      basePkg({
+        id: 'pkg_gold',
+        name: 'Annual Gold Membership',
+        category: 'Membership',
+        hierarchy: 'Primary',
+        freePtSessions: 4,
+        freeClassTrials: 2,
+        guestInvitations: 5,
+        freezeAllowanceDays: 30,
+        minFreezeDays: 7,
+        maxFreezeDays: 15,
+        isTimeRestricted: true,
+        allowedStartTime: '06:00',
+        allowedEndTime: '14:00',
+      }),
+      basePkg({
+        id: 'pkg_pt',
+        name: 'PT 12 Sessions',
+        category: 'Personal Training',
+        hierarchy: 'Secondary',
+      }),
+    ];
+
+    const member: Client = {
+      id: 'c10',
+      name: 'Karim',
+      phone: '01012345678',
+      status: 'Active',
+      ptSessionsRemaining: 3,
+      packages: [
+        {
+          id: 'cp_gold',
+          packageName: 'Annual Gold Membership',
+          status: 'Active',
+          startDate: '2026-01-01',
+          endDate: '2026-12-31',
+          freezeDaysUsed: 10,
+        },
+        {
+          id: 'cp_pt',
+          packageName: 'PT 12 Sessions',
+          status: 'Active',
+          startDate: '2026-01-01',
+          endDate: '2026-12-31',
+        },
+      ],
+    };
+
+    const summary = computeMemberBenefitsSummary(member, cataloguePackages, 2, NOW);
+    assert.ok(summary.activePrimaryPackage);
+    assert.strictEqual(summary.activePrimaryPackage?.name, 'Annual Gold Membership');
+    assert.strictEqual(summary.activeSecondaryCount, 1);
+    assert.strictEqual(summary.activePrimaryPackage?.isTimeRestricted, true);
+    assert.strictEqual(summary.ptSessions.total, 4);
+    assert.strictEqual(summary.ptSessions.remaining, 3);
+    assert.strictEqual(summary.guestInvitations.total, 5);
+    assert.strictEqual(summary.guestInvitations.used, 2);
+    assert.strictEqual(summary.guestInvitations.remaining, 3);
+    assert.strictEqual(summary.freezeAllowance.totalDays, 30);
+    assert.strictEqual(summary.freezeAllowance.usedDays, 10);
+    assert.strictEqual(summary.freezeAllowance.remainingDays, 20);
+  });
+
+  it('auto-promotes first waitlisted member in FIFO order when an attendee is removed', () => {
+    const res = promoteNextWaitlistedMember(['m1', 'm2', 'm3'], ['w1', 'w2'], 3, 'm2');
+    assert.strictEqual(res.promotedMemberId, 'w1');
+    assert.deepStrictEqual(res.updatedAttendees, ['m1', 'm3', 'w1']);
+    assert.deepStrictEqual(res.updatedWaitlist, ['w2']);
+  });
+
+  it('normalizes Egyptian mobile numbers and builds WhatsApp deep links', () => {
+    assert.strictEqual(normalizeWhatsAppPhone('01012345678'), '201012345678');
+    assert.strictEqual(normalizeWhatsAppPhone('+20 122 333 4444'), '201223334444');
+
+    const receiptUrl = buildWhatsAppPaymentReceiptUrl({
+      payment: {
+        id: 'pay1',
+        clientId: 'c10',
+        client_name: 'Karim',
+        amount: 5000,
+        amount_paid: 5000,
+        date: '2026-10-16',
+        method: 'Cash',
+        packageType: 'Annual Gold',
+        package_category_type: 'Memberships',
+        sales_rep_id: 's1',
+        created_at: '2026-10-16T10:00:00.000Z',
+        notes: 'Paid [Split Tender: Cash 3000 LE + Instapay 2000 LE]',
+      },
+      client: { id: 'c10', name: 'Karim', phone: '01012345678', status: 'Active' },
+      clubName: 'Inzan Athletics',
+    });
+    assert.ok(receiptUrl?.startsWith('https://wa.me/201012345678?text='));
+    assert.ok(decodeURIComponent(receiptUrl!).includes('Cash (Split Tender)'));
+
+    const promoUrl = buildWhatsAppWaitlistPromotionUrl({
+      clientName: 'Karim',
+      clientPhone: '01012345678',
+      clubName: 'Strike Boxing',
+      className: 'Adult Boxing',
+      classDate: 'Fri, 16 Oct 2026',
+      classTime: '18:00',
+    });
+    assert.ok(promoUrl?.startsWith('https://wa.me/201012345678?text='));
+
+    const renewUrl = buildWhatsAppRenewalReminderUrl({
+      client: { id: 'c10', name: 'Karim', phone: '01012345678', status: 'Active', packageType: 'Annual Gold' },
+      clubName: 'Inzan Athletics',
+    });
+    assert.ok(renewUrl?.startsWith('https://wa.me/201012345678?text='));
+  });
+});
+

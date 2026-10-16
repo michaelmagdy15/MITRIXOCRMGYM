@@ -25,6 +25,7 @@ import { SectionHeader } from './components/SectionHeader';
 import { EmptyState } from './components/EmptyState';
 import { Skeleton, SkeletonCard } from './components/Skeleton';
 import { MemberAccountLinkCard } from './components/MemberAccountLinkCard';
+import { MemberBenefitsWallet } from '../components/member/MemberBenefitsWallet';
 
 const BoxingGlovesIcon = ({ className }: { className?: string }) => (
   <svg
@@ -782,6 +783,9 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
           </div>
         )}
       </div>
+
+      {/* ─── Member Entitlements & Benefits Wallet ─── */}
+      <MemberBenefitsWallet client={client} clubName={branding?.companyName} />
 
       {/* ─── Upcoming Bookings + Calendar Export ─── */}
       {upcomingSessions.length > 0 && (

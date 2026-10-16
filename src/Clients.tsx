@@ -49,6 +49,8 @@ import { isTenantInzan } from './utils/inzanOrg';
 import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
 import { MemberGuestInvitationsTab } from './components/member/MemberGuestInvitationsTab';
 import { MemberDocumentUploader } from './components/member/MemberDocumentUploader';
+import { MemberBenefitsWallet } from './components/member/MemberBenefitsWallet';
+import { buildWhatsAppPaymentReceiptUrl, buildWhatsAppRenewalReminderUrl } from './utils/whatsappTemplates';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
 import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
@@ -90,7 +92,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can } = useAppContext();
+  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can } = useAppContext();
   const { packages } = usePackages();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => {
@@ -3166,6 +3168,12 @@ export default function Clients() {
 
                     {/* Right: Package card */}
                     <div className="p-4 rounded-xl border bg-muted/20 space-y-3 text-left">
+                      <MemberBenefitsWallet
+                        client={activeClient}
+                        packages={packages}
+                        isAdminView={true}
+                        clubName={branding?.companyName || (isInzanTenant ? 'Inzan Athletics' : 'Strike Boxing Club')}
+                      />
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Current Package</p>
                         <div className="flex gap-1">
@@ -3612,100 +3620,144 @@ export default function Clients() {
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3">Expires</TableHead>
                                   {isTenantInzan() && <TableHead className="text-[10px] uppercase py-2.5 px-3">Created Date</TableHead>}
                                   {isTenantInzan() && <TableHead className="text-[10px] uppercase py-2.5 px-3">Created By</TableHead>}
-                                  <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Sessions</TableHead>
-                                  <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Status</TableHead>
-                                  {isTenantInzan() && <TableHead className="text-[10px] uppercase py-2.5 px-3 text-right">Actions</TableHead>}
+                                    <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Sessions</TableHead>
+                                    <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Status</TableHead>
+                                    <TableHead className="text-[10px] uppercase py-2.5 px-3 text-right">Actions</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {[...(activeClient.packages || [])]
+                                    .sort((a, b) => new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime())
+                                    .map((pkg) => {
+                                      const waRenewUrl = buildWhatsAppRenewalReminderUrl({
+                                        client: activeClient,
+                                        pkg,
+                                        clubName: branding?.companyName || (isInzanTenant ? 'Inzan Athletics' : 'Strike Boxing Club'),
+                                      });
+                                      return (
+                                        <TableRow key={pkg.id} className="hover:bg-muted/20 border-b transition-colors">
+                                          <TableCell className="py-2.5 px-3 text-xs font-medium">{pkg.packageName || '—'}</TableCell>
+                                          <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</TableCell>
+                                          <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</TableCell>
+                                          {isTenantInzan() && <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.createdAt || pkg.startDate, 'dd MMM yyyy')}</TableCell>}
+                                          {isTenantInzan() && <TableCell className="py-2.5 px-3 text-xs">{pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}</TableCell>}
+                                          <TableCell className="py-2.5 px-3 text-xs text-center">
+                                            {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} / ${pkg.sessionsTotal ?? '?'}` : '—'}
+                                          </TableCell>
+                                          <TableCell className="py-2.5 px-3 text-center">
+                                            <Badge
+                                              className={`text-[9px] px-1.5 py-0 ${
+                                                pkg.status === 'Active' ? 'bg-green-500' : pkg.status === 'Expired' ? 'bg-muted text-muted-foreground' : pkg.status === 'Hold' ? 'bg-amber-500' : 'bg-red-500'
+                                              }`}
+                                            >
+                                              {pkg.status}
+                                            </Badge>
+                                          </TableCell>
+                                          <TableCell className="py-2.5 px-3 text-right whitespace-nowrap">
+                                            <div className="inline-flex items-center justify-end gap-1">
+                                              {waRenewUrl && (
+                                                <a
+                                                  href={waRenewUrl}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  title="Send 1-Tap WhatsApp Renewal Reminder"
+                                                  className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
+                                                >
+                                                  <MessageCircle className="h-3.5 w-3.5" />
+                                                </a>
+                                              )}
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-7 px-2 text-[10px] font-semibold"
+                                                onClick={() => setUpgradeDialogClientId(activeClient.id)}
+                                              >
+                                                <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade
+                                              </Button>
+                                            </div>
+                                          </TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Payment History</p>
+                            <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-none">
+                              {payments.filter((p) => p.clientId === activeClient.id).length} entries
+                            </Badge>
+                          </div>
+                          <div className="rounded-xl border bg-background overflow-hidden overflow-x-auto">
+                            <Table>
+                              <TableHeader className="bg-muted/30">
+                                <TableRow>
+                                  <TableHead className="text-[10px] uppercase py-2.5 px-3">Date</TableHead>
+                                  <TableHead className="text-[10px] uppercase py-2.5 px-3 text-right">Amount</TableHead>
+                                  <TableHead className="text-[10px] uppercase py-2.5 px-3">Package</TableHead>
+                                  <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Method</TableHead>
+                                  <TableHead className="text-[10px] uppercase py-2.5 px-3 text-right">Receipt</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {[...(activeClient.packages || [])]
-                                  .sort((a, b) => new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime())
-                                  .map((pkg) => (
-                                    <TableRow key={pkg.id} className="hover:bg-muted/20 border-b transition-colors">
-                                      <TableCell className="py-2.5 px-3 text-xs font-medium">{pkg.packageName || '—'}</TableCell>
-                                      <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</TableCell>
-                                      <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</TableCell>
-                                      {isTenantInzan() && <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.createdAt || pkg.startDate, 'dd MMM yyyy')}</TableCell>}
-                                      {isTenantInzan() && <TableCell className="py-2.5 px-3 text-xs">{pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}</TableCell>}
-                                      <TableCell className="py-2.5 px-3 text-xs text-center">
-                                        {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} / ${pkg.sessionsTotal ?? '?'}` : '—'}
-                                      </TableCell>
-                                      <TableCell className="py-2.5 px-3 text-center">
-                                        <Badge
-                                          className={`text-[9px] px-1.5 py-0 ${
-                                            pkg.status === 'Active' ? 'bg-green-500' : pkg.status === 'Expired' ? 'bg-muted text-muted-foreground' : pkg.status === 'Hold' ? 'bg-amber-500' : 'bg-red-500'
-                                          }`}
-                                        >
-                                          {pkg.status}
-                                        </Badge>
-                                      </TableCell>
-                                      {isTenantInzan() && (<TableCell className="py-2.5 px-3 text-right whitespace-nowrap">
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="h-7 px-2 text-[10px] font-semibold"
-                                          onClick={() => setUpgradeDialogClientId(activeClient.id)}
-                                        >
-                                          <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade
-                                        </Button>
-                                      </TableCell>)}
-                                    </TableRow>
-                                  ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Payment History</p>
-                          <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-none">
-                            {payments.filter((p) => p.clientId === activeClient.id).length} entries
-                          </Badge>
-                        </div>
-                        <div className="rounded-xl border bg-background overflow-hidden overflow-x-auto">
-                          <Table>
-                            <TableHeader className="bg-muted/30">
-                              <TableRow>
-                                <TableHead className="text-[10px] uppercase py-2.5 px-3">Date</TableHead>
-                                <TableHead className="text-[10px] uppercase py-2.5 px-3 text-right">Amount</TableHead>
-                                <TableHead className="text-[10px] uppercase py-2.5 px-3">Package</TableHead>
-                                <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Method</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {payments
-                                .filter((p) => p.clientId === activeClient.id)
-                                .sort((a, b) => {
-                                  const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
-                                  if (dateDiff !== 0) return dateDiff;
-                                  // Tiebreaker: created_at (actual recording time) newest first
-                                  return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-                                })
-                                .map((payment) => (
-                                    <TableRow key={payment.id} className="hover:bg-muted/20 border-b transition-colors">
-                                      <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(payment.date, 'MMM d, yyyy')}</TableCell>
-                                    <TableCell className="py-2.5 px-3 text-right">
-                                      <span className="text-xs font-bold text-green-600">
-                                        {payment.amount.toLocaleString()} {t('payments.currency_le')}
-                                      </span>
-                                    </TableCell>
-                                    <TableCell className="py-2.5 px-3 text-xs max-w-[120px] truncate">{payment.packageType}</TableCell>
-                                    <TableCell className="py-2.5 px-3 text-center">
-                                      <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                                        {payment.method}
-                                      </Badge>
+                                {payments
+                                  .filter((p) => p.clientId === activeClient.id)
+                                  .sort((a, b) => {
+                                    const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+                                    if (dateDiff !== 0) return dateDiff;
+                                    // Tiebreaker: created_at (actual recording time) newest first
+                                    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+                                  })
+                                  .map((payment) => {
+                                    const waReceiptUrl = buildWhatsAppPaymentReceiptUrl({
+                                      payment,
+                                      client: activeClient,
+                                      clubName: branding?.companyName || (isInzanTenant ? 'Inzan Athletics' : 'Strike Boxing Club'),
+                                    });
+                                    return (
+                                      <TableRow key={payment.id} className="hover:bg-muted/20 border-b transition-colors">
+                                        <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(payment.date, 'MMM d, yyyy')}</TableCell>
+                                        <TableCell className="py-2.5 px-3 text-right">
+                                          <span className="text-xs font-bold text-green-600">
+                                            {payment.amount.toLocaleString()} {t('payments.currency_le')}
+                                          </span>
+                                        </TableCell>
+                                        <TableCell className="py-2.5 px-3 text-xs max-w-[120px] truncate">{payment.packageType}</TableCell>
+                                        <TableCell className="py-2.5 px-3 text-center">
+                                          <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                            {payment.method}
+                                          </Badge>
+                                        </TableCell>
+                                        <TableCell className="py-2.5 px-3 text-right">
+                                          {waReceiptUrl ? (
+                                            <a
+                                              href={waReceiptUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              title="Send 1-Tap WhatsApp Receipt"
+                                              className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 text-[10px] font-bold transition-colors"
+                                            >
+                                              <MessageCircle className="h-3 w-3" />
+                                              WhatsApp
+                                            </a>
+                                          ) : (
+                                            <span className="text-[10px] text-muted-foreground">—</span>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                {payments.filter((p) => p.clientId === activeClient.id).length === 0 && (
+                                  <TableRow>
+                                    <TableCell colSpan={5} className="text-center py-10 text-xs text-muted-foreground italic">
+                                      No payments recorded.
                                     </TableCell>
                                   </TableRow>
-                                ))}
-                              {payments.filter((p) => p.clientId === activeClient.id).length === 0 && (
-                                <TableRow>
-                                  <TableCell colSpan={4} className="text-center py-10 text-xs text-muted-foreground italic">
-                                    No payments recorded.
-                                  </TableCell>
-                                </TableRow>
-                              )}
+                                )}
                             </TableBody>
                           </Table>
                         </div>

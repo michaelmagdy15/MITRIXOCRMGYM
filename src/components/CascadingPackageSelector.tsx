@@ -298,7 +298,7 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
         const cat = (pkg.category || '').toLowerCase();
         const targetTeam = (pkg.targetTeam || '').toLowerCase();
         const branchName = (pkg.branch || '').toLowerCase();
-        const memberCat = (pkg.memberCategory || '').toLowerCase();
+        const memberCat = String((pkg as any).memberCategory || '').toLowerCase();
         const priceStr = String(pkg.price ?? '');
         const sessionsStr = String(pkg.sessions ?? '');
         const hierarchy = (pkg.hierarchy || '').toLowerCase();
@@ -345,8 +345,9 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
   const handleDirectSelect = (pkg: Package) => {
     const isPt = isPtPackage(pkg);
     setIsPtSelected(isPt);
-    if (pkg.memberCategory) {
-      const norm = normalizeMemberCategory(pkg.memberCategory);
+    const pkgMemberCat = (pkg as any).memberCategory;
+    if (pkgMemberCat) {
+      const norm = normalizeMemberCategory(pkgMemberCat);
       setCategory(norm);
       onCategoryChange?.(norm);
     }
@@ -480,9 +481,9 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
                               {pkg.category}
                             </span>
                           )}
-                          {pkg.memberCategory && (
+                          {(pkg as any).memberCategory && (
                             <span className="inline-flex items-center rounded px-1.5 py-0.2 text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
-                              {pkg.memberCategory}
+                              {(pkg as any).memberCategory}
                             </span>
                           )}
                           {pkg.branch && pkg.branch !== 'All Branches' && pkg.branch !== 'All' && (
