@@ -2,12 +2,13 @@ import { getTenantId } from '../firebase';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Package } from '../types';
 import { MEMBER_CATEGORIES, MemberCategory, normalizeMemberCategory, isPackageMatchingFilter } from '../utils/memberCategories';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Sparkles, Dumbbell, MapPin, Layers, CheckCircle2, UserCheck, ShieldAlert } from 'lucide-react';
+import { Sparkles, Dumbbell, MapPin, Layers, CheckCircle2, UserCheck, ShieldAlert, Search, X, Check, ArrowRight } from 'lucide-react';
 
 export interface CascadingPackageSelectorProps {
   packages: Package[];
@@ -56,6 +57,9 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
   const [packageTypeFilter, setPackageTypeFilter] = useState<
     'ALL' | 'MEMBERSHIP' | 'PT' | 'CLASSES' | 'SGF' | 'NUTRITION' | 'DROPIN'
   >('ALL');
+
+  // Instant quick search query across all packages
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const isNutritionPackage = (pkg: Package) => {
     const n = (pkg.name || '').toLowerCase();
@@ -283,6 +287,76 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
     return packages.find(p => p.name === selectedPackageName) || null;
   }, [packages, selectedPackageName]);
 
+  // Quick Search Filter: searches across all active packages
+  const searchedPackages = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return packages
+      .filter((pkg) => {
+        if (!isPackageActive(pkg)) return false;
+        const name = (pkg.name || '').toLowerCase();
+        const cat = (pkg.category || '').toLowerCase();
+        const targetTeam = (pkg.targetTeam || '').toLowerCase();
+        const branchName = (pkg.branch || '').toLowerCase();
+        const memberCat = (pkg.memberCategory || '').toLowerCase();
+        const priceStr = String(pkg.price ?? '');
+        const sessionsStr = String(pkg.sessions ?? '');
+        const hierarchy = (pkg.hierarchy || '').toLowerCase();
+
+        return (
+          name.includes(q) ||
+          cat.includes(q) ||
+          targetTeam.includes(q) ||
+          branchName.includes(q) ||
+          memberCat.includes(q) ||
+          priceStr.includes(q) ||
+          (q === 'morning' && (pkg.isTimeRestricted || (pkg.allowedStartTime && pkg.allowedEndTime))) ||
+          (q === 'pt' && isPtPackage(pkg)) ||
+          (q === 'sgf' && isSgfPackage(pkg)) ||
+          (q === 'classes' && isClassesPackage(pkg)) ||
+          (q === 'nutrition' && isNutritionPackage(pkg)) ||
+          (q === 'dropin' && isDropInPackage(pkg)) ||
+          (q === 'membership' && isMembershipPackage(pkg)) ||
+          (q === 'unlimited' && (pkg.sessions === -1 || pkg.sessions === 0)) ||
+          (sessionsStr === q) ||
+          (hierarchy === q)
+        );
+      })
+      .sort((a, b) => {
+        const q = searchQuery.trim().toLowerCase();
+        const aName = (a.name || '').toLowerCase();
+        const bName = (b.name || '').toLowerCase();
+        if (aName === q && bName !== q) return -1;
+        if (bName === q && aName !== q) return 1;
+        if (aName.startsWith(q) && !bName.startsWith(q)) return -1;
+        if (bName.startsWith(q) && !aName.startsWith(q)) return 1;
+        const aCat = (a.category || '').toLowerCase();
+        const bCat = (b.category || '').toLowerCase();
+        if (aCat.startsWith(q) && !bCat.startsWith(q)) return -1;
+        if (bCat.startsWith(q) && !aCat.startsWith(q)) return 1;
+        return a.price - b.price;
+      });
+  }, [packages, searchQuery]);
+
+  const isSearching = searchQuery.trim().length > 0;
+  const effectiveFilteredPackages = isSearching ? searchedPackages : filteredPackages;
+
+  // Direct package selection (from search results or dropdown)
+  const handleDirectSelect = (pkg: Package) => {
+    const isPt = isPtPackage(pkg);
+    setIsPtSelected(isPt);
+    if (pkg.memberCategory) {
+      const norm = normalizeMemberCategory(pkg.memberCategory);
+      setCategory(norm);
+      onCategoryChange?.(norm);
+    }
+    if (pkg.branch && pkg.branch !== 'All Branches' && pkg.branch !== 'All') {
+      setBranch(pkg.branch);
+      onBranchChange?.(pkg.branch);
+    }
+    onPackageSelect(pkg, isPt);
+  };
+
   // Combined branch list
   const branchOptions = useMemo(() => {
     const list = ['All Branches', ...branches];
@@ -302,6 +376,160 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
         <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
           POS Safe Guard
         </Badge>
+      </div>
+
+      {/* Instant Package Search Bar */}
+      <div className="space-y-2 rounded-xl bg-background/60 p-3 border border-border/50 shadow-sm">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <Search className="h-3.5 w-3.5 text-primary" />
+            Quick Package Search
+          </Label>
+          {isSearching && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <X className="h-3 w-3" />
+              Clear search
+            </button>
+          )}
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by package name, price (e.g. 2500), category, or sessions..."
+            className="pl-9 pr-9 h-10 rounded-xl bg-background border-border/70 focus-visible:border-primary text-xs font-medium placeholder:text-muted-foreground/70 shadow-sm"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors cursor-pointer"
+              title="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Quick Suggestion Chips */}
+        {!isSearching && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Quick:</span>
+            {['Morning', 'PT', 'Membership', 'Classes', 'SGF', 'Nutrition'].map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => setSearchQuery(chip)}
+                className="text-[10px] px-2 py-0.5 rounded-md bg-muted/60 hover:bg-muted border border-border/40 text-muted-foreground hover:text-foreground transition-all cursor-pointer font-medium"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Live Search Results */}
+        {isSearching && (
+          <div className="space-y-1.5 pt-1 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                Found {searchedPackages.length} package{searchedPackages.length === 1 ? '' : 's'} matching "{searchQuery}"
+              </span>
+              <span className="text-muted-foreground text-[10px]">
+                Click any to select directly
+              </span>
+            </div>
+
+            {searchedPackages.length > 0 ? (
+              <div className="max-h-[260px] overflow-y-auto space-y-1.5 pr-1">
+                {searchedPackages.map((pkg) => {
+                  const isSelected = selectedPackageName === pkg.name;
+                  const metaBadges = getPackageMetadataBadges(pkg);
+                  return (
+                    <div
+                      key={pkg.id}
+                      onClick={() => handleDirectSelect(pkg)}
+                      className={`group p-2.5 rounded-xl border text-xs transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        isSelected
+                          ? 'bg-emerald-500/15 border-emerald-500 shadow-sm'
+                          : 'bg-background hover:bg-accent/50 border-border/60 hover:border-primary/50'
+                      }`}
+                    >
+                      <div className="flex flex-col gap-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold truncate ${isSelected ? 'text-emerald-700 dark:text-emerald-300' : 'text-foreground'}`}>
+                            {pkg.name}
+                          </span>
+                          {isSelected && (
+                            <Badge className="h-4 px-1.5 text-[9px] bg-emerald-600 hover:bg-emerald-600 text-white font-bold">
+                              Selected
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1">
+                          {pkg.category && (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.2 text-[10px] font-semibold bg-muted text-muted-foreground border border-border/40">
+                              {pkg.category}
+                            </span>
+                          )}
+                          {pkg.memberCategory && (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.2 text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
+                              {pkg.memberCategory}
+                            </span>
+                          )}
+                          {pkg.branch && pkg.branch !== 'All Branches' && pkg.branch !== 'All' && (
+                            <span className="inline-flex items-center rounded px-1.5 py-0.2 text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                              {pkg.branch}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">
+                            {pkg.sessions === -1 || pkg.sessions === 0 ? 'Unlimited' : `${pkg.sessions} ses`} • {pkg.expiryDays}d
+                          </span>
+                          {metaBadges.map((b) => (
+                            <span
+                              key={b.key}
+                              className={`inline-flex items-center rounded px-1.5 py-0.2 text-[9px] font-semibold ${b.className}`}
+                            >
+                              {b.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <div className="text-right">
+                          <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                            {pkg.price.toLocaleString()} LE
+                          </span>
+                        </div>
+                        <div className={`h-7 w-7 rounded-lg flex items-center justify-center border transition-all ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'border-border/60 group-hover:border-primary group-hover:text-primary'
+                        }`}>
+                          {isSelected ? <Check className="h-4 w-4" /> : <ArrowRight className="h-3.5 w-3.5" />}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl border border-dashed border-border/60 text-center text-xs text-muted-foreground space-y-1">
+                <p>No package matches "<strong>{searchQuery}</strong>".</p>
+                <p className="text-[11px] text-primary">Try searching by partial name, category (e.g. PT, Classes), or price (e.g. 2000).</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Step 1: Member Category */}
@@ -465,11 +693,13 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
         <div className="flex items-center justify-between">
           <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
             <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
-            Step 3: Matching Price Packages ({filteredPackages.length})
+            {isSearching
+              ? `Matching Search Packages (${effectiveFilteredPackages.length})`
+              : `Step 3: Matching Price Packages (${effectiveFilteredPackages.length})`}
           </Label>
-          {filteredPackages.length === 0 && (
+          {effectiveFilteredPackages.length === 0 && (
             <span className="text-[11px] text-amber-500 font-medium">
-              No direct package for this combination
+              {isSearching ? 'No packages matched search' : 'No direct package for this combination'}
             </span>
           )}
         </div>
@@ -482,15 +712,19 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
               return;
             }
             const found = packages.find(p => p.name === val);
-            onPackageSelect(found || null, found ? isPtPackage(found) : isPtSelected);
+            if (found) {
+              handleDirectSelect(found);
+            } else {
+              onPackageSelect(null, isPtSelected);
+            }
           }}
         >
           <SelectTrigger className="h-12 rounded-xl bg-background border-primary/30 focus:border-primary text-sm font-semibold shadow-inner">
-            <SelectValue placeholder={filteredPackages.length > 0 ? "Select package..." : "No matching packages — click for options"} />
+            <SelectValue placeholder={effectiveFilteredPackages.length > 0 ? "Select package..." : "No matching packages — click for options"} />
           </SelectTrigger>
           <SelectContent className="rounded-2xl max-h-[320px]">
-            {filteredPackages.length > 0 ? (
-              filteredPackages.map((pkg) => {
+            {effectiveFilteredPackages.length > 0 ? (
+              effectiveFilteredPackages.map((pkg) => {
                 const metaBadges = getPackageMetadataBadges(pkg);
                 return (
                   <SelectItem key={pkg.id} value={pkg.name} className="py-2.5 px-3 rounded-xl cursor-pointer">
@@ -524,8 +758,17 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
               })
             ) : (
               <div className="p-3 text-center text-xs text-muted-foreground">
-                <p>No package matches <strong>{category}</strong> at <strong>{branch}</strong>.</p>
-                <p className="mt-1 text-[11px] text-primary">Try changing the Branch or Category, or create a custom package.</p>
+                {isSearching ? (
+                  <>
+                    <p>No package matches search query "<strong>{searchQuery}</strong>".</p>
+                    <p className="mt-1 text-[11px] text-primary">Try another keyword, or clear search to browse all tiers.</p>
+                  </>
+                ) : (
+                  <>
+                    <p>No package matches <strong>{category}</strong> at <strong>{branch}</strong>.</p>
+                    <p className="mt-1 text-[11px] text-primary">Try changing the Branch or Category, or create a custom package.</p>
+                  </>
+                )}
               </div>
             )}
             <SelectItem value="__custom__" className="py-2 px-3 text-xs italic text-muted-foreground border-t border-border/40 mt-1">
