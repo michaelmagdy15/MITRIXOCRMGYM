@@ -22,6 +22,7 @@ import Clients from './Clients';
 import Calendar from './Calendar';
 import Payments from './Payments';
 import PTPackages from './PTPackages';
+import Packages from './Packages';
 import Attendance from './Attendance';
 import AuditLogs from './AuditLogs';
 import Tasks from './Tasks';
@@ -647,6 +648,12 @@ function AppContent() {
       label: 'Bookings',
       icon: ShoppingCart,
       show: canAny(['classes.book_member', 'coaches.schedule_pt', 'payments.create'])
+    },
+    {
+      id: 'packages',
+      label: isInzan ? 'Packages' : (t('nav.packages') === 'nav.packages' ? 'Packages' : t('nav.packages')),
+      icon: Package,
+      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || canAccessSettings)
     },
     {
       id: 'requests',
@@ -1314,6 +1321,10 @@ function AppContent() {
 
             <TabsContent value="bookings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <Bookings />
+            </TabsContent>
+
+            <TabsContent value="packages" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <Packages />
             </TabsContent>
 
             <TabsContent value="requests" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">

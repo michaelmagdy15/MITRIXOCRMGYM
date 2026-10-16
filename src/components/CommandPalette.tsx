@@ -4,7 +4,7 @@ import { useAppContext } from '../context';
 import { useLanguage } from '../contexts/LanguageContext';
 import { 
   Search, BarChart3, Users, Activity, DollarSign, 
-  Calendar, Shield, Settings, FileText, CornerDownLeft, X, Sparkles
+  Calendar, Shield, Settings, FileText, CornerDownLeft, X, Sparkles, Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,10 +41,11 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
     { id: 'clients', name: 'Go to Members List', description: 'View client database, check active packages, and manage records', icon: Users },
     { id: 'leads', name: 'Go to Leads Pipeline', description: 'Track leads, trial sessions, and customer follow-up actions', icon: Activity },
     { id: 'payments', name: 'Go to Payments & Ledger', description: 'Record transactions, print receipts, and track gym revenue', icon: DollarSign },
+    { id: 'packages', name: 'Go to Packages Management', description: 'Configure memberships, PT tiers, categories, benefits, and hierarchy', icon: Package },
     { id: 'bookings', name: 'Go to Bookings', description: 'Manage group training classes and private training bookings', icon: Calendar },
     { id: 'coaches', name: 'Go to Coaches', description: 'Directory of personal trainers and class instructors', icon: Shield },
     { id: 'settings', name: 'Go to Settings', description: 'Manage gym branches, membership packages, and user access roles', icon: Settings },
-    { id: 'auditlogs', name: 'Go to Audit Logs', description: 'Monitor system events, database updates, and action logs', icon: FileText }
+    { id: 'audit', name: 'Go to Audit Logs', description: 'Monitor system events, database updates, and action logs', icon: FileText }
   ];
 
   // Filter navigation items
