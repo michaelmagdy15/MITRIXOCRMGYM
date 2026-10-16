@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useClasses } from '../hooks/useClasses';
+import { useMasterClasses } from '../hooks/useMasterClasses';
+import { MasterClassLibraryManager } from './classes/MasterClassLibraryManager';
+import { canDeleteClassSession } from '../utils/classDeletionGuardrail';
 import { ClassAnalytics } from './ClassAnalytics';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { collection, getDocs, doc, updateDoc, setDoc, arrayUnion, arrayRemove, query, where } from 'firebase/firestore';
@@ -38,7 +41,8 @@ import {
   UserCheck,
   UserX,
   Sparkles,
-  FileSpreadsheet
+  FileSpreadsheet,
+  BookOpen
 } from 'lucide-react';
 import AttendanceReconciliationModal from './attendance/AttendanceReconciliationModal';
 import { useAuth } from '../contexts/AuthContext';
@@ -75,6 +79,7 @@ export const BASE_CATEGORIES = [
 
 export const ClassManager: React.FC = () => {
   const { classes, loading, addClass, updateClass, cancelClass, deleteClass } = useClasses();
+  const { masterClasses } = useMasterClasses();
   const { currentUser } = useAuth();
   const { branches, branding } = useSettings();
   const { clients, setActiveTab, setActiveClientId } = useAppContext();
@@ -91,7 +96,11 @@ export const ClassManager: React.FC = () => {
   const [selectedSpecificDate, setSelectedSpecificDate] = useState<string>('');
 
   // Form fields
+  const [masterClassId, setMasterClassId] = useState<string>('');
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [classType, setClassType] = useState<'Free' | 'Paid'>('Free');
   const [category, setCategory] = useState('Adults');
   const [selectedTiers, setSelectedTiers] = useState<CanonicalTier[]>(['ADULT']);
   const [instructorId, setInstructorId] = useState('');
@@ -128,6 +137,11 @@ export const ClassManager: React.FC = () => {
   const [reconcileClassDate, setReconcileClassDate] = useState<string | undefined>(undefined);
   const [reconcileSessionId, setReconcileSessionId] = useState<string | undefined>(undefined);
 
+  const activeMasterClasses = useMemo(
+    () => (masterClasses || []).filter(mc => mc.status === 'Active'),
+    [masterClasses]
+  );
+
   useEffect(() => {
     const fetchCoaches = async () => {
       try {
@@ -146,12 +160,18 @@ export const ClassManager: React.FC = () => {
     fetchCoaches();
   }, []);
 
-  // Synchronize latest rosterClass when classes change in real-time
+  // Synchronize latest rosterClass and targetClass when classes change in real-time
   useEffect(() => {
     if (rosterClass) {
       const freshClass = classes.find(c => c.id === rosterClass.id);
       if (freshClass) {
         setRosterClass(freshClass);
+      }
+    }
+    if (targetClass) {
+      const freshTarget = classes.find(c => c.id === targetClass.id);
+      if (freshTarget) {
+        setTargetClass(freshTarget);
       }
     }
   }, [classes]);
@@ -193,14 +213,17 @@ export const ClassManager: React.FC = () => {
     };
   }, [isRosterOpen, rosterClass?.id]);
 
-  // Dynamic Categories from Base + Loaded Classes
+  // Dynamic Categories from Base + Loaded Classes + Master Classes
   const dynamicCategories = useMemo(() => {
     const catSet = new Set<string>(BASE_CATEGORIES);
     classes.forEach(c => {
       if (c.category) catSet.add(c.category);
     });
+    masterClasses.forEach(mc => {
+      if (mc.category) catSet.add(mc.category);
+    });
     return Array.from(catSet);
-  }, [classes]);
+  }, [classes, masterClasses]);
 
   const manualMemberOptions = useMemo(() => {
     const enrolled = new Set([...(rosterClass?.attendees || []), ...(rosterClass?.waitlist || [])].map(String));
@@ -219,9 +242,37 @@ export const ClassManager: React.FC = () => {
     }).slice(0, 50);
   }, [clients, rosterClass?.attendees, rosterClass?.waitlist, memberSearchTerm]);
 
+  const handleSelectMasterClass = (selectedId: string) => {
+    if (!selectedId || selectedId === '__none__') {
+      setMasterClassId('');
+      return;
+    }
+    const mc = activeMasterClasses.find(item => item.id === selectedId);
+    if (!mc) return;
+
+    setMasterClassId(mc.id);
+    setName(mc.name);
+    setCategory(mc.category || 'Adults');
+    setCapacity(mc.capacity || 15);
+    setClassType(mc.classType || 'Free');
+    setPrice(mc.classType === 'Free' ? 0 : Number(mc.price || 0));
+    setDescription(mc.description || '');
+    setImageUrl(mc.imageUrl || '');
+    if (mc.branch) {
+      setBranch(mc.branch);
+    }
+    if (mc.allowedTiers && mc.allowedTiers.length > 0) {
+      setSelectedTiers(mc.allowedTiers.map(toCanonicalTier));
+    }
+  };
+
   const openCreateDialog = () => {
     setEditingClass(null);
+    setMasterClassId('');
     setName('');
+    setDescription('');
+    setImageUrl('');
+    setClassType('Free');
     setCategory('Adults');
     setSelectedTiers(['ADULT']);
     if (coaches.length > 0) {
@@ -243,7 +294,11 @@ export const ClassManager: React.FC = () => {
 
   const openEditDialog = (cls: ClassSchedule) => {
     setEditingClass(cls);
+    setMasterClassId(cls.masterClassId || '');
     setName(cls.name);
+    setDescription(cls.description || '');
+    setImageUrl(cls.imageUrl || '');
+    setClassType(cls.classType || (cls.price > 0 ? 'Paid' : 'Free'));
     setCategory(cls.category || 'Adults');
     const initialTiers = (cls.allowed_tiers && cls.allowed_tiers.length > 0)
       ? cls.allowed_tiers.map(toCanonicalTier)
@@ -308,17 +363,22 @@ export const ClassManager: React.FC = () => {
       const startIso = `${date}T${startTime}:00`;
       const endIso = `${date}T${endTime}:00`;
       const tiersToSave = Array.from(new Set(selectedTiers));
+      const effectivePrice = classType === 'Free' ? 0 : (Number(price) || 0);
 
       if (editingClass) {
         await updateClass(editingClass.id, {
+          ...(masterClassId ? { masterClassId } : {}),
           name: name.trim(),
+          description: description.trim(),
+          ...(imageUrl ? { imageUrl } : {}),
+          classType,
           category,
           allowed_tiers: tiersToSave,
           allowedTiers: tiersToSave,
           instructorId,
           instructorName,
           capacity: Number(capacity) || 15,
-          price: Number(price) || 0,
+          price: effectivePrice,
           cutoffMinutes: Number(cutoffMinutes) || 120,
           date,
           time: startTime,
@@ -338,14 +398,18 @@ export const ClassManager: React.FC = () => {
           const eIso = `${dateString}T${endTime}:00`;
 
           await addClass({
+            ...(masterClassId ? { masterClassId } : {}),
             name: name.trim(),
+            description: description.trim(),
+            ...(imageUrl ? { imageUrl } : {}),
+            classType,
             category,
             allowed_tiers: tiersToSave,
             allowedTiers: tiersToSave,
             instructorId,
             instructorName,
             capacity: Number(capacity) || 15,
-            price: Number(price) || 0,
+            price: effectivePrice,
             cutoffMinutes: Number(cutoffMinutes) || 120,
             date: dateString,
             time: startTime,
@@ -399,8 +463,15 @@ export const ClassManager: React.FC = () => {
     }
   };
 
+  const deleteCheck = useMemo(() => canDeleteClassSession(targetClass), [targetClass]);
+
   const handleConfirmDeleteClass = async () => {
     if (!targetClass) return;
+    const check = canDeleteClassSession(targetClass);
+    if (!check.allowed) {
+      toast.error(check.reason || 'Cannot delete class session while bookings exist.');
+      return;
+    }
     try {
       await deleteClass(targetClass.id);
       toast.success(`Class "${targetClass.name}" was permanently removed.`);
@@ -696,9 +767,55 @@ export const ClassManager: React.FC = () => {
         status: 'booked',
         promotedAt: new Date().toISOString()
       }).catch(() => {});
+      toast.success('Member promoted from waiting list to attending roster.');
     } catch (err) {
       console.error("Error promoting waitlist member:", err);
-      alert("Failed to promote member.");
+      toast.error("Failed to promote member.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRemoveWaitlistMember = async (waitlistId: string) => {
+    if (!rosterClass) return;
+    const { displayName, client } = resolveAttendee(waitlistId, clients);
+    if (!window.confirm(`Remove ${displayName} from the waiting list for this class?`)) {
+      return;
+    }
+
+    setActionLoadingId(waitlistId);
+    try {
+      const classRef = doc(db, 'classSchedules', rosterClass.id);
+      await updateDoc(classRef, {
+        waitlist: arrayRemove(waitlistId)
+      });
+
+      const nowIso = new Date().toISOString();
+      const bookingDocRef = doc(db, 'classBookings', `${rosterClass.id}_${waitlistId}`);
+      await updateDoc(bookingDocRef, {
+        status: 'cancelled',
+        cancelledAt: nowIso
+      }).catch((bookingErr) => {
+        console.warn('[ClassManager] Waitlist booking record not updated (may not exist for legacy entries):', bookingErr);
+      });
+
+      setCancelledBookings(prev => [
+        {
+          id: `${rosterClass.id}_${waitlistId}`,
+          classId: rosterClass.id,
+          clientId: waitlistId,
+          memberId: client?.memberId || waitlistId,
+          memberName: displayName,
+          memberPhone: client?.phone || '',
+          status: 'cancelled',
+          cancelledAt: nowIso
+        },
+        ...prev.filter(b => b.id !== `${rosterClass.id}_${waitlistId}`)
+      ]);
+      toast.success(`Removed ${displayName} from the waiting list.`);
+    } catch (err) {
+      console.error("Error removing waitlisted member:", err);
+      toast.error("Failed to remove waitlisted member.");
     } finally {
       setActionLoadingId(null);
     }
@@ -898,6 +1015,9 @@ export const ClassManager: React.FC = () => {
         <TabsList>
           <TabsTrigger value="classes" className="gap-2 text-xs font-bold">
             <Calendar className="h-4 w-4" /> Class Schedule ({classes.length})
+          </TabsTrigger>
+          <TabsTrigger value="master-library" className="gap-2 text-xs font-bold">
+            <BookOpen className="h-4 w-4" /> Master Class Library ({masterClasses.length})
           </TabsTrigger>
           <TabsTrigger value="analytics" className="gap-2 text-xs font-bold">
             <Flame className="h-4 w-4" /> Analytics & Payroll
@@ -1247,6 +1367,10 @@ export const ClassManager: React.FC = () => {
         <TabsContent value="analytics">
           <ClassAnalytics />
         </TabsContent>
+
+        <TabsContent value="master-library">
+          <MasterClassLibraryManager />
+        </TabsContent>
       </Tabs>
 
       {/* ─── ATTENDEE ROSTER DIALOG ─── */}
@@ -1285,9 +1409,15 @@ export const ClassManager: React.FC = () => {
                     </span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground uppercase text-[10px] block">Waitlist</span>
+                    <span className="text-muted-foreground uppercase text-[10px] block">Waiting List</span>
                     <span className="text-sm font-black text-amber-500">
                       {rosterClass.waitlist?.length || 0}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground uppercase text-[10px] block">Canceled</span>
+                    <span className="text-sm font-black text-destructive">
+                      {cancelledBookings.length}
                     </span>
                   </div>
                 </div>
@@ -1602,14 +1732,26 @@ export const ClassManager: React.FC = () => {
                             </div>
                           </div>
 
-                          <Button
-                            size="sm"
-                            disabled={isBusy}
-                            onClick={() => handlePromoteWaitlist(waitlistId)}
-                            className="h-7 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white"
-                          >
-                            Promote to Class
-                          </Button>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              disabled={isBusy}
+                              onClick={() => handlePromoteWaitlist(waitlistId)}
+                              className="h-7 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white"
+                            >
+                              Promote to Class
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={isBusy}
+                              onClick={() => handleRemoveWaitlistMember(waitlistId)}
+                              className="h-7 text-xs font-bold text-destructive hover:bg-destructive/10"
+                              title="Remove from waiting list"
+                            >
+                              Remove
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}
@@ -1702,6 +1844,30 @@ export const ClassManager: React.FC = () => {
               </div>
             )}
 
+            <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 space-y-1.5">
+              <Label className="text-xs font-bold uppercase text-primary flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5" /> Pick from Master Class Library
+              </Label>
+              <Select value={masterClassId || '__none__'} onValueChange={(val) => handleSelectMasterClass(val || '')}>
+                <SelectTrigger className="h-9 text-xs bg-background">
+                  <SelectValue placeholder="Select a pre-configured class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Custom class (no master profile) —</SelectItem>
+                  {activeMasterClasses.map(mc => (
+                    <SelectItem key={mc.id} value={mc.id}>
+                      {mc.name} • {mc.classType === 'Paid' ? `${mc.price} LE` : 'Free'} • Cap {mc.capacity}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {activeMasterClasses.length === 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  No active master classes yet. Create them in the "Master Class Library" tab.
+                </p>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase text-muted-foreground">Class Name</Label>
               <Input
@@ -1711,6 +1877,37 @@ export const ClassManager: React.FC = () => {
                 required
                 className="h-9 text-xs"
               />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Description</Label>
+                <Input
+                  placeholder="Short description shown to members"
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase text-muted-foreground">Class Type</Label>
+                <Select
+                  value={classType}
+                  onValueChange={(val) => {
+                    if (val !== 'Free' && val !== 'Paid') return;
+                    setClassType(val);
+                    if (val === 'Free') setPrice(0);
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Free">Free</SelectItem>
+                    <SelectItem value="Paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2020,11 +2217,41 @@ export const ClassManager: React.FC = () => {
               Are you sure you want to permanently remove <strong>{targetClass?.name}</strong> from the database? This cannot be undone.
             </DialogDescription>
           </DialogHeader>
+          {!deleteCheck.allowed && (
+            <div className="mt-3 p-3 rounded-xl border border-destructive/40 bg-destructive/10 text-xs text-destructive space-y-2">
+              <div className="flex items-start gap-2 font-bold">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span>
+                  This session still has {deleteCheck.activeBookingsCount} attending and {deleteCheck.waitlistCount} waitlisted member booking(s).
+                  All bookings must be cleared from the roster before it can be deleted.
+                </span>
+              </div>
+              {targetClass && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs font-bold border-destructive/40 text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    setIsDeleteDialogOpen(false);
+                    openRosterDialog(targetClass);
+                  }}
+                >
+                  <Users className="h-3.5 w-3.5 mr-1" /> Open Roster to Clear Bookings
+                </Button>
+              )}
+            </div>
+          )}
           <DialogFooter className="mt-4 gap-2">
             <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setIsDeleteDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" size="sm" className="rounded-xl font-bold" onClick={handleConfirmDeleteClass}>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="rounded-xl font-bold"
+              disabled={!deleteCheck.allowed}
+              onClick={handleConfirmDeleteClass}
+            >
               Delete Permanently
             </Button>
           </DialogFooter>

@@ -158,6 +158,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       notes: params.notes,
       receiptSerial: params.receiptSerial || undefined,
       recordedBy: params.recordedBy,
+      recordedByName: params.recordedByName || params.salesName || 'Staff',
       salesName: params.salesName,
       sales_rep_id: params.sales_rep_id,
       branch: effectiveBranch || undefined,
@@ -176,7 +177,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       operationId: params.operationId,
       created_at: new Date().toISOString(),
       deleted_at: null
-    };
+    } as any;
 
     if (lockRef) {
       await runTransaction(db, async (txn) => {
@@ -333,6 +334,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       notes: params.notes,
       receiptSerial: params.receiptSerial || undefined,
       recordedBy: params.recordedBy,
+      recordedByName: params.recordedByName || params.salesName || 'Staff',
       salesName: params.salesName,
       sales_rep_id: params.sales_rep_id,
       branch: effectiveBranch || undefined,
@@ -386,16 +388,26 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
 
     // E. Client Upgrade/Renewal Logic and Package Activation
     if (!isPendingOrFailed) {
+      const nowIso = new Date().toISOString();
+      const auditCreatedBy = params.recordedBy || 'system';
+      const auditCreatedByName = params.recordedByName || params.salesName || 'Staff';
+
       // Expire previous active package if renewing the same package or upgrading from previous package
       const updatedPkgs = clientPackages.map((p: any) => {
-        if (p.status !== 'Active') return p;
+        const basePkg = {
+          ...p,
+          createdAt: p.createdAt || nowIso,
+          createdBy: p.createdBy || auditCreatedBy,
+          createdByName: p.createdByName || auditCreatedByName,
+        };
+        if (p.status !== 'Active') return basePkg;
         if (params.isRenewal && p.packageName === params.packageType) {
-          return { ...p, status: 'Expired' };
+          return { ...basePkg, status: 'Expired' };
         }
         if (params.isUpgradePayment && params.previousPackageName && p.packageName === params.previousPackageName) {
-          return { ...p, status: 'Expired' };
+          return { ...basePkg, status: 'Expired' };
         }
-        return p;
+        return basePkg;
       });
 
       let newClientPackage: any = {
@@ -408,7 +420,13 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
         amountPaid: actualAmountPaid,
         remainingBalance,
         isPartial: remainingBalance > 0,
-        isComplimentary: params.isComplimentary || (params.amount === 0 && actualAmountPaid === 0)
+        isComplimentary: params.isComplimentary || (params.amount === 0 && actualAmountPaid === 0),
+        subscriptionType: params.isRenewal ? 'renew' : params.isUpgradePayment ? 'upgrade' : 'new',
+        salesRepName: params.salesName || undefined,
+        trainerName: params.coachName || undefined,
+        createdAt: nowIso,
+        createdBy: auditCreatedBy,
+        createdByName: auditCreatedByName,
       };
 
       const pkgStr = (params.packageType || '').toLowerCase();
@@ -432,7 +450,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
         startDate: resolvedStartDateIso,
         status: params.isMemberOnHold ? 'Hold' : 'Active',
         hasDiscount: !!params.discountType,
-        lastContactDate: new Date().toISOString(),
+        lastContactDate: nowIso,
         memberCategory: inferredCategory
       };
 
@@ -445,15 +463,65 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
         clientUpdate.membershipExpiry = resolvedEndDate;
       }
 
+      const nextPackages = [...updatedPkgs, newClientPackage];
+
       if (params.systemPackage) {
         const isUnlimited = params.systemPackage.sessions === 0;
         const sessions = params.systemPackage.sessions;
         newClientPackage.sessionsTotal = isUnlimited ? 'unlimited' : sessions;
         newClientPackage.sessionsRemaining = isUnlimited ? 'unlimited' : sessions;
         clientUpdate.sessionsRemaining = isUnlimited ? 'unlimited' : sessions;
+
+        const benefitGuestInvites = Number(
+          params.systemPackage.guestInvitations ?? params.systemPackage.benefits?.guestInvitations ?? 0
+        );
+        if (benefitGuestInvites > 0) {
+          clientUpdate.guestInvitesRemaining = (Number(clientData.guestInvitesRemaining) || 0) + benefitGuestInvites;
+        }
+        const benefitClassTrials = Number(
+          params.systemPackage.freeClassTrials ?? params.systemPackage.benefits?.freeClassTrials ?? 0
+        );
+        if (benefitClassTrials > 0) {
+          clientUpdate.freeClassTrialsRemaining = (Number(clientData.freeClassTrialsRemaining) || 0) + benefitClassTrials;
+        }
+
+        const freePtSessions = Number(
+          params.systemPackage.freePtSessions ?? params.systemPackage.benefits?.freePtSessions ?? 0
+        );
+        if (freePtSessions > 0) {
+          const currentPtRemaining =
+            typeof clientData.ptSessionsRemaining === 'number'
+              ? clientData.ptSessionsRemaining
+              : Number(clientData.ptSessionsRemaining) || 0;
+          clientUpdate.ptSessionsRemaining = currentPtRemaining + freePtSessions;
+
+          const complimentaryPtPackage: any = {
+            id: Math.random().toString(36).substr(2, 9),
+            packageName: `Complimentary PT (${freePtSessions} Sessions - ${params.packageType})`,
+            type: 'pt',
+            isPT: true,
+            startDate: resolvedStartDateIso,
+            endDate: resolvedEndDate,
+            sessionsTotal: freePtSessions,
+            sessionsRemaining: freePtSessions,
+            status: 'Active',
+            amount: 0,
+            amountPaid: 0,
+            remainingBalance: 0,
+            isPartial: false,
+            isComplimentary: true,
+            subscriptionType: 'new',
+            salesRepName: params.salesName || undefined,
+            trainerName: params.coachName || undefined,
+            createdAt: nowIso,
+            createdBy: auditCreatedBy,
+            createdByName: auditCreatedByName,
+          };
+          nextPackages.push(complimentaryPtPackage);
+        }
       }
 
-      clientUpdate.packages = [...updatedPkgs, newClientPackage];
+      clientUpdate.packages = nextPackages;
 
       // Only overwrite assignedTo when a specific rep was explicitly selected
       if (params.sales_rep_id) {

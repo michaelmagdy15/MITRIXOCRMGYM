@@ -25,6 +25,27 @@ export * from './types/attendance';
 
 export type Branch = string;
 
+export type PackageHierarchy = 'Primary' | 'Secondary';
+export type PackageTargetTeam = 'Sales' | 'PT' | 'Class Instructors' | 'Nutrition';
+
+export interface PackageCategoryItem {
+  id: string;
+  name: string;
+  description?: string;
+  isSystem?: boolean;
+  createdAt: string;
+  createdBy?: string;
+}
+
+export interface PackageBenefits {
+  freePtSessions?: number;
+  freezeAllowanceDays?: number;
+  minFreezeDays?: number;
+  maxFreezeDays?: number;
+  guestInvitations?: number;
+  freeClassTrials?: number;
+}
+
 export interface Package {
   id: string;
   name: string;
@@ -39,12 +60,30 @@ export interface Package {
   is_all_branches?: boolean;
   is_active?: boolean;
   isActive?: boolean;
+  status?: 'Active' | 'Hold';
   /** Soft-archive fields. archivedAt set => archived. */
   archivedAt?: string;
   archivedBy?: string;
   archivedReason?: string;
   type: 'Private' | 'Group' | 'Other';
   imageUrl?: string;
+  // Inzan Athletics Package Enhancements
+  hierarchy?: PackageHierarchy;
+  benefits?: PackageBenefits;
+  freePtSessions?: number;
+  freezeAllowanceDays?: number;
+  minFreezeDays?: number;
+  maxFreezeDays?: number;
+  guestInvitations?: number;
+  freeClassTrials?: number;
+  isTimeRestricted?: boolean;
+  allowedStartTime?: string; // HH:mm e.g. "06:00"
+  allowedEndTime?: string;   // HH:mm e.g. "14:00"
+  targetTeam?: PackageTargetTeam;
+  targetAmount?: number;
+  createdAt?: string;
+  createdBy?: string;
+  createdByName?: string;
 }
 
 export interface Coach {
@@ -479,11 +518,13 @@ export interface ClientPackage {
   isOnHold?: boolean; // True if package is temporarily paused
   holdReason?: string; // Reason for holding the package
   holdDate?: string; // ISO string - when the hold was placed
+  freezeDaysUsed?: number; // Cumulative days frozen against the package's freeze allowance
   subscriptionType?: 'new' | 'renew' | 'upgrade' | 'wrongentry';
   isPendingConfirmation?: boolean;
   salesRepName?: string;
   trainerName?: string;
   createdBy?: string;
+  createdByName?: string;
   createdAt?: string;
 }
 
@@ -609,12 +650,16 @@ export interface JuiceBarOrder {
 export interface GuestInvite {
   id: string;
   hostClientId: string;
+  hostMemberId?: string;
   hostName: string;
   guestName: string;
   guestPhone: string;
   inviteCode: string;
   status: 'Pending' | 'Attended' | 'Expired';
   createdAt: string;
+  attendedAt?: string;
+  attendanceDate?: string;
+  branch?: string;
 }
 
 export interface FeatureFlags {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { Package } from '../types';
 import { cleanData } from '../utils';
@@ -31,11 +31,16 @@ export const usePackages = () => {
     try {
       const docRef = doc(collection(db, 'packages'));
       const docId = docRef.id;
+      const status = pkg.status || 'Active';
+      const isHold = status === 'Hold';
       const dataToSave = cleanData({
         ...pkg,
-        isActive: pkg.isActive !== false,
-        is_active: pkg.is_active !== false,
-        createdAt: new Date().toISOString()
+        status,
+        isActive: isHold ? false : pkg.isActive !== false,
+        is_active: isHold ? false : pkg.is_active !== false,
+        createdAt: pkg.createdAt || new Date().toISOString(),
+        createdBy: pkg.createdBy || auth.currentUser?.uid || currentUser?.id || '',
+        createdByName: pkg.createdByName || auth.currentUser?.displayName || currentUser?.name || auth.currentUser?.email || 'Admin'
       });
       await setDoc(docRef, dataToSave);
       await addAuditLog('CREATE', 'CLIENT', docId, `Created package: ${pkg.name}${pkg.category ? ` [${pkg.category}]` : ''}`, currentUser?.name);
@@ -61,6 +66,27 @@ export const usePackages = () => {
       const msg = err?.message || 'Failed to update package';
       console.error('[Packages] updatePackage error:', err);
       toast.error(`Failed to update package: ${msg}`);
+      throw err;
+    }
+  };
+
+  const togglePackageHold = async (id: string, hold: boolean) => {
+    try {
+      const pkg = packages.find(p => p.id === id);
+      const pkgName = pkg?.name || id;
+      const newStatus = hold ? 'Hold' : 'Active';
+      await updateDoc(doc(db, 'packages', id), cleanData({
+        status: newStatus,
+        isActive: !hold,
+        is_active: !hold,
+        updatedAt: new Date().toISOString()
+      }));
+      await addAuditLog('UPDATE', 'CLIENT', id, `Set package status to ${newStatus}: ${pkgName}`, currentUser?.name);
+      toast.success(`Package "${pkgName}" is now ${hold ? 'On Hold' : 'Active'}`);
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to update package status';
+      console.error('[Packages] togglePackageHold error:', err);
+      toast.error(`Failed to update package status: ${msg}`);
       throw err;
     }
   };
@@ -91,6 +117,7 @@ export const usePackages = () => {
       const pkg = packages.find(p => p.id === id);
       const pkgName = pkg?.name || id;
       await updateDoc(doc(db, 'packages', id), cleanData({
+        status: 'Active',
         isActive: true,
         is_active: true,
         archivedAt: null,
@@ -109,6 +136,7 @@ export const usePackages = () => {
 
   const recalculateAllPackages = async () => {};
 
-  return { packages, loading, error, addPackage, updatePackage, deletePackage: archivePackage, restorePackage, recalculateAllPackages };
+  return { packages, loading, error, addPackage, updatePackage, togglePackageHold, deletePackage: archivePackage, restorePackage, recalculateAllPackages };
 };
+
 

@@ -413,6 +413,16 @@ service cloud.firestore {
       allow write: if isTenantAdmin();
     }
 
+    match /packageCategories/{categoryId} {
+      allow read: if true;
+      allow write: if isTenantStaff();
+    }
+
+    match /masterClasses/{classId} {
+      allow read: if true;
+      allow write: if isTenantStaff();
+    }
+
     match /rewards/{rewardId} {
       allow read: if isAuthenticated();
       allow create: if isTenantStaff();
@@ -644,8 +654,12 @@ service cloud.firestore {
 
     match /guestInvites/{inviteId} {
       allow read: if isTenantStaff() || (isAuthenticated() && resource.data.hostId != null && isOwnClientRecord(resource.data.hostId));
-      allow create: if isAuthenticated() && request.resource.data.hostId != null && isOwnClientRecord(request.resource.data.hostId);
+      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.hostId != null && isOwnClientRecord(request.resource.data.hostId));
       allow update, delete: if isTenantStaff();
+    }
+
+    match /guests/{guestId} {
+      allow read, write: if isTenantStaff();
     }
 
     match /clientPerformance/{performanceId} {

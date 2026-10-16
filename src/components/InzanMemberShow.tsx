@@ -30,7 +30,10 @@ import { AdjustPackageDatesDialog, canOverridePackageDates, buildPackageUpdates 
 import { ConfirmDialog } from './ConfirmDialog';
 import { addAuditLog } from '../services/auditService';
 import { canReassignMemberSalesRep } from '../utils/permissions';
-import { Trash2, CalendarClock } from 'lucide-react';
+import { Trash2, CalendarClock, TrendingUp } from 'lucide-react';
+import { MemberGuestInvitationsTab } from './member/MemberGuestInvitationsTab';
+import { MemberDocumentUploader } from './member/MemberDocumentUploader';
+import { isFieldLockedForUser, sanitizeMemberProfileUpdates } from '../utils/memberProfileLocking';
 
 interface InzanMemberShowProps {
   client: Client;
@@ -56,6 +59,7 @@ type TabType =
   | 'financials'
   | 'freezing'
   | 'activities'
+  | 'invitations'
   | 'files'
   | 'others'
   | 'comments'
@@ -202,6 +206,9 @@ export function InzanMemberShow({
       civilStatus: client.civilStatus || '',
       cardId: client.cardId || '',
       civilianOrMilitary: client.civilianOrMilitary || 'None',
+      medicalInfo: client.medicalInfo || '',
+      preferredTime: client.preferredTime || undefined,
+      colorLabel: client.colorLabel || '',
       photoURL: client.photoURL || ''
     });
     setIsEditing(true);
@@ -212,11 +219,12 @@ export function InzanMemberShow({
     try {
       const isRepLocked = Boolean(client.salesRep || client.assignedTo);
       const canReassign = canReassignMemberSalesRep(currentUser);
-      const updates = { ...formData };
+      const rawUpdates = { ...formData };
       if (isRepLocked && !canReassign) {
         // Enforce Sales Manager authority rule: preserve assigned sales rep unless Sales Manager
-        updates.salesRep = client.salesRep || client.assignedTo || '';
+        rawUpdates.salesRep = client.salesRep || client.assignedTo || '';
       }
+      const updates = sanitizeMemberProfileUpdates(rawUpdates, client, currentUser);
       await onUpdateClient(client.id, updates);
       setIsEditing(false);
     } catch (err: any) {
@@ -246,13 +254,14 @@ export function InzanMemberShow({
     options?: { value: string; label: string }[],
     disabled?: boolean
   ) => {
+    const isDisabled = disabled !== undefined ? disabled : (fieldKey ? isFieldLockedForUser(fieldKey, currentUser, client) : false);
     if (isEditing && fieldKey) {
       if (type === 'select' && options) {
         return (
           <div className="flex flex-col space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-muted-foreground font-semibold uppercase">{label}</span>
-              {disabled && (
+              {isDisabled && (
                 <span className="text-[9px] text-amber-500 font-bold">🔒 Locked</span>
               )}
             </div>
@@ -260,7 +269,7 @@ export function InzanMemberShow({
               className="h-8 w-full rounded border border-input bg-background px-2 py-0 text-xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
               value={(formData[fieldKey] as string) || ''}
               onChange={e => handleInputChange(fieldKey, e.target.value)}
-              disabled={disabled}
+              disabled={isDisabled}
             >
               <option value="">Select...</option>
               {options.map(opt => (
@@ -274,13 +283,13 @@ export function InzanMemberShow({
         <div className="flex flex-col space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground font-semibold uppercase">{label}</span>
-            {disabled && (
+            {isDisabled && (
               <span className="text-[9px] text-amber-500 font-bold">🔒 Locked</span>
             )}
           </div>
           <Input
             type={type}
-            disabled={disabled}
+            disabled={isDisabled}
             className="h-8 text-xs bg-background text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
             value={(formData[fieldKey] !== undefined ? formData[fieldKey] : '') as any}
             onChange={e => handleInputChange(fieldKey, type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value)}
@@ -299,20 +308,10 @@ export function InzanMemberShow({
 
   const getAge = (dob: string | undefined) => safeGetAge(dob);
 
-  const handleUpgradeClick = () => {
+  const handleUpgradeClick = (pkgName?: string) => {
     setUpgradeDialogClientId(client.id);
-    setUpgradePkgName('');
+    setUpgradePkgName(pkgName || '');
     setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd'));
-  };
-
-  const handleRenewClick = () => {
-    if (setRenewDialogClientId) {
-      setRenewDialogClientId(client.id);
-      if (setRenewPkgName) setRenewPkgName('');
-      if (setRenewStartDate) setRenewStartDate(format(new Date(), 'yyyy-MM-dd'));
-    } else {
-      handleUpgradeClick();
-    }
   };
 
   const handleAddPackageClick = () => {
@@ -345,6 +344,7 @@ export function InzanMemberShow({
               { id: 'financials', label: 'Financial Accounts List' },
               { id: 'freezing', label: 'Freezing List' },
               { id: 'activities', label: 'Activities' },
+              { id: 'invitations', label: 'Invitations & Referrals' },
               { id: 'files', label: 'Files' },
               { id: 'others', label: 'Others' },
               { id: 'comments', label: 'Comments Log' },
@@ -460,7 +460,7 @@ export function InzanMemberShow({
 
           {/* Buttons bar */}
           <div className="flex flex-wrap gap-2 items-center">
-            {/* Safety net toggle lock button */}
+            {/* Edit Additional Info toggle button */}
             <Button
               variant="outline"
               size="sm"
@@ -479,10 +479,13 @@ export function InzanMemberShow({
               ) : (
                 <>
                   <Unlock className="h-3.5 w-3.5 mr-1" />
-                  Safety Net: Edit
+                  Edit Additional Info
                 </>
               )}
             </Button>
+            <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/10 font-semibold">
+              <Lock className="h-3 w-3 mr-1" /> Core identity fields locked for security
+            </Badge>
 
             <Button
               variant="outline"
@@ -588,71 +591,68 @@ export function InzanMemberShow({
               <div className="md:col-span-3 border border-border p-6 rounded-xl bg-muted/5">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-primary mb-4 border-b border-border pb-2">Profile Details</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
-                  {renderField('Member Name', client.name, 'name')}
-                  {renderField('Username', client.memberId, 'legacyNotes')}
-                  {renderField('Mobile', client.phone, 'phone')}
-                  {renderField('Phone', client.phone, 'phone')}
-                  {renderField('Backup Mobile', client.backupPhone, 'backupPhone')}
-                  {renderField('Job', client.jobTitle, 'jobTitle')}
-                  {renderField('Birthday', (client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'yyyy-MM-dd', '') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date')}
-                  {renderField('National ID', client.nationalId, 'nationalId')}
-                  {renderField('Email', client.email, 'email')}
-                  {renderField('Area', client.city, 'city')}
-                  {(() => {
-                    const isRepLocked = Boolean(client.salesRep || client.assignedTo);
-                    const canReassign = canReassignMemberSalesRep(currentUser);
-                    return renderField(
-                      'Sales Man',
-                      users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || 'unassigned',
-                      'salesRep',
-                      'select',
-                      users.filter(u => ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
-                      isRepLocked && !canReassign
-                    );
-                  })()}
-                  {renderField('Trainer', users.find(u => u.id === (formData.assignedTo || client.assignedTo))?.name || 'unassigned', 'assignedTo', 'select',
-                    users.filter(u => ['coach'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name }))
+                  {renderField('Member Name', client.name, 'name', 'text', undefined, isFieldLockedForUser('name', currentUser, client))}
+                  {renderField('Username', client.memberId, 'legacyNotes', 'text', undefined, isFieldLockedForUser('legacyNotes', currentUser, client))}
+                  {renderField('Mobile', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client))}
+                  {renderField('Phone', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client))}
+                  {renderField('Backup Mobile', client.backupPhone, 'backupPhone', 'text', undefined, isFieldLockedForUser('backupPhone', currentUser, client))}
+                  {renderField('Job', client.jobTitle, 'jobTitle', 'text', undefined, isFieldLockedForUser('jobTitle', currentUser, client))}
+                  {renderField('Birthday', (client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'yyyy-MM-dd', '') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date', undefined, isFieldLockedForUser('dateOfBirth', currentUser, client))}
+                  {renderField('National ID', client.nationalId, 'nationalId', 'text', undefined, isFieldLockedForUser('nationalId', currentUser, client))}
+                  {renderField('Email', client.email, 'email', 'text', undefined, isFieldLockedForUser('email', currentUser, client))}
+                  {renderField('Area', client.city, 'city', 'text', undefined, isFieldLockedForUser('city', currentUser, client))}
+                  {renderField(
+                    'Sales Man',
+                    users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || 'unassigned',
+                    'salesRep',
+                    'select',
+                    users.filter(u => ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
+                    isFieldLockedForUser('salesRep', currentUser, client)
                   )}
-                  {renderField('Weight (kg)', client.weight, 'weight', 'number')}
-                  {renderField('Height (cm)', client.height, 'height', 'number')}
+                  {renderField('Trainer', users.find(u => u.id === (formData.assignedTo || client.assignedTo))?.name || 'unassigned', 'assignedTo', 'select',
+                    users.filter(u => ['coach'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
+                    isFieldLockedForUser('assignedTo', currentUser, client)
+                  )}
+                  {renderField('Weight (kg)', client.weight, 'weight', 'number', undefined, isFieldLockedForUser('weight', currentUser, client))}
+                  {renderField('Height (cm)', client.height, 'height', 'number', undefined, isFieldLockedForUser('height', currentUser, client))}
                   {renderField('Level', client.activityLevel, 'activityLevel', 'select', [
                     { value: 'Beginner', label: 'Beginner' },
                     { value: 'Intermediate', label: 'Intermediate' },
                     { value: 'Advanced', label: 'Advanced' }
-                  ])}
+                  ], isFieldLockedForUser('activityLevel', currentUser, client))}
                   {renderField('Goal', client.fitnessTarget, 'fitnessTarget', 'select', [
                     { value: 'Loss Weight', label: 'Loss Weight' },
                     { value: 'Build Muscle', label: 'Build Muscle' },
                     { value: 'Fitness', label: 'Fitness' },
                     { value: 'Rehab', label: 'Rehab' }
-                  ])}
-                  {renderField('Civil Status', client.civilStatus, 'civilStatus')}
+                  ], isFieldLockedForUser('fitnessTarget', currentUser, client))}
+                  {renderField('Civil Status', client.civilStatus, 'civilStatus', 'text', undefined, isFieldLockedForUser('civilStatus', currentUser, client))}
                   {renderField('Status', client.status)}
-                  {renderField('Address', client.address, 'address')}
-                  {renderField('Member Code', client.legacyMemberId, 'legacyMemberId')}
-                  {renderField('Emergency Contact', client.emergencyContactName, 'emergencyContactName')}
+                  {renderField('Address', client.address, 'address', 'text', undefined, isFieldLockedForUser('address', currentUser, client))}
+                  {renderField('Member Code', client.legacyMemberId, 'legacyMemberId', 'text', undefined, isFieldLockedForUser('legacyMemberId', currentUser, client))}
+                  {renderField('Emergency Contact', client.emergencyContactName, 'emergencyContactName', 'text', undefined, isFieldLockedForUser('emergencyContactName', currentUser, client))}
                   {renderField('Gender', client.gender, 'gender', 'select', [
                     { value: 'Male', label: 'Male' },
                     { value: 'Female', label: 'Female' }
-                  ])}
-                  {renderField('Type', client.typeOfClient, 'typeOfClient')}
-                  {renderField('Guest Serial', client.guestSerial, 'guestSerial')}
-                  {renderField('Advertising Source', client.advertisingSource, 'advertisingSource')}
-                  {renderField('Bar-code / RFID', client.barcode, 'barcode')}
-                  {renderField('Nationality', client.nationality, 'nationality')}
+                  ], isFieldLockedForUser('gender', currentUser, client))}
+                  {renderField('Type', client.typeOfClient, 'typeOfClient', 'text', undefined, isFieldLockedForUser('typeOfClient', currentUser, client))}
+                  {renderField('Guest Serial', client.guestSerial, 'guestSerial', 'text', undefined, isFieldLockedForUser('guestSerial', currentUser, client))}
+                  {renderField('Advertising Source', client.advertisingSource, 'advertisingSource', 'text', undefined, isFieldLockedForUser('advertisingSource', currentUser, client))}
+                  {renderField('Bar-code / RFID', client.barcode, 'barcode', 'text', undefined, isFieldLockedForUser('barcode', currentUser, client))}
+                  {renderField('Nationality', client.nationality, 'nationality', 'text', undefined, isFieldLockedForUser('nationality', currentUser, client))}
                   {renderField('Civilian/Military', client.civilianOrMilitary, 'civilianOrMilitary', 'select', [
                     { value: 'None', label: 'None' },
                     { value: 'Civilian', label: 'Civilian' },
                     { value: 'Military', label: 'Military' }
-                  ])}
-                  {renderField('Card ID', client.cardId, 'cardId')}
-                  {renderField('Medical Info', client.medicalInfo, 'medicalInfo')}
+                  ], isFieldLockedForUser('civilianOrMilitary', currentUser, client))}
+                  {renderField('Card ID', client.cardId, 'cardId', 'text', undefined, isFieldLockedForUser('cardId', currentUser, client))}
+                  {renderField('Medical Info', client.medicalInfo, 'medicalInfo', 'text', undefined, isFieldLockedForUser('medicalInfo', currentUser, client))}
                   {renderField('Preferred Time', client.preferredTime, 'preferredTime', 'select', [
                     { value: 'Morning', label: 'Morning' },
                     { value: 'Afternoon', label: 'Afternoon' },
                     { value: 'Evening', label: 'Evening' },
                     { value: 'Night', label: 'Night' }
-                  ])}
+                  ], isFieldLockedForUser('preferredTime', currentUser, client))}
                   {renderField('Color Label', client.colorLabel, 'colorLabel', 'select', [
                     { value: 'red', label: '🔴 Red' },
                     { value: 'green', label: '🟢 Green' },
@@ -662,7 +662,7 @@ export function InzanMemberShow({
                     { value: 'orange', label: '🟠 Orange' },
                     { value: 'pink', label: '🩷 Pink' },
                     { value: 'brown', label: '🟤 Brown' }
-                  ])}
+                  ], isFieldLockedForUser('colorLabel', currentUser, client))}
                   {renderField('Created On', safeFormatDate(client.createdAt, 'yyyy-MM-dd HH:mm:ss'))}
                 </div>
               </div>
@@ -703,10 +703,10 @@ export function InzanMemberShow({
               <h3 className="text-sm font-bold uppercase text-primary">Package Status</h3>
               <div className="flex gap-2">
                 <Button
-                  onClick={client.packages && client.packages.some(p => p.status === 'Active') ? handleRenewClick : handleAddPackageClick}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8"
+                  onClick={() => handleUpgradeClick()}
+                  className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs h-8"
                 >
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Membership (Renew)
+                  <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade Package
                 </Button>
                 <Button
                   onClick={handleAddPackageClick}
@@ -732,7 +732,7 @@ export function InzanMemberShow({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-3 border-t border-border text-xs">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-3 border-t border-border text-xs">
                     <div>
                       <span className="text-muted-foreground block font-medium">Start Date:</span>
                       <span className="font-bold text-foreground">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</span>
@@ -742,8 +742,12 @@ export function InzanMemberShow({
                       <span className="font-bold text-foreground">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground block font-medium">Created On:</span>
-                      <span className="font-bold text-foreground">{safeFormatDate(client.createdAt, 'dd MMM yyyy')}</span>
+                      <span className="text-muted-foreground block font-medium">Created Date:</span>
+                      <span className="font-bold text-foreground">{safeFormatDate(pkg.createdAt || client.createdAt, 'dd MMM yyyy HH:mm')}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block font-medium">Created By:</span>
+                      <span className="font-bold text-foreground">{pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}</span>
                     </div>
                     <div>
                       <span className="text-muted-foreground block font-medium">Status:</span>
@@ -755,10 +759,18 @@ export function InzanMemberShow({
                   <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
                     <Button
                       size="sm"
-                      onClick={handleUpgradeClick}
+                      onClick={() => handleUpgradeClick(pkg.packageName)}
                       className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs h-7"
                     >
-                      Change Package (Renew)
+                      <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade Package
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleUpgradeClick(pkg.packageName)}
+                      className="text-xs h-7 border-sky-500/40 text-sky-600 hover:bg-sky-500/10 font-bold"
+                    >
+                      <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade
                     </Button>
                     {canAdjustDates && (
                       <Button
@@ -811,9 +823,11 @@ export function InzanMemberShow({
                       <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Package</TableHead>
                       <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Start</TableHead>
                       <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Expires</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created Date</TableHead>
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
                       <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-center">Sessions</TableHead>
                       <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-center">Status</TableHead>
-                      {canAdjustDates && <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-right">Actions</TableHead>}
+                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -825,6 +839,12 @@ export function InzanMemberShow({
                             <TableCell className="py-3 px-4 text-xs font-medium text-foreground">{pkg.packageName}</TableCell>
                             <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</TableCell>
                             <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</TableCell>
+                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">
+                              {safeFormatDate(pkg.createdAt || client.createdAt, 'dd MMM yyyy HH:mm')}
+                            </TableCell>
+                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">
+                              {pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}
+                            </TableCell>
                             <TableCell className="py-3 px-4 text-xs text-muted-foreground text-center">
                               {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} / ${pkg.sessionsTotal ?? '?'}` : '—'}
                             </TableCell>
@@ -839,21 +859,31 @@ export function InzanMemberShow({
                                 {pkg.status}
                               </Badge>
                             </TableCell>
-                            {canAdjustDates && (
-                              <TableCell className="py-3 px-4 text-right whitespace-nowrap">
-                                <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]" onClick={() => setAdjustPkgId(pkg.id)}>
-                                  <CalendarClock className="h-3.5 w-3.5 mr-1" /> Adjust Dates
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" title="Delete package" onClick={() => setDeletePkgId(pkg.id)}>
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </TableCell>
-                            )}
+                            <TableCell className="py-3 px-4 text-right whitespace-nowrap">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-[10px] font-bold text-sky-600 hover:text-sky-700 hover:bg-sky-500/10"
+                                onClick={() => handleUpgradeClick(pkg.packageName)}
+                              >
+                                <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade
+                              </Button>
+                              {canAdjustDates && (
+                                <>
+                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]" onClick={() => setAdjustPkgId(pkg.id)}>
+                                    <CalendarClock className="h-3.5 w-3.5 mr-1" /> Adjust Dates
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" title="Delete package" onClick={() => setDeletePkgId(pkg.id)}>
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                            </TableCell>
                           </TableRow>
                         ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                        <TableCell colSpan={8} className="py-6 text-center text-xs text-muted-foreground">
                           No historical package records.
                         </TableCell>
                       </TableRow>
@@ -970,6 +1000,26 @@ export function InzanMemberShow({
           </div>
         )}
 
+        {activeTab === 'invitations' && (
+          <div className="space-y-4 text-left">
+            <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3">Invitations & Referrals</h3>
+            <div className="bg-muted/10 p-4 rounded-xl border border-border flex flex-wrap items-center justify-between gap-4 text-xs">
+              <div>
+                <span className="text-muted-foreground font-medium block uppercase text-[10px]">Referred By</span>
+                <span className="font-bold text-foreground">
+                  {client.referredByName || client.referredBy || 'Direct / Walk-in'}
+                  {client.invitedByType ? ` (${client.invitedByType})` : ''}
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground font-medium block uppercase text-[10px]">Referral Code</span>
+                <span className="font-mono font-bold text-primary">{client.referralCode || '—'}</span>
+              </div>
+            </div>
+            <MemberGuestInvitationsTab client={client} />
+          </div>
+        )}
+
         {activeTab === 'freezing' && (
           <div className="space-y-4 text-left">
             <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3">Freezing Logs</h3>
@@ -982,33 +1032,7 @@ export function InzanMemberShow({
         {activeTab === 'files' && (
           <div className="space-y-4 text-left">
             <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3">Uploaded Documents</h3>
-            {client.documents && client.documents.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-left">
-                {client.documents.map(doc => (
-                  <div key={doc.id} className="bg-muted/10 p-4 rounded-xl border border-border flex items-center justify-between gap-3 hover:border-border/80 transition-colors">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <FileCheck className="h-5 w-5 text-primary shrink-0" />
-                      <div className="overflow-hidden">
-                        <p className="text-xs font-bold text-foreground truncate">{doc.name}</p>
-                        <span className="text-[10px] text-muted-foreground">{safeFormatDate(doc.uploadDate, 'dd MMM yyyy')}</span>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => window.open(doc.url, '_blank')}
-                      className="text-xs text-primary hover:text-primary/80"
-                    >
-                      View
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-muted/5 p-8 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs">
-                No files or contracts uploaded for this member.
-              </div>
-            )}
+            <MemberDocumentUploader client={client} onUpdateClient={onUpdateClient} />
           </div>
         )}
 

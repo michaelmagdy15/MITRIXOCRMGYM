@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { auth, db } from '../firebase';
 import { collection, onSnapshot, query, where, getDocs, doc, setDoc, updateDoc } from 'firebase/firestore';
-import { Attendance, Branch, Client, User } from '../types';
+import { Attendance, Branch, Client, Package, User } from '../types';
 import { addAuditLog } from '../services/auditService';
+import { validatePackageTimeWindow } from '../utils/membershipRules';
+import { isTenantInzan } from '../utils/inzanOrg';
 import { useAuth } from '../contexts/AuthContext';
 
 export const useAttendance = (currentUser: User | null, clients: Client[]) => {
@@ -40,6 +42,25 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
 
       if (client.status === 'Expired') {
         throw new Error(`${client.name}'s membership is expired. Please renew membership at the front desk.`);
+      }
+
+      // Time-restricted packages (e.g. Morning Package): allow entry if ANY active package
+      // is unrestricted or currently inside its window. Unknown packages never block.
+      const activeNames = Array.from(new Set(
+        (client.packages || []).filter(p => p.status === 'Active' && p.packageName).map(p => p.packageName)
+      )).slice(0, 10);
+      if (isTenantInzan() && activeNames.length > 0) {
+        const pkgSnap = await getDocs(query(collection(db, 'packages'), where('name', 'in', activeNames)));
+        const defsByName = new Map<string, Package>();
+        pkgSnap.docs.forEach(d => {
+          const data = { ...d.data(), id: d.id } as Package;
+          defsByName.set(data.name, data);
+        });
+        const checkInNow = new Date();
+        const windowResults = activeNames.map(n => validatePackageTimeWindow(defsByName.get(n) || null, checkInNow));
+        if (windowResults.every(r => !r.allowed)) {
+          throw new Error(windowResults[0]?.reason || `${client.name}'s package does not allow access at this time.`);
+        }
       }
 
       const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });

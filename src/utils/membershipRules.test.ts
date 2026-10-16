@@ -5,7 +5,9 @@ import {
   isAcademyOrExemptPackage,
   isClientUnder16OrJunior,
   hasActivePrimaryMembership,
-  validateMembershipEligibility
+  validateMembershipEligibility,
+  validatePackageTimeWindow,
+  validateFreezeDurationLimits
 } from './membershipRules';
 import { Client, Package } from '../types';
 
@@ -102,12 +104,16 @@ describe('Inzan Athletics Membership Hierarchy & Eligibility Rules', () => {
     memberCategory: 'Kids Only'
   };
 
-  it('1. Primary membership package detection', () => {
+  it('1. Primary membership package detection (including explicit hierarchy)', () => {
     assert.strictEqual(isPrimaryMembershipPackage(primaryPackage), true);
     assert.strictEqual(isPrimaryMembershipPackage({ name: 'Annual Membership' }), true);
     assert.strictEqual(isPrimaryMembershipPackage(ptPackage), false);
     assert.strictEqual(isPrimaryMembershipPackage(nutritionPackage), false);
     assert.strictEqual(isPrimaryMembershipPackage(sgfPackage), false);
+
+    // Explicit hierarchy overrides category/name heuristics
+    assert.strictEqual(isPrimaryMembershipPackage({ name: 'Custom Access Plan', category: 'Custom', hierarchy: 'Primary' }), true);
+    assert.strictEqual(isPrimaryMembershipPackage({ name: 'Bonus Membership Addon', category: 'Membership', hierarchy: 'Secondary' }), false);
   });
 
   it('2. Academy and exempt package detection (SGF, MMA, Gymnastics)', () => {
@@ -172,4 +178,73 @@ describe('Inzan Athletics Membership Hierarchy & Eligibility Rules', () => {
     assert.strictEqual(resStrike.allowed, true);
     assert.strictEqual(resStrike.isExempt, true);
   });
+
+  it('12. Explicit hierarchy === Secondary strictly requires active primary membership (except kids PT)', () => {
+    const secondaryClassPkg: Package = {
+      ...mmaPackage,
+      hierarchy: 'Secondary'
+    };
+    const deniedRes = validateMembershipEligibility(adultWithoutMembership, secondaryClassPkg);
+    assert.strictEqual(deniedRes.allowed, false);
+
+    const allowedRes = validateMembershipEligibility(adultWithMembership, secondaryClassPkg);
+    assert.strictEqual(allowedRes.allowed, true);
+
+    const secondaryPtPkg: Package = {
+      ...ptPackage,
+      hierarchy: 'Secondary'
+    };
+    const kidPtRes = validateMembershipEligibility(kidUnder16, secondaryPtPkg);
+    assert.strictEqual(kidPtRes.allowed, true);
+  });
+
+  it('13. validatePackageTimeWindow enforces time-restricted packages', () => {
+    // Non-restricted package is always allowed
+    assert.strictEqual(validatePackageTimeWindow(primaryPackage, new Date('2026-06-01T21:00:00')).allowed, true);
+
+    const morningPackage: Partial<Package> = {
+      name: 'Morning Access',
+      isTimeRestricted: true,
+      allowedStartTime: '06:00',
+      allowedEndTime: '14:00'
+    };
+
+    const at10am = new Date(2026, 5, 1, 10, 30, 0);
+    const resInside = validatePackageTimeWindow(morningPackage, at10am);
+    assert.strictEqual(resInside.allowed, true);
+
+    const at6pm = new Date(2026, 5, 1, 18, 15, 0);
+    const resOutside = validatePackageTimeWindow(morningPackage, at6pm);
+    assert.strictEqual(resOutside.allowed, false);
+    assert.match(resOutside.reason || '', /06:00 and 14:00/);
+  });
+
+  it('14. validateFreezeDurationLimits enforces min, max, and total freeze allowance days', () => {
+    const pkgWithFreezeLimits: Partial<Package> = {
+      name: 'Annual Membership',
+      minFreezeDays: 7,
+      maxFreezeDays: 30,
+      freezeAllowanceDays: 45
+    };
+
+    // Valid freeze request
+    const validRes = validateFreezeDurationLimits(pkgWithFreezeLimits, 14, 10);
+    assert.strictEqual(validRes.allowed, true);
+
+    // Below minimum freeze days
+    const belowMinRes = validateFreezeDurationLimits(pkgWithFreezeLimits, 3, 0);
+    assert.strictEqual(belowMinRes.allowed, false);
+    assert.match(belowMinRes.reason || '', /Minimum freeze duration is 7/);
+
+    // Above maximum freeze days
+    const aboveMaxRes = validateFreezeDurationLimits(pkgWithFreezeLimits, 35, 0);
+    assert.strictEqual(aboveMaxRes.allowed, false);
+    assert.match(aboveMaxRes.reason || '', /Maximum single freeze duration is 30/);
+
+    // Exceeds total freeze allowance
+    const exceedsTotalRes = validateFreezeDurationLimits(pkgWithFreezeLimits, 20, 30);
+    assert.strictEqual(exceedsTotalRes.allowed, false);
+    assert.match(exceedsTotalRes.reason || '', /exceeds total freeze allowance of 45/);
+  });
 });
+

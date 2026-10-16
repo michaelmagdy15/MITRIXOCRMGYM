@@ -1,8 +1,30 @@
-export type ClassStatus = 'active' | 'cancelled' | 'completed';
+export type ClassStatus = 'active' | 'cancelled' | 'completed' | 'hold';
+
+export interface MasterClassDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  capacity: number;
+  imageUrl?: string;
+  classType: 'Free' | 'Paid';
+  price: number;
+  category: string;
+  status: 'Active' | 'On Hold';
+  branch?: string;
+  allowedTiers?: string[];
+  createdAt: string;
+  updatedAt?: string;
+  createdBy?: string;
+  createdByName?: string;
+}
 
 export interface ClassSchedule {
   id: string;
+  masterClassId?: string;
   name: string;
+  description?: string;
+  imageUrl?: string;
+  classType?: 'Free' | 'Paid';
   instructorId: string;
   instructorName: string;
   coachName?: string;

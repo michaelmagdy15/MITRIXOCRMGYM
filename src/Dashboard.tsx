@@ -65,6 +65,9 @@ import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, L
 import OnlineUsers from './components/OnlineUsers';
 import { Textarea } from '@/components/ui/textarea';
 import TodayClassesWidget from './components/dashboard/TodayClassesWidget';
+import InzanDailyRevenueSummary from './components/dashboard/InzanDailyRevenueSummary';
+import { isTenantInzan } from './utils/inzanOrg';
+import { getTenantId } from './firebase';
 
 function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], renderItem: (item: any) => React.ReactNode, itemsPerPage?: number }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -227,6 +230,7 @@ export default function Dashboard() {
   // receive the full dataset when canViewGlobalDashboard is true. For reps, they only see their own.
   const allClients = contextClients;
   const allPayments = contextPayments;
+  const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
 
   const pendingConfirmationCount = React.useMemo(() => {
     let count = 0;
@@ -1184,6 +1188,10 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      {isInzan && canViewGlobalDashboard && (
+        <InzanDailyRevenueSummary payments={payments} users={users} />
+      )}
 
       <TodayClassesWidget />
 

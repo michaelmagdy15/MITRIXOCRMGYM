@@ -26,10 +26,15 @@ export interface MembershipValidationResult {
 
 /**
  * Checks whether a package is a Primary Membership.
- * Primary memberships are categorized under 'Membership' or 'Gym Memberships'.
+ * Primary memberships have hierarchy === 'Primary', or are categorized under 'Membership' or 'Gym Memberships'.
  */
-export function isPrimaryMembershipPackage(pkg?: Package | null | { category?: string; name?: string; packageName?: string; type?: string }): boolean {
+export function isPrimaryMembershipPackage(
+  pkg?: Package | null | { category?: string; name?: string; packageName?: string; type?: string; hierarchy?: string }
+): boolean {
   if (!pkg) return false;
+  if ((pkg as Package).hierarchy === 'Primary') return true;
+  if ((pkg as Package).hierarchy === 'Secondary') return false;
+
   const cat = (pkg.category || '').toLowerCase().trim();
   const name = ((pkg as any).packageName || pkg.name || '').toLowerCase().trim();
   
@@ -47,8 +52,13 @@ export function isPrimaryMembershipPackage(pkg?: Package | null | { category?: s
  * Checks whether a package is an Academy / SGF / MMA / Gymnastics package
  * which does NOT require an active primary membership.
  */
-export function isAcademyOrExemptPackage(pkg?: Package | null | { category?: string; name?: string; packageName?: string; type?: string }): boolean {
+export function isAcademyOrExemptPackage(
+  pkg?: Package | null | { category?: string; name?: string; packageName?: string; type?: string; hierarchy?: string }
+): boolean {
   if (!pkg) return false;
+  if ((pkg as Package).hierarchy === 'Secondary' || (pkg as Package).hierarchy === 'Primary') {
+    return false;
+  }
   const cat = (pkg.category || '').toLowerCase().trim();
   const name = ((pkg as any).packageName || pkg.name || '').toLowerCase().trim();
   
@@ -163,15 +173,15 @@ export function hasActivePrimaryMembership(client?: Client | null, now: Date = n
 /**
  * Validates whether a client is eligible to purchase or book a given package
  * according to Inzan Athletics gym rules:
- * - A primary membership is required for secondary services (PT, Nutrition).
+ * - A primary membership is required for secondary services (PT, Nutrition, or any package with hierarchy === 'Secondary').
  * - Exemptions:
  *   1. Young kids 16 and below can get PT packages without a membership.
- *   2. Academy classes (SGF academy, MMA classes, Gymnastics) do not need memberships.
+ *   2. Academy classes (SGF academy, MMA classes, Gymnastics) do not need memberships unless explicitly marked Secondary.
  *   3. Purchasing a Primary Membership itself does not require an existing membership.
  */
 export function validateMembershipEligibility(
   client?: Client | null,
-  targetPackage?: Package | null | { category?: string; name?: string; type?: string },
+  targetPackage?: Package | null | { category?: string; name?: string; type?: string; hierarchy?: string },
   now: Date = new Date(),
   tenantId?: string
 ): MembershipValidationResult {
@@ -195,8 +205,8 @@ export function validateMembershipEligibility(
     };
   }
 
-  // 2. If the package is Academy / SGF / MMA / Gymnastics / Drop-in / Complimentary, allowed!
-  if (isAcademyOrExemptPackage(targetPackage)) {
+  // 2. If the package is Academy / SGF / MMA / Gymnastics / Drop-in / Complimentary (and not explicitly Secondary), allowed!
+  if ((targetPackage as Package).hierarchy !== 'Secondary' && isAcademyOrExemptPackage(targetPackage)) {
     return {
       allowed: true,
       isPrimaryMembership: false,
@@ -220,9 +230,9 @@ export function validateMembershipEligibility(
     };
   }
 
-  // 4. Otherwise, target package is Secondary (PT or Nutrition for adult, etc.).
+  // 4. Otherwise, target package is Secondary (explicit hierarchy === 'Secondary', or PT/Nutrition for adult, etc.).
   // Client MUST have an active Primary Membership!
-  const hasActivePrimary = hasActivePrimaryMembership(client, now);
+  const hasActivePrimary = hasActivePrimaryMembership(client, now, tenantId);
   if (hasActivePrimary) {
     return {
       allowed: true,
@@ -239,4 +249,105 @@ export function validateMembershipEligibility(
     isExempt: false,
     reason: `A primary gym membership is required to purchase or book ${serviceName}. Adult members must hold an active Primary Membership before adding secondary packages like Personal Training or Nutrition. (Exemption: Kids 16 and below, or Academy/SGF/MMA classes).`
   };
+}
+
+function parseTimeToMinutes(timeStr: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(timeStr.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/**
+ * Validates whether a check-in time falls within the package's allowed time window.
+ */
+export function validatePackageTimeWindow(
+  pkg?: Partial<Package> | null,
+  checkInTime: Date = new Date()
+): { allowed: boolean; reason?: string } {
+  if (!pkg || !pkg.isTimeRestricted || !pkg.allowedStartTime || !pkg.allowedEndTime) {
+    return { allowed: true };
+  }
+
+  const startMinutes = parseTimeToMinutes(pkg.allowedStartTime);
+  const endMinutes = parseTimeToMinutes(pkg.allowedEndTime);
+  if (startMinutes === null || endMinutes === null) {
+    return { allowed: true };
+  }
+
+  const checkMinutes = checkInTime.getHours() * 60 + checkInTime.getMinutes();
+  const isWithinWindow =
+    startMinutes <= endMinutes
+      ? checkMinutes >= startMinutes && checkMinutes <= endMinutes
+      : checkMinutes >= startMinutes || checkMinutes <= endMinutes;
+
+  if (!isWithinWindow) {
+    const checkInFormatted = `${String(checkInTime.getHours()).padStart(2, '0')}:${String(checkInTime.getMinutes()).padStart(2, '0')}`;
+    return {
+      allowed: false,
+      reason: `Package "${pkg.name || 'Time-Restricted Package'}" only allows access between ${pkg.allowedStartTime} and ${pkg.allowedEndTime} (current time: ${checkInFormatted}).`
+    };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Validates whether a requested freeze duration satisfies the package's minimum, maximum, and total allowance limits.
+ */
+export function validateFreezeDurationLimits(
+  pkg?: Partial<Package> | null,
+  requestedDays: number = 0,
+  alreadyFrozenDays: number = 0
+): { allowed: boolean; reason?: string } {
+  if (!pkg) {
+    return { allowed: true };
+  }
+
+  const minFreezeDays =
+    pkg.minFreezeDays && pkg.minFreezeDays > 0
+      ? pkg.minFreezeDays
+      : pkg.benefits?.minFreezeDays && pkg.benefits.minFreezeDays > 0
+      ? pkg.benefits.minFreezeDays
+      : 1;
+
+  const maxFreezeDays =
+    pkg.maxFreezeDays && pkg.maxFreezeDays > 0
+      ? pkg.maxFreezeDays
+      : pkg.benefits?.maxFreezeDays && pkg.benefits.maxFreezeDays > 0
+      ? pkg.benefits.maxFreezeDays
+      : 365;
+
+  const freezeAllowanceDays =
+    pkg.freezeAllowanceDays && pkg.freezeAllowanceDays > 0
+      ? pkg.freezeAllowanceDays
+      : pkg.benefits?.freezeAllowanceDays && pkg.benefits.freezeAllowanceDays > 0
+      ? pkg.benefits.freezeAllowanceDays
+      : 365;
+
+  if (requestedDays < minFreezeDays) {
+    return {
+      allowed: false,
+      reason: `Minimum freeze duration is ${minFreezeDays} day(s) (requested: ${requestedDays}).`
+    };
+  }
+
+  if (requestedDays > maxFreezeDays) {
+    return {
+      allowed: false,
+      reason: `Maximum single freeze duration is ${maxFreezeDays} day(s) (requested: ${requestedDays}).`
+    };
+  }
+
+  if (alreadyFrozenDays + requestedDays > freezeAllowanceDays) {
+    const remaining = Math.max(0, freezeAllowanceDays - alreadyFrozenDays);
+    return {
+      allowed: false,
+      reason: `Freeze request of ${requestedDays} day(s) exceeds total freeze allowance of ${freezeAllowanceDays} day(s) (${alreadyFrozenDays} already used, ${remaining} remaining).`
+    };
+  }
+
+  return { allowed: true };
 }

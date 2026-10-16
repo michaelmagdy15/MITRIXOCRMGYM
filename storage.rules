@@ -30,6 +30,45 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/.*');
     }
 
+    // Member documents (IDs, contracts, medical reports) — tenant-scoped.
+    // NOTE: Storage rules cannot read named tenant Firestore databases and no role
+    // custom claims are issued yet, so staff role cannot be verified here.
+    // Mitigations: no listing (files reachable only by exact, random path), create-only
+    // (no overwrite/delete from clients), strict size + type limits.
+    // TODO(security): issue {role, tenantId} custom claims and require
+    // request.auth.token.tenantId == tenantId && staff role.
+    match /tenants/{tenantId}/member_documents/{clientId}/{fileName} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null
+                   && request.resource.size < 15 * 1024 * 1024
+                   && (request.resource.contentType.matches('image/.*')
+                       || request.resource.contentType == 'application/pdf'
+                       || request.resource.contentType == 'application/msword'
+                       || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      allow update, delete: if false;
+    }
+
+    // Master class profile images — tenant-scoped, images only.
+    match /tenants/{tenantId}/master_classes/{fileName} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
+    }
+
+    // Package images (existing Packages.tsx upload path) — images only.
+    match /packages/{fileName} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if request.auth != null
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow update, delete: if false;
+    }
+
     // Everything else is denied
     match /{allPaths=**} {
       allow read, write: if false;

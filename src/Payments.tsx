@@ -177,8 +177,40 @@ export default function Payments() {
   const [discountedAmount, setDiscountedAmount] = useState('');
   const [amountPaid, setAmountPaid] = useState('');
   const [paymentCategory, setPaymentCategory] = useState<PaymentCategory>('Memberships');
+  const [packageCategoryFilter, setPackageCategoryFilter] = useState<'All' | 'Membership' | 'PT' | 'Classes' | 'SGF' | 'Nutrition'>('All');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [isMemberOnHold, setIsMemberOnHold] = useState(false);
+
+  const modalFilteredPackages = React.useMemo(() => {
+    if (packageCategoryFilter === 'All') return visiblePackages;
+    return visiblePackages.filter((pkg) => {
+      const cat = (pkg.category || '').toLowerCase();
+      const name = (pkg.name || '').toLowerCase();
+      const type = (pkg.type || '').toLowerCase();
+      const resolved = resolvePaymentCategory(pkg.name);
+      switch (packageCategoryFilter) {
+        case 'PT':
+          return cat === 'pt' || cat.includes('private') || type === 'private' || resolved === 'PT' || name.includes('pt');
+        case 'Classes':
+          return cat.includes('class') || resolved === 'Classes' || name.includes('class');
+        case 'SGF':
+          return cat.includes('sgf') || name.includes('sgf') || name.includes('small group');
+        case 'Nutrition':
+          return cat.includes('nutrition') || name.includes('nutrition') || pkg.targetTeam === 'Nutrition';
+        case 'Membership':
+          return (
+            cat.includes('membership') ||
+            (resolved === 'Memberships' &&
+              !cat.includes('sgf') &&
+              !name.includes('sgf') &&
+              !cat.includes('nutrition') &&
+              !name.includes('nutrition'))
+          );
+        default:
+          return true;
+      }
+    });
+  }, [visiblePackages, packageCategoryFilter]);
 
   // Hold feature state
   const [isHoldDialogOpen, setIsHoldDialogOpen] = useState(false);
@@ -308,7 +340,7 @@ export default function Payments() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const canApplyDiscount = can('payments.apply_discount');
+  const canApplyDiscount = can('payments.apply_discount') || (isInzan && (isCurrentUserAdmin || currentUser?.role === 'manager'));
   const pricingBreakdown = calculatePricing({
     grossAmount: amount ? Number(amount) : 0,
     discountType: discountType || 'none',
@@ -643,6 +675,7 @@ export default function Payments() {
       setDiscountedAmount('');
       setAmountPaid('');
       setPaymentCategory('Memberships');
+      setPackageCategoryFilter('All');
       setReceiptNumber('');
       setIsMemberOnHold(false);
       setDiscountReason('Standard');
@@ -2069,13 +2102,44 @@ export default function Payments() {
                   </Select>
                 </div>
 
-                <div className="col-span-full">
+                <div className="col-span-full space-y-3">
+                  {isInzan && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">
+                      Filter Packages by Category
+                    </Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(['All', 'Membership', 'PT', 'Classes', 'SGF', 'Nutrition'] as const).map((pill) => {
+                        const isSelected = packageCategoryFilter === pill;
+                        return (
+                          <button
+                            key={pill}
+                            type="button"
+                            onClick={() => {
+                              setPackageCategoryFilter(pill);
+                              if (pill === 'PT') setPaymentCategory('PT');
+                              else if (pill === 'Classes' || pill === 'SGF') setPaymentCategory('Classes');
+                              else if (pill === 'Membership') setPaymentCategory('Memberships');
+                            }}
+                            className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                              isSelected
+                                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                : 'bg-background/60 text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground'
+                            }`}
+                          >
+                            {pill}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  )}
                   {(() => {
                     const currentSelectedClient = clientId ? clients.find(c => c.id === clientId) : null;
                     return (
                       <>
                         <CascadingPackageSelector
-                          packages={visiblePackages}
+                          packages={isInzan && modalFilteredPackages.length > 0 ? modalFilteredPackages : visiblePackages}
                           selectedPackageName={packageType}
                           initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
                           initialBranch={paymentBranch || currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
@@ -2477,7 +2541,8 @@ export default function Payments() {
                   <TableHead className="hidden sm:table-cell">{t('payments.table.method')}</TableHead>
                   <TableHead className="hidden md:table-cell">{t('payments.table.package')}</TableHead>
                   <TableHead className="hidden lg:table-cell">{t('payments.receipt_no')}</TableHead>
-                  <TableHead className="hidden lg:table-cell">{t('payments.table.recorded_by')}</TableHead>
+                  {isInzan && <TableHead className="hidden lg:table-cell">Created Date</TableHead>}
+                  {isInzan && <TableHead className="hidden lg:table-cell">Created By</TableHead>}
                   <TableHead className="hidden xl:table-cell">{t('payments.table.sales_member')}</TableHead>
                   <TableHead className="hidden xl:table-cell">{t('payments.table.notes')}</TableHead>
                   <TableHead className="text-right">{t('payments.table.actions')}</TableHead>
@@ -2496,10 +2561,11 @@ export default function Payments() {
                       (payment as any).guest_name || 
                       (t('payments.table.unknown_client') || 'Walk-in Guest');
                     const recordedByUser = users.find(u => u.id === payment.recordedBy);
-                    // Fallback: use stored name, then sales_rep user, then default to Unknown
+                    // Fallback: use stored name, then resolved user display, then sales_rep user, then default
                     const salesRepUser = !recordedByUser ? users.find(u => u.id === payment.sales_rep_id) : null;
                     const recordedByLabel = recordedByUser?.name
                       || (payment as any).recordedByName
+                      || (payment.recordedBy ? resolveUserDisplay(payment.recordedBy, users, payment.recordedBy) : '')
                       || salesRepUser?.name
                       || (payment as any).sales_rep_name
                       || '—';
@@ -2607,9 +2673,25 @@ export default function Payments() {
                             {payment.receiptSerial || '—'}
                           </span>
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-xs sm:text-sm hidden lg:table-cell">
-                          {recordedByLabel}
+                        {isInzan && (
+                          <>
+                        <TableCell className="text-muted-foreground text-xs hidden lg:table-cell whitespace-nowrap">
+                          {payment.created_at ? (
+                            <div>
+                              <div className="font-medium text-foreground">{safeFormatDate(getEgyptDate(payment.created_at), 'MMM d, yyyy')}</div>
+                              <div className="text-[10px] text-muted-foreground">{safeFormatDate(getEgyptDate(payment.created_at), 'h:mm a')}</div>
+                            </div>
+                          ) : payment.date ? (
+                            <div className="font-medium text-foreground">{safeFormatDate(getEgyptDate(payment.date), 'MMM d, yyyy')}</div>
+                          ) : (
+                            '—'
+                          )}
                         </TableCell>
+                        <TableCell className="text-muted-foreground text-xs sm:text-sm hidden lg:table-cell">
+                          <span className="font-medium text-foreground">{recordedByLabel}</span>
+                        </TableCell>
+                          </>
+                        )}
                         <TableCell className="hidden xl:table-cell">
                           {payment.salesName ? (
                             <Badge variant="outline" className="flex items-center gap-1 w-fit bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200">
@@ -2647,8 +2729,9 @@ export default function Payments() {
                                 setUpgradePaymentId(null);
                               }
                             }}>
-                              <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.upgrade_package')} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20" />}>
+                              <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.upgrade_package') || 'Upgrade Package'} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 gap-1" />}>
                                 <TrendingUp className="h-4 w-4" />
+                                <span className="hidden xl:inline text-xs font-semibold">Upgrade</span>
                               </DialogTrigger>
                               <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
                                 <DialogHeader>

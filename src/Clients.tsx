@@ -44,9 +44,11 @@ import { AdjustPackageDatesDialog, canOverridePackageDates } from './components/
 import { addAuditLog } from './services/auditService';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
 import { canReassignMemberSalesRep } from './utils/permissions';
-import { validateMembershipEligibility } from './utils/membershipRules';
+import { validateMembershipEligibility, validateFreezeDurationLimits } from './utils/membershipRules';
 import { isTenantInzan } from './utils/inzanOrg';
 import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
+import { MemberGuestInvitationsTab } from './components/member/MemberGuestInvitationsTab';
+import { MemberDocumentUploader } from './components/member/MemberDocumentUploader';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
 import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
@@ -903,12 +905,28 @@ export default function Clients() {
         alert("Selected package not found.");
         return;
       }
+
+      const requestedFreezeDays = Math.round(
+        (new Date(freezeEndDate).getTime() - new Date(freezeStartDate).getTime()) / 86400000
+      );
+      const systemPkg = packages.find(p => p.name === pkg.packageName);
+      const allowanceDays = Number(systemPkg?.freezeAllowanceDays ?? systemPkg?.benefits?.freezeAllowanceDays ?? 0);
+      const hasFreezeRules = isTenantInzan() && !!systemPkg && allowanceDays > 0;
+      if (hasFreezeRules) {
+        const freezeCheck = validateFreezeDurationLimits(systemPkg, requestedFreezeDays, pkg.freezeDaysUsed || 0);
+        if (!freezeCheck.allowed) {
+          alert(freezeCheck.reason || 'Freeze request exceeds this package\'s freeze limits.');
+          return;
+        }
+      }
+
       packagesCopy[pkgIdx] = {
         ...pkg,
         status: 'Hold',
         isOnHold: true,
         holdReason: `${freezeType} Freeze: ${freezeReason || 'No details provided'}`,
         holdDate: new Date().toISOString(),
+        freezeDaysUsed: (pkg.freezeDaysUsed || 0) + Math.max(0, requestedFreezeDays),
         startDate: freezeStartDate,
         endDate: freezeEndDate
       };
@@ -3592,8 +3610,11 @@ export default function Clients() {
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3">Package</TableHead>
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3">Start</TableHead>
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3">Expires</TableHead>
+                                  {isTenantInzan() && <TableHead className="text-[10px] uppercase py-2.5 px-3">Created Date</TableHead>}
+                                  {isTenantInzan() && <TableHead className="text-[10px] uppercase py-2.5 px-3">Created By</TableHead>}
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Sessions</TableHead>
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Status</TableHead>
+                                  {isTenantInzan() && <TableHead className="text-[10px] uppercase py-2.5 px-3 text-right">Actions</TableHead>}
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -3604,6 +3625,8 @@ export default function Clients() {
                                       <TableCell className="py-2.5 px-3 text-xs font-medium">{pkg.packageName || '—'}</TableCell>
                                       <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</TableCell>
                                       <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</TableCell>
+                                      {isTenantInzan() && <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.createdAt || pkg.startDate, 'dd MMM yyyy')}</TableCell>}
+                                      {isTenantInzan() && <TableCell className="py-2.5 px-3 text-xs">{pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}</TableCell>}
                                       <TableCell className="py-2.5 px-3 text-xs text-center">
                                         {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} / ${pkg.sessionsTotal ?? '?'}` : '—'}
                                       </TableCell>
@@ -3616,6 +3639,16 @@ export default function Clients() {
                                           {pkg.status}
                                         </Badge>
                                       </TableCell>
+                                      {isTenantInzan() && (<TableCell className="py-2.5 px-3 text-right whitespace-nowrap">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="h-7 px-2 text-[10px] font-semibold"
+                                          onClick={() => setUpgradeDialogClientId(activeClient.id)}
+                                        >
+                                          <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade
+                                        </Button>
+                                      </TableCell>)}
                                     </TableRow>
                                   ))}
                               </TableBody>
@@ -3850,6 +3883,9 @@ export default function Clients() {
                       }
                     })()}
                   </div>
+
+                  {/* Guest Invitations & Visitor Attendance */}
+                  {isTenantInzan() && <MemberGuestInvitationsTab client={activeClient} />}
                 </TabsContent>
 
                 {/* ── AUDIT LOGS TAB ── */}
@@ -4033,6 +4069,9 @@ export default function Clients() {
 
                 {/* ── DOCUMENTS TAB ── */}
                 <TabsContent value="documents" className="mt-0 outline-none p-5 text-left space-y-6">
+                  {/* Local Device File Uploader */}
+                  {isTenantInzan() && <MemberDocumentUploader client={activeClient} onUpdateClient={updateClient} />}
+
                   {/* Documents List */}
                   <div className="p-4 rounded-xl border bg-muted/20">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Logged Documents</p>

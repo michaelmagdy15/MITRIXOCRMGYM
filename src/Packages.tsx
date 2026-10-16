@@ -1,6 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { useAppContext } from './context';
 import { usePackages } from './hooks/usePackages';
+import { usePackageCategories } from './hooks/usePackageCategories';
+import { PackageCategoryManagerDialog } from './components/packages/PackageCategoryManagerDialog';
+import PackageBenefitsFormSection, { PackageEnhancementsState, DEFAULT_PACKAGE_ENHANCEMENTS } from './components/packages/PackageBenefitsFormSection';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -9,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Package, Branch } from './types';
-import { Plus, Edit, Upload, X, Archive, RotateCcw, HelpCircle, ChevronDown, ChevronUp, Layers, Tag } from 'lucide-react';
+import { Plus, Edit, Upload, X, Archive, RotateCcw, HelpCircle, ChevronDown, ChevronUp, Layers, Tag, FolderCog, PauseCircle, PlayCircle, Target, Calendar, User as UserIcon } from 'lucide-react';
 import { storage, getTenantId } from './firebase';
 import { isTenantInzan } from './utils/inzanOrg';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -44,11 +47,15 @@ export const PACKAGE_CATEGORIES = INZAN_PACKAGE_CATEGORIES;
 
 export default function Packages() {
   const { currentUser, branches, features } = useAppContext();
-  const { packages, addPackage, updatePackage, deletePackage, restorePackage } = usePackages();
+  const { packages, addPackage, updatePackage, togglePackageHold, deletePackage, restorePackage } = usePackages();
+  const { categoryNames } = usePackageCategories();
   const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
   const availableCategories = isInzan ? INZAN_PACKAGE_CATEGORIES : STANDARD_PACKAGE_CATEGORIES;
+  const effectiveCategories: readonly string[] = isInzan && categoryNames && categoryNames.length > 0 ? categoryNames : availableCategories;
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isCatManagerOpen, setIsCatManagerOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [packageToDelete, setPackageToDelete] = useState<string | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
@@ -64,6 +71,7 @@ export default function Packages() {
   const [category, setCategory] = useState<string>('Gym Memberships');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [imageUrl, setImageUrl] = useState('');
+  const [enhancements, setEnhancements] = useState<PackageEnhancementsState>(DEFAULT_PACKAGE_ENHANCEMENTS);
   const [uploading, setUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -109,19 +117,59 @@ export default function Packages() {
     }
   };
 
+  const buildEnhancementPayload = (numericPrice: number) => {
+    const enh: any = enhancements || DEFAULT_PACKAGE_ENHANCEMENTS;
+    const freePtSessions = Number(enh.freePtSessions ?? enh.benefits?.freePtSessions ?? 0);
+    const freezeAllowanceDays = Number(enh.freezeAllowanceDays ?? enh.benefits?.freezeAllowanceDays ?? 0);
+    const minFreezeDays = Number(enh.minFreezeDays ?? enh.benefits?.minFreezeDays ?? 0);
+    const maxFreezeDays = Number(enh.maxFreezeDays ?? enh.benefits?.maxFreezeDays ?? 0);
+    const guestInvitations = Number(enh.guestInvitations ?? enh.benefits?.guestInvitations ?? 0);
+    const freeClassTrials = Number(enh.freeClassTrials ?? enh.benefits?.freeClassTrials ?? 0);
+    const pkgStatus: 'Active' | 'Hold' = enh.status === 'Hold' ? 'Hold' : 'Active';
+    const isTimeRestricted = Boolean(enh.isTimeRestricted);
+
+    return {
+      hierarchy: (enh.hierarchy || 'Primary') as Package['hierarchy'],
+      status: pkgStatus,
+      isActive: pkgStatus !== 'Hold',
+      is_active: pkgStatus !== 'Hold',
+      benefits: {
+        freePtSessions,
+        freezeAllowanceDays,
+        minFreezeDays,
+        maxFreezeDays,
+        guestInvitations,
+        freeClassTrials,
+      },
+      freePtSessions,
+      freezeAllowanceDays,
+      minFreezeDays,
+      maxFreezeDays,
+      guestInvitations,
+      freeClassTrials,
+      isTimeRestricted,
+      allowedStartTime: isTimeRestricted ? (enh.allowedStartTime || '06:00') : undefined,
+      allowedEndTime: isTimeRestricted ? (enh.allowedEndTime || '14:00') : undefined,
+      targetTeam: (enh.targetTeam || 'Sales') as Package['targetTeam'],
+      targetAmount: enh.targetAmount !== undefined && enh.targetAmount !== '' ? Number(enh.targetAmount) : numericPrice,
+    };
+  };
+
   const handleAdd = async () => {
     if (name && (unlimitedSessions || sessions !== '') && price !== '' && expiryDays !== '') {
       setIsSubmitting(true);
       try {
+        const numericPrice = Number(price);
         await addPackage({
           name,
           sessions: unlimitedSessions ? 0 : Number(sessions),
-          price: Number(price),
+          price: numericPrice,
           expiryDays: Number(expiryDays),
           branch,
           category,
           type: packageType,
-          imageUrl: imageUrl || undefined
+          imageUrl: imageUrl || undefined,
+          ...(isInzan ? buildEnhancementPayload(numericPrice) : {}),
         });
         setIsAddOpen(false);
         resetForm();
@@ -137,15 +185,17 @@ export default function Packages() {
     if (editingPackage && name && (unlimitedSessions || sessions !== '') && price !== '' && expiryDays !== '') {
       setIsSubmitting(true);
       try {
+        const numericPrice = Number(price);
         await updatePackage(editingPackage.id, {
           name,
           sessions: unlimitedSessions ? 0 : Number(sessions),
-          price: Number(price),
+          price: numericPrice,
           expiryDays: Number(expiryDays),
           branch,
           category,
           type: packageType,
-          imageUrl: imageUrl || undefined
+          imageUrl: imageUrl || undefined,
+          ...(isInzan ? buildEnhancementPayload(numericPrice) : {}),
         });
         setIsEditOpen(false);
         setEditingPackage(null);
@@ -159,7 +209,30 @@ export default function Packages() {
   };
 
   const isArchived = (pkg: Package) => {
-    return pkg.archivedAt !== undefined || pkg.isActive === false || pkg.is_active === false;
+    return Boolean(pkg.archivedAt);
+  };
+
+  const isOnHold = (pkg: Package) => {
+    if (isArchived(pkg)) return false;
+    return pkg.status === 'Hold' || pkg.isActive === false || pkg.is_active === false;
+  };
+
+  const handleToggleHold = async (pkg: Package) => {
+    const currentlyHold = isOnHold(pkg);
+    setIsSubmitting(true);
+    try {
+      if (togglePackageHold) {
+        await togglePackageHold(pkg.id, !currentlyHold);
+      } else {
+        await updatePackage(pkg.id, {
+          status: !currentlyHold ? 'Hold' : 'Active',
+          isActive: currentlyHold,
+          is_active: currentlyHold,
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -205,6 +278,31 @@ export default function Packages() {
     setCategory(pkg.category || (pkg.type === 'Private' ? 'Personal Training (PT)' : 'Gym Memberships'));
     setPackageType(pkg.type || 'Group');
     setImageUrl(pkg.imageUrl || '');
+
+    const freePtSessions = pkg.freePtSessions ?? pkg.benefits?.freePtSessions ?? 0;
+    const freezeAllowanceDays = pkg.freezeAllowanceDays ?? pkg.benefits?.freezeAllowanceDays ?? 0;
+    const minFreezeDays = pkg.minFreezeDays ?? pkg.benefits?.minFreezeDays ?? 7;
+    const maxFreezeDays = pkg.maxFreezeDays ?? pkg.benefits?.maxFreezeDays ?? 30;
+    const guestInvitations = pkg.guestInvitations ?? pkg.benefits?.guestInvitations ?? 0;
+    const freeClassTrials = pkg.freeClassTrials ?? pkg.benefits?.freeClassTrials ?? 0;
+
+    setEnhancements({
+      ...DEFAULT_PACKAGE_ENHANCEMENTS,
+      hierarchy: pkg.hierarchy || 'Primary',
+      status: isOnHold(pkg) ? 'Hold' : 'Active',
+      freePtSessions,
+      freezeAllowanceDays,
+      minFreezeDays,
+      maxFreezeDays,
+      guestInvitations,
+      freeClassTrials,
+      isTimeRestricted: Boolean(pkg.isTimeRestricted),
+      allowedStartTime: pkg.allowedStartTime || '06:00',
+      allowedEndTime: pkg.allowedEndTime || '14:00',
+      targetTeam: pkg.targetTeam || 'Sales',
+      targetAmount: pkg.targetAmount ?? pkg.price ?? 0,
+    });
+
     setIsEditOpen(true);
   };
 
@@ -215,12 +313,12 @@ export default function Packages() {
     setPrice('');
     setExpiryDays('');
     setBranch('ALL');
-    setCategory('Gym Memberships');
+    setCategory(effectiveCategories[0] || 'Gym Memberships');
     setPackageType('Group');
     setImageUrl('');
+    setEnhancements(DEFAULT_PACKAGE_ENHANCEMENTS);
     setUploading(false);
   };
-
 
   const getCategoryBadgeClass = (cat?: string) => {
     switch (cat) {
@@ -231,6 +329,7 @@ export default function Packages() {
       case 'Personal Training (PT)':
         return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
       case 'SGF':
+      case 'SGF (Small Group Fitness)':
         return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
       case 'Gymnastics':
         return 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20';
@@ -247,6 +346,60 @@ export default function Packages() {
       default:
         return 'bg-muted text-muted-foreground border-border';
     }
+  };
+
+  const renderBenefitsBadges = (pkg: Package) => {
+    const pt = pkg.freePtSessions ?? pkg.benefits?.freePtSessions ?? 0;
+    const freeze = pkg.freezeAllowanceDays ?? pkg.benefits?.freezeAllowanceDays ?? 0;
+    const minF = pkg.minFreezeDays ?? pkg.benefits?.minFreezeDays ?? 0;
+    const maxF = pkg.maxFreezeDays ?? pkg.benefits?.maxFreezeDays ?? 0;
+    const invites = pkg.guestInvitations ?? pkg.benefits?.guestInvitations ?? 0;
+    const trials = pkg.freeClassTrials ?? pkg.benefits?.freeClassTrials ?? 0;
+    const timeRestricted = Boolean(pkg.isTimeRestricted);
+
+    const badges: React.ReactNode[] = [];
+    if (pt > 0) {
+      badges.push(
+        <span key="pt" className="inline-flex items-center rounded-md bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 text-[11px] font-medium text-purple-600 dark:text-purple-400">
+          🎁 {pt} PT
+        </span>
+      );
+    }
+    if (freeze > 0) {
+      const rangeText = minF > 0 || maxF > 0 ? ` (${minF || 1}-${maxF || freeze}d)` : '';
+      badges.push(
+        <span key="freeze" className="inline-flex items-center rounded-md bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400">
+          ❄️ {freeze}d Freeze{rangeText}
+        </span>
+      );
+    }
+    if (invites > 0) {
+      badges.push(
+        <span key="invites" className="inline-flex items-center rounded-md bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+          🎟️ {invites} Invites
+        </span>
+      );
+    }
+    if (trials > 0) {
+      badges.push(
+        <span key="trials" className="inline-flex items-center rounded-md bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+          🏋️ {trials} Class Trials
+        </span>
+      );
+    }
+    if (timeRestricted) {
+      badges.push(
+        <span key="time" className="inline-flex items-center rounded-md bg-orange-500/10 border border-orange-500/20 px-1.5 py-0.5 text-[11px] font-medium text-orange-600 dark:text-orange-400">
+          ⏰ {pkg.allowedStartTime || '06:00'}-{pkg.allowedEndTime || '14:00'}
+        </span>
+      );
+    }
+
+    if (badges.length === 0) {
+      return <span className="text-xs text-muted-foreground">—</span>;
+    }
+
+    return <div className="flex flex-wrap gap-1 max-w-[260px]">{badges}</div>;
   };
 
   const filteredPackages = packages
@@ -266,7 +419,7 @@ export default function Packages() {
             Configure memberships, PT tiers, day passes, and service entitlements
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -278,11 +431,23 @@ export default function Packages() {
             {showGuide ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           </Button>
 
+          {isInzan && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCatManagerOpen(true)}
+              className="gap-1.5"
+            >
+              <FolderCog className="h-4 w-4 text-primary" />
+              <span>Manage Categories</span>
+            </Button>
+          )}
+
           <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if (!open) resetForm(); }}>
             <DialogTrigger render={<Button className="gap-1.5" />}>
               <Plus className="h-4 w-4" /> Add Package
             </DialogTrigger>
-            <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
+            <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
               <DialogHeader>
                 <DialogTitle className="text-xl md:text-2xl font-bold">Add New Package</DialogTitle>
               </DialogHeader>
@@ -299,7 +464,7 @@ export default function Packages() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableCategories.map(cat => (
+                        {effectiveCategories.map(cat => (
                           <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                         ))}
                       </SelectContent>
@@ -363,6 +528,8 @@ export default function Packages() {
                   </div>
                 )}
 
+                {isInzan && <PackageBenefitsFormSection value={enhancements} onChange={setEnhancements} />}
+
                 <div className="space-y-2">
                   <Label>Package Image (optional)</Label>
                   <div className="flex items-center gap-3">
@@ -422,9 +589,13 @@ export default function Packages() {
               <h4 className="font-semibold text-foreground">{isInzan ? 'Package Configuration & Inzan Operations Guide' : 'Package Configuration Guide'}</h4>
               <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
                 <li><strong className="text-foreground">Categories:</strong> Segment packages cleanly across POS tabs (Gym Memberships, PT, Drop-in, Classes, Nutrition). This prevents cross-service booking confusion.</li>
-                <li><strong className="text-foreground">Unlimited Entry:</strong> Mark <em>∞ Unlimited</em> for time-governed memberships. Sessions field is stored as 0 and members enjoy unrestricted check-ins until expiry.</li>
-                <li><strong className="text-foreground">Validity & Expiry:</strong> Calculated in days from payment confirmation. Expired memberships automatically block new bookings while preserving complete historical records.</li>
-                <li><strong className="text-foreground">Soft-Archive:</strong> Inactive or retired packages are archived rather than permanently deleted. Existing members keep active entitlements and historical revenue reports remain 100% accurate.</li>
+                {isInzan && (
+                  <>
+                <li><strong className="text-foreground">Primary vs Secondary Hierarchy:</strong> Primary packages represent core memberships, while Secondary packages represent add-ons or supplementary services.</li>
+                <li><strong className="text-foreground">Benefits & Entitlements:</strong> Configure complimentary PT sessions, freeze allowances (total days + min/max per request), guest invitations, class trials, and off-peak check-in windows.</li>
+                <li><strong className="text-foreground">Target Attribution & Hold Status:</strong> Assign revenue targets to Sales, PT, Class Instructors, or Nutrition teams, and place seasonal packages On Hold without archiving them.</li>
+                  </>
+                )}
               </ul>
             </div>
           </div>
@@ -441,7 +612,7 @@ export default function Packages() {
         >
           All Categories ({packages.length})
         </Button>
-        {availableCategories.map(cat => {
+        {effectiveCategories.map(cat => {
           const count = packages.filter(p => (p.category || (p.type === 'Private' ? 'Personal Training (PT)' : 'Gym Memberships')) === cat).length;
           return (
             <Button
@@ -464,64 +635,152 @@ export default function Packages() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Sessions</TableHead>
+                <TableHead>{isInzan ? 'Category & Hierarchy' : 'Category'}</TableHead>
+                {isInzan && <TableHead>Benefits & Access</TableHead>}
+                {isInzan && <TableHead>Target</TableHead>}
+                <TableHead>Sessions / Expiry</TableHead>
                 <TableHead>Price</TableHead>
-                <TableHead>Expiry</TableHead>
-                <TableHead>Branch</TableHead>
+                {isInzan && <TableHead>Status</TableHead>}
+                {isInzan && <TableHead>Created</TableHead>}
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredPackages.map(pkg => {
                 const archived = isArchived(pkg);
+                const onHold = isOnHold(pkg);
                 const pkgCat = pkg.category || (pkg.type === 'Private' ? 'Personal Training (PT)' : 'Gym Memberships');
+                const hierarchy = pkg.hierarchy || 'Primary';
+                const targetTeam = pkg.targetTeam || 'Sales';
                 return (
-                  <TableRow key={pkg.id} className={archived ? 'opacity-60 bg-muted/30' : undefined}>
+                  <TableRow key={pkg.id} className={archived ? 'opacity-60 bg-muted/30' : onHold ? 'bg-amber-500/5' : undefined}>
                     <TableCell className="font-medium">
-                      {pkg.name}
-                      {archived && (
-                        <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-600">
-                          Archived
+                      <div className="flex flex-col">
+                        <span>{pkg.name}</span>
+                        <span className="text-xs text-muted-foreground">Branch: {pkg.branch}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${getCategoryBadgeClass(pkgCat)}`}>
+                          <Tag className="h-3 w-3" />
+                          {pkgCat}
                         </span>
-                      )}
+                        {isInzan && (
+                          <span
+                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+                              hierarchy === 'Primary'
+                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                                : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+                            }`}
+                          >
+                            {hierarchy}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
+                    {isInzan && (
+                      <TableCell>
+                        {renderBenefitsBadges(pkg)}
+                      </TableCell>
+                    )}
+                    {isInzan && (
+                      <TableCell>
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                            <Target className="h-3 w-3" />
+                            Target: {targetTeam}
+                          </span>
+                          {pkg.targetAmount !== undefined && pkg.targetAmount > 0 && (
+                            <span className="text-[11px] text-muted-foreground">
+                              Credit: {Number(pkg.targetAmount).toLocaleString()} LE
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                     <TableCell>
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${getCategoryBadgeClass(pkgCat)}`}>
-                        <Tag className="h-3 w-3" />
-                        {pkgCat}
-                      </span>
+                      <div className="flex flex-col">
+                        <span>
+                          {pkg.sessions === 0
+                            ? <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">∞ Unlimited</span>
+                            : `${pkg.sessions} sessions`}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{pkg.expiryDays} days</span>
+                      </div>
                     </TableCell>
-                    <TableCell>
-                      {pkg.sessions === 0
-                        ? <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">∞ Unlimited</span>
-                        : pkg.sessions}
-                    </TableCell>
-                    <TableCell>{pkg.price.toLocaleString()} LE</TableCell>
-                    <TableCell>{pkg.expiryDays} days</TableCell>
-                    <TableCell>{pkg.branch}</TableCell>
+                    <TableCell className="font-semibold">{pkg.price.toLocaleString()} LE</TableCell>
+                    {isInzan && (
+                      <TableCell>
+                        {archived ? (
+                          <span className="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2.5 py-0.5 text-xs font-medium text-rose-600">
+                            Archived
+                          </span>
+                        ) : onHold ? (
+                          <span className="inline-flex items-center rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-xs font-medium text-amber-600">
+                            On Hold
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
+                            Active
+                          </span>
+                        )}
+                      </TableCell>
+                    )}
+                    {isInzan && (
+                      <TableCell>
+                        <div className="flex flex-col text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString() : '—'}
+                          </span>
+                          {pkg.createdByName && (
+                            <span className="inline-flex items-center gap-1 text-[11px]">
+                              <UserIcon className="h-3 w-3" />
+                              {pkg.createdByName}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                    )}
                     <TableCell className="text-right">
-                      {!archived && (
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(pkg)} disabled={isSubmitting}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {archived ? (
-                        <Button variant="ghost" size="icon" onClick={() => handleRestore(pkg.id)} title="Restore package" disabled={isSubmitting}>
-                          <RotateCcw className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(pkg.id)} title="Archive package" disabled={isSubmitting}>
-                          <Archive className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <div className="flex items-center justify-end gap-1">
+                        {!archived && (
+                          <>
+                            {isInzan && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleToggleHold(pkg)}
+                                title={onHold ? 'Activate package' : 'Put package On Hold'}
+                                disabled={isSubmitting}
+                                className={onHold ? 'text-emerald-600' : 'text-amber-600'}
+                              >
+                                {onHold ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" onClick={() => openEdit(pkg)} title="Edit package" disabled={isSubmitting}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        {archived ? (
+                          <Button variant="ghost" size="icon" onClick={() => handleRestore(pkg.id)} title="Restore package" disabled={isSubmitting}>
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(pkg.id)} title="Archive package" disabled={isSubmitting}>
+                            <Archive className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
               })}
               {filteredPackages.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={isInzan ? 9 : 5} className="text-center text-muted-foreground py-8">
                     No packages found in this category.
                   </TableCell>
                 </TableRow>
@@ -531,8 +790,13 @@ export default function Packages() {
         </CardContent>
       </Card>
 
+      <PackageCategoryManagerDialog
+        open={isCatManagerOpen}
+        onOpenChange={setIsCatManagerOpen}
+      />
+
       <Dialog open={isEditOpen} onOpenChange={(open) => { setIsEditOpen(open); if (!open) resetForm(); }}>
-        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
+        <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
           <DialogHeader>
             <DialogTitle className="text-xl md:text-2xl font-bold">Edit Package</DialogTitle>
           </DialogHeader>
@@ -549,7 +813,7 @@ export default function Packages() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableCategories.map(cat => (
+                    {effectiveCategories.map(cat => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
                   </SelectContent>
@@ -612,6 +876,8 @@ export default function Packages() {
                 </Select>
               </div>
             )}
+
+            {isInzan && <PackageBenefitsFormSection value={enhancements} onChange={setEnhancements} />}
 
             <div className="space-y-2">
               <Label>Package Image (optional)</Label>
@@ -695,3 +961,4 @@ export default function Packages() {
     </div>
   );
 }
+

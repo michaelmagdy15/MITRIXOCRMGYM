@@ -146,6 +146,27 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isManager();
     }
+
+    // PACKAGE CATEGORIES
+    match /packageCategories/{categoryId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // MASTER CLASSES
+    match /masterClasses/{classId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+
+    // GUEST INVITES & GUESTS
+    match /guestInvites/{inviteId} {
+      allow read, write: if isStaff();
+    }
+
+    match /guests/{guestId} {
+      allow read, write: if isStaff();
+    }
     
     // ENTITLEMENTS (Service Entitlements)
     match /entitlements/{entitlementId} {
