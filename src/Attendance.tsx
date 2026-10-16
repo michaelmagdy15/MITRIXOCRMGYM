@@ -70,6 +70,13 @@ import {
 } from './utils/universalQr';
 import { getCachedDeviceFingerprint } from './utils/deviceFingerprint';
 import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
+import {
+  evaluateTurnstileGateAccess,
+  triggerTurnstileRelay,
+  TurnstileHardwareConfig,
+  TurnstileGateDecision,
+  DEFAULT_TURNSTILE_CONFIG,
+} from './utils/turnstileGateBridge';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const {
@@ -83,6 +90,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     features,
     clients,
     payments,
+    packages,
     addClient,
     updateClient,
     attendances,
@@ -90,6 +98,15 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   } = useAppContext();
   const isInzan = getTenantId() === 'inzanathletics' || features?.shiftHandover === true || features?.commercialGymWorkspaces === true;
   const [isShiftHandoverOpen, setIsShiftHandoverOpen] = useState(false);
+  const [isTurnstileConfigOpen, setIsTurnstileConfigOpen] = useState(false);
+  const [turnstileEval, setTurnstileEval] = useState<TurnstileGateDecision | null>(null);
+  const [turnstileConfig, setTurnstileConfig] = useState<TurnstileHardwareConfig>(() => {
+    try {
+      const saved = localStorage.getItem('turnstile_gate_config');
+      if (saved) return { ...DEFAULT_TURNSTILE_CONFIG, ...JSON.parse(saved) };
+    } catch {}
+    return DEFAULT_TURNSTILE_CONFIG;
+  });
   const [isGuestInviteOpen, setIsGuestInviteOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
@@ -828,35 +845,45 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     }
 
     const evaluation = evaluateCheckinGatekeeper(member, payments || []);
+    const turnstileAccess = evaluateTurnstileGateAccess({
+      member,
+      payments: payments || [],
+      cataloguePackages: packages || [],
+      config: turnstileConfig,
+    });
     setGatekeeperEval(evaluation);
+    setTurnstileEval(turnstileAccess);
     setSelectedPackageName(
       evaluation.activePackages[0]?.packageName || member.packageType || ''
     );
 
-    if (!evaluation.allowed && evaluation.denialReasonCode && evaluation.denialMessage) {
+    if ((!evaluation.allowed && evaluation.denialReasonCode && evaluation.denialMessage) || !turnstileAccess.allowRelayOpen) {
       appendWrongEntryLog({
         memberId: member.memberId || member.id,
         clientName: member.name,
         clientId: member.id,
         branch: selectedBranch || 'MAIN',
         lookupMode: parsedQr.isUniversal ? 'qr_code' : lookupMode,
-        reasonCode: evaluation.denialReasonCode,
-        reasonMessage: evaluation.denialMessage,
+        reasonCode: evaluation.denialReasonCode || (turnstileAccess.reasonCode as any) || 'EXPIRED',
+        reasonMessage: !turnstileAccess.allowRelayOpen ? turnstileAccess.messageEn : (evaluation.denialMessage || 'Blocked'),
       });
     }
 
     if (isKiosk) {
       setIsScanning(false);
       const statusCheck = checkMemberStatus(member);
-      if (statusCheck.valid && evaluation.allowed) {
+      if (statusCheck.valid && evaluation.allowed && turnstileAccess.allowRelayOpen) {
         setIsRecording(true);
         try {
           await recordAttendance(member.id, selectedBranch);
+          if (turnstileConfig.enabled) {
+            triggerTurnstileRelay(turnstileConfig, turnstileAccess, member).catch(() => {});
+          }
           setKioskOverlay({
             show: true,
             type: 'success',
             title: isArabic ? 'تم تسجيل حضورك' : 'Check-in Recorded',
-            message: statusCheck.message,
+            message: isArabic ? turnstileAccess.messageAr : turnstileAccess.messageEn,
             subText: member.packageType ? `${isArabic ? 'الباقة:' : 'Package:'} ${member.packageType}` : ''
           });
         } catch (err: any) {
@@ -875,8 +902,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           type: statusCheck.reason === 'Hold' || evaluation.isFrozen ? 'warning' : 'error',
           title: statusCheck.reason === 'Hold' || evaluation.isFrozen
             ? (isArabic ? 'حسابك معلق' : 'Membership on Hold') 
-            : (isArabic ? 'الاشتراك منتهٍ' : 'Entry Blocked'),
-          message: evaluation.denialMessage || statusCheck.message
+            : (isArabic ? 'تم رفض الدخول' : 'Entry Blocked'),
+          message: isArabic
+            ? (!turnstileAccess.allowRelayOpen ? turnstileAccess.messageAr : (evaluation.denialMessage || statusCheck.message))
+            : (!turnstileAccess.allowRelayOpen ? turnstileAccess.messageEn : (evaluation.denialMessage || statusCheck.message))
         });
       }
 
@@ -887,16 +916,19 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       }, 3000);
 
     } else {
-      // Front-desk admin checkin flow with 6-stage gatekeeper
+      // Front-desk admin checkin flow with 6-stage gatekeeper + Turnstile Bridge rules
       setLastScannedMember(member);
       setIsScanning(false);
       setError(null);
       setSuccessMessage(null);
       setIsGuestInviteOpen(lookupMode === 'invitation_id');
 
-      // If gatekeeper requires staff attention (Frozen, Expired, Unconfirmed, Multiple Packages, or Overdue Debt), pause for 1-click confirmation
-      if (!evaluation.allowed) {
-        setError(evaluation.denialMessage || 'Check-in blocked by membership gatekeeper.');
+      if (!evaluation.allowed || !turnstileAccess.allowRelayOpen) {
+        setError(
+          !turnstileAccess.allowRelayOpen
+            ? `${turnstileAccess.messageEn} (${turnstileAccess.messageAr})`
+            : evaluation.denialMessage || 'Check-in blocked by membership gatekeeper.'
+        );
         return;
       }
 
@@ -908,10 +940,14 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       setIsRecording(true);
       try {
         await recordAttendance(member.id, selectedBranch);
+        if (turnstileConfig.enabled) {
+          triggerTurnstileRelay(turnstileConfig, turnstileAccess, member).catch(() => {});
+        }
         setSuccessMessage(t('attendance.attendance_recorded').replace('{name}', member.name));
         setTimeout(() => {
           setLastScannedMember(null);
           setGatekeeperEval(null);
+          setTurnstileEval(null);
           setSuccessMessage(null);
           if (manualInputRef.current) manualInputRef.current.value = '';
         }, 3000);
@@ -920,6 +956,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         setTimeout(() => {
           setLastScannedMember(null);
           setGatekeeperEval(null);
+          setTurnstileEval(null);
           setError(null);
           if (manualInputRef.current) manualInputRef.current.value = '';
         }, 4000);
@@ -1061,9 +1098,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     setSuccessMessage(null);
     try {
       await recordAttendance(lastScannedMember.id, selectedBranch);
+      if (turnstileConfig.enabled && turnstileEval) {
+        triggerTurnstileRelay(turnstileConfig, turnstileEval, lastScannedMember).catch(() => {});
+      }
       setSuccessMessage(t('attendance.attendance_recorded').replace('{name}', lastScannedMember.name));
       setTimeout(() => {
         setLastScannedMember(null);
+        setTurnstileEval(null);
         setSuccessMessage(null);
       }, 3000);
     } catch (err: any) {
@@ -1124,6 +1165,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       }
 
       await recordAttendance(lastScannedMember.id, selectedBranch);
+      if (turnstileConfig.enabled && turnstileEval) {
+        triggerTurnstileRelay(turnstileConfig, turnstileEval, lastScannedMember).catch(() => {});
+      }
       setSuccessMessage(
         `Guest "${trimmedName}" checked in (Pass ${usedInvites + 1}/${totalInvites}) & added to Sales Leads!`
       );
@@ -1133,6 +1177,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       setTimeout(() => {
         setLastScannedMember(null);
         setGatekeeperEval(null);
+        setTurnstileEval(null);
         setSuccessMessage(null);
       }, 3500);
     } catch (err: any) {
@@ -1150,17 +1195,28 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           <p className="text-muted-foreground">{isInzan ? 'Scan member QR code or check in members for workouts and sessions' : t('attendance.subtitle')}</p>
         </div>
         
-        <div className="flex items-center gap-2">
-          {isInzan && !isKiosk && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsShiftHandoverOpen(true)}
-              className="gap-1.5 font-medium border-primary/30 hover:bg-primary/5"
-            >
-              <Clock className="w-4 h-4 text-primary" />
-              Shift Handover
-            </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {!isKiosk && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsTurnstileConfigOpen(true)}
+                className="gap-1.5 font-medium border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+              >
+                <Unlock className="w-4 h-4" />
+                {turnstileConfig.enabled ? 'Turnstile: Online' : 'Turnstile Gate'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsShiftHandoverOpen(true)}
+                className="gap-1.5 font-medium border-primary/30 hover:bg-primary/5"
+              >
+                <Clock className="w-4 h-4 text-primary" />
+                Shift Handover
+              </Button>
+            </>
           )}
 
           <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-lg border">
@@ -2330,6 +2386,140 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           <div>{branding.companyName || 'STRIKE'} GYM CRM • Confidential</div>
         </div>
       </div>
+
+      <Dialog open={isTurnstileConfigOpen} onOpenChange={setIsTurnstileConfigOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Unlock className="h-5 w-5 text-emerald-500" />
+              Turnstile & Biometric Gate Hardware Bridge
+            </DialogTitle>
+            <DialogDescription>
+              Connect ZKTeco, Hikvision, or Shelly LAN HTTP relays to automatically unlock turnstile gates on valid QR/biometric check-in, enforce Morning Package windows, and manage Seasonal Pop-Up (North Coast / Sahel) branch passes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center justify-between p-3 rounded-xl border bg-muted/30">
+              <div>
+                <p className="text-sm font-bold">Auto-Pulse Turnstile on Valid Check-In</p>
+                <p className="text-xs text-muted-foreground">Fires LAN HTTP relay pulse when gatekeeper + time-window pass</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={turnstileConfig.enabled}
+                onChange={(e) => {
+                  const next = { ...turnstileConfig, enabled: e.target.checked };
+                  setTurnstileConfig(next);
+                  localStorage.setItem('turnstile_gate_config', JSON.stringify(next));
+                }}
+                className="h-4 w-4 accent-emerald-600"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Hardware Controller Type</Label>
+                <select
+                  value={turnstileConfig.controllerType}
+                  onChange={(e) => {
+                    const next = { ...turnstileConfig, controllerType: e.target.value as any };
+                    setTurnstileConfig(next);
+                    localStorage.setItem('turnstile_gate_config', JSON.stringify(next));
+                  }}
+                  className="w-full h-9 rounded-md border bg-background px-3 text-xs font-medium"
+                >
+                  <option value="Shelly_HTTP">Shelly HTTP Relay (Wi-Fi / LAN)</option>
+                  <option value="ZKTeco">ZKTeco Turnstile Controller</option>
+                  <option value="Hikvision">Hikvision MinMoe / ISAPI</option>
+                  <option value="Custom_Webhook">Custom Local Webhook</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Relay Pulse Duration (ms)</Label>
+                <Input
+                  type="number"
+                  value={turnstileConfig.relayPulseMs}
+                  onChange={(e) => {
+                    const next = { ...turnstileConfig, relayPulseMs: Number(e.target.value) || 1500 };
+                    setTurnstileConfig(next);
+                    localStorage.setItem('turnstile_gate_config', JSON.stringify(next));
+                  }}
+                  className="h-9 text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Local LAN Relay Endpoint URL</Label>
+              <Input
+                value={turnstileConfig.relayEndpointUrl}
+                onChange={(e) => {
+                  const next = { ...turnstileConfig, relayEndpointUrl: e.target.value };
+                  setTurnstileConfig(next);
+                  localStorage.setItem('turnstile_gate_config', JSON.stringify(next));
+                }}
+                placeholder="http://192.168.1.50/relay/0?turn=on&timer=3"
+                className="h-9 text-xs font-mono"
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
+              <div>
+                <p className="text-xs font-bold text-amber-700 dark:text-amber-400">
+                  Seasonal / Pop-Up Branch Mode (North Coast / Sahel / Gouna)
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Enforces seasonal branch pass limits for Cairo-only packages unless member holds an All-Passport / VIP tier.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={Boolean(turnstileConfig.isSeasonalSahelBranch)}
+                onChange={(e) => {
+                  const next = { ...turnstileConfig, isSeasonalSahelBranch: e.target.checked };
+                  setTurnstileConfig(next);
+                  localStorage.setItem('turnstile_gate_config', JSON.stringify(next));
+                }}
+                className="h-4 w-4 accent-amber-600"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                const res = await triggerTurnstileRelay(
+                  { ...turnstileConfig, enabled: true },
+                  {
+                    allowRelayOpen: true,
+                    relayPulseMs: turnstileConfig.relayPulseMs || 1500,
+                    statusColor: 'green',
+                    reasonCode: 'GRANTED',
+                    messageEn: 'Test Open Gate',
+                    messageAr: 'فتح تجريبي للبوابة',
+                  },
+                  { id: 'TEST', name: 'Test Admin' }
+                );
+                if (res.triggered) {
+                  toast.success(`Turnstile Relay Pulsed (${turnstileConfig.relayPulseMs || 1500}ms)`);
+                } else {
+                  toast.error(res.error || 'Relay unreachable');
+                }
+              }}
+              className="gap-1.5 text-xs font-bold border-emerald-500/40 text-emerald-600"
+            >
+              <Unlock className="h-3.5 w-3.5" />
+              Test Open Gate Relay Now
+            </Button>
+            <Button type="button" size="sm" onClick={() => setIsTurnstileConfigOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ShiftHandoverDialog
         open={isShiftHandoverOpen}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -87,6 +88,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   const { currentUser, logout } = useAuth();
   const { branding, features } = useSettings();
   const { theme, toggleTheme, themeLocked } = useTheme();
+  const { language, toggleLanguage, isRtl } = useLanguage();
 
   const isStrike = useMemo(() => {
     const tenantId = getTenantId();
@@ -103,6 +105,16 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   }, []);
   
   const filteredNavItems = useMemo(() => {
+    const arLabels: Record<MemberTab, string> = {
+      home: 'بطاقتي',
+      booking: 'الحجوزات',
+      juicebar: 'الكافيتريا',
+      wallet: 'المحفظة',
+      locker: 'الخزنة',
+      invites: 'الدعوات',
+      nutrition: 'التغذية',
+      profile: 'حسابي',
+    };
     return NAV_ITEMS.filter((item) => {
       if (item.tab === 'home' && features.qrCheckin === false) return false;
       if (item.tab === 'juicebar') {
@@ -118,12 +130,15 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       if (item.tab === 'nutrition' && features.nutrition === false && !isInzan) return false;
       return true;
     }).map(item => {
+      if (language === 'ar') {
+        return { ...item, label: arLabels[item.tab] || item.label };
+      }
       if (item.tab === 'home' && isStrike && isMobile) {
         return { ...item, label: 'Home Screen' };
       }
       return item;
     });
-  }, [features, isStrike, isInzan, isMobile]);
+  }, [features, isStrike, isInzan, isMobile, language]);
 
   const [activeTab, setActiveTab] = useState<MemberTab>((initialTab as MemberTab) || 'home');
 
@@ -177,15 +192,15 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   
   const profileSubTabsList = useMemo(() => {
     const list = [
-      { id: 'settings', label: 'Settings' },
-      { id: 'progress', label: 'Progress', pointSystemRequired: true },
-      { id: 'membership', label: 'Membership' },
-      { id: 'attendance', label: 'History' },
-      { id: 'badges', label: 'Badges', pointSystemRequired: true },
-      { id: 'rewards', label: 'Rewards', pointSystemRequired: true },
+      { id: 'settings', label: language === 'ar' ? 'الإعدادات' : 'Settings' },
+      { id: 'progress', label: language === 'ar' ? 'التقدم و InBody' : 'Progress', pointSystemRequired: true },
+      { id: 'membership', label: language === 'ar' ? 'العضوية' : 'Membership' },
+      { id: 'attendance', label: language === 'ar' ? 'الحضور' : 'History' },
+      { id: 'badges', label: language === 'ar' ? 'الأوسمة' : 'Badges', pointSystemRequired: true },
+      { id: 'rewards', label: language === 'ar' ? 'المكافآت' : 'Rewards', pointSystemRequired: true },
     ];
     return list.filter(tab => !tab.pointSystemRequired || features.pointsSystem !== false);
-  }, [features.pointsSystem]);
+  }, [features.pointsSystem, language]);
 
   const [profileSubTab, setProfileSubTab] = useState<'settings' | 'progress' | 'membership' | 'attendance' | 'badges' | 'rewards'>('settings');
 
@@ -584,7 +599,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-background flex flex-col font-sans relative">
+    <div dir={isRtl ? 'rtl' : 'ltr'} className="h-screen overflow-hidden bg-background flex flex-col font-sans relative">
       <header className="border-b border-border/60 bg-background/80 backdrop-blur-xl h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div 
@@ -598,7 +613,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             )}
           </div>
           <Badge variant="outline" className="text-[10px] font-semibold tracking-wider uppercase text-muted-foreground border-border hidden sm:inline-flex">
-            Member
+            {language === 'ar' ? 'عضو' : 'Member'}
           </Badge>
         </div>
 
@@ -637,6 +652,16 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
               </Select>
             </div>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleLanguage}
+            title={language === 'ar' ? 'Switch to English' : 'التبديل إلى العربية'}
+            className="h-7 px-2 text-[11px] font-bold border-border/70 text-foreground"
+          >
+            {language === 'ar' ? 'EN' : 'عربي'}
+          </Button>
 
           <MemberNotificationBell clientId={activeClient?.id} onNavigate={handleNavigate} />
 

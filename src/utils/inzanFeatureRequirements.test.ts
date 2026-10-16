@@ -263,3 +263,218 @@ describe('Core UX Improvements — Benefits Wallet, Waitlist Auto-Promote & What
   });
 });
 
+import {
+  validateOrExtractInstapayRef,
+  calculateBnplSchedule,
+  generateEgyptianEtaTaxCsv,
+} from './egyptianPayments';
+import {
+  parseInBodyTextReport,
+  computeInBodyTransformation,
+} from './inbodyParser';
+import { reconcileShiftDrawer } from './shiftHandover';
+import { evaluateTurnstileGateAccess } from './turnstileGateBridge';
+import {
+  computeChurnRiskMembers,
+  buildWhatsAppRetentionOutreachUrl,
+} from './churnRetention';
+
+describe('Egypt Top-Tier Gym Platform — Payments, InBody, Shift Handover, Turnstile & Retention', () => {
+  it('extracts InstaPay IPN reference from SMS and calculates BNPL schedules & ETA 14% VAT CSV', () => {
+    const sms = 'InstaPay: You have received EGP 4,500.00 from KARIM AHMED. Ref: 629481029384.';
+    const parsed = validateOrExtractInstapayRef(sms);
+    assert.strictEqual(parsed.valid, true);
+    assert.strictEqual(parsed.normalizedRef, '629481029384');
+    assert.strictEqual(parsed.extractedAmount, 4500);
+
+    const valuPlan = calculateBnplSchedule(12000, 'ValU', 6);
+    assert.strictEqual(valuPlan.months, 6);
+    assert.strictEqual(valuPlan.principalAmount, 12000);
+    assert.ok(valuPlan.monthlyInstallment >= 2000);
+
+    const { csv } = generateEgyptianEtaTaxCsv(
+      [
+        {
+          id: 'p_eta_1',
+          clientId: 'c1',
+          client_name: 'Karim Ahmed',
+          amount: 1140,
+          amount_paid: 1140,
+          date: '2026-10-16',
+          method: 'Instapay',
+          instapayRef: '629481029384',
+          instapayVerified: true,
+          packageType: 'Annual Gold',
+          package_category_type: 'Memberships',
+          sales_rep_id: 's1',
+          created_at: '2026-10-16T10:00:00.000Z',
+        },
+      ],
+      [{ id: 'c1', name: 'Karim Ahmed', phone: '01012345678', nationalId: '29501011234567', status: 'Active' }]
+    );
+    assert.ok(csv.includes('Net Before VAT (EGP),Egyptian VAT 14% (EGP),Gross Paid (EGP)'));
+    assert.ok(csv.includes('1000.00,140.00,1140.00'));
+    assert.ok(csv.includes('Verified'));
+  });
+
+  it('parses InBody 270/570/770 text output and computes body recomposition deltas', () => {
+    const rawOcr = `
+      Weight: 82.4 kg
+      Skeletal Muscle Mass (SMM): 38.2 kg
+      Percent Body Fat (PBF): 16.5 %
+      Body Fat Mass: 13.6 kg
+      BMI: 24.8
+      Visceral Fat Level: 6
+      Basal Metabolic Rate (BMR): 1890 kcal
+      InBody Score: 84 / 100
+    `;
+    const parsed = parseInBodyTextReport(rawOcr);
+    assert.strictEqual(parsed.weight, 82.4);
+    assert.strictEqual(parsed.muscleMass, 38.2);
+    assert.strictEqual(parsed.bodyFat, 16.5);
+    assert.strictEqual(parsed.visceralFatLevel, 6);
+    assert.strictEqual(parsed.bmr, 1890);
+    assert.strictEqual(parsed.inbodyScore, 84);
+
+    const delta = computeInBodyTransformation([
+      { id: '1', memberId: 'c1', date: '2026-09-01', weight: 85.0, muscleMass: 36.5, bodyFat: 19.5 },
+      { id: '2', memberId: 'c1', date: '2026-10-16', weight: 82.4, muscleMass: 38.2, bodyFat: 16.5 },
+    ]);
+    assert.ok(delta);
+    assert.strictEqual(delta.vsPrevious.muscleDelta, 1.7);
+    assert.strictEqual(delta.vsPrevious.bodyFatDelta, -3);
+    assert.ok(delta.coachingHeadline.includes('Elite Recomposition'));
+  });
+
+  it('reconciles multi-tender shift cash drawer including Split-Tender payments', () => {
+    const shiftPayments = [
+      {
+        id: 'p1',
+        clientId: 'c1',
+        client_name: 'Member 1',
+        amount: 5000,
+        amount_paid: 5000,
+        date: '2026-10-16',
+        method: 'Cash' as const,
+        primaryTenderAmount: 3000,
+        secondaryMethod: 'Instapay' as const,
+        secondaryTenderAmount: 2000,
+        notes: 'Paid [Split Tender: Cash 3000 LE + Instapay 2000 LE]',
+        packageType: 'Annual',
+        package_category_type: 'Memberships' as const,
+        sales_rep_id: 's1',
+        created_at: '2026-10-16T10:00:00.000Z',
+      },
+      {
+        id: 'p2',
+        clientId: 'c2',
+        client_name: 'Member 2',
+        amount: 1500,
+        amount_paid: 1500,
+        date: '2026-10-16',
+        method: 'Credit Card' as const,
+        packageType: 'Monthly',
+        package_category_type: 'Memberships' as const,
+        sales_rep_id: 's1',
+        created_at: '2026-10-16T11:00:00.000Z',
+      },
+    ];
+
+    const recon = reconcileShiftDrawer({
+      payments: shiftPayments,
+      shiftDate: '2026-10-16',
+      openingFloat: 1000,
+      countedCash: 4000, // 1000 float + 3000 cash split
+      countedCard: 1500,
+      countedInstapay: 2000,
+    });
+    assert.strictEqual(recon.expectedCashInDrawer, 4000);
+    assert.strictEqual(recon.card.expected, 1500);
+    assert.strictEqual(recon.instapay.expected, 2000);
+    assert.strictEqual(recon.overallStatus, 'BALANCED');
+  });
+
+  it('enforces Turnstile Morning Package time windows and Seasonal Sahel branch rules', () => {
+    const morningPkg = basePkg({
+      id: 'pkg_morning',
+      name: 'Morning Fitness Package',
+      isTimeRestricted: true,
+      allowedStartTime: '06:00',
+      allowedEndTime: '14:00',
+    });
+    const member: Client = {
+      id: 'c_morning',
+      name: 'Omar',
+      phone: '01099998888',
+      status: 'Active',
+      packageType: 'Morning Fitness Package',
+      membershipExpiry: '2026-12-31',
+      sessionsRemaining: 'unlimited',
+    };
+
+    // Evening check-in at 19:30 Local time should be denied
+    const eveningDate = new Date(2026, 9, 16, 19, 30, 0);
+    const eveningCheck = evaluateTurnstileGateAccess({
+      member,
+      payments: [],
+      cataloguePackages: [morningPkg],
+      now: eveningDate,
+    });
+    assert.strictEqual(eveningCheck.allowRelayOpen, false);
+    assert.strictEqual(eveningCheck.reasonCode, 'OUTSIDE_TIME_WINDOW');
+
+    // Seasonal Sahel branch check for Cairo-only member who exhausted free seasonal visits
+    const sahelCheck = evaluateTurnstileGateAccess({
+      member: { ...member, packageType: 'Standard Cairo Monthly', branch: 'Nasr City' },
+      payments: [],
+      cataloguePackages: [],
+      config: {
+        enabled: true,
+        controllerType: 'ZKTeco',
+        relayEndpointUrl: '',
+        relayPulseMs: 1500,
+        isSeasonalSahelBranch: true,
+        seasonalFreeVisitsAllowance: 2,
+      },
+      seasonalVisitsUsed: 2,
+      now: new Date(2026, 9, 16, 10, 0, 0),
+    });
+    assert.strictEqual(sahelCheck.allowRelayOpen, false);
+    assert.strictEqual(sahelCheck.reasonCode, 'SEASONAL_PASS_REQUIRED');
+  });
+
+  it('identifies 14-day inactive active members and builds bilingual Arabic/English WhatsApp retention links', () => {
+    const clients: Client[] = [
+      {
+        id: 'c_inactive',
+        name: 'Nour Hassan',
+        phone: '01011112222',
+        status: 'Active',
+        packageType: 'Annual Gold',
+        membershipExpiry: '2026-12-31',
+      },
+    ];
+    const attendances = [
+      {
+        id: 'a1',
+        clientId: 'c_inactive',
+        date: '2026-09-20T10:00:00.000Z', // 26 days before NOW (2026-10-16)
+      },
+    ];
+    const risks = computeChurnRiskMembers(clients, attendances as any, [], NOW);
+    assert.strictEqual(risks.length, 1);
+    const firstRisk = risks[0]!;
+    assert.strictEqual(firstRisk.riskType, 'INACTIVE_14_DAYS');
+    assert.strictEqual(firstRisk.daysSinceLastVisit, 26);
+
+    const arUrl = buildWhatsAppRetentionOutreachUrl({
+      item: firstRisk,
+      clubName: 'Inzan Athletics',
+      lang: 'ar',
+    });
+    assert.ok(arUrl?.startsWith('https://wa.me/201011112222?text='));
+    assert.ok(decodeURIComponent(arUrl!).includes('افتقدناك في'));
+  });
+});
+
+

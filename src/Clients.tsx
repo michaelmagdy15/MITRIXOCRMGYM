@@ -50,6 +50,7 @@ import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistory
 import { MemberGuestInvitationsTab } from './components/member/MemberGuestInvitationsTab';
 import { MemberDocumentUploader } from './components/member/MemberDocumentUploader';
 import { MemberBenefitsWallet } from './components/member/MemberBenefitsWallet';
+import MemberBodyTracker from './member/MemberBodyTracker';
 import { buildWhatsAppPaymentReceiptUrl, buildWhatsAppRenewalReminderUrl } from './utils/whatsappTemplates';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
@@ -2688,6 +2689,7 @@ export default function Clients() {
                     { value: 'activity', label: 'Activity', icon: <MessageSquare className="h-3.5 w-3.5" /> },
                     { value: 'history', label: 'History', icon: <FileText className="h-3.5 w-3.5" /> },
                     { value: 'referrals', label: 'Referrals', icon: <Users className="h-3.5 w-3.5" /> },
+                    { value: 'inbody', label: 'InBody', icon: <Activity className="h-3.5 w-3.5" /> },
                     { value: 'audit-logs', label: 'Audit Logs', icon: <Activity className="h-3.5 w-3.5" /> },
                     { value: 'points', label: 'Points', icon: <Gift className="h-3.5 w-3.5" /> },
                     { value: 'freeze', label: 'Freeze', icon: <Calendar className="h-3.5 w-3.5" /> },
@@ -4274,6 +4276,14 @@ export default function Clients() {
                       Merge & Deactivate Source Account
                     </Button>
                   </div>
+                </TabsContent>
+
+                {/* ── INBODY TAB ── */}
+                <TabsContent value="inbody" className="mt-0 outline-none p-5 space-y-5">
+                  <MemberBodyTracker
+                    client={activeClient}
+                    clubName={branding?.companyName || (isInzanTenant ? 'Inzan Athletics' : 'Strike Boxing Club')}
+                  />
                 </TabsContent>
               </div>
             </Tabs>

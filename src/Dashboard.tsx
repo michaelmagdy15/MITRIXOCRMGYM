@@ -66,6 +66,7 @@ import OnlineUsers from './components/OnlineUsers';
 import { Textarea } from '@/components/ui/textarea';
 import TodayClassesWidget from './components/dashboard/TodayClassesWidget';
 import InzanDailyRevenueSummary from './components/dashboard/InzanDailyRevenueSummary';
+import { RetentionRadarCard } from './components/dashboard/RetentionRadarCard';
 import { isTenantInzan } from './utils/inzanOrg';
 import { getTenantId } from './firebase';
 
@@ -222,7 +223,7 @@ const SalesTargetDialog = React.memo(function SalesTargetDialog({
 });
 
 export default function Dashboard() {
-  const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, branches, clients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId } = useAppContext();
+  const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, branches, branding, clients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId } = useAppContext();
   const { t, language, isRtl } = useLanguage();
   // Use context data directly instead of creating duplicate Firestore listeners.
   // Context 'clients' and 'payments' are already filtered for the current user's visibility.
@@ -1189,11 +1190,22 @@ export default function Dashboard() {
         )}
       </div>
 
-      {isInzan && canViewGlobalDashboard && (
+      {canViewGlobalDashboard && (
         <InzanDailyRevenueSummary payments={payments} users={users} />
       )}
 
       <TodayClassesWidget />
+
+      <RetentionRadarCard
+        clients={allClients}
+        attendances={attendances}
+        payments={allPayments}
+        clubName={branding?.companyName || (isInzan ? 'Inzan Athletics' : 'Strike Boxing Club')}
+        onSelectMember={(clientId) => {
+          setActiveClientId(clientId);
+          setActiveTab('clients');
+        }}
+      />
 
       {/* Branch Attendance Heatmap */}
       {attendanceHeatmap.length > 0 && (

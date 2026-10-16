@@ -342,14 +342,34 @@ export interface ShiftHandover {
   outgoingStaffName: string;
   incomingStaffId?: string;
   incomingStaffName?: string;
+  openingFloat?: number;
   cashInDrawer: number;
   cashCollected: number;
+  expectedCash?: number;
+  cashDiscrepancy?: number;
+  countedCard?: number;
+  expectedCard?: number;
+  cardDiscrepancy?: number;
+  countedInstapay?: number;
+  expectedInstapay?: number;
+  instapayDiscrepancy?: number;
   unresolvedIssues?: string;
   lostAndFoundCount?: number;
   status: 'Pending Acknowledgment' | 'Acknowledged';
   createdAt: string;
   acknowledgedAt?: string;
 }
+
+export type PaymentMethodType =
+  | 'Cash'
+  | 'Credit Card'
+  | 'Bank Transfer'
+  | 'Instapay'
+  | 'ValU'
+  | 'Sympl'
+  | 'Souhoola'
+  | 'Fawry'
+  | 'Other';
 
 export interface Payment {
   id: string;
@@ -366,13 +386,21 @@ export interface Payment {
   isPartialPayment?: boolean;
   isComplimentary?: boolean;
   date: string; // ISO string
-  method: 'Cash' | 'Credit Card' | 'Bank Transfer' | 'Instapay' | 'Other';
+  method: PaymentMethodType;
+  secondaryMethod?: PaymentMethodType;
+  primaryTenderAmount?: number;
+  secondaryTenderAmount?: number;
   status?: 'paid' | 'pending' | 'refunded' | 'failed';
   refundMethod?: string;
   refundAmount?: number;
   refundedAt?: string;
   refundedBy?: string;
-  instapayRef?: string; // 12 digits
+  instapayRef?: string; // 12 digits or IPN code
+  instapayVerified?: boolean;
+  instapayVerifiedBy?: string;
+  instapayVerifiedAt?: string;
+  instapayProofUrl?: string;
+  bnplMonths?: number;
   packageType: string;
   package_category_type: PaymentCategory;
   coachName?: string; // Optional coach name for PT packages

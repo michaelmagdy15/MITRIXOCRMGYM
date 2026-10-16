@@ -33,9 +33,16 @@ import { getTenantId, storage } from './firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { addAuditLog } from './services/auditService';
 import { useOperationId } from './hooks/useOperationId';
-import { ShieldAlert, Paperclip, MessageCircle } from 'lucide-react';
+import { ShieldAlert, Paperclip, MessageCircle, CheckCircle, Clock, Download } from 'lucide-react';
 import { calculateSplitTenderRemaining, splitInstallmentsEvenly } from './utils/installmentSplitter';
 import { buildWhatsAppPaymentReceiptUrl } from './utils/whatsappTemplates';
+import {
+  validateOrExtractInstapayRef,
+  calculateBnplSchedule,
+  buildWhatsAppPaymentLinkUrl,
+  generateEgyptianEtaTaxCsv,
+} from './utils/egyptianPayments';
+import { ShiftHandoverDialog } from './components/ShiftHandoverDialog';
 
 export default function Payments() {
   const { t, language, isRtl } = useLanguage();
@@ -70,6 +77,8 @@ export default function Payments() {
     });
   }, [packages, features]);
   const [isNewPaymentOpen, setIsNewPaymentOpen] = useState(false);
+  const [isShiftHandoverOpen, setIsShiftHandoverOpen] = useState(false);
+  const [bnplMonths, setBnplMonths] = useState<3 | 6 | 9 | 12>(6);
 
   const isInzan = isTenantInzan(branding?.companyName) || getTenantId() === 'inzanathletics';
   const isCurrentUserAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin';
@@ -1503,19 +1512,46 @@ export default function Payments() {
     <div className="space-y-4">
       <div className="flex flex-wrap justify-between items-center gap-2">
         <h2 className="text-2xl font-bold tracking-tight">{t('payments.title')}</h2>
-        <div className="flex items-center gap-2">
-          {isInzan && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={printCashierShiftZReport}
-              className="gap-1.5 font-semibold border-primary/30 hover:bg-primary/5"
-              title="Print 80mm Thermal Cashier Shift Z-Report (Cash + Card + Instapay totals)"
-            >
-              <Receipt className="h-4 w-4 text-primary" />
-              Shift Z-Report (80mm)
-            </Button>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const { csv } = generateEgyptianEtaTaxCsv(filteredPayments, clients);
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `ETA_VAT_Report_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="gap-1.5 font-semibold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+            title="Export Egyptian Tax Authority (ETA 14% VAT) CSV for Filtered Payments"
+          >
+            <Download className="h-4 w-4" />
+            Export ETA 14% VAT CSV
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsShiftHandoverOpen(true)}
+            className="gap-1.5 font-semibold border-primary/30 hover:bg-primary/5"
+            title="Reconcile Cash Drawer, Visa Terminal Batch & InstaPay for Shift Handover"
+          >
+            <Clock className="h-4 w-4 text-primary" />
+            Shift Handover
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={printCashierShiftZReport}
+            className="gap-1.5 font-semibold border-primary/30 hover:bg-primary/5"
+            title="Print 80mm Thermal Cashier Shift Z-Report (Cash + Card + Instapay totals)"
+          >
+            <Receipt className="h-4 w-4 text-primary" />
+            Shift Z-Report (80mm)
+          </Button>
           <Dialog open={isNewPaymentOpen} onOpenChange={setIsNewPaymentOpen}>
             <DialogTrigger render={<Button />}>
               <Plus className="mr-2 h-4 w-4" /> {t('payments.record_payment')}
@@ -2004,8 +2040,12 @@ export default function Payments() {
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
                       <SelectItem value="Cash" className="rounded-xl py-3 px-4">{t('dashboard.cash')}</SelectItem>
                       <SelectItem value="Credit Card" className="rounded-xl py-3 px-4">{t('dashboard.visa')}</SelectItem>
-                      <SelectItem value="Bank Transfer" className="rounded-xl py-3 px-4">Bank Transfer</SelectItem>
                       <SelectItem value="Instapay" className="rounded-xl py-3 px-4">{t('dashboard.instapay')}</SelectItem>
+                      <SelectItem value="ValU" className="rounded-xl py-3 px-4">ValU (BNPL Installments)</SelectItem>
+                      <SelectItem value="Sympl" className="rounded-xl py-3 px-4">Sympl (Pay Later)</SelectItem>
+                      <SelectItem value="Souhoola" className="rounded-xl py-3 px-4">Souhoola (BNPL)</SelectItem>
+                      <SelectItem value="Fawry" className="rounded-xl py-3 px-4">Fawry Reference Code</SelectItem>
+                      <SelectItem value="Bank Transfer" className="rounded-xl py-3 px-4">Bank Transfer</SelectItem>
                       <SelectItem value="Other" className="rounded-xl py-3 px-4">{t('leads.tabs.other')}</SelectItem>
                     </SelectContent>
                   </Select>
@@ -2040,6 +2080,8 @@ export default function Payments() {
                             <option value="Credit Card">Visa / Credit Card</option>
                             <option value="Instapay">Instapay</option>
                             <option value="Cash">Cash</option>
+                            <option value="ValU">ValU</option>
+                            <option value="Sympl">Sympl</option>
                             <option value="Bank Transfer">Bank Transfer</option>
                           </select>
                         </div>
@@ -2058,16 +2100,109 @@ export default function Payments() {
                   )}
                 </div>
 
-                {method === 'Instapay' && (
-                  <div className="space-y-3">
-                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.instapay_ref')}</Label>
+                {(method === 'Instapay' || (useSplitTender && secondaryMethod === 'Instapay')) && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">
+                        {t('payments.instapay_ref')} / Paste SMS
+                      </Label>
+                      {(() => {
+                        const selClient = clients.find((c) => c.id === clientId);
+                        const waLink = buildWhatsAppPaymentLinkUrl({
+                          clientName: selClient?.name || guestClientName || 'Member',
+                          clientPhone: selClient?.phone || newClientPhone,
+                          clubName: branding?.companyName || 'Mitrixo Gym',
+                          packageName: packageType || 'Membership',
+                          amount: pricingBreakdown.amountPaid || Number(amount) || 0,
+                          method: 'Instapay',
+                        });
+                        return waLink ? (
+                          <a
+                            href={waLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-bold text-emerald-600 hover:underline flex items-center gap-1"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" />
+                            Send IPA via WhatsApp
+                          </a>
+                        ) : null;
+                      })()}
+                    </div>
                     <Input 
-                      placeholder="123456789012" 
-                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-mono"
+                      placeholder="Paste InstaPay SMS or 12-digit IPN Ref..." 
+                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-base font-mono"
                       value={instapayRef} 
-                      maxLength={12}
-                      onChange={(e) => setInstapayRef(e.target.value.replace(/\D/g, ''))} 
+                      onChange={(e) => {
+                        const rawVal = e.target.value;
+                        const parsed = validateOrExtractInstapayRef(rawVal);
+                        setInstapayRef(parsed.valid ? parsed.normalizedRef : rawVal.replace(/\D/g, '').slice(0, 16));
+                      }} 
                     />
+                  </div>
+                )}
+
+                {(['ValU', 'Sympl', 'Souhoola'] as const).includes(method as any) && (
+                  <div className="p-3.5 rounded-2xl border border-purple-500/30 bg-purple-500/5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase text-purple-600 dark:text-purple-400">
+                        {method} BNPL Plan
+                      </span>
+                      <div className="flex gap-1">
+                        {([3, 6, 9, 12] as const).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setBnplMonths(m)}
+                            className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                              bnplMonths === m
+                                ? 'bg-purple-600 text-white border-purple-600'
+                                : 'bg-background text-muted-foreground border-border'
+                            }`}
+                          >
+                            {m}M
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {(() => {
+                      const plan = calculateBnplSchedule(
+                        pricingBreakdown.amountPaid || Number(amount) || 0,
+                        method as 'ValU' | 'Sympl' | 'Souhoola',
+                        bnplMonths
+                      );
+                      const selClient = clients.find((c) => c.id === clientId);
+                      const waBnplUrl = buildWhatsAppPaymentLinkUrl({
+                        clientName: selClient?.name || guestClientName || 'Member',
+                        clientPhone: selClient?.phone || newClientPhone,
+                        clubName: branding?.companyName || 'Mitrixo Gym',
+                        packageName: packageType || 'Membership',
+                        amount: pricingBreakdown.amountPaid || Number(amount) || 0,
+                        method: method as 'ValU' | 'Sympl' | 'Souhoola',
+                        bnplMonths,
+                      });
+                      return (
+                        <div className="text-xs space-y-1">
+                          <div className="flex justify-between font-mono">
+                            <span className="text-muted-foreground">Est. Monthly Installment:</span>
+                            <span className="font-bold text-purple-600 dark:text-purple-400">
+                              {plan.monthlyInstallment.toLocaleString()} EGP / mo ({plan.months} mos)
+                            </span>
+                          </div>
+                          {waBnplUrl && (
+                            <a
+                              href={waBnplUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline pt-1"
+                            >
+                              <MessageCircle className="h-3.5 w-3.5" />
+                              Send {method} Checkout Link via WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -2366,8 +2501,12 @@ export default function Payments() {
             <option value="All">{t('common.all_methods')}</option>
             <option value="Cash">{t('dashboard.cash')}</option>
             <option value="Credit Card">{t('dashboard.visa')}</option>
-            <option value="Bank Transfer">{t('common.bank_transfer')}</option>
             <option value="Instapay">{t('dashboard.instapay')}</option>
+            <option value="ValU">ValU</option>
+            <option value="Sympl">Sympl</option>
+            <option value="Souhoola">Souhoola</option>
+            <option value="Fawry">Fawry</option>
+            <option value="Bank Transfer">{t('common.bank_transfer')}</option>
             <option value="Other">{t('common.other')}</option>
           </select>
         </div>
@@ -2638,9 +2777,36 @@ export default function Payments() {
                         <TableCell className="hidden sm:table-cell">
                           <div className="flex items-center">
                             {getMethodIcon(payment.method)}
-                            <div>
-                              <div className="text-xs sm:text-sm">
-                                {payment.method === 'Cash' ? t('dashboard.cash') : payment.method === 'Credit Card' ? t('dashboard.visa') : payment.method === 'Bank Transfer' ? t('common.bank_transfer') : payment.method === 'Instapay' ? t('dashboard.instapay') : payment.method === 'Other' ? t('common.other') : payment.method}
+                            <div className="space-y-0.5">
+                              <div className="text-xs sm:text-sm flex items-center gap-1.5">
+                                <span>
+                                  {payment.method === 'Cash' ? t('dashboard.cash') : payment.method === 'Credit Card' ? t('dashboard.visa') : payment.method === 'Bank Transfer' ? t('common.bank_transfer') : payment.method === 'Instapay' ? t('dashboard.instapay') : payment.method === 'Other' ? t('common.other') : payment.method}
+                                </span>
+                                {(payment.method === 'Instapay' || payment.secondaryMethod === 'Instapay') && (
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const nextVerified = !payment.instapayVerified;
+                                      await updatePayment(payment.id, {
+                                        instapayVerified: nextVerified,
+                                        instapayVerifiedBy: nextVerified ? (currentUser?.name || 'Admin') : '',
+                                        instapayVerifiedAt: nextVerified ? new Date().toISOString() : '',
+                                      } as any);
+                                    }}
+                                    title={
+                                      payment.instapayVerified
+                                        ? `Verified by ${payment.instapayVerifiedBy || 'Admin'} — click to unverify`
+                                        : 'Click to verify InstaPay transfer in bank statement'
+                                    }
+                                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
+                                      payment.instapayVerified
+                                        ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                                        : 'bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500/25'
+                                    }`}
+                                  >
+                                    {payment.instapayVerified ? '✓ IPN Verified' : '⏳ Verify IPN'}
+                                  </button>
+                                )}
                               </div>
                               {payment.instapayRef && (
                                 <div className="text-[10px] text-muted-foreground font-mono">
@@ -3359,6 +3525,13 @@ export default function Payments() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ShiftHandoverDialog
+        open={isShiftHandoverOpen}
+        onOpenChange={setIsShiftHandoverOpen}
+        currentUser={currentUser}
+        selectedBranch={filterBranch !== 'All' ? filterBranch : (branches[0] || 'MAIN')}
+      />
 
       <AlertDialog 
         isOpen={alertOpen}
