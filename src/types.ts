@@ -431,6 +431,8 @@ export interface Client {
   packageType?: string; // e.g., "10 S GT Adults", "30 package adult"
   sessionsRemaining?: number | string; // e.g., 6, 0, -3, or "no attend"
   ptSessionsRemaining?: number | string;
+  guestInvitesRemaining?: number; // Package benefit: guest invitations left
+  freeClassTrialsRemaining?: number; // Package benefit: free trials of paid classes left
   startDate?: string; // ISO string
   membershipExpiry?: string; // ISO string (End Date)
   dateOfBirth?: string; // ISO string

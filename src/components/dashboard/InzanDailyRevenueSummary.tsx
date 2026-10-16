@@ -166,6 +166,31 @@ export function InzanDailyRevenueSummary({
 }) {
   const [selectedTab, setSelectedTab] = useState<'today' | 'yesterday'>('today');
 
+  // Package target attribution: this month's revenue per target team.
+  const teamTargets = useMemo(() => {
+    const monthKey = safeFormatDate(new Date(), 'yyyy-MM');
+    const teams: Record<string, { revenue: number; count: number }> = {
+      Sales: { revenue: 0, count: 0 },
+      PT: { revenue: 0, count: 0 },
+      'Class Instructors': { revenue: 0, count: 0 },
+      Nutrition: { revenue: 0, count: 0 },
+    };
+    for (const p of payments) {
+      if (p.deleted_at || (p.status && p.status !== 'paid')) continue;
+      const d = p.date || p.created_at;
+      if (!d || safeFormatDate(d, 'yyyy-MM') !== monthKey) continue;
+      let team = (p as Payment & { targetTeam?: string }).targetTeam;
+      if (!team) {
+        const cat = resolvePaymentCategory(p.packageType || '');
+        team = cat === 'PT' ? 'PT' : cat === 'Classes' ? 'Class Instructors' : cat === 'Nutrition' ? 'Nutrition' : 'Sales';
+      }
+      const bucket = teams[team] || (teams[team] = { revenue: 0, count: 0 });
+      bucket.revenue += Number(p.amount_paid ?? p.amount) || 0;
+      bucket.count += 1;
+    }
+    return Object.entries(teams);
+  }, [payments]);
+
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const u of users) {
@@ -623,6 +648,18 @@ export function InzanDailyRevenueSummary({
             </table>
           </div>
         )}
+      </div>
+      <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Package Target Attribution — This Month</h4>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {teamTargets.map(([team, v]) => (
+            <div key={team} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3">
+              <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{team}</div>
+              <div className="text-lg font-black text-slate-900 dark:text-white">{v.revenue.toLocaleString()} LE</div>
+              <div className="text-[11px] text-slate-500">{v.count} sale(s)</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

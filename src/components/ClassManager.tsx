@@ -13,7 +13,9 @@ import { MasterClassLibraryManager } from './classes/MasterClassLibraryManager';
 import { canDeleteClassSession } from '../utils/classDeletionGuardrail';
 import { ClassAnalytics } from './ClassAnalytics';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, getDocs, doc, updateDoc, setDoc, arrayUnion, arrayRemove, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, setDoc, arrayUnion, arrayRemove, query, where, increment } from 'firebase/firestore';
+import { isTenantInzan } from '../utils/inzanOrg';
+import { addAuditLog } from '../services/auditService';
 import { db, auth } from '../firebase';
 import { User, Client } from '../types';
 import { ClassSchedule } from '../types/class';
@@ -831,6 +833,31 @@ export const ClassManager: React.FC = () => {
       let resOk = false;
       let errorMsg = '';
       const selectedClient = clients.find(c => c.id === memberIdToAdd || c.memberId === memberIdToAdd);
+
+      const isPaidClass = rosterClass.classType === 'Paid' || (rosterClass.classType !== 'Free' && Number(rosterClass.price) > 0);
+      const trialsLeft = Number(selectedClient?.freeClassTrialsRemaining) || 0;
+      if (
+        isTenantInzan() && isPaidClass && selectedClient && trialsLeft > 0 &&
+        window.confirm(`${selectedClient.name} has ${trialsLeft} free class trial(s) from their package.\n\nUse 1 free trial for this paid class?`)
+      ) {
+        await updateDoc(doc(db, 'classSchedules', rosterClass.id), { attendees: arrayUnion(selectedClient.id) });
+        await setDoc(doc(db, 'classBookings', `${rosterClass.id}_${selectedClient.id}`), {
+          classId: rosterClass.id,
+          className: rosterClass.name,
+          clientId: selectedClient.id,
+          memberId: selectedClient.memberId || selectedClient.id,
+          memberName: selectedClient.name,
+          status: 'booked',
+          isFreeTrial: true,
+          bookedAt: new Date().toISOString(),
+          bookedBy: currentUser?.id || 'staff',
+        }, { merge: true });
+        await updateDoc(doc(db, 'clients', selectedClient.id), { freeClassTrialsRemaining: increment(-1) });
+        await addAuditLog('UPDATE', 'CLIENT', selectedClient.id, `Used 1 free class trial for paid class "${rosterClass.name}"`, currentUser?.name);
+        toast.success(`${selectedClient.name} booked using a free class trial (${trialsLeft - 1} left).`);
+        setSelectedMemberToAdd('');
+        return;
+      }
 
       try {
         const res = await fetch('/api/classes/book', {

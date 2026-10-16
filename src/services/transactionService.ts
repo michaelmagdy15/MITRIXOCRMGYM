@@ -337,6 +337,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       recordedByName: params.recordedByName || params.salesName || 'Staff',
       salesName: params.salesName,
       sales_rep_id: params.sales_rep_id,
+      ...(params.systemPackage?.targetTeam ? { targetTeam: params.systemPackage.targetTeam } : {}),
       branch: effectiveBranch || undefined,
       branchId: effectiveBranchId,
       clientBranch: effectiveBranch || undefined,

@@ -9,6 +9,7 @@ import {
   addDoc,
   updateDoc,
   doc,
+  increment,
 } from 'firebase/firestore';
 import {
   Table,
@@ -311,7 +312,17 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
         payload.attendanceDate = chosenAttendanceIso;
       }
 
+      const tracksInvites = typeof client.guestInvitesRemaining === 'number';
+      if (tracksInvites && (client.guestInvitesRemaining as number) <= 0) {
+        toast.error(`${client.name} has used all guest invitations included in their package.`);
+        return;
+      }
+
       await addDoc(collection(db, 'guestInvites'), payload);
+
+      if (tracksInvites) {
+        await updateDoc(doc(db, 'clients', client.id), { guestInvitesRemaining: increment(-1) });
+      }
 
       await addDoc(collection(db, 'auditLogs'), {
         action: 'CREATE',
@@ -445,6 +456,11 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
             <span className="text-2xl font-black text-foreground mt-1 block">
               {kpis.total}
             </span>
+            {typeof client.guestInvitesRemaining === 'number' && (
+              <span className="text-[11px] font-semibold text-primary block">
+                {client.guestInvitesRemaining} package invite(s) left
+              </span>
+            )}
           </div>
           <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
             <Users className="h-5 w-5" />
