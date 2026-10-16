@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Client, User, SessionType, Session } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Client, User, SessionType, Session, CoachSchedule as CoachScheduleType } from '../types';
 import { auth, db, getTenantId } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, getDocs } from 'firebase/firestore';
 import { useSessions } from '../hooks/useSessions';
@@ -54,7 +54,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
   const { bookSession, updateSessionStatus, deleteSession } = useSessions();
   const [selectedCoachId, setSelectedCoachId] = useState<string>('');
   const [sessionType, setSessionType] = useState<SessionType>('1-on-1');
-  const [coachSchedule, setCoachSchedule] = useState<Record<string, { enabled: boolean; startTime: string; endTime: string }> | null>(null);
+  const [coachSchedule, setCoachSchedule] = useState<CoachScheduleType['days'] | null>(null);
   const [bookingDate, setBookingDate] = useState<string>(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
   const [bookingTime, setBookingTime] = useState<string>('10:00');
   const [bookingMessage, setBookingMessage] = useState<string>('');
@@ -165,6 +165,71 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
 
     fetchCoachSchedule();
   }, [selectedCoachId]);
+
+  // Compute available coach slots for selected bookingDate
+  const dateDaySlots = useMemo(() => {
+    if (!selectedCoachId || !bookingDate || !coachSchedule) return null;
+    const parsed = new Date(`${bookingDate}T00:00:00`);
+    if (isNaN(parsed.getTime())) return null;
+    const dayMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayKey = dayMap[parsed.getDay()] || 'monday';
+    const dayCfg = coachSchedule[dayKey];
+    if (!dayCfg || !dayCfg.enabled) {
+      return { enabled: false, dayKey, slots: [] };
+    }
+
+    const [startH = 9, startM = 0] = (dayCfg.startTime || '09:00').split(':').map(Number);
+    const [endH = 21, endM = 0] = (dayCfg.endTime || '21:00').split(':').map(Number);
+    const duration = dayCfg.slotDurationMinutes || 60;
+    let startTotalM = startH * 60 + startM;
+    const endTotalM = endH * 60 + endM;
+    if (endTotalM <= startTotalM) return { enabled: true, dayKey, slots: [] };
+
+    const fmtMin = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    const slots: {
+      id: string;
+      startTime: string;
+      endTime: string;
+      dedicatedType?: SessionType;
+      capacity: number;
+      matchesSelectedType: boolean;
+    }[] = [];
+
+    while (startTotalM < endTotalM) {
+      const slotEndM = Math.min(startTotalM + duration, endTotalM);
+      const startTime = fmtMin(startTotalM);
+      const endTime = fmtMin(slotEndM);
+      const slotId = `${startTime}-${endTime}`;
+
+      const rule = dayCfg.slotRules?.[startTime] || dayCfg.slotRules?.[slotId];
+      const isBlocked =
+        (dayCfg.blockedSlots || []).includes(slotId) ||
+        (dayCfg.blockedSlots || []).includes(startTime) ||
+        rule?.type === 'Break';
+
+      if (!isBlocked) {
+        const dedicatedType = rule && rule.type !== 'Any' && rule.type !== 'Break' ? rule.type : undefined;
+        const capacity =
+          rule?.capacity ||
+          dayCfg.capacities?.[dedicatedType || sessionType] ||
+          1;
+        const matchesSelectedType = !dedicatedType || dedicatedType === sessionType;
+
+        slots.push({
+          id: slotId,
+          startTime,
+          endTime,
+          dedicatedType,
+          capacity,
+          matchesSelectedType,
+        });
+      }
+
+      startTotalM += duration;
+    }
+
+    return { enabled: true, dayKey, slots };
+  }, [selectedCoachId, bookingDate, coachSchedule, sessionType]);
 
   if (!client) return null;
 
@@ -488,6 +553,66 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                 />
               </div>
             </div>
+
+            {/* Interactive Slot Pills for Selected Date */}
+            {dateDaySlots && (
+              <div className="space-y-2 pt-1 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-muted-foreground capitalize">
+                    Available Slots ({dateDaySlots.dayKey})
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground">1-tap to select time & type</span>
+                </div>
+                {!dateDaySlots.enabled ? (
+                  <p className="text-xs text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 font-medium">
+                    Coach is marked Off on {dateDaySlots.dayKey}. Please pick another date.
+                  </p>
+                ) : dateDaySlots.slots.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    No open slots configured for this day.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {dateDaySlots.slots.map(slot => {
+                      const isSelected = bookingTime === slot.startTime;
+                      return (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          onClick={() => {
+                            setBookingTime(slot.startTime);
+                            if (slot.dedicatedType) {
+                              setSessionType(slot.dedicatedType);
+                            }
+                          }}
+                          className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between gap-1 ${
+                            isSelected
+                              ? 'bg-primary text-primary-foreground border-primary shadow-sm font-bold'
+                              : slot.matchesSelectedType
+                                ? 'bg-background hover:border-primary/50 text-foreground border-border'
+                                : 'bg-muted/40 hover:border-primary/40 text-muted-foreground border-dashed border-border'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-mono font-extrabold">
+                              {slot.startTime} – {slot.endTime}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-1 text-[10px]">
+                            <span className="truncate font-semibold">
+                              {slot.dedicatedType ? slot.dedicatedType : 'Any Type'}
+                            </span>
+                            <span className="font-mono opacity-80 shrink-0">
+                              Max {slot.capacity}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="bookMessage" className="text-xs font-bold text-muted-foreground">Message / Focus (Optional)</Label>

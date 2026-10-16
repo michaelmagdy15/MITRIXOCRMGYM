@@ -5,7 +5,11 @@ import {
   doc, getDoc, setDoc, updateDoc, addDoc, 
   collection, query, where, onSnapshot, getDocs 
 } from 'firebase/firestore';
-import { CoachSchedule as CoachScheduleType, Session, SessionType, SessionStatus, Client } from '../types';
+import { 
+  CoachSchedule as CoachScheduleType, Session, SessionType, SessionStatus, Client,
+  CoachSlotRule, PT_CAPACITY_LIMITS
+} from '../types';
+import { updatePTSessionStatus } from '../services/ptSessionService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,11 +97,15 @@ export default function CoachSchedule({
   onStartFloor?: (client?: Client, session?: Session) => void; 
 } = {}) {
   const { currentUser } = useAuth();
-  const [activeView, setActiveView] = useState<'timetable' | 'settings'>('timetable');
+  const [activeView, setActiveView] = useState<'timetable' | 'slot-grid' | 'settings'>('timetable');
   const [schedule, setSchedule] = useState<CoachScheduleType['days']>(DEFAULT_SCHEDULE);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Brush state for Slot Capacity Grid
+  const [brushType, setBrushType] = useState<CoachSlotRule['type']>('1-on-1');
+  const [brushCap, setBrushCap] = useState<number>(1);
 
   // Selected date for visual timetable
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -263,20 +271,215 @@ export default function CoachSchedule({
     });
   };
 
-  // Toggle slot block / break
-  const toggleSlotBlock = async (dayKey: string, slotId: string) => {
+  // Select brush helper
+  const handleSelectBrush = (type: CoachSlotRule['type']) => {
+    setBrushType(type);
+    if (type === '1-on-1' || type === 'Nutrition' || type === 'Any') {
+      setBrushCap(1);
+    } else if (type === 'Partner') {
+      setBrushCap(2);
+    } else if (type === 'Small Group') {
+      setBrushCap(prev => (prev >= 3 && prev <= 5 ? prev : 5));
+    } else if (type === 'Class') {
+      setBrushCap(prev => (prev >= 1 && prev <= 30 ? prev : 15));
+    } else if (type === 'Break') {
+      setBrushCap(0);
+    }
+  };
+
+  const adjustBrushCap = (delta: number) => {
+    if (brushType === 'Break') return;
+    if (brushType !== 'Any') {
+      const limits = PT_CAPACITY_LIMITS[brushType as SessionType] || { min: 1, max: 30 };
+      setBrushCap(prev => Math.max(limits.min, Math.min(limits.max, prev + delta)));
+    } else {
+      setBrushCap(prev => Math.max(1, Math.min(30, prev + delta)));
+    }
+  };
+
+  // Apply rule to a single slot
+  const applySlotRule = (
+    dayKey: string,
+    slotStartTime: string,
+    slotId: string,
+    ruleType: CoachSlotRule['type'] = brushType,
+    ruleCap: number = brushCap
+  ) => {
+    setSchedule(prev => {
+      const currentDay = prev[dayKey] || DEFAULT_SCHEDULE[dayKey]!;
+      const blockedList = currentDay.blockedSlots || [];
+      const currentRules = { ...(currentDay.slotRules || {}) };
+
+      currentRules[slotStartTime] = { type: ruleType, capacity: ruleCap };
+      if (currentRules[slotId]) {
+        currentRules[slotId] = { type: ruleType, capacity: ruleCap };
+      }
+
+      let newBlockedList = blockedList.filter(s => s !== slotId && s !== slotStartTime);
+      if (ruleType === 'Break') {
+        newBlockedList = [...newBlockedList, slotId];
+      }
+
+      return {
+        ...prev,
+        [dayKey]: {
+          ...currentDay,
+          blockedSlots: newBlockedList,
+          slotRules: currentRules
+        }
+      };
+    });
+  };
+
+  // Cycle dedicated slot rule right from daily timetable
+  const cycleSlotRule = async (dayKey: string, slotStartTime: string, slotId: string) => {
     const currentDay = schedule[dayKey] || DEFAULT_SCHEDULE[dayKey]!;
     const blockedList = currentDay.blockedSlots || [];
-    const isCurrentlyBlocked = blockedList.includes(slotId);
-    const newBlockedList = isCurrentlyBlocked 
-      ? blockedList.filter(s => s !== slotId)
-      : [...blockedList, slotId];
+    const existingRule = currentDay.slotRules?.[slotStartTime] || currentDay.slotRules?.[slotId];
+    const isBlocked = blockedList.includes(slotId) || blockedList.includes(slotStartTime) || existingRule?.type === 'Break';
+
+    const order: CoachSlotRule['type'][] = ['Any', '1-on-1', 'Partner', 'Small Group', 'Class', 'Nutrition', 'Break'];
+    const currentType: CoachSlotRule['type'] = isBlocked ? 'Break' : (existingRule?.type || 'Any');
+    const nextIndex = (order.indexOf(currentType) + 1) % order.length;
+    const nextType = order[nextIndex] || 'Any';
+
+    let nextCap = 1;
+    if (nextType === 'Break') nextCap = 0;
+    else if (nextType === 'Any') nextCap = currentDay.capacities?.['1-on-1'] || 1;
+    else nextCap = currentDay.capacities?.[nextType] ?? SESSION_TYPES.find(t => t.key === nextType)?.defaultMax ?? 1;
+
+    const currentRules = { ...(currentDay.slotRules || {}) };
+    currentRules[slotStartTime] = { type: nextType, capacity: nextCap };
+    let newBlockedList = blockedList.filter(s => s !== slotId && s !== slotStartTime);
+    if (nextType === 'Break') {
+      newBlockedList = [...newBlockedList, slotId];
+    }
 
     const updatedSchedule: CoachScheduleType['days'] = {
       ...schedule,
       [dayKey]: {
         ...currentDay,
-        blockedSlots: newBlockedList
+        blockedSlots: newBlockedList,
+        slotRules: currentRules
+      }
+    };
+    setSchedule(updatedSchedule);
+    await handleSave(updatedSchedule);
+  };
+
+  // Helper to get slots for a given day config
+  const getDayTimeSlots = (dayCfg: CoachScheduleType['days'][string]) => {
+    if (!dayCfg || !dayCfg.enabled) return [];
+    const [startH = 9, startM = 0] = (dayCfg.startTime || '09:00').split(':').map(Number);
+    const [endH = 21, endM = 0] = (dayCfg.endTime || '21:00').split(':').map(Number);
+    const duration = dayCfg.slotDurationMinutes || 60;
+    let startTotalM = startH * 60 + startM;
+    const endTotalM = endH * 60 + endM;
+    if (endTotalM <= startTotalM) return [];
+    const list: { startTime: string; endTime: string; id: string }[] = [];
+    while (startTotalM < endTotalM) {
+      const slotEndTotalM = Math.min(startTotalM + duration, endTotalM);
+      const startTime = formatMinutesToTime(startTotalM);
+      const endTime = formatMinutesToTime(slotEndTotalM);
+      list.push({ startTime, endTime, id: `${startTime}-${endTime}` });
+      startTotalM += duration;
+    }
+    return list;
+  };
+
+  // Fill entire day column with active brush
+  const fillDayWithBrush = (dayKey: string) => {
+    setSchedule(prev => {
+      const currentDay = prev[dayKey] || DEFAULT_SCHEDULE[dayKey]!;
+      const daySlots = getDayTimeSlots(currentDay);
+      const currentRules = { ...(currentDay.slotRules || {}) };
+      let newBlockedList = [...(currentDay.blockedSlots || [])];
+
+      daySlots.forEach(s => {
+        currentRules[s.startTime] = { type: brushType, capacity: brushCap };
+        newBlockedList = newBlockedList.filter(b => b !== s.id && b !== s.startTime);
+        if (brushType === 'Break') {
+          newBlockedList.push(s.id);
+        }
+      });
+
+      return {
+        ...prev,
+        [dayKey]: {
+          ...currentDay,
+          blockedSlots: newBlockedList,
+          slotRules: currentRules
+        }
+      };
+    });
+  };
+
+  // Fill time row across all enabled days with active brush
+  const fillTimeRowWithBrush = (slotStartTime: string) => {
+    setSchedule(prev => {
+      const next = { ...prev };
+      DAYS.forEach(d => {
+        const currentDay = next[d.key] || DEFAULT_SCHEDULE[d.key]!;
+        if (!currentDay.enabled) return;
+        const daySlots = getDayTimeSlots(currentDay);
+        const matchSlot = daySlots.find(s => s.startTime === slotStartTime);
+        if (!matchSlot) return;
+
+        const currentRules = { ...(currentDay.slotRules || {}) };
+        currentRules[slotStartTime] = { type: brushType, capacity: brushCap };
+        let newBlockedList = (currentDay.blockedSlots || []).filter(b => b !== matchSlot.id && b !== slotStartTime);
+        if (brushType === 'Break') {
+          newBlockedList.push(matchSlot.id);
+        }
+        next[d.key] = {
+          ...currentDay,
+          blockedSlots: newBlockedList,
+          slotRules: currentRules
+        };
+      });
+      return next;
+    });
+  };
+
+  // All unique time slot start times across all 7 days for the matrix grid
+  const matrixTimeRows = useMemo(() => {
+    const timeSet = new Set<string>();
+    DAYS.forEach(d => {
+      const dayCfg = schedule[d.key] || DEFAULT_SCHEDULE[d.key]!;
+      getDayTimeSlots(dayCfg).forEach(s => timeSet.add(s.startTime));
+    });
+    if (timeSet.size === 0) {
+      for (let h = 9; h < 21; h++) {
+        timeSet.add(formatMinutesToTime(h * 60));
+      }
+    }
+    return Array.from(timeSet).sort();
+  }, [schedule]);
+
+  // Toggle slot block / break
+  const toggleSlotBlock = async (dayKey: string, slotId: string) => {
+    const currentDay = schedule[dayKey] || DEFAULT_SCHEDULE[dayKey]!;
+    const blockedList = currentDay.blockedSlots || [];
+    const slotStartTime = slotId.split('-')[0] || slotId;
+    const rule = currentDay.slotRules?.[slotStartTime] || currentDay.slotRules?.[slotId];
+    const isCurrentlyBlocked = blockedList.includes(slotId) || blockedList.includes(slotStartTime) || rule?.type === 'Break';
+    const newBlockedList = isCurrentlyBlocked 
+      ? blockedList.filter(s => s !== slotId && s !== slotStartTime)
+      : [...blockedList, slotId];
+
+    const currentRules = { ...(currentDay.slotRules || {}) };
+    if (isCurrentlyBlocked && currentRules[slotStartTime]?.type === 'Break') {
+      currentRules[slotStartTime] = { type: 'Any', capacity: currentDay.capacities?.['1-on-1'] || 1 };
+    } else if (!isCurrentlyBlocked) {
+      currentRules[slotStartTime] = { type: 'Break', capacity: 0 };
+    }
+
+    const updatedSchedule: CoachScheduleType['days'] = {
+      ...schedule,
+      [dayKey]: {
+        ...currentDay,
+        blockedSlots: newBlockedList,
+        slotRules: currentRules
       }
     };
     setSchedule(updatedSchedule);
@@ -337,6 +540,7 @@ export default function CoachSchedule({
       startTime: string;
       endTime: string;
       isBlocked: boolean;
+      dedicatedType?: SessionType;
       sessions: Session[];
       capacity: number;
     }[] = [];
@@ -349,7 +553,9 @@ export default function CoachSchedule({
       const slotEndTime = formatMinutesToTime(slotEndTotalM);
       const slotId = `${slotStartTime}-${slotEndTime}`;
 
-      const isBlocked = (currentDayConfig.blockedSlots || []).includes(slotId);
+      const rule = currentDayConfig.slotRules?.[slotStartTime] || currentDayConfig.slotRules?.[slotId];
+      let isBlocked = (currentDayConfig.blockedSlots || []).includes(slotId) || (currentDayConfig.blockedSlots || []).includes(slotStartTime);
+      let dedicatedType: SessionType | undefined = undefined;
 
       // Find sessions that belong to this date and slot
       const slotSessions = sessions.filter(s => {
@@ -365,15 +571,23 @@ export default function CoachSchedule({
         return sStart === slotStartTime;
       });
 
-      // Max capacity for this slot (based on booked session type or default 1-on-1 / small group)
       const primarySessionType = slotSessions[0]?.type || '1-on-1';
-      const capacity = currentDayConfig.capacities?.[primarySessionType] || 1;
+      let capacity = currentDayConfig.capacities?.[primarySessionType] || 1;
+
+      if (rule) {
+        if (rule.type === 'Break') {
+          isBlocked = true;
+        }
+        dedicatedType = rule.type !== 'Any' && rule.type !== 'Break' ? rule.type : undefined;
+        capacity = rule.capacity || currentDayConfig.capacities?.[dedicatedType || primarySessionType] || 1;
+      }
 
       slots.push({
         id: slotId,
         startTime: slotStartTime,
         endTime: slotEndTime,
         isBlocked,
+        dedicatedType,
         sessions: slotSessions,
         capacity
       });
@@ -385,11 +599,13 @@ export default function CoachSchedule({
   }, [currentDayConfig, selectedDate, sessions]);
 
   // Handle open booking modal for a specific slot
-  const handleOpenAssignModal = (startTime?: string, endTime?: string) => {
+  const handleOpenAssignModal = (startTime?: string, endTime?: string, dedicatedType?: SessionType) => {
     setBookingError(null);
     setSessionNotes('');
     setSelectedClientId('');
-    setSelectedSessionType('1-on-1');
+    const rule = startTime ? (currentDayConfig.slotRules?.[startTime] || (endTime ? currentDayConfig.slotRules?.[`${startTime}-${endTime}`] : undefined)) : undefined;
+    const preSelectedType = dedicatedType || (rule && rule.type !== 'Any' && rule.type !== 'Break' ? rule.type : '1-on-1');
+    setSelectedSessionType(preSelectedType);
     setClientSearch('');
 
     if (startTime && endTime) {
@@ -457,10 +673,22 @@ export default function CoachSchedule({
     if (!selectedSession) return;
     setIsUpdatingSession(true);
     try {
-      await updateDoc(doc(db, 'sessions', selectedSession.id), {
-        status,
-        updatedAt: new Date().toISOString()
-      });
+      const normalizedStatus = status === 'Completed' ? 'Attended' : status;
+      try {
+        await updatePTSessionStatus(selectedSession.id, normalizedStatus, {
+          authorName: currentUser?.name || 'Coach',
+          authorId: currentUser?.id,
+        });
+      } catch (err: any) {
+        if (err?.message && err.message.includes('Client') && err.message.includes('not found')) {
+          await updateDoc(doc(db, 'sessions', selectedSession.id), {
+            status,
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          throw err;
+        }
+      }
       setSelectedSession(null);
     } catch (err) {
       console.error("Error updating session status:", err);
@@ -509,7 +737,7 @@ export default function CoachSchedule({
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="bg-muted p-1 rounded-xl flex items-center gap-1 border">
+          <div className="bg-muted p-1 rounded-xl flex items-center gap-1 border flex-wrap">
             <Button
               variant={activeView === 'timetable' ? 'default' : 'ghost'}
               size="sm"
@@ -518,6 +746,15 @@ export default function CoachSchedule({
             >
               <CalendarDays className="h-3.5 w-3.5" />
               Visual Timetable
+            </Button>
+            <Button
+              variant={activeView === 'slot-grid' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveView('slot-grid')}
+              className="h-8 text-xs font-semibold gap-1.5 rounded-lg transition-all"
+            >
+              <Sliders className="h-3.5 w-3.5" />
+              Slot Capacity Grid
             </Button>
             <Button
               variant={activeView === 'settings' ? 'default' : 'ghost'}
@@ -765,28 +1002,52 @@ export default function CoachSchedule({
                           </span>
                         </div>
 
-                        {/* Status Badge */}
-                        {slot.isBlocked ? (
-                          <Badge variant="secondary" className="text-[10px] font-semibold gap-1 bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                            <Lock className="h-3 w-3" /> Break / Blocked
-                          </Badge>
-                        ) : isFull ? (
-                          <Badge className="text-[10px] font-bold bg-blue-600 text-white hover:bg-blue-600">
-                            Full ({bookedCount}/{slot.capacity})
-                          </Badge>
-                        ) : isPartiallyBooked ? (
-                          <Badge variant="outline" className="text-[10px] font-bold text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40">
-                            {bookedCount}/{slot.capacity} Booked • {slot.capacity - bookedCount} spots left
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] font-bold text-emerald-600 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40">
-                            Available • Max {slot.capacity}
-                          </Badge>
-                        )}
+                        {/* Status Badge & Dedicated Type Badge */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {slot.isBlocked ? (
+                            <Badge variant="secondary" className="text-[10px] font-semibold gap-1 bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                              <Lock className="h-3 w-3" /> Break / Blocked
+                            </Badge>
+                          ) : isFull ? (
+                            <Badge className="text-[10px] font-bold bg-blue-600 text-white hover:bg-blue-600">
+                              Full ({bookedCount}/{slot.capacity})
+                            </Badge>
+                          ) : isPartiallyBooked ? (
+                            <Badge variant="outline" className="text-[10px] font-bold text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/40">
+                              {bookedCount}/{slot.capacity} Booked • {slot.capacity - bookedCount} spots left
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] font-bold text-emerald-600 border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40">
+                              Available • Max {slot.capacity}
+                            </Badge>
+                          )}
+
+                          {!slot.isBlocked && slot.dedicatedType && (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-bold ${
+                                SESSION_TYPES.find(t => t.key === slot.dedicatedType)?.badgeColor || ''
+                              }`}
+                            >
+                              Dedicated: {slot.dedicatedType} • Max {slot.capacity}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       {/* Right: Quick Slot Controls */}
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => cycleSlotRule(selectedDayOfWeekKey, slot.startTime, slot.id)}
+                          className="h-7 text-[10px] px-2 font-semibold rounded-lg"
+                          title="Cycle dedicated slot type & capacity"
+                        >
+                          <Sliders className="h-3 w-3 mr-1" />
+                          {slot.isBlocked ? 'Type: Break' : `Type: ${slot.dedicatedType || 'Any'}`}
+                        </Button>
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -808,7 +1069,7 @@ export default function CoachSchedule({
                         {!slot.isBlocked && !isFull && (
                           <Button
                             size="sm"
-                            onClick={() => handleOpenAssignModal(slot.startTime, slot.endTime)}
+                            onClick={() => handleOpenAssignModal(slot.startTime, slot.endTime, slot.dedicatedType)}
                             className="h-7 text-[11px] font-bold gap-1 px-3 rounded-lg shadow-sm"
                           >
                             <Plus className="h-3 w-3" /> Assign Member
@@ -869,6 +1130,283 @@ export default function CoachSchedule({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* VIEW 1.5: SLOT CAPACITY GRID (7-DAY MATRIX) */}
+      {activeView === 'slot-grid' && (
+        <div className="space-y-4">
+          {/* Paint / Brush Toolbar */}
+          <Card className="border shadow-sm bg-card">
+            <CardHeader className="p-4 pb-3 border-b bg-muted/20">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" /> Slot Capacity & Dedicated Type Brush
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Select a session brush below, then click any cell, day column header, or time row to paint rules across your week.
+                  </CardDescription>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => handleSave()}
+                  disabled={isSaving}
+                  className="h-8 text-xs font-bold gap-1.5 rounded-xl shrink-0"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {saved ? 'Saved Grid!' : isSaving ? 'Saving...' : 'Save Grid Rules'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              {/* Session Type Brush Selector */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-muted-foreground mr-1">Brush:</span>
+                {SESSION_TYPES.map(t => {
+                  const Icon = t.icon;
+                  const active = brushType === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => handleSelectBrush(t.key)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
+                        active
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-[1.02]'
+                          : `${t.badgeColor} hover:opacity-80`
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{t.label}</span>
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectBrush('Any')}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    brushType === 'Any'
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-[1.02]'
+                      : 'bg-background text-foreground border-border hover:bg-muted'
+                  }`}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span>Any (Open)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectBrush('Break')}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    brushType === 'Break'
+                      ? 'bg-zinc-800 text-white border-zinc-900 dark:bg-zinc-200 dark:text-zinc-900 shadow-sm scale-[1.02]'
+                      : 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-300/60 hover:bg-zinc-500/20'
+                  }`}
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>Break (Blocked)</span>
+                </button>
+              </div>
+
+              {/* Capacity Stepper for Active Brush */}
+              {brushType !== 'Break' && (
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-muted-foreground">Brush Capacity:</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7 rounded-lg text-xs"
+                        onClick={() => adjustBrushCap(-1)}
+                        disabled={
+                          brushType !== 'Any'
+                            ? brushCap <= (PT_CAPACITY_LIMITS[brushType as SessionType]?.min ?? 1)
+                            : brushCap <= 1
+                        }
+                      >
+                        -
+                      </Button>
+                      <span className="w-10 text-center text-xs font-black font-mono">
+                        Max {brushCap}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7 rounded-lg text-xs"
+                        onClick={() => adjustBrushCap(1)}
+                        disabled={
+                          brushType !== 'Any'
+                            ? brushCap >= (PT_CAPACITY_LIMITS[brushType as SessionType]?.max ?? 30)
+                            : brushCap >= 30
+                        }
+                      >
+                        +
+                      </Button>
+                    </div>
+
+                    {/* Quick capacity presets based on brushType */}
+                    {brushType === 'Small Group' && (
+                      <div className="flex items-center gap-1 ml-2">
+                        {[3, 4, 5].map(v => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setBrushCap(v)}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                              brushCap === v ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground'
+                            }`}
+                          >
+                            Max {v}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {brushType === 'Class' && (
+                      <div className="flex items-center gap-1 ml-2">
+                        {[10, 15, 20, 25].map(v => (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setBrushCap(v)}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                              brushCap === v ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground'
+                            }`}
+                          >
+                            Max {v}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <span className="text-[11px] text-muted-foreground">
+                    Active Brush: <strong className="text-foreground">{brushType}</strong> (Max {brushCap})
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 7-Day x Time-Slot Interactive Matrix Grid */}
+          <Card className="border shadow-sm overflow-hidden bg-card">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="p-2.5 text-[11px] font-bold text-muted-foreground w-28 border-r">
+                      Time / Fill Row
+                    </th>
+                    {DAYS.map(d => {
+                      const dayCfg = schedule[d.key] || DEFAULT_SCHEDULE[d.key]!;
+                      return (
+                        <th key={d.key} className="p-2 text-center border-r last:border-r-0 min-w-[115px]">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-xs font-bold text-foreground">{d.short}</span>
+                            {dayCfg.enabled ? (
+                              <button
+                                type="button"
+                                onClick={() => fillDayWithBrush(d.key)}
+                                className="text-[9px] font-bold px-2 py-0.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                                title={`Fill all ${d.label} slots with ${brushType}`}
+                              >
+                                Fill Day
+                              </button>
+                            ) : (
+                              <span className="text-[9px] font-semibold uppercase text-muted-foreground">Off</span>
+                            )}
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {matrixTimeRows.map(timeStr => (
+                    <tr key={timeStr} className="hover:bg-muted/10">
+                      <td className="p-2 border-r bg-muted/10 align-middle">
+                        <button
+                          type="button"
+                          onClick={() => fillTimeRowWithBrush(timeStr)}
+                          className="w-full text-left group flex flex-col"
+                          title={`Apply ${brushType} across all enabled days at ${formatTimeTo12h(timeStr)}`}
+                        >
+                          <span className="text-xs font-black font-mono group-hover:text-primary transition-colors">
+                            {formatTimeTo12h(timeStr)}
+                          </span>
+                          <span className="text-[9px] text-muted-foreground group-hover:text-primary">
+                            Fill row →
+                          </span>
+                        </button>
+                      </td>
+                      {DAYS.map(d => {
+                        const dayCfg = schedule[d.key] || DEFAULT_SCHEDULE[d.key]!;
+                        const daySlots = getDayTimeSlots(dayCfg);
+                        const matchSlot = daySlots.find(s => s.startTime === timeStr);
+
+                        if (!dayCfg.enabled || !matchSlot) {
+                          return (
+                            <td key={d.key} className="p-1.5 border-r last:border-r-0 bg-muted/20 text-center">
+                              <span className="text-[10px] text-muted-foreground/50">—</span>
+                            </td>
+                          );
+                        }
+
+                        const rule = dayCfg.slotRules?.[timeStr] || dayCfg.slotRules?.[matchSlot.id];
+                        const isBlocked =
+                          (dayCfg.blockedSlots || []).includes(matchSlot.id) ||
+                          (dayCfg.blockedSlots || []).includes(timeStr) ||
+                          rule?.type === 'Break';
+
+                        const cellType: CoachSlotRule['type'] = isBlocked ? 'Break' : (rule?.type || 'Any');
+                        const cellCap =
+                          cellType === 'Break'
+                            ? 0
+                            : rule?.capacity ||
+                              (cellType !== 'Any'
+                                ? dayCfg.capacities?.[cellType] ?? SESSION_TYPES.find(t => t.key === cellType)?.defaultMax ?? 1
+                                : dayCfg.capacities?.['1-on-1'] ?? 1);
+
+                        const typeMeta = SESSION_TYPES.find(t => t.key === cellType);
+
+                        let cellStyle = 'bg-background hover:border-primary/50 text-foreground border-border';
+                        if (cellType === 'Break') {
+                          cellStyle = 'bg-zinc-500/10 text-zinc-500 border-zinc-300/60 dark:border-zinc-700 dashed';
+                        } else if (typeMeta) {
+                          cellStyle = typeMeta.badgeColor;
+                        }
+
+                        return (
+                          <td key={d.key} className="p-1.5 border-r last:border-r-0 align-middle">
+                            <button
+                              type="button"
+                              onClick={() => applySlotRule(d.key, timeStr, matchSlot.id)}
+                              className={`w-full rounded-xl border p-2 text-left transition-all flex flex-col justify-between gap-1 min-h-[54px] hover:scale-[1.01] ${cellStyle}`}
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="text-[10px] font-extrabold truncate">
+                                  {cellType === 'Break' ? 'Break' : cellType === 'Any' ? 'Any Type' : cellType}
+                                </span>
+                                {cellType === 'Break' && <Lock className="h-3 w-3 shrink-0" />}
+                              </div>
+                              <span className="text-[9px] font-mono font-semibold opacity-85">
+                                {cellType === 'Break' ? 'Blocked' : `Max ${cellCap}`}
+                              </span>
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         </div>
       )}
 

@@ -33,7 +33,8 @@ export interface PTSessionSnapshot {
   date: string;
   time?: string;
   startTime?: string;
-  status: 'Scheduled' | 'Attended' | 'No Show' | 'Cancelled' | 'Rescheduled';
+  status: 'Scheduled' | 'Attended' | 'Completed' | 'No Show' | 'Cancelled' | 'Rescheduled';
+  deductedOnBook?: boolean;
 }
 
 export interface SessionDeductionResult {
@@ -67,7 +68,11 @@ export function calculatePTBalanceTransition(
   now: Date = new Date()
 ): SessionDeductionResult {
   const oldStatus = session.status;
-  const isCurrentlyDeducted = oldStatus === 'Attended' || oldStatus === 'No Show';
+  const isCurrentlyDeducted =
+    oldStatus === 'Attended' ||
+    oldStatus === 'Completed' ||
+    oldStatus === 'No Show' ||
+    (oldStatus === 'Scheduled' && Boolean(session.deductedOnBook));
 
   // Session start time calculation
   const sessionStartMs = parseSessionStartMs(session.date, session.time, session.startTime);
@@ -96,8 +101,8 @@ export function calculatePTBalanceTransition(
       reason = 'Session cancelled in advance (>12h notice); token preserved/restored.';
     }
   } else if (newStatus === 'Scheduled' || newStatus === 'Rescheduled') {
-    targetShouldBeDeducted = false;
-    action = isCurrentlyDeducted ? 'restored' : 'unchanged';
+    targetShouldBeDeducted = Boolean(session.deductedOnBook);
+    action = isCurrentlyDeducted && !targetShouldBeDeducted ? 'restored' : 'unchanged';
     reason = newStatus === 'Rescheduled' ? 'Session rescheduled; token preserved.' : 'Session reset to scheduled; token restored.';
   }
 

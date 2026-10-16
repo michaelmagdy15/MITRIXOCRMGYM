@@ -200,6 +200,15 @@ export default function CoachClients({
         prs: parsedPrs
       });
 
+      if (parseFloat(logWeight) > 0) {
+        await addDoc(collection(db, 'bodyRecords'), {
+          memberId: selectedPerformanceClient.id,
+          date: new Date().toISOString(),
+          weight: parseFloat(logWeight),
+          notes: logWorkoutNotes.trim() || 'Logged by Coach'
+        });
+      }
+
       // Log in audit log
       await addDoc(collection(db, 'auditLogs'), {
         action: 'CREATE',

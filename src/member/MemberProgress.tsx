@@ -13,6 +13,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tool
 export default function MemberProgress({ client }: { client: Client | null }) {
   const { theme } = useTheme();
   const [performanceLogs, setPerformanceLogs] = useState<any[]>([]);
+  const [bodyRecords, setBodyRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export default function MemberProgress({ client }: { client: Client | null }) {
       where('clientId', '==', client.id)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribePerf = onSnapshot(q, (snapshot) => {
       const list = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -40,7 +41,25 @@ export default function MemberProgress({ client }: { client: Client | null }) {
       setLoading(false);
     });
 
-    return unsubscribe;
+    const bodyQ = query(
+      collection(db, 'bodyRecords'),
+      where('memberId', '==', client.id)
+    );
+
+    const unsubscribeBody = onSnapshot(bodyQ, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setBodyRecords(list);
+    }, (err) => {
+      console.error("Error loading body records:", err);
+    });
+
+    return () => {
+      unsubscribePerf();
+      unsubscribeBody();
+    };
   }, [client?.id]);
 
   if (!client) {
@@ -60,15 +79,28 @@ export default function MemberProgress({ client }: { client: Client | null }) {
     );
   }
 
-  // Chronologically sorted (oldest first) data for weight chart
-  const weightChartData = [...performanceLogs]
-    .filter(log => log.weight !== null && log.weight !== undefined && !isNaN(parseFloat(log.weight)))
-    .map(log => ({
-      date: safeFormatDate(log.date, 'dd MMM'),
-      dateFull: safeFormatDate(log.date, 'dd MMM yyyy'),
-      weight: parseFloat(log.weight)
-    }))
-    .reverse(); // Reverse so oldest is first for chronological chart
+  // Chronologically sorted (oldest first) unified data for weight chart
+  const mergedWeightEntries = [
+    ...performanceLogs
+      .filter(log => log.weight !== null && log.weight !== undefined && !isNaN(parseFloat(log.weight)))
+      .map(log => ({ rawDate: String(log.date || ''), weight: parseFloat(log.weight) })),
+    ...bodyRecords
+      .filter(rec => rec.weight !== null && rec.weight !== undefined && !isNaN(parseFloat(rec.weight)))
+      .map(rec => ({ rawDate: String(rec.date || ''), weight: parseFloat(rec.weight) }))
+  ].sort((a, b) => a.rawDate.localeCompare(b.rawDate));
+
+  // Deduplicate entries logged at the same minute/day with identical weight
+  const uniqueWeightEntries = mergedWeightEntries.filter((entry, idx, arr) => {
+    if (idx === 0) return true;
+    const prev = arr[idx - 1]!;
+    return !(prev.rawDate.slice(0, 16) === entry.rawDate.slice(0, 16) && prev.weight === entry.weight);
+  });
+
+  const weightChartData = uniqueWeightEntries.map(entry => ({
+    date: safeFormatDate(entry.rawDate, 'dd MMM'),
+    dateFull: safeFormatDate(entry.rawDate, 'dd MMM yyyy'),
+    weight: entry.weight
+  }));
 
   // Extract all Personal Records (PRs)
   const prsMap = new Map<string, { weight: number; reps: number; date: string }>();

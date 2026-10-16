@@ -100,6 +100,57 @@ const EXERCISE_LIBRARY: { category: string; exercises: string[] }[] = [
   }
 ];
 
+const WORKOUT_TEMPLATES: {
+  name: string;
+  items: { name: string; category: string }[];
+}[] = [
+  {
+    name: 'Push Day',
+    items: [
+      { name: 'Barbell Bench Press', category: 'Chest' },
+      { name: 'Incline Dumbbell Press', category: 'Chest' },
+      { name: 'Overhead Barbell Press', category: 'Shoulders' },
+      { name: 'Tricep Rope Pushdown', category: 'Arms & Core' }
+    ]
+  },
+  {
+    name: 'Pull Day',
+    items: [
+      { name: 'Barbell Deadlift', category: 'Back' },
+      { name: 'Lat Pulldown', category: 'Back' },
+      { name: 'Seated Cable Row', category: 'Back' },
+      { name: 'Barbell Bicep Curl', category: 'Arms & Core' }
+    ]
+  },
+  {
+    name: 'Leg Day',
+    items: [
+      { name: 'Barbell Back Squat', category: 'Legs' },
+      { name: 'Romanian Deadlift (RDL)', category: 'Legs' },
+      { name: 'Leg Press', category: 'Legs' },
+      { name: 'Walking Lunges', category: 'Legs' }
+    ]
+  },
+  {
+    name: 'Full Body HIIT',
+    items: [
+      { name: 'Assault Bike Sprint', category: 'Conditioning' },
+      { name: 'Kettlebell Swings', category: 'Conditioning' },
+      { name: 'Box Jumps', category: 'Conditioning' },
+      { name: 'Plank', category: 'Arms & Core' }
+    ]
+  },
+  {
+    name: 'Boxing Conditioning',
+    items: [
+      { name: 'Battle Ropes', category: 'Conditioning' },
+      { name: 'Sled Push / Prowler', category: 'Conditioning' },
+      { name: 'Push-ups', category: 'Chest' },
+      { name: 'Hanging Leg Raises', category: 'Arms & Core' }
+    ]
+  }
+];
+
 export interface WorkoutSet {
   id: string;
   setNumber: number;
@@ -316,6 +367,37 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
     setExerciseSearch('');
   };
 
+  // Load 1-Tap Workout Program Template
+  const handleApplyTemplate = (templateName: string) => {
+    const template = WORKOUT_TEMPLATES.find(t => t.name === templateName);
+    if (!template) return;
+
+    const now = Date.now();
+    const mappedExercises: WorkoutExercise[] = template.items.map((item, idx) => {
+      const previousBest = clientPrs[item.name.toLowerCase()];
+      const baseWeight = previousBest ? previousBest.weight : 40;
+      const baseReps = previousBest ? previousBest.reps : 10;
+      return {
+        id: `ex_${now}_${idx}_${Math.random().toString(36).substr(2, 4)}`,
+        name: item.name,
+        category: item.category,
+        previousBest,
+        sets: [1, 2, 3].map(setNum => ({
+          id: `set_${setNum}_${now}_${idx}`,
+          setNumber: setNum,
+          type: 'Working',
+          weightKg: baseWeight,
+          reps: baseReps,
+          rpe: 8,
+          completed: false
+        }))
+      };
+    });
+
+    setExercises(prev => [...prev, ...mappedExercises]);
+    setAddExerciseModalOpen(false);
+  };
+
   // Remove Exercise
   const handleRemoveExercise = (exerciseId: string) => {
     setExercises(prev => prev.filter(e => e.id !== exerciseId));
@@ -480,9 +562,13 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
         });
       }
 
-      // 4. Deduct 1 session balance if member has active package
+      // 4. Deduct 1 session balance ONLY if not already deducted on booking or attended
+      const shouldDeductSession =
+        !activeSession ||
+        (!(activeSession as any).deductedOnBook && activeSession.status === 'Scheduled');
+
       const currentRemaining = selectedClient.sessionsRemaining ?? selectedClient.ptSessionsRemaining;
-      if (typeof currentRemaining === 'number' && currentRemaining > 0) {
+      if (shouldDeductSession && typeof currentRemaining === 'number' && currentRemaining > 0) {
         const nextBal = currentRemaining - 1;
         await updateDoc(doc(db, 'clients', selectedClient.id), {
           sessionsRemaining: nextBal
@@ -670,6 +756,25 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
           </div>
         </div>
       )}
+
+      {/* Quick Workout Program Templates Bar */}
+      <div className="bg-card/60 border rounded-2xl p-3 flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 mr-1">
+          <Sparkles className="h-3.5 w-3.5 text-primary" /> Quick Templates:
+        </span>
+        {WORKOUT_TEMPLATES.map(tpl => (
+          <Button
+            key={tpl.name}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => handleApplyTemplate(tpl.name)}
+            className="h-7 text-xs font-bold px-2.5 rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+          >
+            + {tpl.name}
+          </Button>
+        ))}
+      </div>
 
       {/* Main Exercises List or Empty State */}
       {exercises.length === 0 ? (

@@ -164,4 +164,30 @@ const baseClient: ClientPTSnapshot = {
   console.log('  ✓ Unlimited package incremented usedSessions without altering unlimited remaining');
 })();
 
+// 7. Deducted on book (deductedOnBook: true) does not double deduct on Attended, and restores on advance cancel
+(() => {
+  const bookedSession: PTSessionSnapshot = {
+    id: 'sess_booked',
+    clientId: 'client_123',
+    date: '2026-10-10',
+    time: '14:00',
+    status: 'Scheduled',
+    deductedOnBook: true
+  };
+
+  const attendedRes = calculatePTBalanceTransition(bookedSession, 'Attended', baseClient);
+  assert.strictEqual(attendedRes.action, 'unchanged');
+  assert.strictEqual(Object.keys(attendedRes.clientUpdates).length, 0);
+
+  const advanceCancelRes = calculatePTBalanceTransition(
+    bookedSession,
+    'Cancelled',
+    baseClient,
+    new Date('2026-10-08T10:00:00')
+  );
+  assert.strictEqual(advanceCancelRes.action, 'restored');
+  assert.strictEqual(advanceCancelRes.clientUpdates.sessionsRemaining, 11);
+  console.log('  ✓ deductedOnBook prevents double deduction on Attended and restores on >12h Cancel');
+})();
+
 console.log('All PT Attendance & Deduction unit tests passed successfully! ✅');

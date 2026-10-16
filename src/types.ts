@@ -126,6 +126,11 @@ export const PT_CAPACITY_LIMITS: Record<SessionType, { min: number; max: number 
 };
 export type SessionStatus = 'Scheduled' | 'Completed' | 'Attended' | 'No Show' | 'Rescheduled' | 'Cancelled';
 
+export interface CoachSlotRule {
+  type: SessionType | 'Break' | 'Any';
+  capacity: number;
+}
+
 export interface CoachSchedule {
   coachId: string; // userId
   days: Record<string, { 
@@ -135,6 +140,7 @@ export interface CoachSchedule {
     capacities?: Partial<Record<SessionType, number>>;
     slotDurationMinutes?: number;
     blockedSlots?: string[];
+    slotRules?: Record<string, CoachSlotRule>; // keyed by startTime "HH:mm" or "HH:mm-HH:mm"
   }>;
   updatedAt: string;
 }
@@ -192,6 +198,9 @@ export interface Assessment {
   assignedCoachName?: string;
   assignedBy?: string;
   assignedAt?: string;
+  coachOutcomeNotes?: string;
+  recommendedPackage?: string;
+  completedAt?: string;
 }
 
 export interface ImportBatch {

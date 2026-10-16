@@ -6,7 +6,7 @@ import { addAuditLog } from './auditService';
 import { toValidDate, safeAddDays, safeParseExpiryToEndOfDay } from '../utils/dateUtils';
 import { getTenantId } from '../firebase';
 
-const inferEntitlementType = (pkgName: string): Entitlement['type'] => {
+export const inferEntitlementType = (pkgName: string): Entitlement['type'] => {
   const name = pkgName.toLowerCase();
   if (name.includes('pt') || name.includes('personal training')) return 'pt';
   if (name.includes('class') || name.includes('group')) return 'class';

@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, updateDoc, doc, getDocs, or } from 'firebase/firestore';
-import { Session, SessionStatus, Client } from '../types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { collection, query, where, onSnapshot, updateDoc, doc, getDocs, or, addDoc } from 'firebase/firestore';
+import { Session, SessionStatus, Client, Assessment } from '../types';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dumbbell, CheckCircle, XCircle, Clock, Ban, ClipboardList } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
-import { Assessment } from '../types';
+import { updatePTSessionStatus } from '../services/ptSessionService';
 
 type StatusFilter = 'all' | SessionStatus;
 
@@ -46,6 +46,11 @@ export default function CoachSessions() {
     return 'sessions';
   });
   const [loading, setLoading] = useState(true);
+  const [completingAssessmentId, setCompletingAssessmentId] = useState<string | null>(null);
+  const [outcomeNotes, setOutcomeNotes] = useState('');
+  const [recommendedPackage, setRecommendedPackage] = useState('');
+  const [assessmentWeight, setAssessmentWeight] = useState('');
+  const [savingAssessment, setSavingAssessment] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -112,13 +117,70 @@ export default function CoachSessions() {
   }, [currentUser?.id, currentUser?.coachId, currentUser?.name]);
 
   const handleStatusUpdate = async (id: string, newStatus: SessionStatus) => {
+    const normalizedStatus = newStatus === 'Completed' ? 'Attended' : newStatus;
     try {
-      await updateDoc(doc(db, 'sessions', id), { 
-        status: newStatus,
-        updatedAt: new Date().toISOString()
+      await updatePTSessionStatus(id, normalizedStatus, {
+        authorName: currentUser?.name || 'Coach',
+        authorId: currentUser?.id
       });
     } catch (e) {
-      console.error("Failed to update session status:", e);
+      console.warn("Falling back to direct session status update:", e);
+      try {
+        await updateDoc(doc(db, 'sessions', id), { 
+          status: normalizedStatus,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (fallbackErr) {
+        console.error("Failed to update session status:", fallbackErr);
+      }
+    }
+  };
+
+  const handleCompleteAssessment = async (assessment: Assessment) => {
+    setSavingAssessment(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const combinedNotes = [
+        outcomeNotes.trim(),
+        recommendedPackage.trim() ? `Recommended PT Package: ${recommendedPackage.trim()}` : ''
+      ].filter(Boolean).join(' | ');
+
+      await updateDoc(doc(db, 'assessments', assessment.id), {
+        status: 'Completed',
+        coachOutcomeNotes: combinedNotes,
+        ...(recommendedPackage.trim() ? { recommendedPackage: recommendedPackage.trim() } : {}),
+        completedAt: nowIso,
+        updatedAt: nowIso
+      });
+
+      const parsedWeight = parseFloat(assessmentWeight);
+      if (!isNaN(parsedWeight) && parsedWeight > 0 && assessment.clientId) {
+        await addDoc(collection(db, 'bodyRecords'), {
+          memberId: assessment.clientId,
+          date: nowIso,
+          weight: parsedWeight,
+          ...(combinedNotes ? { notes: `Assessment: ${combinedNotes}` } : {})
+        });
+        await addDoc(collection(db, 'clientPerformance'), {
+          clientId: assessment.clientId,
+          clientName: assessment.clientName || 'Member',
+          coachId: currentUser?.id || '',
+          coachName: currentUser?.name || 'Coach',
+          date: nowIso,
+          weight: parsedWeight,
+          workoutNotes: combinedNotes ? `Assessment Findings: ${combinedNotes}` : 'Initial Fitness Assessment',
+          prs: []
+        });
+      }
+
+      setCompletingAssessmentId(null);
+      setOutcomeNotes('');
+      setRecommendedPackage('');
+      setAssessmentWeight('');
+    } catch (e) {
+      console.error("Failed to complete assessment:", e);
+    } finally {
+      setSavingAssessment(false);
     }
   };
 
@@ -321,8 +383,15 @@ export default function CoachSessions() {
                         </div>
                       )}
 
+                      {assessment.coachOutcomeNotes && (
+                        <div className="text-xs bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800 p-2.5 rounded-lg">
+                          <span className="font-bold text-zinc-900 dark:text-zinc-100 uppercase text-[10px] tracking-wider">Assessment Outcome:</span>{' '}
+                          <span className="text-foreground/90">{assessment.coachOutcomeNotes}</span>
+                        </div>
+                      )}
+
                       {assessment.status === 'Pending' && (
-                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
                           {cleanPhone && (
                             <Button
                               size="sm"
@@ -333,13 +402,115 @@ export default function CoachSessions() {
                               Open WhatsApp Chat
                             </Button>
                           )}
-                          <Button 
-                            size="sm" 
-                            className="text-xs h-8 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 ml-auto font-bold"
-                            onClick={() => updateDoc(doc(db, 'assessments', assessment.id), { status: 'Contacted', updatedAt: new Date().toISOString() })}
-                          >
-                            Mark as Contacted
-                          </Button>
+                          <div className="flex items-center gap-2 ml-auto">
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              className="text-xs h-8 border-zinc-300 dark:border-zinc-700"
+                              onClick={() => updateDoc(doc(db, 'assessments', assessment.id), { status: 'Contacted', updatedAt: new Date().toISOString() })}
+                            >
+                              Mark as Contacted
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              className="text-xs h-8 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-bold"
+                              onClick={() => updateDoc(doc(db, 'assessments', assessment.id), { status: 'Scheduled', updatedAt: new Date().toISOString() })}
+                            >
+                              Mark as Scheduled
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {(assessment.status === 'Contacted' || assessment.status === 'Scheduled') && (
+                        <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 space-y-3">
+                          {completingAssessmentId === assessment.id ? (
+                            <div className="bg-zinc-50 dark:bg-zinc-900/60 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800 space-y-2.5">
+                              <p className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">Complete Assessment & Log Findings</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <Input
+                                  placeholder="Body weight (kg, optional)"
+                                  type="number"
+                                  step="0.1"
+                                  value={assessmentWeight}
+                                  onChange={e => setAssessmentWeight(e.target.value)}
+                                  className="h-8 text-xs"
+                                />
+                                <Input
+                                  placeholder="Recommended PT package (optional)"
+                                  value={recommendedPackage}
+                                  onChange={e => setRecommendedPackage(e.target.value)}
+                                  className="h-8 text-xs"
+                                />
+                              </div>
+                              <Input
+                                placeholder="Assessment outcome notes & observations..."
+                                value={outcomeNotes}
+                                onChange={e => setOutcomeNotes(e.target.value)}
+                                className="h-8 text-xs"
+                              />
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-xs h-8"
+                                  onClick={() => {
+                                    setCompletingAssessmentId(null);
+                                    setOutcomeNotes('');
+                                    setRecommendedPackage('');
+                                    setAssessmentWeight('');
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  disabled={savingAssessment}
+                                  className="text-xs h-8 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-bold"
+                                  onClick={() => handleCompleteAssessment(assessment)}
+                                >
+                                  {savingAssessment ? 'Saving...' : 'Mark Completed'}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              {cleanPhone && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-8 text-foreground border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                  onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
+                                >
+                                  Open WhatsApp Chat
+                                </Button>
+                              )}
+                              <div className="flex items-center gap-2 ml-auto">
+                                {assessment.status === 'Contacted' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs h-8 border-zinc-300 dark:border-zinc-700"
+                                    onClick={() => updateDoc(doc(db, 'assessments', assessment.id), { status: 'Scheduled', updatedAt: new Date().toISOString() })}
+                                  >
+                                    Mark Scheduled
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  className="text-xs h-8 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 font-bold"
+                                  onClick={() => {
+                                    setCompletingAssessmentId(assessment.id);
+                                    setOutcomeNotes('');
+                                    setRecommendedPackage('');
+                                    setAssessmentWeight('');
+                                  }}
+                                >
+                                  Complete Assessment & Log Findings
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </CardContent>

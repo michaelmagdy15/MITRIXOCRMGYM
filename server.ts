@@ -31,6 +31,7 @@ import {
 } from './src/utils/bookingCutoff.js';
 import { desktopSyncRouter } from './src/routes/desktopSync.js';
 import { generateSlotBucketKeys, validateNutritionSlotRules } from './src/utils/nutritionBooking.js';
+import { parseSessionStartMs } from './src/utils/ptAttendance.js';
 import {
   defaultFirebaseConfig,
   strikeCrmConfig,
@@ -4673,7 +4674,22 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
           throw new Error("Coach is not available on this day");
         }
 
-        const capacity = dayConfig.capacities?.[sessionData.type] || 0;
+        const slotRule = dayConfig.slotRules?.[sessionData.startTime];
+        const blockedSlots: string[] = Array.isArray(dayConfig.blockedSlots) ? dayConfig.blockedSlots : [];
+        if (
+          blockedSlots.includes(`${sessionData.startTime}-${sessionData.endTime}`) ||
+          slotRule?.type === 'Break'
+        ) {
+          throw new Error("This time slot is marked as a coach break / unavailable");
+        }
+
+        if (slotRule) {
+          if (slotRule.type && slotRule.type !== 'Any' && slotRule.type !== sessionData.type) {
+            throw new Error(`Coach has dedicated the ${sessionData.startTime} slot to ${slotRule.type} sessions only`);
+          }
+        }
+
+        const capacity = slotRule?.capacity ?? dayConfig.capacities?.[sessionData.type] ?? 0;
         if (capacity === 0) {
           throw new Error(`Coach does not offer ${sessionData.type} sessions on this day`);
         }
@@ -4795,6 +4811,8 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
           coachId: sessionData.coachId,
           trainerId: sessionData.coachId, // Ensure backwards compatibility for legacy components
           status: 'Scheduled',
+          deductedOnBook: true,
+          entitlementId: validEntRef?.id || null,
           createdAt: new Date().toISOString()
         };
         transaction.set(newSessionRef, newSession);
@@ -4838,36 +4856,62 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
 
         const clientRef = db.collection("clients").doc(session.clientId);
         const clientDoc = await transaction.get(clientRef);
-        
-        if (clientDoc.exists) {
-          const client = clientDoc.data()!;
-          const updateData: any = {};
-          
-          if (session.packageId && client.packages) {
-            const packagesCopy = [...client.packages];
-            const pkgIdx = packagesCopy.findIndex((p: any) => p.id === session.packageId);
-            if (pkgIdx !== -1) {
-              if (typeof packagesCopy[pkgIdx].sessionsRemaining === 'number') {
-                packagesCopy[pkgIdx].sessionsRemaining += 1;
-                updateData.packages = packagesCopy;
-              }
-            }
-          } else if (typeof client.sessionsRemaining === 'number') {
-             updateData.sessionsRemaining = client.sessionsRemaining + 1;
-          }
+        const entRef = session.entitlementId ? db.collection("entitlements").doc(session.entitlementId) : null;
+        const entDoc = entRef ? await transaction.get(entRef) : null;
 
-          if (Object.keys(updateData).length > 0) {
-            transaction.update(clientRef, updateData);
+        const sessionStartMs = parseSessionStartMs(session.date, session.time || session.startTime, session.startTimeIso);
+        const isLateCancel = !isNaN(sessionStartMs) && (sessionStartMs - Date.now() < 12 * 60 * 60 * 1000);
+
+        if (!isLateCancel) {
+          if (entDoc && entDoc.exists && entRef) {
+            const entData = entDoc.data()!;
+            if (entData.sessionsTotal !== 'unlimited' && typeof entData.sessionsUsed === 'number') {
+              transaction.update(entRef, {
+                sessionsUsed: Math.max(0, entData.sessionsUsed - 1)
+              });
+            }
+          } else if (clientDoc.exists) {
+            const client = clientDoc.data()!;
+            const updateData: any = {};
+
+            if (session.packageId && client.packages) {
+              const packagesCopy = [...client.packages];
+              const pkgIdx = packagesCopy.findIndex((p: any) => p.id === session.packageId);
+              if (pkgIdx !== -1) {
+                if (typeof packagesCopy[pkgIdx].sessionsRemaining === 'number') {
+                  packagesCopy[pkgIdx].sessionsRemaining += 1;
+                  updateData.packages = packagesCopy;
+                }
+              }
+            } else if (typeof client.sessionsRemaining === 'number') {
+              updateData.sessionsRemaining = client.sessionsRemaining + 1;
+            }
+
+            if (typeof client.ptSessionsRemaining === 'number') {
+              updateData.ptSessionsRemaining = client.ptSessionsRemaining + 1;
+            }
+            if (typeof client.usedSessions === 'number') {
+              updateData.usedSessions = Math.max(0, client.usedSessions - 1);
+            }
+
+            if (Object.keys(updateData).length > 0) {
+              transaction.update(clientRef, updateData);
+            }
           }
         }
 
-        transaction.update(sessionRef, { status: 'Cancelled' });
-        
+        transaction.update(sessionRef, isLateCancel
+          ? { status: 'Cancelled', forfeitedLateCancel: true }
+          : { status: 'Cancelled' }
+        );
+
         transaction.set(db.collection("auditLogs").doc(), {
           action: "UPDATE",
           entityType: "SESSION",
           entityId: sessionId,
-          details: `Cancelled session and refunded to package`,
+          details: isLateCancel
+            ? `Cancelled session (<12h notice, token forfeited)`
+            : `Cancelled session and refunded to package`,
           timestamp: new Date().toISOString(),
           userId: req.user?.uid || "system",
           userName: req.user?.email || "System API"
@@ -4923,7 +4967,22 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
           throw new Error("Coach is not available on this day");
         }
 
-        const capacity = dayConfig.capacities?.[session.type] || 0;
+        const slotRule = dayConfig.slotRules?.[newStartTime];
+        const blockedSlots: string[] = Array.isArray(dayConfig.blockedSlots) ? dayConfig.blockedSlots : [];
+        if (
+          blockedSlots.includes(`${newStartTime}-${newEndTime}`) ||
+          slotRule?.type === 'Break'
+        ) {
+          throw new Error("This time slot is marked as a coach break / unavailable");
+        }
+
+        if (slotRule) {
+          if (slotRule.type && slotRule.type !== 'Any' && slotRule.type !== session.type) {
+            throw new Error(`Coach has dedicated the ${newStartTime} slot to ${slotRule.type} sessions only`);
+          }
+        }
+
+        const capacity = slotRule?.capacity ?? dayConfig.capacities?.[session.type] ?? 0;
         if (capacity === 0) {
           throw new Error(`Coach does not offer ${session.type} sessions on this day`);
         }

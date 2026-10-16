@@ -74,17 +74,16 @@ export default function PayoutCalculator({ coachId, coachName, onClose }: Payout
     const lastDay = new Date(Number(year), Number(month), 0).getDate();
     const endDate = `${year}-${month}-${lastDay}`;
     
-    // Fetch completed PT sessions
+    // Fetch completed/attended PT sessions
     const sessionsRef = collection(db, 'sessions');
     const qSessions = query(
       sessionsRef, 
-      where('coachId', '==', coachId),
-      where('status', '==', 'Completed')
+      where('coachId', '==', coachId)
     );
     const sessionsSnap = await getDocs(qSessions);
     const sessions = sessionsSnap.docs
       .map(d => d.data() as Session)
-      .filter(s => s.date >= startDate && s.date <= endDate);
+      .filter(s => (s.status === 'Completed' || s.status === 'Attended') && s.date >= startDate && s.date <= endDate);
 
     // Fetch completed Classes
     const classesRef = collection(db, 'classSchedules');

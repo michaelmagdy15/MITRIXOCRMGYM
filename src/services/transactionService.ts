@@ -1,9 +1,9 @@
 import { runTransaction, doc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
 import { addAuditLog } from './auditService';
-import { buildEntitlementPayload } from './entitlementService';
+import { buildEntitlementPayload, inferEntitlementType } from './entitlementService';
 import { PaymentCategory, resolvePaymentCategory } from '../utils/paymentCategories';
 import { toCanonicalBranchId } from '../utils/memberCategories';
 import { normalizeBranchName } from '../utils/branchUtils';
@@ -519,6 +519,25 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
             createdByName: auditCreatedByName,
           };
           nextPackages.push(complimentaryPtPackage);
+
+          if (inferEntitlementType(params.systemPackage.name) !== 'pt') {
+            const compPtEntitlementRef = doc(collection(db, 'entitlements'));
+            transaction.set(compPtEntitlementRef, cleanData({
+              id: compPtEntitlementRef.id,
+              memberId: params.clientId,
+              productId: `${params.systemPackage.id}-comp-pt`,
+              productName: 'Complimentary PT (' + params.packageType + ')',
+              type: 'pt',
+              status: 'active',
+              sessionsTotal: freePtSessions,
+              sessionsUsed: 0,
+              validFrom: resolvedStartDateIso,
+              validUntil: resolvedEndDate,
+              paymentId: paymentRef.id,
+              createdAt: nowIso,
+              tenantId: getTenantId()
+            }));
+          }
         }
       }
 
