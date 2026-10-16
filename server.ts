@@ -211,6 +211,19 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
           return;
         }
       }
+
+      if (userDoc.exists) {
+        const tenantRole = String(userDoc.data()?.role || '');
+        if (tenantRole && (decodedToken.role !== tenantRole || decodedToken.tenantId !== resolvedTenantId)) {
+          try {
+            const existing = (await admin.auth().getUser(decodedToken.uid)).customClaims || {};
+            await admin.auth().setCustomUserClaims(decodedToken.uid, { ...existing, role: tenantRole, tenantId: resolvedTenantId });
+            (req as any).claimsUpdated = true;
+          } catch (claimErr) {
+            console.error('[Auth] Failed to sync custom claims:', claimErr);
+          }
+        }
+      }
     }
 
     next();
@@ -2781,7 +2794,12 @@ async function startServer() {
     return { db, userId: userId as string, user };
   };
 
-  app.get('/api/call-center/logs', requireAuth, async (req, res) => {
+  // Syncs {role, tenantId} custom claims (done inside requireAuth) so Storage rules can verify staff + tenant.
+app.post('/api/auth/sync-claims', requireAuth, (req, res) => {
+  res.json({ ok: true, refreshed: Boolean((req as any).claimsUpdated) });
+});
+
+app.get('/api/call-center/logs', requireAuth, async (req, res) => {
     try {
       const access = await getAuthorizedInzanCallCenterDb(req, res);
       if (!access) return;

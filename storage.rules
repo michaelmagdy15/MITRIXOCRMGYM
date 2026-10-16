@@ -2,6 +2,14 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // Staff of the tenant in the path. role/tenantId are custom claims synced by server requireAuth.
+    function isTenantStaff(tenantId) {
+      return request.auth != null
+        && request.auth.token.tenantId == tenantId
+        && request.auth.token.role in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'owner',
+                                       'rep', 'sales_rep', 'coach', 'staff', 'sales', 'frontdesk', 'receptionist'];
+    }
+
     // User avatars — each user can only read/write their own avatar
     match /avatars/{userId} {
       allow read:  if request.auth != null;
@@ -31,16 +39,12 @@ service firebase.storage {
     }
 
     // Member documents (IDs, contracts, medical reports) — tenant-scoped.
-    // NOTE: Storage rules cannot read named tenant Firestore databases and no role
-    // custom claims are issued yet, so staff role cannot be verified here.
-    // Mitigations: no listing (files reachable only by exact, random path), create-only
-    // (no overwrite/delete from clients), strict size + type limits.
-    // TODO(security): issue {role, tenantId} custom claims and require
-    // request.auth.token.tenantId == tenantId && staff role.
+    // Access requires staff of this tenant via {role, tenantId} custom claims (synced in server requireAuth).
+    // Also: no listing, create-only from clients, strict size + type limits.
     match /tenants/{tenantId}/member_documents/{clientId}/{fileName} {
-      allow get: if request.auth != null;
+      allow get: if isTenantStaff(tenantId);
       allow list: if false;
-      allow create: if request.auth != null
+      allow create: if isTenantStaff(tenantId)
                    && request.resource.size < 15 * 1024 * 1024
                    && (request.resource.contentType.matches('image/.*')
                        || request.resource.contentType == 'application/pdf'
@@ -51,9 +55,9 @@ service firebase.storage {
 
     // Master class profile images — tenant-scoped, images only.
     match /tenants/{tenantId}/master_classes/{fileName} {
-      allow get: if request.auth != null;
+      allow get: if request.auth != null && request.auth.token.tenantId == tenantId;
       allow list: if false;
-      allow create: if request.auth != null
+      allow create: if isTenantStaff(tenantId)
                    && request.resource.size < 5 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
       allow update, delete: if false;

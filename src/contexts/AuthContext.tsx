@@ -124,6 +124,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (userDoc.exists()) {
             userData = userDoc.data() as User;
+            // Keep auth custom claims (role, tenantId) in sync for Storage rules; refresh token if updated.
+            firebaseUser.getIdToken().then(t => fetch('/api/auth/sync-claims', { method: 'POST', headers: { Authorization: `Bearer ${t}` } }))
+              .then(r => r.ok ? r.json() : null)
+              .then(d => (d?.refreshed ? firebaseUser.getIdToken(true) : undefined))
+              .catch(err => console.warn('[Auth] Claim sync failed:', err));
             userData.id = userId;
             if (userData.status === 'nonworking') {
               setCurrentUser(null);
