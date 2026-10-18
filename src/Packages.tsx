@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Package, Branch } from './types';
-import { Plus, Edit, Upload, X, Archive, RotateCcw, HelpCircle, ChevronDown, ChevronUp, Layers, Tag, FolderCog, PauseCircle, PlayCircle, Target, Calendar, User as UserIcon } from 'lucide-react';
+import { Plus, Edit, Upload, X, Archive, RotateCcw, HelpCircle, ChevronDown, ChevronUp, Layers, Tag, FolderCog, PauseCircle, PlayCircle, Target, Calendar, User as UserIcon, Search, ArrowUpDown } from 'lucide-react';
 import { storage, getTenantId } from './firebase';
 import { isTenantInzan } from './utils/inzanOrg';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -71,6 +71,9 @@ export default function Packages() {
   const [packageType, setPackageType] = useState<Package['type']>('Group');
   const [category, setCategory] = useState<string>('Gym Memberships');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'default' | 'price-asc' | 'price-desc' | 'duration-desc' | 'name-asc' | 'type'>('default');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'Primary' | 'Secondary' | 'Private' | 'Group'>('ALL');
   const [imageUrl, setImageUrl] = useState('');
   const [enhancements, setEnhancements] = useState<PackageEnhancementsState>(DEFAULT_PACKAGE_ENHANCEMENTS);
   const [uploading, setUploading] = useState(false);
@@ -409,6 +412,38 @@ export default function Packages() {
       if (selectedCategory === 'ALL') return true;
       const cat = pkg.category || (pkg.type === 'Private' ? 'Personal Training (PT)' : 'Gym Memberships');
       return cat === selectedCategory;
+    })
+    .filter(pkg => {
+      if (!isInzan || typeFilter === 'ALL') return true;
+      if (typeFilter === 'Primary' || typeFilter === 'Secondary') {
+        const h = pkg.hierarchy || 'Primary';
+        return h === typeFilter;
+      }
+      return pkg.type === typeFilter;
+    })
+    .filter(pkg => {
+      if (!isInzan || !searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      const cat = pkg.category || (pkg.type === 'Private' ? 'Personal Training (PT)' : 'Gym Memberships');
+      const h = pkg.hierarchy || 'Primary';
+      return `${pkg.name} ${cat} ${h} ${pkg.type || ''} ${pkg.price} ${pkg.expiryDays}`.toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      if (!isInzan || sortBy === 'default') return 0;
+      if (sortBy === 'price-asc') return (a.price || 0) - (b.price || 0);
+      if (sortBy === 'price-desc') return (b.price || 0) - (a.price || 0);
+      if (sortBy === 'duration-desc') return (b.expiryDays || 0) - (a.expiryDays || 0);
+      if (sortBy === 'name-asc') return (a.name || '').localeCompare(b.name || '');
+      if (sortBy === 'type') {
+        const hA = a.hierarchy || 'Primary';
+        const hB = b.hierarchy || 'Primary';
+        if (hA !== hB) return hA === 'Primary' ? -1 : 1;
+        const cA = a.category || '';
+        const cB = b.category || '';
+        if (cA !== cB) return cA.localeCompare(cB);
+        return (a.price || 0) - (b.price || 0);
+      }
+      return 0;
     });
 
   return (
@@ -602,6 +637,63 @@ export default function Packages() {
             </div>
           </div>
         </Card>
+      )}
+
+      {/* Search & Sort Toolbar (Inzan) */}
+      {isInzan && (
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/20 border border-border/60 p-3 rounded-2xl">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search packages by name, category, Primary/Secondary, or price..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 bg-background rounded-xl text-sm"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 bg-background border rounded-xl p-1">
+              {(['ALL', 'Primary', 'Secondary', 'Private', 'Group'] as const).map((tf) => (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={() => setTypeFilter(tf)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                    typeFilter === tf
+                      ? 'bg-primary text-primary-foreground shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {tf === 'ALL' ? 'All Types' : tf}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="h-9 rounded-xl border border-input bg-background px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="default">Sort: Default Order</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+                <option value="type">Type: Primary → Secondary</option>
+                <option value="duration-desc">Duration: Longest First</option>
+                <option value="name-asc">Name: A → Z</option>
+              </select>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Category Filter Pills */}

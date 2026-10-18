@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign, Flame } from 'lucide-react';
+import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign, Flame, UserCheck } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { getTenantId } from '../firebase';
 import CoachHome from './CoachHome';
 import CoachSchedule from './CoachSchedule';
 import CoachClients from './CoachClients';
@@ -13,11 +14,12 @@ import CoachProfile from './CoachProfile';
 import CoachClassPortal from './CoachClassPortal';
 import CoachEarnings from './CoachEarnings';
 import CoachFloorMode from './CoachFloorMode';
+import CoachFitnessManagerView from './CoachFitnessManagerView';
 import { Client, Session } from '../types';
 
-export type CoachTab = 'home' | 'classes' | 'schedule' | 'members' | 'sessions' | 'earnings' | 'profile' | 'floor';
+export type CoachTab = 'home' | 'triage' | 'classes' | 'schedule' | 'members' | 'sessions' | 'earnings' | 'profile' | 'floor';
 
-const NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
+const BASE_NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Home',     icon: <Home className="h-5 w-5" /> },
   { tab: 'classes',  label: 'Classes',  icon: <Flame className="h-5 w-5" /> },
   { tab: 'schedule', label: 'Schedule', icon: <Calendar className="h-5 w-5" /> },
@@ -31,8 +33,46 @@ export default function CoachPortal() {
   const { currentUser, logout } = useAuth();
   const { branding } = useSettings();
   const { theme, toggleTheme, themeLocked } = useTheme();
+
+  const isInzan = useMemo(() => {
+    const t = getTenantId().toLowerCase();
+    return t.includes('inzan') || t === 'db-inzanathletics' || (branding?.companyName || '').toLowerCase().includes('inzan');
+  }, [branding?.companyName]);
+
+  const canAccessFitnessManagerBoard = useMemo(() => {
+    if (!isInzan || !currentUser) return false;
+    const roleStr = String(currentUser.role || '').toLowerCase();
+    const nameStr = String(currentUser.name || '').toLowerCase();
+    const specStr = String((currentUser as any).specialty || (currentUser as any).department || '').toLowerCase();
+    return (
+      roleStr === 'fitness_manager' ||
+      roleStr === 'admin' ||
+      roleStr === 'crm_admin' ||
+      roleStr === 'super_admin' ||
+      roleStr === 'manager' ||
+      specStr.includes('fitness manager') ||
+      specStr.includes('head coach') ||
+      nameStr.includes('fitness manager')
+    );
+  }, [isInzan, currentUser]);
+
   const [activeTab, setActiveTab] = useState<CoachTab>('home');
   const [floorContext, setFloorContext] = useState<{ client?: Client | null; session?: Session | null } | null>(null);
+
+  useEffect(() => {
+    if (canAccessFitnessManagerBoard && String(currentUser?.role || '').toLowerCase() === 'fitness_manager') {
+      setActiveTab('triage');
+    }
+  }, [canAccessFitnessManagerBoard, currentUser?.role]);
+
+  const navItems = useMemo(() => {
+    if (!canAccessFitnessManagerBoard) return BASE_NAV_ITEMS;
+    return [
+      BASE_NAV_ITEMS[0]!,
+      { tab: 'triage' as CoachTab, label: 'FM Triage', icon: <UserCheck className="h-5 w-5" /> },
+      ...BASE_NAV_ITEMS.slice(1),
+    ];
+  }, [canAccessFitnessManagerBoard]);
 
   const handleStartFloor = (client?: Client | null, session?: Session | null) => {
     setFloorContext({ client: client || null, session: session || null });
@@ -49,10 +89,22 @@ export default function CoachPortal() {
             <h1 className="text-lg font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
           )}
           <Badge variant="outline" className="text-[10px] font-bold tracking-widest uppercase text-primary border-primary/30">
-            Coach Portal
+            {canAccessFitnessManagerBoard && activeTab === 'triage' ? 'Fitness Manager Portal' : 'Coach Portal'}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          {canAccessFitnessManagerBoard && (
+            <Button
+              variant={activeTab === 'triage' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setActiveTab(activeTab === 'triage' ? 'home' : 'triage')}
+              className="h-8 text-xs font-bold gap-1.5 rounded-xl border-primary/40 shadow-xs"
+            >
+              <UserCheck className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Fitness Manager</span> Triage
+            </Button>
+          )}
+
           {/* Quick Floor Mode Launcher Button */}
           <Button
             variant={activeTab === 'floor' ? 'default' : 'outline'}
@@ -81,6 +133,7 @@ export default function CoachPortal() {
 
       <main className="flex-1 container mx-auto px-3 sm:px-4 py-6 pb-24 max-w-4xl">
         {activeTab === 'home'     && <CoachHome onNavigate={setActiveTab} onStartFloor={handleStartFloor} />}
+        {activeTab === 'triage'   && canAccessFitnessManagerBoard && <CoachFitnessManagerView />}
         {activeTab === 'classes'  && <CoachClassPortal />}
         {activeTab === 'schedule' && <CoachSchedule onStartFloor={handleStartFloor} />}
         {activeTab === 'members'  && <CoachClients onStartFloor={handleStartFloor} />}
@@ -97,7 +150,7 @@ export default function CoachPortal() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1.5 shadow-lg backdrop-blur-md bg-opacity-90">
-        {NAV_ITEMS.map(({ tab, label, icon }) => {
+        {navItems.map(({ tab, label, icon }) => {
           const isActive = activeTab === tab;
           return (
             <button

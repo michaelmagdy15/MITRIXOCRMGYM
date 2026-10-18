@@ -136,6 +136,41 @@ export default function CoachSessions() {
     }
   };
 
+  const handleResolveReschedule = async (session: Session, approve: boolean) => {
+    const req = (session as any).rescheduleRequest;
+    if (!req) return;
+    try {
+      const nowIso = new Date().toISOString();
+      if (approve) {
+        await updateDoc(doc(db, 'sessions', session.id), {
+          date: req.proposedDate || session.date,
+          startTime: req.proposedTime || session.startTime,
+          time: req.proposedTime || session.time,
+          status: 'Scheduled',
+          rescheduleRequest: {
+            ...req,
+            status: 'Approved',
+            resolvedAt: nowIso,
+            resolvedBy: currentUser?.name || 'Coach',
+          },
+          updatedAt: nowIso,
+        });
+      } else {
+        await updateDoc(doc(db, 'sessions', session.id), {
+          rescheduleRequest: {
+            ...req,
+            status: 'Rejected',
+            resolvedAt: nowIso,
+            resolvedBy: currentUser?.name || 'Coach',
+          },
+          updatedAt: nowIso,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to resolve reschedule request:', err);
+    }
+  };
+
   const handleCompleteAssessment = async (assessment: Assessment) => {
     setSavingAssessment(true);
     try {
@@ -254,6 +289,11 @@ export default function CoachSessions() {
                                 {session.type}
                               </Badge>
                             )}
+                            {(session as any).isFreePtSession && (
+                              <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-200 font-bold">
+                                Free PT Quota
+                              </Badge>
+                            )}
                           </div>
                           <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
                             <span>{formattedDate}</span>
@@ -267,6 +307,40 @@ export default function CoachSessions() {
                           {style.icon} {session.status}
                         </Badge>
                       </div>
+
+                      {(session as any).rescheduleRequest?.status === 'PendingCoachApproval' && (
+                        <div className="mt-3 p-3 rounded-lg border border-amber-300 bg-amber-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="text-xs">
+                            <span className="font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider block">
+                              Member Requested Reschedule
+                            </span>
+                            <span className="text-foreground">
+                              Proposed Slot:{' '}
+                              <strong className="font-mono">
+                                {(session as any).rescheduleRequest.proposedDate} at {(session as any).rescheduleRequest.proposedTime}
+                              </strong>
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                              onClick={() => handleResolveReschedule(session, true)}
+                            >
+                              Approve New Time
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs border-red-300 text-red-600 hover:bg-red-50 font-bold"
+                              onClick={() => handleResolveReschedule(session, false)}
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
                       {session.status === 'Scheduled' && (
                         <div className="flex gap-2 mt-3">
                           <Button size="sm" variant="default" className="gap-1 bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 h-8" onClick={() => handleStatusUpdate(session.id, 'Completed')}>

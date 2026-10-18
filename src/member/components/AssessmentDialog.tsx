@@ -125,6 +125,23 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
         }
       }
 
+      const freePtCount =
+        (client as any).freePtSessionsTotal ??
+        (Array.isArray(client.packages)
+          ? client.packages.reduce((acc: number, p: any) => acc + (Number(p?.freePtSessions) || 0), 0)
+          : 0);
+      const freePtUsed = (client as any).freePtSessionsUsed ?? 0;
+      const freePtRemaining = Math.max(0, freePtCount - freePtUsed);
+      const hasPaidPt =
+        (typeof client.ptSessionsRemaining === 'number' && client.ptSessionsRemaining > 0) ||
+        (Array.isArray(client.packages) &&
+          client.packages.some(
+            (p: any) =>
+              p?.status === 'Active' &&
+              (/pt|private|trainer/i.test(`${p?.category || ''} ${p?.packageName || ''}`) || p?.type === 'pt') &&
+              (Number(p?.sessionsRemaining) || 0) > 0
+          ));
+
       await addDoc(collection(db, 'assessments'), {
         clientId: client.id || 'guest',
         clientName: fullName.trim() || client.name || 'Anonymous',
@@ -142,6 +159,18 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
         referralSource: hasCoachPreference === 'Yes' ? referralSource : undefined,
         preferredCoachId: resolvedCoachId,
         preferredCoachName: hasCoachPreference === 'Yes' ? (resolvedCoachName || coachName) : 'Any Coach',
+        // In Inzan Athletics, all assessments route to Fitness Manager triage first; assignedCoachId stays null until Fitness Manager assigns
+        assignedCoachId: isInzan ? null : resolvedCoachId,
+        assignedCoachName: isInzan ? null : (hasCoachPreference === 'Yes' ? (resolvedCoachName || coachName) : null),
+        routedTo: isInzan ? 'fitness_manager' : 'coach',
+        triageStatus: isInzan ? 'AwaitingFitnessManager' : 'Assigned',
+        freePtSessionsRemaining: freePtRemaining,
+        hasPaidPtPackage: hasPaidPt,
+        ptEntitlementSummary: hasPaidPt
+          ? 'Paid PT Package Active'
+          : freePtRemaining > 0
+          ? `${freePtRemaining} Free PT Sessions Available`
+          : 'No PT Package — Awaiting Payment',
         preferredDate: isInzan ? timePeriod : (preferredDate || ''),
         preferredTime: isInzan ? preferredHour : (preferredTime || ''),
         status: 'Pending',
@@ -149,6 +178,18 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
+
+      if (isInzan && client.id && client.id !== 'guest') {
+        try {
+          const { doc: fsDoc, updateDoc } = await import('firebase/firestore');
+          await updateDoc(fsDoc(db, 'clients', client.id), {
+            ptAssessmentStatus: 'PendingFitnessManager',
+            ptAssessmentRequestedAt: new Date().toISOString(),
+          });
+        } catch (updateErr) {
+          console.warn('Could not update client ptAssessmentStatus:', updateErr);
+        }
+      }
 
       setSuccess(true);
       setTimeout(() => {

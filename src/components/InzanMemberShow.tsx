@@ -20,10 +20,10 @@ import { safeFormatDate, safeGetAge, toValidDate } from '../utils/dateUtils';
 import { Textarea } from '@/components/ui/textarea';
 import { db, storage } from '../firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, query, where, onSnapshot, addDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, orderBy, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { SalesTransferLog, TrainerTransferLog } from '../types';
 import { toast } from 'sonner';
-import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette, ArrowLeft } from 'lucide-react';
+import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette, ArrowLeft, Gift, Sparkles, ShieldCheck, Edit3, RefreshCw } from 'lucide-react';
 import { compressImage } from '../utils/imageUtils';
 import EntitlementManager from './EntitlementManager';
 import { AdjustPackageDatesDialog, canOverridePackageDates, buildPackageUpdates } from './AdjustPackageDatesDialog';
@@ -93,6 +93,331 @@ export function InzanMemberShow({
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Client>>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // Unlimited Referrals state (Overview quick-action)
+  const [showAddReferralForm, setShowAddReferralForm] = useState(false);
+  const [referralName, setReferralName] = useState('');
+  const [referralPhone, setReferralPhone] = useState('');
+  const [referralNotes, setReferralNotes] = useState('');
+  const [isSubmittingReferral, setIsSubmittingReferral] = useState(false);
+
+  // Per-Package Same-Day Edit & Transfer state
+  const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
+  const [pkgSearchFilter, setPkgSearchFilter] = useState('');
+  const [editPkgForm, setEditPkgForm] = useState<{ packageName: string; startDate: string; endDate: string; sessionsRemaining: string }>({
+    packageName: '',
+    startDate: '',
+    endDate: '',
+    sessionsRemaining: '',
+  });
+  const [transferPkgId, setTransferPkgId] = useState<string | null>(null);
+  const [transferTargetQuery, setTransferTargetQuery] = useState('');
+  const [isTransferringPkg, setIsTransferringPkg] = useState(false);
+
+  // Instant Member Feedback state (editable by any staff member on Overview)
+  const [quickFeedbackText, setQuickFeedbackText] = useState<string>(
+    (client as any).frontDeskNote || client.legacyNotes || ''
+  );
+  const [newFeedbackEntry, setNewFeedbackEntry] = useState('');
+  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+
+  React.useEffect(() => {
+    setQuickFeedbackText((client as any).frontDeskNote || client.legacyNotes || '');
+  }, [client.id, (client as any).frontDeskNote, client.legacyNotes]);
+
+  const isSecondaryPackageItem = (pkg: any): boolean => {
+    if (!pkg) return false;
+    if (pkg.hierarchyType === 'Secondary' || pkg.hierarchy === 'Secondary') return true;
+    const catMatch = packages.find(
+      cp => (cp.name || '').trim().toLowerCase() === String(pkg.packageName || pkg.name || '').trim().toLowerCase() || cp.id === pkg.packageId
+    ) as any;
+    if (catMatch?.hierarchyType === 'Secondary' || catMatch?.hierarchy === 'Secondary') return true;
+    return /\bpt\b|private\s*train|personal\s*train|group\s*pt|semi\s*private|nutrition|physiotherapy|massage|assessment|recovery/i.test(
+      `${pkg.category || catMatch?.category || ''} ${pkg.packageName || pkg.name || ''}`
+    );
+  };
+
+  const getDaysRemainingToRenew = (endDateStr?: string | null): number => {
+    if (!endDateStr) return Number((client as any).daysRemaining || 0);
+    const endDt = toValidDate(endDateStr);
+    if (!endDt) return Number((client as any).daysRemaining || 0);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const endStart = new Date(endDt);
+    endStart.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round((endStart.getTime() - todayStart.getTime()) / 86400000));
+  };
+
+  const handleSaveMemberFeedback = async () => {
+    setIsSavingFeedback(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const authorName = currentUser?.name || currentUser?.email || 'Staff';
+      const updates: Record<string, any> = {
+        frontDeskNote: quickFeedbackText.trim(),
+        legacyNotes: quickFeedbackText.trim(),
+        lastFeedbackBy: authorName,
+        lastFeedbackAt: nowIso,
+      };
+      if (newFeedbackEntry.trim()) {
+        updates.comments = [
+          ...(client.comments || []),
+          {
+            id: `fb_${Date.now()}`,
+            text: `[Member Feedback] ${newFeedbackEntry.trim()}`,
+            date: nowIso,
+            author: authorName,
+          },
+        ];
+      }
+      await onUpdateClient(client.id, updates as Partial<Client>);
+      setNewFeedbackEntry('');
+      toast.success('Member feedback saved & logged.');
+    } catch (err) {
+      console.error('Failed to save member feedback:', err);
+      toast.error('Failed to save member feedback.');
+    } finally {
+      setIsSavingFeedback(false);
+    }
+  };
+
+  const resolvePackageBenefits = (pkg: any) => {
+    const pkgNameNorm = String(pkg?.packageName || pkg?.name || client.packageType || '').trim().toLowerCase();
+    const catalogMatch = packages.find(
+      cp => (cp.name || '').trim().toLowerCase() === pkgNameNorm || cp.id === pkg?.packageId
+    ) as any;
+    const rawClient = client as any;
+    const pb = pkg?.benefits || {};
+    const cb = rawClient.benefits || {};
+    const catB = catalogMatch?.benefits || {};
+
+    const freezeTotal = Number(pb.freezeAllowanceDays ?? pkg?.freezeAllowanceDays ?? catB.freezeAllowanceDays ?? catalogMatch?.freezeAllowanceDays ?? cb.freezeAllowanceDays ?? rawClient.freezeAllowanceDays ?? 0);
+    const freezeUsed = Number(pb.freezeDaysUsed ?? pkg?.freezeDaysUsed ?? cb.freezeDaysUsed ?? rawClient.freezeDaysUsed ?? 0);
+    const invTotal = Number(pb.guestInvitations ?? pkg?.guestInvitations ?? catB.guestInvitations ?? catalogMatch?.guestInvitations ?? cb.guestInvitations ?? rawClient.guestInvitations ?? 0);
+    const invUsed = Number(pb.invitationsUsed ?? pkg?.invitationsUsed ?? cb.invitationsUsed ?? rawClient.invitationsUsed ?? 0);
+    const freePtTotal = Number(pb.freePtSessions ?? pkg?.freePtSessions ?? catB.freePtSessions ?? catalogMatch?.freePtSessions ?? cb.freePtSessions ?? rawClient.freePtSessions ?? rawClient.freePtSessionsTotal ?? 0);
+    const freePtUsed = Number(pb.freePtSessionsUsed ?? pkg?.freePtSessionsUsed ?? cb.freePtSessionsUsed ?? rawClient.freePtSessionsUsed ?? 0);
+    const classTotal = Number(pb.freeClassTrials ?? pkg?.freeClassTrials ?? catB.freeClassTrials ?? catalogMatch?.freeClassTrials ?? cb.freeClassTrials ?? rawClient.freeClassTrials ?? rawClient.freeClassTrialsTotal ?? 0);
+    const classUsed = Number(pb.classTrialsUsed ?? pkg?.classTrialsUsed ?? pkg?.freeClassTrialsUsed ?? cb.classTrialsUsed ?? rawClient.freeClassTrialsUsed ?? 0);
+
+    return {
+      freezeTotal,
+      freezeUsed,
+      freezeRem: Math.max(0, freezeTotal - freezeUsed),
+      invTotal,
+      invUsed,
+      invRem: Math.max(0, invTotal - invUsed),
+      freePtTotal,
+      freePtUsed,
+      freePtRem: Math.max(0, freePtTotal - freePtUsed),
+      classTotal,
+      classUsed,
+      classRem: Math.max(0, classTotal - classUsed),
+    };
+  };
+
+  const getSameDayEditState = (pkg: any) => {
+    const createdRaw = pkg?.createdAt || client.createdAt;
+    const createdDate = toValidDate(createdRaw);
+    const nowMs = Date.now();
+    const ageHours = createdDate ? (nowMs - createdDate.getTime()) / (1000 * 60 * 60) : 999;
+    const isWithin24h = ageHours >= 0 && ageHours <= 24;
+    const isFinanceConfirmed = Boolean(pkg?.financeConfirmed);
+    const canSameDayEdit = isWithin24h && !isFinanceConfirmed;
+    const hoursLeft = isWithin24h ? Math.max(1, Math.ceil(24 - ageHours)) : 0;
+    return {
+      isWithin24h,
+      isFinanceConfirmed,
+      canSameDayEdit,
+      hoursLeft,
+    };
+  };
+
+  const handleAddUnlimitedReferral = async () => {
+    if (!referralName.trim() || !referralPhone.trim()) {
+      toast.error('Please enter both Referral Name and Phone Number.');
+      return;
+    }
+    setIsSubmittingReferral(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const newRefEntry = {
+        id: `ref_${Date.now()}`,
+        name: referralName.trim(),
+        phone: referralPhone.trim(),
+        notes: referralNotes.trim(),
+        referredByClientId: client.id,
+        referredByMemberId: client.memberId || client.id,
+        referredByName: client.name,
+        createdAt: nowIso,
+        createdBy: currentUser?.name || 'Staff',
+      };
+      // 1. Add to leads collection so sales team can follow up
+      await addDoc(collection(db, 'leads'), {
+        name: referralName.trim(),
+        phone: referralPhone.trim(),
+        notes: referralNotes.trim() ? `Member Referral from ${client.name} (#${client.memberId || client.id}): ${referralNotes.trim()}` : `Referred by member ${client.name} (#${client.memberId || client.id})`,
+        source: 'Member Referral',
+        referredBy: client.id,
+        referredByName: client.name,
+        status: 'New',
+        branch: client.branch || currentUser?.branch || 'Inzan Athletics',
+        createdAt: nowIso,
+      });
+      // 2. Append to member's unlimited referrals list on client doc
+      const existingRefs = Array.isArray((client as any).referrals) ? (client as any).referrals : [];
+      await onUpdateClient(client.id, {
+        referrals: [newRefEntry, ...existingRefs],
+      } as any);
+      setReferralName('');
+      setReferralPhone('');
+      setReferralNotes('');
+      setShowAddReferralForm(false);
+      toast.success(`Referral "${newRefEntry.name}" added (Unlimited Referrals — 0 guest quota used)!`);
+    } catch (err) {
+      console.error('Failed to add referral:', err);
+      toast.error('Failed to save referral.');
+    } finally {
+      setIsSubmittingReferral(false);
+    }
+  };
+
+  const handleSaveSameDayPkgEdit = async (pkgId: string) => {
+    const targetPkg = (client.packages || []).find(p => p.id === pkgId);
+    const editCheck = getSameDayEditState(targetPkg || {});
+    if (!editCheck.canSameDayEdit) {
+      toast.error('Package is locked (>24 hours since creation or confirmed by Accounting).');
+      setEditingPkgId(null);
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const editorName = currentUser?.name || currentUser?.email || 'Staff';
+    const currentList = Array.isArray(client.packages) && client.packages.length > 0
+      ? [...client.packages]
+      : [{
+          id: pkgId,
+          packageId: '',
+          packageName: client.packageType || 'Membership Package',
+          startDate: client.joinDate || nowIso.slice(0, 10),
+          endDate: client.expiryDate || nowIso.slice(0, 10),
+          sessionsTotal: client.totalSessions || 'unlimited',
+          sessionsRemaining: client.sessionsRemaining ?? 'unlimited',
+          status: (client.status === 'Active' ? 'Active' : 'Expired') as any,
+          createdAt: client.createdAt || nowIso,
+          createdBy: editorName,
+          createdByName: editorName,
+        }];
+
+    const updated = currentList.map(p => {
+      if (p.id !== pkgId) return p;
+      const parsedRem = editPkgForm.sessionsRemaining === 'unlimited' || editPkgForm.sessionsRemaining === ''
+        ? p.sessionsRemaining
+        : Number(editPkgForm.sessionsRemaining);
+      return {
+        ...p,
+        packageName: editPkgForm.packageName || p.packageName,
+        startDate: editPkgForm.startDate || p.startDate,
+        endDate: editPkgForm.endDate || p.endDate,
+        sessionsRemaining: parsedRem as any,
+        updatedAt: nowIso,
+        lastModifiedAt: nowIso,
+        lastModifiedBy: editorName,
+      };
+    });
+
+    await onUpdateClient(client.id, buildPackageUpdates(updated as any) as Partial<Client>);
+    await addAuditLog(
+      'UPDATE',
+      'PACKAGE_RECORD',
+      client.id,
+      `Same-day (<24h) package edit by ${editorName} on "${editPkgForm.packageName}" for ${client.name}`,
+      editorName
+    );
+    setEditingPkgId(null);
+    setPkgSearchFilter('');
+    toast.success(`Package updated within 24h window (logged by ${editorName}).`);
+  };
+
+  const handleToggleFinanceConfirmPkg = async (pkgId: string, confirmState: boolean) => {
+    const currentList = Array.isArray(client.packages) ? [...client.packages] : [];
+    const updated = currentList.map(p => p.id === pkgId ? {
+      ...p,
+      financeConfirmed: confirmState,
+      financeConfirmedAt: confirmState ? new Date().toISOString() : null,
+      financeConfirmedBy: confirmState ? (currentUser?.name || 'Finance') : null,
+    } : p);
+    await onUpdateClient(client.id, { packages: updated as any });
+    toast.success(confirmState ? 'Package confirmed by Accounting — same-day edits are now locked.' : 'Accounting lock removed.');
+  };
+
+  const handleExecutePackageTransfer = async (pkgId: string) => {
+    if (!transferTargetQuery.trim()) {
+      toast.error('Enter recipient Member ID, Phone, or Name.');
+      return;
+    }
+    setIsTransferringPkg(true);
+    try {
+      const qTerm = transferTargetQuery.trim().toLowerCase().replace(/^#/, '');
+      const snap = await getDocs(collection(db, 'clients'));
+      const allClients = snap.docs.map(d => ({ ...d.data(), id: d.id } as Client));
+      const targetClient = allClients.find(c =>
+        c.id !== client.id && (
+          String(c.memberId || '').toLowerCase() === qTerm ||
+          String(c.id).toLowerCase() === qTerm ||
+          (c.phone && c.phone.replace(/\D/g, '').includes(qTerm.replace(/\D/g, '')) && qTerm.replace(/\D/g, '').length >= 6) ||
+          (c.name && c.name.toLowerCase() === qTerm)
+        )
+      );
+      if (!targetClient) {
+        toast.error(`No matching recipient member found for "${transferTargetQuery}". Try their exact Member ID or Phone.`);
+        setIsTransferringPkg(false);
+        return;
+      }
+
+      const sourcePackages = Array.isArray(client.packages) ? [...client.packages] : [];
+      const pkgToMove = sourcePackages.find(p => p.id === pkgId);
+      if (!pkgToMove) {
+        toast.error('Package not found on source member.');
+        setIsTransferringPkg(false);
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const remainingSourcePackages = sourcePackages.filter(p => p.id !== pkgId);
+      const targetPackages = Array.isArray(targetClient.packages) ? [...targetClient.packages] : [];
+      const transferredPkg = {
+        ...pkgToMove,
+        transferredFromClientId: client.id,
+        transferredFromName: client.name,
+        transferredAt: nowIso,
+        transferredBy: currentUser?.name || 'Staff',
+      };
+
+      await onUpdateClient(client.id, buildPackageUpdates(remainingSourcePackages as any) as Partial<Client>);
+      await updateDoc(doc(db, 'clients', targetClient.id), {
+        ...buildPackageUpdates([transferredPkg as any, ...targetPackages]),
+        updatedAt: nowIso,
+      });
+
+      await addAuditLog(
+        'UPDATE',
+        'PACKAGE_RECORD',
+        client.id,
+        `Transferred package "${pkgToMove.packageName}" from ${client.name} to ${targetClient.name} (#${targetClient.memberId || targetClient.id})`,
+        currentUser?.name
+      );
+
+      setTransferPkgId(null);
+      setTransferTargetQuery('');
+      toast.success(`Transferred "${pkgToMove.packageName}" to ${targetClient.name} (#${targetClient.memberId || targetClient.id})!`);
+    } catch (err) {
+      console.error('Error transferring package:', err);
+      toast.error('Failed to transfer package.');
+    } finally {
+      setIsTransferringPkg(false);
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -339,14 +664,12 @@ export function InzanMemberShow({
           <div className="h-4 w-px bg-border hidden sm:block shrink-0" />
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
             {[
-              { id: 'member_data', label: 'Member Data' },
-              { id: 'package_data', label: 'Package Data' },
-              { id: 'financials', label: 'Financial Accounts List' },
-              { id: 'freezing', label: 'Freezing List' },
+              { id: 'member_data', label: 'Overview (User Details)' },
+              { id: 'package_data', label: 'Packages & Invites' },
+              { id: 'financials', label: 'Financials' },
+              { id: 'freezing', label: 'Freezing' },
               { id: 'activities', label: 'Activities' },
-              { id: 'invitations', label: 'Invitations & Referrals' },
               { id: 'files', label: 'Files' },
-              { id: 'others', label: 'Others' },
               { id: 'comments', label: 'Comments Log' },
               { id: 'transfers', label: 'Transfer History' },
               { id: 'entitlements', label: 'Entitlements' }
@@ -479,12 +802,12 @@ export function InzanMemberShow({
               ) : (
                 <>
                   <Unlock className="h-3.5 w-3.5 mr-1" />
-                  Edit Additional Info
+                  Edit User Details
                 </>
               )}
             </Button>
             <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/10 font-semibold">
-              <Lock className="h-3 w-3 mr-1" /> Core identity fields locked for security
+              <Lock className="h-3 w-3 mr-1" /> Packages Locked on Profile (&lt;24h rule in Packages tab)
             </Badge>
 
             <Button
@@ -492,12 +815,10 @@ export function InzanMemberShow({
               size="sm"
               className="h-8 bg-teal-600 hover:bg-teal-700 border-teal-500 text-white font-bold text-xs"
               onClick={() => {
-                const url = `${window.location.origin}/signup?ref=${client.referralCode || ''}`;
-                navigator.clipboard.writeText(url);
-                alert(`Referral Link copied: ${url}`);
+                setActiveTab('package_data');
               }}
             >
-              Referral
+              Packages &amp; Invites
             </Button>
             
             <Button
@@ -511,22 +832,248 @@ export function InzanMemberShow({
             >
               Staff Whatsapp
             </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 bg-pink-600 hover:bg-pink-700 border-pink-500 text-white font-bold text-xs"
-              onClick={() => alert('Sending package data via WhatsApp...')}
-            >
-              Send Package Data
-            </Button>
           </div>
         </div>
+
+        {/* Always-Visible Read-Only Primary & Secondary Package + Reconciled Quotas Banner */}
+        {(() => {
+          const rawC = client as any;
+          const allPkgs = Array.isArray(client.packages) ? client.packages : [];
+          const primaryPkg =
+            allPkgs.find(p => !isSecondaryPackageItem(p) && (p.status === 'Active' || (p.status as any) === 'Frozen' || p.status === 'Hold')) ||
+            allPkgs.find(p => !isSecondaryPackageItem(p)) ||
+            (client.packageType && !isSecondaryPackageItem({ packageName: client.packageType })
+              ? {
+                  packageName: rawC.primaryPackageName || client.packageType,
+                  status: client.status,
+                  startDate: client.startDate || client.joinDate,
+                  endDate: client.membershipExpiry || client.expiryDate,
+                  createdAt: client.createdAt,
+                  createdBy: rawC.salesName || 'System',
+                }
+              : null);
+
+          const secondaryPkgs = allPkgs.filter(p => isSecondaryPackageItem(p));
+          const activeSecondaryPkg =
+            secondaryPkgs.find(p => p.status === 'Active') ||
+            secondaryPkgs[0] ||
+            (rawC.secondaryPackageName
+              ? {
+                  packageName: rawC.secondaryPackageName,
+                  status: 'Active',
+                  sessionsRemaining: rawC.paidPtSessionsRemaining ?? 0,
+                  totalSessions: rawC.paidPtSessionsTotal ?? 0,
+                  createdAt: client.createdAt,
+                  createdBy: rawC.salesName || 'System',
+                }
+              : null);
+
+          const primaryExpiry = primaryPkg?.endDate || client.membershipExpiry || client.expiryDate;
+          const daysToRenew = getDaysRemainingToRenew(primaryExpiry);
+          const b = resolvePackageBenefits(primaryPkg || allPkgs[0] || {});
+
+          const paidPtTotal = Number(rawC.paidPtSessionsTotal ?? activeSecondaryPkg?.totalSessions ?? (activeSecondaryPkg as any)?.sessionsTotal ?? 0);
+          const paidPtRem = Number(rawC.paidPtSessionsRemaining ?? activeSecondaryPkg?.sessionsRemaining ?? 0);
+          const paidPtUsed = Number(rawC.paidPtSessionsUsed ?? Math.max(0, paidPtTotal - paidPtRem));
+
+          const freePtTotal = Number(rawC.freePtSessionsTotal ?? b.freePtTotal ?? 0);
+          const freePtUsed = Number(rawC.freePtSessionsUsed ?? b.freePtUsed ?? 0);
+          const freePtRem = Number(rawC.freePtSessionsRemaining ?? Math.max(0, freePtTotal - freePtUsed));
+
+          const invTotal = Number(rawC.invitationsTotal ?? b.invTotal ?? 0);
+          const invUsed = Number(rawC.invitationsUsed ?? b.invUsed ?? 0);
+          const invRem = Number(rawC.invitationsRemaining ?? Math.max(0, invTotal - invUsed));
+
+          const freezeTotal = Number(rawC.freezeAllowanceDays ?? b.freezeTotal ?? 0);
+          const freezeUsed = Number(rawC.freezeDaysUsed ?? b.freezeUsed ?? 0);
+          const freezeRem = Number(rawC.freezeDaysRemaining ?? Math.max(0, freezeTotal - freezeUsed));
+
+          return (
+            <div className="mb-6 rounded-xl border border-border bg-muted/15 p-4 space-y-3 text-left shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-primary">
+                    Active Membership &amp; Secondary Package Summary
+                  </span>
+                  <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/10 font-bold">
+                    <Lock className="h-3 w-3 mr-1" /> Read-Only on Profile • Manage in Packages Tab
+                  </Badge>
+                </div>
+                {activeTab !== 'package_data' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setActiveTab('package_data')}
+                    className="h-7 text-xs font-bold border-primary/40 text-primary hover:bg-primary/10"
+                  >
+                    Open Packages &amp; Invites Tab →
+                  </Button>
+                )}
+              </div>
+
+              {/* Primary + Secondary Package Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Primary Package */}
+                <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex flex-col justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <Badge className="bg-emerald-600 text-white text-[10px] font-bold uppercase mb-1">
+                        Primary Package (Membership)
+                      </Badge>
+                      <h4 className="text-sm font-black text-foreground">
+                        {primaryPkg?.packageName || rawC.primaryPackageName || client.packageType || 'No Primary Membership'}
+                      </h4>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span
+                        className={`text-sm font-black px-2.5 py-1 rounded-lg border inline-block ${
+                          daysToRenew <= 7 && client.status === 'Active'
+                            ? 'bg-amber-500/15 text-amber-600 border-amber-500/40'
+                            : client.status === 'Active'
+                            ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                            : 'bg-rose-500/15 text-rose-600 border-rose-500/30'
+                        }`}
+                      >
+                        {client.status === 'Active' || client.status === 'Hold'
+                          ? `${daysToRenew} Days to Renew`
+                          : '0 Days (Expired)'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-2 border-t border-emerald-500/20">
+                    <div>
+                      <span className="text-muted-foreground block text-[10px]">Start Date</span>
+                      <span className="font-bold text-foreground">{safeFormatDate(primaryPkg?.startDate || client.startDate, 'dd MMM yyyy')}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[10px]">Renewal / Expiry</span>
+                      <span className="font-bold text-foreground">{safeFormatDate(primaryExpiry, 'dd MMM yyyy')}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[10px]">Created By</span>
+                      <span className="font-bold text-foreground">
+                        {(primaryPkg as any)?.createdByName || (primaryPkg as any)?.createdBy || rawC.salesName || 'System'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block text-[10px]">Created On</span>
+                      <span className="font-bold text-foreground">
+                        {safeFormatDate(primaryPkg?.createdAt || client.createdAt, 'dd MMM yyyy')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Secondary Package (if any) */}
+                <div className="p-3.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 flex flex-col justify-between gap-2">
+                  {activeSecondaryPkg ? (
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <Badge className="bg-indigo-600 text-white text-[10px] font-bold uppercase mb-1">
+                            Secondary Package (PT / Add-On)
+                          </Badge>
+                          <h4 className="text-sm font-black text-foreground">
+                            {activeSecondaryPkg.packageName}
+                          </h4>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="text-sm font-black px-2.5 py-1 rounded-lg border bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 inline-block">
+                            {paidPtRem} / {paidPtTotal || activeSecondaryPkg.sessionsRemaining || 0} Sessions Left
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-2 border-t border-indigo-500/20">
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Coach / Trainer</span>
+                          <span className="font-bold text-foreground">
+                            {(activeSecondaryPkg as any)?.coachName || rawC.trainerName || users.find(u => u.id === client.assignedTo)?.name || 'Assigned Coach'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Expiry Date</span>
+                          <span className="font-bold text-foreground">
+                            {safeFormatDate((activeSecondaryPkg as any)?.endDate, 'dd MMM yyyy')}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Created By</span>
+                          <span className="font-bold text-foreground">
+                            {(activeSecondaryPkg as any)?.createdByName || (activeSecondaryPkg as any)?.createdBy || rawC.salesName || 'System'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Created On</span>
+                          <span className="font-bold text-foreground">
+                            {safeFormatDate((activeSecondaryPkg as any)?.createdAt || client.createdAt, 'dd MMM yyyy')}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-start justify-between h-full gap-2">
+                      <div>
+                        <Badge variant="outline" className="text-[10px] font-bold uppercase border-indigo-500/30 text-indigo-500 mb-1">
+                          Secondary Package (PT / Add-On)
+                        </Badge>
+                        <p className="text-xs font-semibold text-muted-foreground mt-1">
+                          No active secondary package (Private Training / Group PT / Nutrition) on this profile.
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleAddPackageClick}
+                        className="h-7 text-xs font-bold border-indigo-500/40 text-indigo-600 hover:bg-indigo-500/10"
+                      >
+                        <Plus className="h-3 w-3 mr-1" /> Add Secondary Package
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 5-Pill Reconciled Quotas Strip */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                <div className="p-2 rounded-lg border border-border bg-background/80">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground block">Days to Renew</span>
+                  <span className={`text-xs font-black ${daysToRenew <= 7 && client.status === 'Active' ? 'text-amber-500' : 'text-foreground'}`}>
+                    {client.status === 'Active' || client.status === 'Hold' ? `${daysToRenew} Days Left` : '0 Days (Expired)'}
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg border border-border bg-background/80">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground block">Paid PT Sessions</span>
+                  <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">
+                    {paidPtRem} Left ({paidPtUsed}/{paidPtTotal} Used)
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg border border-border bg-background/80">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground block">Free PT Quota</span>
+                  <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                    {freePtRem} Left ({freePtUsed}/{freePtTotal} Used)
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg border border-border bg-background/80">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground block">Guest Invitations</span>
+                  <span className="text-xs font-black text-sky-600 dark:text-sky-400">
+                    {invRem} Left ({invUsed}/{invTotal} Used)
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg border border-border bg-background/80">
+                  <span className="text-[10px] font-bold uppercase text-muted-foreground block">Freeze Balance</span>
+                  <span className="text-xs font-black text-cyan-600 dark:text-cyan-400">
+                    {freezeRem}d Left ({freezeUsed}/{freezeTotal}d Used)
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Tab Contents */}
         {activeTab === 'member_data' && (
           <div className="space-y-6">
-            {/* Desktop Two-Column Sidebar Layout */}
+            {/* Desktop Two-Column Sidebar Layout (Strictly User Details Only) */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-left">
               {/* Left Column: Photo & Redgits ID */}
               <div className="md:col-span-1 space-y-4">
@@ -587,14 +1134,18 @@ export function InzanMemberShow({
                 </div>
               </div>
 
-              {/* Right Column: Key-Value Field Grid */}
+              {/* Right Column: Key-Value User Details Grid */}
               <div className="md:col-span-3 border border-border p-6 rounded-xl bg-muted/5">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-primary mb-4 border-b border-border pb-2">Profile Details</h3>
+                <div className="flex items-center justify-between mb-4 border-b border-border pb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-primary">User Profile Details</h3>
+                  <span className="text-[10px] text-muted-foreground">
+                    Packages &amp; Invitations are managed in the <strong>Packages &amp; Invites</strong> tab
+                  </span>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
                   {renderField('Member Name', client.name, 'name', 'text', undefined, isFieldLockedForUser('name', currentUser, client))}
                   {renderField('Username', client.memberId, 'legacyNotes', 'text', undefined, isFieldLockedForUser('legacyNotes', currentUser, client))}
                   {renderField('Mobile', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client))}
-                  {renderField('Phone', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client))}
                   {renderField('Backup Mobile', client.backupPhone, 'backupPhone', 'text', undefined, isFieldLockedForUser('backupPhone', currentUser, client))}
                   {renderField('Job', client.jobTitle, 'jobTitle', 'text', undefined, isFieldLockedForUser('jobTitle', currentUser, client))}
                   {renderField('Birthday', (client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'yyyy-MM-dd', '') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date', undefined, isFieldLockedForUser('dateOfBirth', currentUser, client))}
@@ -603,13 +1154,13 @@ export function InzanMemberShow({
                   {renderField('Area', client.city, 'city', 'text', undefined, isFieldLockedForUser('city', currentUser, client))}
                   {renderField(
                     'Sales Man',
-                    users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || 'unassigned',
+                    users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || (client as any).salesName || 'unassigned',
                     'salesRep',
                     'select',
                     users.filter(u => ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
                     isFieldLockedForUser('salesRep', currentUser, client)
                   )}
-                  {renderField('Trainer', users.find(u => u.id === (formData.assignedTo || client.assignedTo))?.name || 'unassigned', 'assignedTo', 'select',
+                  {renderField('Trainer', users.find(u => u.id === (formData.assignedTo || client.assignedTo))?.name || (client as any).trainerName || 'unassigned', 'assignedTo', 'select',
                     users.filter(u => ['coach'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
                     isFieldLockedForUser('assignedTo', currentUser, client)
                   )}
@@ -668,11 +1219,52 @@ export function InzanMemberShow({
               </div>
             </div>
 
-            {/* Comments and Notes section */}
-            <div className="border border-border p-6 rounded-xl bg-muted/10 text-left">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-primary mb-3">System & Staff Notes</h4>
-              <div className="text-xs text-foreground bg-background p-4 rounded-lg border border-border leading-relaxed max-h-40 overflow-y-auto whitespace-pre-line">
-                {client.legacyNotes || 'No notes currently recorded on this profile.'}
+            {/* Member Feedback & Staff Notes Section (Editable by Any Staff Member) */}
+            <div className="border border-border p-5 rounded-xl bg-muted/10 text-left space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5" /> Member Feedback &amp; Front-Desk Notes
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    Anyone on the team can update member feedback or add a quick feedback note below without unlocking core identity fields.
+                  </p>
+                </div>
+                {(client as any).lastFeedbackBy && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Last updated by <strong>{(client as any).lastFeedbackBy}</strong> on {safeFormatDate((client as any).lastFeedbackAt, 'dd MMM yyyy HH:mm')}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Pinned Profile Feedback / Note</Label>
+                  <Textarea
+                    value={quickFeedbackText}
+                    onChange={e => setQuickFeedbackText(e.target.value)}
+                    placeholder="Enter member feedback, preferences, or front-desk notes..."
+                    className="text-xs min-h-[75px] bg-background"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Log New Feedback Entry to Timeline (Optional)</Label>
+                  <Textarea
+                    value={newFeedbackEntry}
+                    onChange={e => setNewFeedbackEntry(e.target.value)}
+                    placeholder="Add a timestamped feedback log (e.g. Member requested morning coach follow-up)..."
+                    className="text-xs min-h-[75px] bg-background"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  disabled={isSavingFeedback}
+                  onClick={handleSaveMemberFeedback}
+                  className="h-8 text-xs font-bold bg-primary text-primary-foreground"
+                >
+                  {isSavingFeedback ? 'Saving Feedback...' : 'Save Member Feedback'}
+                </Button>
               </div>
             </div>
 
@@ -690,7 +1282,7 @@ export function InzanMemberShow({
                   disabled={isSaving}
                   className="bg-sky-600 hover:bg-sky-700 text-white font-bold"
                 >
-                  {isSaving ? 'Saving...' : 'Save Changes'}
+                  {isSaving ? 'Saving...' : 'Save User Details'}
                 </Button>
               </div>
             )}
@@ -698,199 +1290,518 @@ export function InzanMemberShow({
         )}
 
         {activeTab === 'package_data' && (
-          <div className="space-y-6 text-left">
-            <div className="flex justify-between items-center border-b border-border pb-3">
-              <h3 className="text-sm font-bold uppercase text-primary">Package Status</h3>
+          <div className="space-y-8 text-left">
+            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-border pb-3">
+              <div>
+                <h3 className="text-sm font-bold uppercase text-primary">Packages, Invitations &amp; Referrals Hub</h3>
+                <p className="text-xs text-muted-foreground">
+                  View Primary &amp; Secondary packages, who created them &amp; when, upgrade/renew, transfer, edit within 24h, and manage Guest Invitations &amp; Referrals in one place.
+                </p>
+              </div>
               <div className="flex gap-2">
                 <Button
-                  onClick={() => handleUpgradeClick()}
-                  className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs h-8"
-                >
-                  <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade Package
-                </Button>
-                <Button
                   onClick={handleAddPackageClick}
-                  variant="outline"
-                  className="text-xs h-8"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 gap-1"
                 >
-                  Add Service
+                  <Plus className="h-3.5 w-3.5" /> Add New Package
                 </Button>
               </div>
             </div>
 
-            {/* Active package summary */}
-            {client.packages && client.packages.some(p => p.status === 'Active') ? (
-              client.packages.filter(p => p.status === 'Active').map(pkg => (
-                <div key={pkg.id} className="bg-muted/10 p-6 rounded-xl border-l-4 border-l-emerald-500 border border-border space-y-4 shadow-sm">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded uppercase">Active Package</span>
-                      <h4 className="text-lg font-bold text-foreground mt-2">{pkg.packageName}</h4>
-                    </div>
-                    <span className="text-2xl font-black text-emerald-500">
-                      {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} Sessions` : '—'}
-                    </span>
-                  </div>
+            {/* Per-Package Multi-Package Cards (Primary & Secondary) */}
+            {(() => {
+              const allPackages = (client.packages && client.packages.length > 0)
+                ? [...client.packages].sort((a, b) => {
+                    const aSec = isSecondaryPackageItem(a) ? 1 : 0;
+                    const bSec = isSecondaryPackageItem(b) ? 1 : 0;
+                    if (a.status === 'Active' && b.status !== 'Active') return -1;
+                    if (a.status !== 'Active' && b.status === 'Active') return 1;
+                    if (aSec !== bSec) return aSec - bSec;
+                    return (toValidDate(b.startDate)?.getTime() || 0) - (toValidDate(a.startDate)?.getTime() || 0);
+                  })
+                : client.packageType
+                  ? [{
+                      id: `primary_${client.id}`,
+                      packageId: '',
+                      packageName: client.packageType,
+                      startDate: client.joinDate || client.startDate || '',
+                      endDate: client.expiryDate || client.membershipExpiry || '',
+                      sessionsTotal: client.totalSessions || 'unlimited',
+                      sessionsRemaining: client.sessionsRemaining ?? 'unlimited',
+                      status: (client.status === 'Active' ? 'Active' : 'Expired') as any,
+                      createdAt: client.createdAt || '',
+                      createdByName: (client as any).salesName || 'System',
+                    }]
+                  : [];
 
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-3 border-t border-border text-xs">
-                    <div>
-                      <span className="text-muted-foreground block font-medium">Start Date:</span>
-                      <span className="font-bold text-foreground">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block font-medium">Expiry Date:</span>
-                      <span className="font-bold text-foreground">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block font-medium">Created Date:</span>
-                      <span className="font-bold text-foreground">{safeFormatDate(pkg.createdAt || client.createdAt, 'dd MMM yyyy HH:mm')}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block font-medium">Created By:</span>
-                      <span className="font-bold text-foreground">{pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground block font-medium">Status:</span>
-                      <span className="font-bold text-emerald-500 uppercase">{pkg.status}</span>
-                    </div>
-                  </div>
-
-                  {/* Actions row */}
-                  <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
+              if (allPackages.length === 0) {
+                return (
+                  <div className="bg-muted/5 p-8 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs flex flex-col items-center justify-center gap-2">
+                    <AlertCircle className="h-6 w-6 text-rose-500" />
+                    <span>No active or historical membership packages found on this profile.</span>
                     <Button
                       size="sm"
-                      onClick={() => handleUpgradeClick(pkg.packageName)}
-                      className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs h-7"
+                      onClick={handleAddPackageClick}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs mt-2"
                     >
-                      <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade Package
+                      Purchase a Package
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleUpgradeClick(pkg.packageName)}
-                      className="text-xs h-7 border-sky-500/40 text-sky-600 hover:bg-sky-500/10 font-bold"
-                    >
-                      <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade
-                    </Button>
-                    {canAdjustDates && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs h-7 border-amber-500/40 text-amber-600"
-                        onClick={() => setAdjustPkgId(pkg.id)}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-4">
+                  {allPackages.map((pkg, idx) => {
+                    const b = resolvePackageBenefits(pkg);
+                    const editState = getSameDayEditState(pkg);
+                    const isActive = pkg.status === 'Active';
+                    const isSecondary = isSecondaryPackageItem(pkg);
+                    const isEditingThisPkg = editingPkgId === pkg.id;
+                    const isTransferringThisPkg = transferPkgId === pkg.id;
+                    const pkgDaysLeft = getDaysRemainingToRenew(pkg.endDate);
+                    const filteredCatalogPackages = packages.filter(cp => {
+                      if (!pkgSearchFilter.trim()) return true;
+                      const q = pkgSearchFilter.trim().toLowerCase();
+                      return (
+                        (cp.name || '').toLowerCase().includes(q) ||
+                        (cp.category || '').toLowerCase().includes(q) ||
+                        String(cp.price || '').includes(q)
+                      );
+                    });
+
+                    return (
+                      <div
+                        key={pkg.id || idx}
+                        className={`p-6 rounded-xl border-l-4 border space-y-4 shadow-sm ${
+                          isActive
+                            ? isSecondary
+                              ? 'bg-indigo-500/5 border-l-indigo-500 border-border'
+                              : 'bg-muted/10 border-l-emerald-500 border-border'
+                            : 'bg-muted/5 border-l-zinc-500 border-border/70 opacity-90'
+                        }`}
                       >
-                        <CalendarClock className="h-3.5 w-3.5 mr-1" /> Adjust Dates
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs h-7"
-                    >
-                      Transfer Package
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs h-7"
-                    >
-                      Freezing
-                    </Button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="bg-muted/5 p-8 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs flex flex-col items-center justify-center gap-2">
-                <AlertCircle className="h-6 w-6 text-rose-500" />
-                <span>No active membership package found on this profile.</span>
-                <Button
-                  size="sm"
-                  onClick={handleAddPackageClick}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs mt-2"
-                >
-                  Purchase a Package
-                </Button>
-              </div>
-            )}
-
-            {/* Historical Packages Table */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Package History</h4>
-              <div className="rounded-xl border border-border bg-background overflow-hidden">
-                <Table>
-                  <TableHeader className="bg-muted/20 border-b border-border">
-                    <TableRow>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Package</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Start</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Expires</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created Date</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-center">Sessions</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-center">Status</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {client.packages && client.packages.length > 0 ? (
-                      [...client.packages]
-                        .sort((a, b) => (toValidDate(b.startDate)?.getTime() || 0) - (toValidDate(a.startDate)?.getTime() || 0))
-                        .map(pkg => (
-                          <TableRow key={pkg.id} className="hover:bg-muted/50 border-b border-border/50 transition-colors">
-                            <TableCell className="py-3 px-4 text-xs font-medium text-foreground">{pkg.packageName}</TableCell>
-                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</TableCell>
-                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</TableCell>
-                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">
-                              {safeFormatDate(pkg.createdAt || client.createdAt, 'dd MMM yyyy HH:mm')}
-                            </TableCell>
-                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">
-                              {pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}
-                            </TableCell>
-                            <TableCell className="py-3 px-4 text-xs text-muted-foreground text-center">
-                              {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} / ${pkg.sessionsTotal ?? '?'}` : '—'}
-                            </TableCell>
-                            <TableCell className="py-3 px-4 text-center">
-                              <Badge className={
-                                pkg.status === 'Active' 
-                                  ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
-                                  : pkg.status === 'Expired' 
-                                  ? 'bg-muted text-muted-foreground border border-border' 
-                                  : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                              }>
-                                {pkg.status}
+                        {/* Package Header + Primary/Secondary Badge + 24h Lock Status */}
+                        <div className="flex flex-wrap justify-between items-start gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge className={`text-[10px] font-bold uppercase ${
+                                isSecondary
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-emerald-600 text-white'
+                              }`}>
+                                {isSecondary ? 'Secondary Package (PT / Add-On)' : 'Primary Package (Membership)'}
                               </Badge>
-                            </TableCell>
-                            <TableCell className="py-3 px-4 text-right whitespace-nowrap">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                                isActive ? 'text-emerald-500 bg-emerald-500/10' : 'text-muted-foreground bg-muted'
+                              }`}>
+                                {pkg.status}
+                              </span>
+                              {editState.canSameDayEdit ? (
+                                <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-bold">
+                                  <Unlock className="h-3 w-3 mr-1" /> Editable (&lt;24h Window • {editState.hoursLeft}h left)
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-500/30 font-bold">
+                                  <Lock className="h-3 w-3 mr-1" />
+                                  {editState.isFinanceConfirmed
+                                    ? 'Locked (Confirmed by Accounting)'
+                                    : 'Locked (>24h Creation Window Passed)'}
+                                </Badge>
+                              )}
+                            </div>
+                            <h4 className="text-lg font-bold text-foreground mt-2">{pkg.packageName}</h4>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-xl sm:text-2xl font-black ${isSecondary ? 'text-indigo-500' : 'text-emerald-500'}`}>
+                              {isSecondary
+                                ? `${pkg.sessionsRemaining ?? 0} / ${(pkg as any).totalSessions ?? pkg.sessionsTotal ?? pkg.sessionsRemaining ?? 0} Sessions`
+                                : isActive
+                                  ? `${pkgDaysLeft} Days to Renew`
+                                  : 'Expired'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Dates & Creation Audit Trail */}
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-3 border-t border-border text-xs">
+                          <div>
+                            <span className="text-muted-foreground block font-medium">Start Date:</span>
+                            <span className="font-bold text-foreground">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block font-medium">Expiry / Renewal Date:</span>
+                            <span className="font-bold text-foreground">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block font-medium">Created On:</span>
+                            <span className="font-bold text-foreground">{safeFormatDate(pkg.createdAt || client.createdAt, 'dd MMM yyyy HH:mm')}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block font-medium">Created By:</span>
+                            <span className="font-bold text-primary">
+                              {(pkg as any).createdByName || (pkg as any).createdBy || (pkg as any).salesRepName || (client as any).salesName || 'System'}
+                            </span>
+                            {(pkg as any).lastModifiedBy && (
+                              <span className="text-[10px] text-muted-foreground block">
+                                Edited by {(pkg as any).lastModifiedBy} ({safeFormatDate((pkg as any).lastModifiedAt, 'dd MMM HH:mm')})
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground block font-medium">Accounting Lock:</span>
+                            <span className={`font-bold uppercase ${editState.isFinanceConfirmed ? 'text-emerald-500' : 'text-amber-500'}`}>
+                              {editState.isFinanceConfirmed ? 'Confirmed ✓' : 'Within 24h Rule'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Resolved Package Benefits Grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-border">
+                          <div className="p-2.5 rounded-lg border border-border bg-background/70">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Freeze Allowance</span>
+                            <span className="text-sm font-black text-foreground">
+                              {b.freezeUsed} / {b.freezeTotal} Days
+                            </span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
+                              {b.freezeRem} days remaining
+                            </span>
+                          </div>
+                          <div className="p-2.5 rounded-lg border border-border bg-background/70">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Guest Invitations</span>
+                            <span className="text-sm font-black text-foreground">
+                              {b.invUsed} / {b.invTotal} Passes
+                            </span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
+                              {b.invRem} passes remaining
+                            </span>
+                          </div>
+                          <div className="p-2.5 rounded-lg border border-border bg-background/70">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Free PT Sessions</span>
+                            <span className="text-sm font-black text-foreground">
+                              {b.freePtUsed} / {b.freePtTotal} Sessions
+                            </span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
+                              {b.freePtRem} free PT remaining
+                            </span>
+                          </div>
+                          <div className="p-2.5 rounded-lg border border-border bg-background/70">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Free Class Trials</span>
+                            <span className="text-sm font-black text-foreground">
+                              {b.classUsed} / {b.classTotal} Classes
+                            </span>
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
+                              {b.classRem} classes remaining
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Inline Same-Day (<24h) Editor Panel with Searchable Package Dropdown */}
+                        {isEditingThisPkg && (
+                          <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-primary uppercase">
+                                Same-Day Package Edit (&lt;24h Window • Logs Editor &amp; Timestamp)
+                              </span>
+                              <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setEditingPkgId(null); setPkgSearchFilter(''); }}>Cancel</Button>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                              <div className="space-y-1">
+                                <Label className="text-[10px] uppercase font-bold">Search &amp; Select Package</Label>
+                                <Input
+                                  placeholder="Type to search packages..."
+                                  value={pkgSearchFilter}
+                                  onChange={e => setPkgSearchFilter(e.target.value)}
+                                  className="h-7 text-xs bg-background mb-1"
+                                />
+                                <select
+                                  className="h-8 w-full rounded border border-input bg-background px-2 text-xs"
+                                  value={editPkgForm.packageName}
+                                  onChange={e => setEditPkgForm(prev => ({ ...prev, packageName: e.target.value }))}
+                                >
+                                  <option value={pkg.packageName}>{pkg.packageName} (Current)</option>
+                                  {filteredCatalogPackages.map(cp => (
+                                    <option key={cp.id} value={cp.name}>
+                                      {cp.name} ({cp.price?.toLocaleString()} LE)
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase font-bold">Start Date</Label>
+                                <Input
+                                  type="date"
+                                  className="h-8 text-xs bg-background mt-1"
+                                  value={editPkgForm.startDate}
+                                  onChange={e => setEditPkgForm(prev => ({ ...prev, startDate: e.target.value }))}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase font-bold">Expiry Date</Label>
+                                <Input
+                                  type="date"
+                                  className="h-8 text-xs bg-background mt-1"
+                                  value={editPkgForm.endDate}
+                                  onChange={e => setEditPkgForm(prev => ({ ...prev, endDate: e.target.value }))}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-[10px] uppercase font-bold">Sessions Left</Label>
+                                <Input
+                                  className="h-8 text-xs bg-background mt-1"
+                                  value={editPkgForm.sessionsRemaining}
+                                  onChange={e => setEditPkgForm(prev => ({ ...prev, sessionsRemaining: e.target.value }))}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex justify-end">
                               <Button
                                 size="sm"
-                                variant="ghost"
-                                className="h-7 px-2 text-[10px] font-bold text-sky-600 hover:text-sky-700 hover:bg-sky-500/10"
-                                onClick={() => handleUpgradeClick(pkg.packageName)}
+                                onClick={() => handleSaveSameDayPkgEdit(pkg.id)}
+                                className="h-7 text-xs font-bold bg-primary text-primary-foreground"
                               >
-                                <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade
+                                Save &amp; Log 24h Edit
                               </Button>
-                              {canAdjustDates && (
-                                <>
-                                  <Button size="sm" variant="ghost" className="h-7 px-2 text-[10px]" onClick={() => setAdjustPkgId(pkg.id)}>
-                                    <CalendarClock className="h-3.5 w-3.5 mr-1" /> Adjust Dates
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" title="Delete package" onClick={() => setDeletePkgId(pkg.id)}>
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={8} className="py-6 text-center text-xs text-muted-foreground">
-                          No historical package records.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Inline Transfer Package Panel */}
+                        {isTransferringThisPkg && (
+                          <div className="p-4 rounded-xl border border-indigo-500/30 bg-indigo-500/5 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                                Transfer &ldquo;{pkg.packageName}&rdquo; to Another Member
+                              </span>
+                              <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setTransferPkgId(null)}>Cancel</Button>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <Input
+                                placeholder="Enter target Member ID (e.g. 1652), Phone, or Exact Name..."
+                                value={transferTargetQuery}
+                                onChange={e => setTransferTargetQuery(e.target.value)}
+                                className="h-8 text-xs bg-background flex-1"
+                              />
+                              <Button
+                                size="sm"
+                                disabled={isTransferringPkg}
+                                onClick={() => handleExecutePackageTransfer(pkg.id)}
+                                className="h-8 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white"
+                              >
+                                {isTransferringPkg ? 'Transferring...' : 'Confirm Package Transfer'}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Per-Package Actions Bar: Upgrade, Renew, Transfer, <24h Edit, Accounting Confirm */}
+                        <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-border">
+                          <Button
+                            size="sm"
+                            onClick={() => handleUpgradeClick(pkg.packageName)}
+                            className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs h-7"
+                          >
+                            <TrendingUp className="h-3.5 w-3.5 mr-1" /> Upgrade
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (setRenewDialogClientId && setRenewPkgName && setRenewStartDate) {
+                                setRenewDialogClientId(client.id);
+                                setRenewPkgName(pkg.packageName);
+                                setRenewStartDate(format(new Date(), 'yyyy-MM-dd'));
+                              } else {
+                                handleUpgradeClick(pkg.packageName);
+                              }
+                            }}
+                            className="text-xs h-7 border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 font-bold"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Renew
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setTransferPkgId(isTransferringThisPkg ? null : pkg.id);
+                              setTransferTargetQuery('');
+                            }}
+                            className="text-xs h-7 border-indigo-500/40 text-indigo-600 hover:bg-indigo-500/10 font-bold"
+                          >
+                            <ArrowRightLeft className="h-3.5 w-3.5 mr-1" /> Transfer
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!editState.canSameDayEdit}
+                            onClick={() => {
+                              setEditingPkgId(isEditingThisPkg ? null : pkg.id);
+                              setPkgSearchFilter('');
+                              setEditPkgForm({
+                                packageName: pkg.packageName || '',
+                                startDate: String(pkg.startDate || '').slice(0, 10),
+                                endDate: String(pkg.endDate || '').slice(0, 10),
+                                sessionsRemaining: String(pkg.sessionsRemaining ?? ''),
+                              });
+                            }}
+                            className="text-xs h-7 font-bold"
+                            title={editState.canSameDayEdit ? 'Edit package within 24h creation window' : 'Locked: Packages cannot be changed after 24 hours from creation'}
+                          >
+                            {editState.canSameDayEdit ? (
+                              <><Edit3 className="h-3.5 w-3.5 mr-1 text-emerald-500" /> Edit Package (&lt;24h)</>
+                            ) : (
+                              <><Lock className="h-3.5 w-3.5 mr-1 text-amber-500" /> Locked (&gt;24h)</>
+                            )}
+                          </Button>
+                          {(currentUser?.role === 'Admin' || currentUser?.role === 'Manager') && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleToggleFinanceConfirmPkg(pkg.id, !editState.isFinanceConfirmed)}
+                              className="text-xs h-7 text-muted-foreground hover:text-foreground ml-auto"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5 mr-1 text-emerald-500" />
+                              {editState.isFinanceConfirmed ? 'Unlock Accounting' : 'Confirm Accounting (Lock Edit)'}
+                            </Button>
+                          )}
+                          {canAdjustDates && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-xs h-7 text-amber-600"
+                              onClick={() => setAdjustPkgId(pkg.id)}
+                            >
+                              <CalendarClock className="h-3.5 w-3.5 mr-1" /> Admin Date Override
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Consolidated Guest Invitations (Package Quota) & Unlimited Member Referrals Inside Packages Tab */}
+            <div className="pt-6 border-t border-border space-y-5">
+              <div>
+                <h3 className="text-sm font-bold uppercase text-primary">Guest Pass Invitations &amp; Member Referrals</h3>
+                <p className="text-xs text-muted-foreground">
+                  Manage package-quota Guest Passes and submit unlimited friend/family Referrals directly inside the Packages tab.
+                </p>
               </div>
+
+              {(() => {
+                const primaryPkg = (client.packages || []).find(p => !isSecondaryPackageItem(p) && p.status === 'Active') || (client.packages || [])[0] || { packageName: client.packageType };
+                const b = resolvePackageBenefits(primaryPkg);
+                const memberReferrals: any[] = Array.isArray((client as any).referrals) ? (client as any).referrals : [];
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                    {/* Card 1: Package Quota Guest Invitations */}
+                    <div className="border border-border rounded-xl p-5 bg-muted/10 flex flex-col justify-between gap-3">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                            <Gift className="h-4 w-4" /> Guest Pass Invitations (Package Quota)
+                          </span>
+                          <Badge variant="outline" className="font-mono text-xs font-bold bg-primary/10 text-primary border-primary/30">
+                            {b.invUsed} / {b.invTotal} Used ({b.invRem} Left)
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          Consumes 1 pass from the member&apos;s Primary Package guest invitation allowance ({primaryPkg?.packageName || client.packageType || 'Active Package'}).
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-border/60 text-xs">
+                        <span className="text-muted-foreground">
+                          Referred By: <strong className="text-foreground">{client.referredByName || client.referredBy || 'Direct / Walk-in'}</strong>
+                        </span>
+                        <span className="font-mono font-bold text-primary">
+                          Remaining: {b.invRem} Pass(es)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Card 2: Unlimited Member Referrals */}
+                    <div className="border border-emerald-500/30 rounded-xl p-5 bg-emerald-500/5 flex flex-col justify-between gap-3">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                            <Sparkles className="h-4 w-4" /> Unlimited Member Referrals
+                          </span>
+                          <Badge className="bg-emerald-600 text-white text-xs font-bold">
+                            ∞ Unlimited ({memberReferrals.length} Referred)
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          Add unlimited friend/family referrals for Sales follow-up without consuming any package guest passes.
+                        </p>
+                      </div>
+
+                      {showAddReferralForm ? (
+                        <div className="space-y-2.5 pt-2 border-t border-emerald-500/20">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <Input
+                              placeholder="Friend's Full Name *"
+                              value={referralName}
+                              onChange={e => setReferralName(e.target.value)}
+                              className="h-8 text-xs bg-background"
+                            />
+                            <Input
+                              placeholder="Phone Number *"
+                              value={referralPhone}
+                              onChange={e => setReferralPhone(e.target.value)}
+                              className="h-8 text-xs bg-background"
+                            />
+                          </div>
+                          <Input
+                            placeholder="Notes (optional, e.g., interested in 3 Months + PT)"
+                            value={referralNotes}
+                            onChange={e => setReferralNotes(e.target.value)}
+                            className="h-8 text-xs bg-background"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setShowAddReferralForm(false)}
+                              className="h-7 text-xs"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={isSubmittingReferral}
+                              onClick={handleAddUnlimitedReferral}
+                              className="h-7 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              {isSubmittingReferral ? 'Saving...' : 'Save Referral Lead'}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20">
+                          <div className="text-[11px] text-muted-foreground truncate max-w-[60%]">
+                            {memberReferrals.length > 0
+                              ? `Latest: ${memberReferrals[0].name} (${memberReferrals[0].phone})`
+                              : 'No referrals submitted yet.'}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => setShowAddReferralForm(true)}
+                            className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Add Referral
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Full Guest Invitations & Visitor Check-in Table */}
+              <MemberGuestInvitationsTab client={client} />
             </div>
           </div>
         )}
@@ -997,26 +1908,6 @@ export function InzanMemberShow({
                 </TableBody>
               </Table>
             </div>
-          </div>
-        )}
-
-        {activeTab === 'invitations' && (
-          <div className="space-y-4 text-left">
-            <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3">Invitations & Referrals</h3>
-            <div className="bg-muted/10 p-4 rounded-xl border border-border flex flex-wrap items-center justify-between gap-4 text-xs">
-              <div>
-                <span className="text-muted-foreground font-medium block uppercase text-[10px]">Referred By</span>
-                <span className="font-bold text-foreground">
-                  {client.referredByName || client.referredBy || 'Direct / Walk-in'}
-                  {client.invitedByType ? ` (${client.invitedByType})` : ''}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground font-medium block uppercase text-[10px]">Referral Code</span>
-                <span className="font-mono font-bold text-primary">{client.referralCode || '—'}</span>
-              </div>
-            </div>
-            <MemberGuestInvitationsTab client={client} />
           </div>
         )}
 

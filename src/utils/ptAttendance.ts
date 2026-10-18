@@ -22,6 +22,9 @@ export interface ClientPTSnapshot {
   name: string;
   sessionsRemaining?: number | 'unlimited';
   usedSessions?: number;
+  freePtSessions?: number;
+  freePtSessionsUsed?: number;
+  benefits?: Record<string, any>;
   packages?: PTPackageSnapshot[];
   strikes?: number;
   noShowStrikes?: number;
@@ -35,6 +38,7 @@ export interface PTSessionSnapshot {
   startTime?: string;
   status: 'Scheduled' | 'Attended' | 'Completed' | 'No Show' | 'Cancelled' | 'Rescheduled';
   deductedOnBook?: boolean;
+  isFreePtSession?: boolean;
 }
 
 export interface SessionDeductionResult {
@@ -156,6 +160,30 @@ export function calculatePTBalanceTransition(
   // Update client root balance
   let updatedRemaining = client.sessionsRemaining;
   let updatedUsed = client.usedSessions ?? 0;
+
+  const freePtTotal = Number(client.freePtSessions ?? client.benefits?.freePtSessions ?? 0);
+  const currentFreePtUsed = Number(client.freePtSessionsUsed ?? client.benefits?.freePtSessionsUsed ?? 0);
+  const isUsingFreePt = Boolean(session.isFreePtSession) || (matchedPackageIndex < 0 && (!client.sessionsRemaining || client.sessionsRemaining === 0) && freePtTotal > 0);
+
+  if (isUsingFreePt) {
+    const nextFreePtUsed = delta < 0
+      ? Math.min(freePtTotal > 0 ? freePtTotal : currentFreePtUsed + 1, currentFreePtUsed + 1)
+      : Math.max(0, currentFreePtUsed - 1);
+    return {
+      clientUpdates: {
+        packages,
+        freePtSessionsUsed: nextFreePtUsed,
+        benefits: {
+          ...(client.benefits || {}),
+          freePtSessions: freePtTotal,
+          freePtSessionsUsed: nextFreePtUsed,
+        }
+      },
+      actionTaken: action,
+      action,
+      reason: `${reason} (Free PT Quota: ${nextFreePtUsed}/${freePtTotal} used)`
+    };
+  }
 
   if (typeof client.sessionsRemaining === 'number') {
     if (delta < 0) {

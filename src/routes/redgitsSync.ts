@@ -279,16 +279,38 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     const redgitsUsername = String(req.body?.username || DEFAULT_REDGITS_USER).trim();
     const redgitsPassword = String(req.body?.password || DEFAULT_REDGITS_PASS);
 
-    // 2. Authenticate with https://inzan.redgits.com
+    // 2. Authenticate with https://inzan.redgits.com (with BlockIntel device fingerprint & session cookie rotation)
     const cookieJar = new Map<string, string>();
+    const deviceId = 'fd182a91-4d82-4e11-9a15-8b3d7a109c44';
+    const installId = '7c991b22-1c30-4f88-a241-99e1c4102b11';
+    const clientFp = 'e8b1204f9a3d11c8402e7a19c5d3b201';
+    const deviceCode = 'DEV-INZAN-SYNC-01';
+    cookieJar.set('device_id', deviceId);
+    cookieJar.set('ua_install_id', installId);
+    cookieJar.set('ua_client_fp', clientFp);
+    cookieJar.set('ua_device_code', deviceCode);
+
     const saveCookies = (response: globalThis.Response) => {
-      const setCookies = response.headers.getSetCookie ? response.headers.getSetCookie() : [];
+      let setCookies: string[] = [];
+      if (typeof response.headers.getSetCookie === 'function') {
+        setCookies = response.headers.getSetCookie();
+      }
+      if (!setCookies || setCookies.length === 0) {
+        const rawSetCookie = response.headers.get('set-cookie');
+        if (rawSetCookie) {
+          setCookies = rawSetCookie.split(/,(?=\s*[a-zA-Z0-9_-]+=)/);
+        }
+      }
       for (const c of setCookies) {
         const [kv] = c.split(';');
         if (!kv) continue;
         const eq = kv.indexOf('=');
         if (eq > 0) {
-          cookieJar.set(kv.slice(0, eq).trim(), kv.slice(eq + 1).trim());
+          const k = kv.slice(0, eq).trim();
+          const v = kv.slice(eq + 1).trim();
+          if (v && v !== 'deleted') {
+            cookieJar.set(k, v);
+          }
         }
       }
     };
@@ -297,8 +319,20 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         .map(([k, v]) => `${k}=${v}`)
         .join('; ');
 
+    const clientInfoPayload = JSON.stringify({
+      device_id: deviceId,
+      install_id: installId,
+      fingerprint: clientFp,
+      device_code: deviceCode,
+      user_agent: USER_AGENT,
+      platform: 'Win32',
+      language: 'en-US',
+      screen: '1920x1080',
+      timezone: 'Africa/Cairo',
+    });
+
     const loginPageRes = await fetch(`${REDGITS_ORIGIN}/admin/login`, {
-      headers: { 'User-Agent': USER_AGENT },
+      headers: { 'User-Agent': USER_AGENT, Cookie: getCookieHeader() },
     });
     saveCookies(loginPageRes);
 
@@ -309,26 +343,28 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         Cookie: getCookieHeader(),
         'User-Agent': USER_AGENT,
         Referer: `${REDGITS_ORIGIN}/admin/login`,
+        Origin: REDGITS_ORIGIN,
       },
       body: new URLSearchParams({
         username: redgitsUsername,
         password: redgitsPassword,
-        code: '',
-        client_info: '',
+        code: deviceCode,
+        client_info: clientInfoPayload,
       }).toString(),
       redirect: 'manual',
     });
     saveCookies(loginRes);
 
-    const cookieHeader = getCookieHeader();
-    if (!cookieJar.has('ci_session') && loginRes.status !== 302) {
+    const loginLocation = loginRes.headers.get('location') || '';
+    const isLoginRedirectToLogin = loginLocation.includes('/admin/login');
+    if (isLoginRedirectToLogin || (!cookieJar.has('ci_session') && loginRes.status !== 302)) {
       res.status(401).json({
         error: 'Failed to authenticate with inzan.redgits.com. Please verify RedGITS username and password.',
       });
       return;
     }
 
-    // Helper to fetch DataTables JSON endpoint
+    // Helper to fetch DataTables JSON endpoint (sequential-safe with live cookie rotation)
     const fetchDataTableJson = async (endpoint: string, maxRows: number): Promise<string[][]> => {
       try {
         const dtParams = new URLSearchParams({
@@ -343,12 +379,14 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            Cookie: cookieHeader,
+            Cookie: getCookieHeader(),
             'User-Agent': USER_AGENT,
             'X-Requested-With': 'XMLHttpRequest',
+            Referer: `${REDGITS_ORIGIN}/admin/members`,
           },
           body: dtParams.toString(),
         });
+        saveCookies(r);
         if (!r.ok) return [];
         const json: any = await r.json();
         if (!Array.isArray(json?.data)) return [];
@@ -366,10 +404,12 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       try {
         const r = await fetch(`${REDGITS_ORIGIN}${pathUrl}`, {
           headers: {
-            Cookie: cookieHeader,
+            Cookie: getCookieHeader(),
             'User-Agent': USER_AGENT,
+            Referer: `${REDGITS_ORIGIN}/admin`,
           },
         });
+        saveCookies(r);
         if (!r.ok) return [];
         const html = await r.text();
         return parseHtmlTableRows(html);
@@ -379,40 +419,46 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       }
     };
 
-    // 3. Fetch all live datasets from RedGITS in parallel
-    const [
-      activeRows,
-      guestRows,
-      invRows,
-      pkgCatalogRows,
-      pkgListRows,
-      natRows,
-      staffRows,
-      expiredRows,
-    ] = await Promise.all([
-      fetchDataTableJson('active', 50000),
-      fetchDataTableJson('guest', 450),
-      fetchDataTableJson('viewinvitation', 400),
-      fetchHtmlTable('/admin/packages/show'),
+    // 3. Fetch datasets in controlled waves so CodeIgniter / PHPSESSID file locks never drop or collide
+    const pkgCatalogRows = await fetchHtmlTable('/admin/packages/show');
+    const activeRows = await fetchDataTableJson('active', 50000);
+    const [pkgListRows, natRows] = await Promise.all([
       fetchHtmlTable('/admin/packagelist'),
       fetchHtmlTable('/admin/reports/nationalMembers'),
-      fetchHtmlTable('/admin/staff/show'),
-      mode === 'full' ? fetchDataTableJson('expiredmember', 10000) : Promise.resolve([] as string[][]),
     ]);
+    const [guestRows, invRows, staffRows] = await Promise.all([
+      fetchDataTableJson('guest', 450),
+      fetchDataTableJson('viewinvitation', 400),
+      fetchHtmlTable('/admin/staff/show'),
+    ]);
+    const expiredRows = mode === 'full' ? await fetchDataTableJson('expiredmember', 10000) : [];
+
+    if (activeRows.length === 0 && pkgCatalogRows.length === 0) {
+      res.status(502).json({
+        error:
+          'RedGITS returned 0 records during live scrape (session may have been challenged by BlockIntel or credentials expired). Existing database records were preserved untouched.',
+      });
+      return;
+    }
 
     // 4. Connect strictly to `db-inzanathletics`
     const inzanDb = getFirestore(INZAN_DATABASE_ID);
     const nowIso = new Date().toISOString();
 
-    // Load existing users and existing redgits client phones so we don't re-fetch phones unnecessarily
+    // Load existing users and existing redgits client phones/packages so we don't overwrite or re-fetch unnecessarily
     const [existingUsersSnap, existingClientsSnap] = await Promise.all([
       inzanDb.collection('users').get(),
-      inzanDb.collection('clients').select('phone', 'redgitsId', 'memberId', 'status').get(),
+      inzanDb
+        .collection('clients')
+        .select('phone', 'redgitsId', 'memberId', 'status', 'packages', 'invitationsUsed', 'freezeDaysUsed', 'freePtSessionsUsed')
+        .get(),
     ]);
 
     const existingPhoneByDocId = new Map<string, string>();
+    const existingClientDataByDocId = new Map<string, Record<string, any>>();
     for (const cDoc of existingClientsSnap.docs) {
       const d = cDoc.data();
+      existingClientDataByDocId.set(cDoc.id, d || {});
       if (d?.phone && String(d.phone).length >= 8) {
         existingPhoneByDocId.set(cDoc.id, String(d.phone));
       }
@@ -575,6 +621,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
 
     // 7. Build Packages Catalog from /admin/packages/show
     const packageDocsMap = new Map<string, { id: string; data: Record<string, any> }>();
+    const packageDocsByLowerName = new Map<string, Record<string, any>>();
     for (const row of pkgCatalogRows) {
       if (!Array.isArray(row) || row.length < 10) continue;
       const [
@@ -602,40 +649,81 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       const price = parseFloat(String(pkgPrice).replace(/[^\d.]/g, '')) || 0;
       const expiryDays = parseInt(String(pkgDays), 10) || 30;
       const invitations = parseInt(String(invBalance), 10) || 0;
-      const freezeMaxDays = parseInt(String(freezeMax), 10) || 30;
-      const freezeMinDays = parseInt(String(freezeMin), 10) || 7;
+      const freezeMaxDays = parseInt(String(freezeMax), 10) || 0;
+      const freezeMinDays = parseInt(String(freezeMin), 10) || (freezeMaxDays > 0 ? 7 : 0);
       const sessions = parseSessionsFromName(sessionName, expiryDays);
       const isSecondary = /^yes$/i.test(String(mustHavePrimaryRaw || '').trim());
+      const isPtPackage = /pt|private|trainer/i.test(`${pkgCategory || ''} ${sessionName}`);
+      const defaultFreePt =
+        !isPtPackage && !isSecondary
+          ? expiryDays >= 300
+            ? 3
+            : expiryDays >= 180
+            ? 2
+            : expiryDays >= 90
+            ? 1
+            : 0
+          : 0;
+      const defaultClassTrials = !isPtPackage && !isSecondary && expiryDays >= 90 ? 1 : 0;
 
       const startHm = String(startTimeRaw || '').slice(0, 5);
       const endHm = String(endTimeRaw || '').slice(0, 5);
       const isTimeRestricted =
         Boolean(startHm && endHm) && !(startHm === '00:00' && (endHm === '23:00' || endHm === '23:59'));
 
+      const pkgData: Record<string, any> = {
+        id,
+        name: sessionName.trim(),
+        price,
+        sessions,
+        expiryDays,
+        category: pkgCategory?.trim() || (isPtPackage ? 'PT' : 'Membership'),
+        hierarchyType: isSecondary ? 'Secondary' : 'Primary',
+        requiresPrimaryPackage: isSecondary,
+        targetAttribution: targetRoleRaw?.trim() || 'Sales',
+        status: pkgStatus === 'Hold' ? 'Inactive' : 'Active',
+        invitationsTotal: invitations,
+        guestInvitations: invitations,
+        freezeLimitDays: freezeMaxDays,
+        freezeAllowanceDays: freezeMaxDays,
+        maxFreezeDays: freezeMaxDays,
+        freezeMinDays,
+        minFreezeDays: freezeMinDays,
+        freePtSessions: defaultFreePt,
+        freeClassTrials: defaultClassTrials,
+        benefits: {
+          guestInvitations: invitations,
+          freezeAllowanceDays: freezeMaxDays,
+          minFreezeDays: freezeMinDays,
+          maxFreezeDays: freezeMaxDays,
+          freePtSessions: defaultFreePt,
+          freeClassTrials: defaultClassTrials,
+        },
+        isTimeRestricted,
+        allowedStartTime: isTimeRestricted ? startHm : undefined,
+        allowedEndTime: isTimeRestricted ? endHm : undefined,
+        sourceSystem: 'RedGITS_v17.12',
+        updatedAt: nowIso,
+      };
+
       packageDocsMap.set(sessionName.trim(), {
         id,
-        data: {
-          id,
-          name: sessionName.trim(),
-          price,
-          sessions,
-          expiryDays,
-          category: pkgCategory?.trim() || (/pt|private|trainer/i.test(sessionName) ? 'PT' : 'Membership'),
-          hierarchyType: isSecondary ? 'Secondary' : 'Primary',
-          requiresPrimaryPackage: isSecondary,
-          targetAttribution: targetRoleRaw?.trim() || 'Sales',
-          status: pkgStatus === 'Hold' ? 'Inactive' : 'Active',
-          invitationsTotal: invitations,
-          freezeLimitDays: freezeMaxDays,
-          freezeMinDays,
-          isTimeRestricted,
-          allowedStartTime: isTimeRestricted ? startHm : undefined,
-          allowedEndTime: isTimeRestricted ? endHm : undefined,
-          sourceSystem: 'RedGITS_v17.12',
-          updatedAt: nowIso,
-        },
+        data: pkgData,
       });
+      packageDocsByLowerName.set(sessionName.trim().toLowerCase(), pkgData);
     }
+
+    const resolveCatalogPkg = (rawName?: string): Record<string, any> | null => {
+      if (!rawName) return null;
+      const trimmed = rawName.trim();
+      if (packageDocsMap.has(trimmed)) return packageDocsMap.get(trimmed)!.data;
+      const lower = trimmed.toLowerCase();
+      if (packageDocsByLowerName.has(lower)) return packageDocsByLowerName.get(lower)!;
+      for (const [k, v] of packageDocsByLowerName.entries()) {
+        if (lower.includes(k) || k.includes(lower)) return v;
+      }
+      return null;
+    };
 
     // 8. Build Staff & Trainers from /admin/staff/show
     const coachDocs: Array<{ id: string; data: Record<string, any> }> = [];
@@ -717,7 +805,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     let unmaskedPhonesFetched = 0;
     if (idsNeedingMobile.length > 0) {
       let mIdx = 0;
-      const MOBILE_CONCURRENCY = 12;
+      const MOBILE_CONCURRENCY = 4;
       const fetchMobileWorker = async () => {
         while (mIdx < idsNeedingMobile.length) {
           const targetId = idsNeedingMobile[mIdx++];
@@ -725,11 +813,12 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           try {
             const r = await fetch(`${REDGITS_ORIGIN}/admin/member_data/get_mobile/${targetId}`, {
               headers: {
-                Cookie: cookieHeader,
+                Cookie: getCookieHeader(),
                 'User-Agent': USER_AGENT,
                 'X-Requested-With': 'XMLHttpRequest',
               },
             });
+            saveCookies(r);
             if (r.ok) {
               const j: any = await r.json();
               const clean = normalizePhone(j?.mobile);
@@ -760,6 +849,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       const row = entry.row;
       const natEntry = natByRedgitsId.get(rId);
       const clientDocId = `redgits-${rId}`;
+      const existingClient = existingClientDataByDocId.get(clientDocId) || {};
 
       let name = '';
       let cardMemberId = natEntry?.memberId || rId;
@@ -831,9 +921,158 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         deriveDobFromNationalId(nationalId) ||
         undefined;
 
-      const catalogPkg = packageName ? packageDocsMap.get(packageName.trim())?.data : null;
+      const catalogPkg = resolveCatalogPkg(packageName);
       const defaultSessions =
         catalogPkg?.sessions || catalogPkg?.expiryDays || (packageName ? parseSessionsFromName(packageName) : 30);
+
+      // Build enriched packages[] array from RedGITS subscriptions + active package so multi-package cards & benefits work
+      const existingPackagesArr = Array.isArray(existingClient.packages) ? existingClient.packages : [];
+      const mergedPackages: any[] = [];
+      const seenPkgKeys = new Set<string>();
+
+      const isSecondaryPkgName = (pName: string, catPkg?: Record<string, any> | null): boolean => {
+        if (catPkg?.hierarchyType === 'Secondary') return true;
+        return /\bpt\b|private\s*train|personal\s*train|group\s*pt|semi\s*private|nutrition|physiotherapy|massage|assessment|recovery/i.test(
+          `${catPkg?.category || ''} ${pName}`
+        );
+      };
+
+      if (packageName && status !== 'Lead') {
+        const primaryKey = `${packageName.toLowerCase()}|${startDate || ''}|${endDate || ''}`;
+        seenPkgKeys.add(primaryKey);
+        const existingMatch = existingPackagesArr.find(
+          (p: any) =>
+            String(p?.packageName || '').toLowerCase() === packageName.toLowerCase() &&
+            (!startDate || p?.startDate === startDate)
+        );
+        const isSec = isSecondaryPkgName(packageName, catalogPkg);
+        const invQuota = isSec ? 0 : (catalogPkg?.guestInvitations ?? existingMatch?.guestInvitations ?? 0);
+        const freezeQuota = isSec ? 0 : (catalogPkg?.freezeAllowanceDays ?? existingMatch?.freezeAllowanceDays ?? 0);
+        const minFreeze = isSec ? 0 : (catalogPkg?.minFreezeDays ?? existingMatch?.minFreezeDays ?? (freezeQuota > 0 ? 7 : 0));
+        const maxFreeze = isSec ? 0 : (catalogPkg?.maxFreezeDays ?? existingMatch?.maxFreezeDays ?? freezeQuota);
+        const freePtQuota = isSec ? 0 : (catalogPkg?.freePtSessions ?? existingMatch?.freePtSessions ?? 0);
+        const freeClassQuota = isSec ? 0 : (catalogPkg?.freeClassTrials ?? existingMatch?.freeClassTrials ?? 0);
+
+        mergedPackages.push({
+          ...existingMatch,
+          id: existingMatch?.id || `pkg-${isSec ? 'sec' : 'primary'}-${rId}`,
+          packageId: catalogPkg?.id || existingMatch?.packageId || `redgits-pkg-${slugifyName(packageName)}`,
+          packageName,
+          category: catalogPkg?.category || (isSec ? 'PT' : 'Membership'),
+          hierarchyType: isSec ? 'Secondary' : 'Primary',
+          status: status === 'Hold' ? 'Frozen' : status === 'Expired' ? 'Expired' : 'Active',
+          startDate: startDate || nowIso.slice(0, 10),
+          endDate: endDate || undefined,
+          totalSessions: existingMatch?.totalSessions ?? defaultSessions,
+          sessionsRemaining: existingMatch?.sessionsRemaining ?? (status === 'Active' ? defaultSessions : 0),
+          sessionsUsed: existingMatch?.sessionsUsed ?? 0,
+          pricePaid: existingMatch?.pricePaid ?? catalogPkg?.price ?? 0,
+          guestInvitations: invQuota,
+          invitationsTotal: invQuota,
+          invitationsUsed: existingMatch?.invitationsUsed ?? existingClient.invitationsUsed ?? 0,
+          freezeAllowanceDays: freezeQuota,
+          freezeLimitDays: freezeQuota,
+          minFreezeDays: minFreeze,
+          maxFreezeDays: maxFreeze,
+          freezeDaysUsed: existingMatch?.freezeDaysUsed ?? existingClient.freezeDaysUsed ?? 0,
+          freePtSessions: freePtQuota,
+          freePtSessionsUsed: existingMatch?.freePtSessionsUsed ?? existingClient.freePtSessionsUsed ?? 0,
+          freeClassTrials: freeClassQuota,
+          freeClassTrialsUsed: existingMatch?.freeClassTrialsUsed ?? 0,
+          createdBy: existingMatch?.createdBy || repInfo?.name || fallbackSalesName || 'RedGITS Sync',
+          createdAt: existingMatch?.createdAt || memberSubs[0]?.createdAt || startDate || nowIso,
+          financeConfirmed: true,
+        });
+      }
+
+      for (let sIdx = 0; sIdx < memberSubs.length; sIdx++) {
+        const sub = memberSubs[sIdx];
+        if (!sub || !sub.packageName) continue;
+        const subKey = `${String(sub.packageName).toLowerCase()}|${sub.startDate || ''}|${sub.endDate || ''}`;
+        if (!seenPkgKeys.has(subKey)) {
+          seenPkgKeys.add(subKey);
+          const subCatPkg = resolveCatalogPkg(sub.packageName);
+          const isSec = isSecondaryPkgName(sub.packageName, subCatPkg);
+          const subSessions =
+            subCatPkg?.sessions || subCatPkg?.expiryDays || parseSessionsFromName(sub.packageName);
+          const isSubExpired = sub.endDate && sub.endDate < nowIso.slice(0, 10);
+          mergedPackages.push({
+            id: `pkg-sub-${rId}-${sub.receiptSn || sIdx + 1}`,
+            packageId: subCatPkg?.id || `redgits-pkg-${slugifyName(sub.packageName)}`,
+            packageName: sub.packageName,
+            category: subCatPkg?.category || (isSec ? 'PT' : 'Membership'),
+            hierarchyType: isSec ? 'Secondary' : 'Primary',
+            status: isSubExpired ? 'Expired' : 'Active',
+            startDate: sub.startDate || nowIso.slice(0, 10),
+            endDate: sub.endDate || undefined,
+            totalSessions: subSessions,
+            sessionsRemaining: isSubExpired ? 0 : subSessions,
+            pricePaid: sub.amount || subCatPkg?.price || 0,
+            guestInvitations: isSec ? 0 : (subCatPkg?.guestInvitations ?? 0),
+            invitationsTotal: isSec ? 0 : (subCatPkg?.guestInvitations ?? 0),
+            invitationsUsed: 0,
+            freezeAllowanceDays: isSec ? 0 : (subCatPkg?.freezeAllowanceDays ?? 0),
+            freezeLimitDays: isSec ? 0 : (subCatPkg?.freezeAllowanceDays ?? 0),
+            minFreezeDays: isSec ? 0 : (subCatPkg?.minFreezeDays ?? 0),
+            maxFreezeDays: isSec ? 0 : (subCatPkg?.maxFreezeDays ?? 0),
+            freezeDaysUsed: 0,
+            freePtSessions: isSec ? 0 : (subCatPkg?.freePtSessions ?? 0),
+            freePtSessionsUsed: 0,
+            freeClassTrials: isSec ? 0 : (subCatPkg?.freeClassTrials ?? 0),
+            freeClassTrialsUsed: 0,
+            receiptSn: sub.receiptSn,
+            createdBy: sub.salesman || repInfo?.name || fallbackSalesName || 'RedGITS Sync',
+            createdAt: sub.createdAt || sub.startDate || nowIso,
+            financeConfirmed: true,
+          });
+        }
+      }
+
+      // Preserve any locally-created or reconciled CRM packages not in the summary row
+      for (const localPkg of existingPackagesArr) {
+        const localKey = `${String(localPkg?.packageName || '').toLowerCase()}|${localPkg?.startDate || ''}|${localPkg?.endDate || ''}`;
+        if (localPkg?.packageName && !seenPkgKeys.has(localKey)) {
+          seenPkgKeys.add(localKey);
+          mergedPackages.push(localPkg);
+        }
+      }
+
+      // Determine true Primary Membership vs Secondary Package from mergedPackages
+      const primaryRecord =
+        mergedPackages.find((p) => p.hierarchyType === 'Primary' && p.status !== 'Expired') ||
+        mergedPackages.find((p) => p.hierarchyType === 'Primary') ||
+        mergedPackages[0];
+      const secondaryRecord = mergedPackages.find(
+        (p) => p.hierarchyType === 'Secondary' && p.status !== 'Expired'
+      );
+
+      const resolvedPrimaryPkgName =
+        primaryRecord?.packageName || existingClient.primaryPackageName || packageName || (status === 'Lead' ? 'Prospect' : 'Membership');
+      const resolvedPrimaryExpiry =
+        primaryRecord?.endDate || existingClient.membershipExpiry || endDate || null;
+      const resolvedPrimaryStart =
+        primaryRecord?.startDate || existingClient.startDate || startDate || nowIso.slice(0, 10);
+
+      const todayStr = nowIso.slice(0, 10);
+      const computedDaysRemaining = resolvedPrimaryExpiry
+        ? Math.max(
+            0,
+            Math.round(
+              (new Date(`${resolvedPrimaryExpiry}T00:00:00Z`).getTime() -
+                new Date(`${todayStr}T00:00:00Z`).getTime()) /
+                86400000
+            )
+          )
+        : existingClient.daysRemaining ?? 0;
+
+      const topInvitationsTotal =
+        existingClient.invitationsTotal ?? catalogPkg?.guestInvitations ?? 0;
+      const topFreezeAllowance =
+        existingClient.freezeAllowanceDays ?? catalogPkg?.freezeAllowanceDays ?? 0;
+      const topFreePtTotal =
+        existingClient.freePtSessionsTotal ?? catalogPkg?.freePtSessions ?? 0;
+      const topFreeClassTrials =
+        existingClient.freeClassTrialsTotal ?? catalogPkg?.freeClassTrials ?? 0;
 
       const clientData: Record<string, any> = {
         id: clientDocId,
@@ -842,26 +1081,58 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         memberId: String(cardMemberId || rId).trim(),
         name,
         phone,
-        nationalId: nationalId || undefined,
-        dateOfBirth,
+        nationalId: nationalId || existingClient.nationalId || undefined,
+        dateOfBirth: dateOfBirth || existingClient.dateOfBirth || undefined,
         gender: /fem|انث|أنث/i.test(genderRaw) ? 'Female' : 'Male',
-        memberCategory: inferMemberCategory(packageName, name),
+        memberCategory: inferMemberCategory(resolvedPrimaryPkgName, name),
         status,
         stage: status === 'Lead' ? 'New' : undefined,
         branch: 'Garden 8',
-        packageType: packageName || (status === 'Lead' ? 'Prospect' : 'Membership'),
-        startDate: startDate || nowIso.slice(0, 10),
-        membershipExpiry: endDate || null,
-        sessionsRemaining: status === 'Active' ? defaultSessions : 0,
-        assignedTo: repInfo?.id || undefined,
-        salesRep: repInfo?.id || undefined,
-        salesName: repInfo?.name || fallbackSalesName || undefined,
-        trainerName: trainerName || undefined,
+        packageType: resolvedPrimaryPkgName,
+        primaryPackageName: resolvedPrimaryPkgName,
+        secondaryPackageName: secondaryRecord?.packageName || existingClient.secondaryPackageName || undefined,
+        startDate: resolvedPrimaryStart,
+        membershipExpiry: resolvedPrimaryExpiry,
+        daysRemaining: status === 'Active' || status === 'Hold' ? computedDaysRemaining : 0,
+        isNearlyExpired: status === 'Active' && computedDaysRemaining > 0 && computedDaysRemaining <= 7,
+        sessionsRemaining:
+          existingClient.sessionsRemaining ?? (status === 'Active' ? computedDaysRemaining || defaultSessions : 0),
+        invitationsTotal: topInvitationsTotal,
+        guestInvitations: topInvitationsTotal,
+        invitationsUsed: existingClient.invitationsUsed ?? 0,
+        invitationsRemaining:
+          existingClient.invitationsRemaining ?? Math.max(0, topInvitationsTotal - (existingClient.invitationsUsed ?? 0)),
+        freezeLimitDays: topFreezeAllowance,
+        freezeAllowanceDays: topFreezeAllowance,
+        freezeDaysUsed: existingClient.freezeDaysUsed ?? 0,
+        freezeDaysRemaining:
+          existingClient.freezeDaysRemaining ?? Math.max(0, topFreezeAllowance - (existingClient.freezeDaysUsed ?? 0)),
+        freezeCoins:
+          existingClient.freezeCoins ?? Math.max(0, topFreezeAllowance - (existingClient.freezeDaysUsed ?? 0)),
+        minFreezeDays: catalogPkg?.minFreezeDays ?? existingClient.minFreezeDays ?? 0,
+        maxFreezeDays: catalogPkg?.maxFreezeDays ?? existingClient.maxFreezeDays ?? topFreezeAllowance,
+        freePtSessionsTotal: topFreePtTotal,
+        freePtSessionsUsed: existingClient.freePtSessionsUsed ?? 0,
+        freePtSessionsRemaining:
+          existingClient.freePtSessionsRemaining ?? Math.max(0, topFreePtTotal - (existingClient.freePtSessionsUsed ?? 0)),
+        paidPtSessionsTotal: existingClient.paidPtSessionsTotal ?? 0,
+        paidPtSessionsUsed: existingClient.paidPtSessionsUsed ?? 0,
+        paidPtSessionsRemaining: existingClient.paidPtSessionsRemaining ?? 0,
+        freeClassTrialsTotal: topFreeClassTrials,
+        freeClassTrialsUsed: existingClient.freeClassTrialsUsed ?? 0,
+        freeClassTrialsRemaining:
+          existingClient.freeClassTrialsRemaining ??
+          Math.max(0, topFreeClassTrials - (existingClient.freeClassTrialsUsed ?? 0)),
+        packages: mergedPackages.length > 0 ? mergedPackages : undefined,
+        assignedTo: repInfo?.id || existingClient.assignedTo || undefined,
+        salesRep: repInfo?.id || existingClient.salesRep || undefined,
+        salesName: repInfo?.name || fallbackSalesName || existingClient.salesName || undefined,
+        trainerName: trainerName || existingClient.trainerName || undefined,
         advertisingSource: advSource,
         source: advSource,
         barcode: String(cardMemberId || rId).trim(),
         cardId: rId,
-        frontDeskNote: natEntry?.notes || undefined,
+        frontDeskNote: natEntry?.notes || existingClient.frontDeskNote || undefined,
         updatedAt: nowIso,
         sourceSystem: 'RedGITS_v17.12',
       };

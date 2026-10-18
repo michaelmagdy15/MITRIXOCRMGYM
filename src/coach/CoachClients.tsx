@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc } from 'firebase/firestore';
 import { Client, PTPackageRecord } from '../types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -22,6 +22,23 @@ export default function CoachClients({
 } = {}) {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const isInzan = useMemo(() => {
+    const t = getTenantId().toLowerCase();
+    return t.includes('inzan') || t === 'db-inzanathletics' || t === 'default';
+  }, []);
+  const isFitnessManagerOrAdmin = useMemo(() => {
+    if (!currentUser) return false;
+    const roleStr = String(currentUser.role || '').toLowerCase();
+    const specStr = String((currentUser as any).specialty || '').toLowerCase();
+    return (
+      roleStr === 'fitness_manager' ||
+      roleStr === 'admin' ||
+      roleStr === 'crm_admin' ||
+      roleStr === 'super_admin' ||
+      roleStr === 'manager' ||
+      specStr.includes('fitness manager')
+    );
+  }, [currentUser]);
   const [activeTab, setActiveTab] = useState<'my-clients' | 'all-members'>('my-clients');
   const [quickFilter, setQuickFilter] = useState<'all' | 'low-balance' | 'inactive'>('all');
   const [myClients, setMyClients] = useState<Client[]>([]);
@@ -49,14 +66,20 @@ export default function CoachClients({
   const [logPrs, setLogPrs] = useState<{ exercise: string; weight: string; reps: string }[]>([]);
   const [isSavingPerformance, setIsSavingPerformance] = useState(false);
 
-  // Fetch coach's clients
+  // Fetch coach's clients (sessions + Fitness Manager assigned clients & assessments)
   const fetchMyClients = async () => {
     if (!currentUser) return;
     try {
-      const sessionsQ = query(collection(db, 'sessions'), where('trainerId', '==', currentUser.id));
-      const sessionsSnap = await getDocs(sessionsQ);
+      const [sessionsSnap1, sessionsSnap2, assignedClientsSnap, assignedAssessmentsSnap] = await Promise.all([
+        getDocs(query(collection(db, 'sessions'), where('trainerId', '==', currentUser.id))),
+        getDocs(query(collection(db, 'sessions'), where('coachId', '==', currentUser.id))),
+        getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', currentUser.id))),
+        getDocs(query(collection(db, 'assessments'), where('assignedCoachId', '==', currentUser.id))),
+      ]);
+
       const lastMap: Record<string, string> = {};
-      sessionsSnap.docs.forEach(d => {
+      const sessionDocs = [...sessionsSnap1.docs, ...sessionsSnap2.docs];
+      sessionDocs.forEach(d => {
         const data = d.data();
         const cid = data.clientId as string;
         const dt = data.date as string;
@@ -69,7 +92,18 @@ export default function CoachClients({
       });
       setLastSessionMap(lastMap);
 
-      const clientIds = [...new Set(sessionsSnap.docs.map(d => d.data().clientId as string))];
+      const clientIdSet = new Set<string>();
+      sessionDocs.forEach(d => {
+        const cid = d.data().clientId as string;
+        if (cid) clientIdSet.add(cid);
+      });
+      assignedClientsSnap.docs.forEach(d => clientIdSet.add(d.id));
+      assignedAssessmentsSnap.docs.forEach(d => {
+        const cid = d.data().clientId as string;
+        if (cid && cid !== 'guest') clientIdSet.add(cid);
+      });
+
+      const clientIds = Array.from(clientIdSet);
       if (clientIds.length === 0) {
         setMyClients([]);
         return;
@@ -88,8 +122,12 @@ export default function CoachClients({
     }
   };
 
-  // Fetch all active members in the gym
+  // Fetch all active members in the gym (only for non-Inzan or Fitness Manager/Admin)
   const fetchAllActiveMembers = async () => {
+    if (isInzan && !isFitnessManagerOrAdmin) {
+      setAllMembers([]);
+      return;
+    }
     try {
       const q = query(collection(db, 'clients'), where('status', '==', 'Active'));
       const snap = await getDocs(q);
@@ -123,7 +161,7 @@ export default function CoachClients({
       setLoading(false);
     };
     loadData();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, isInzan, isFitnessManagerOrAdmin]);
 
   const handleDeductSession = async () => {
     if (!selectedClient || !currentUser) return;
@@ -322,14 +360,16 @@ export default function CoachClients({
           className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'my-clients' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
           onClick={() => { setActiveTab('my-clients'); setSearch(''); }}
         >
-          My Clients
+          {isInzan ? 'My Assigned Clients' : 'My Clients'}
         </button>
-        <button
-          className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'all-members' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
-          onClick={() => { setActiveTab('all-members'); setSearch(''); }}
-        >
-          Search All Active Members
-        </button>
+        {(!isInzan || isFitnessManagerOrAdmin) && (
+          <button
+            className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'all-members' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            onClick={() => { setActiveTab('all-members'); setSearch(''); }}
+          >
+            Search All Active Members
+          </button>
+        )}
       </div>
 
       <div className="relative">
@@ -371,7 +411,13 @@ export default function CoachClients({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
             <Users className="h-12 w-12 opacity-20" />
-            <p>{search ? 'No members match your search.' : 'No members found.'}</p>
+            <p>
+              {search
+                ? 'No assigned members match your search.'
+                : isInzan
+                ? 'No members have been assigned to you by the Fitness Manager yet.'
+                : 'No members found.'}
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -379,8 +425,26 @@ export default function CoachClients({
           {filtered.map(client => {
             const remaining = getClientRemaining(client);
             const sessionsCount = remaining ?? 0;
-            const hasSessions = remaining !== null && remaining > 0;
-            const isLowBalance = remaining !== null && remaining <= 2;
+            const freePtTotal =
+              (client as any).freePtSessionsTotal ??
+              (Array.isArray(client.packages)
+                ? client.packages.reduce((acc: number, p: any) => acc + (Number(p?.freePtSessions) || 0), 0)
+                : 0);
+            const freePtUsed = (client as any).freePtSessionsUsed ?? 0;
+            const freePtRemaining = Math.max(0, freePtTotal - freePtUsed);
+            const paidPtPkg = Array.isArray(client.packages)
+              ? client.packages.find(
+                  (p: any) =>
+                    p?.status === 'Active' &&
+                    (/pt|private|trainer/i.test(`${p?.category || ''} ${p?.packageName || ''}`) || p?.type === 'pt')
+                )
+              : null;
+            const paidPtRemaining =
+              paidPtPkg?.sessionsRemaining ??
+              (typeof client.ptSessionsRemaining === 'number' ? client.ptSessionsRemaining : 0);
+
+            const hasSessions = (remaining !== null && remaining > 0) || freePtRemaining > 0;
+            const isLowBalance = remaining !== null && remaining <= 2 && freePtRemaining === 0;
             const cleanPhone = (client.phone || '').replace(/[^0-9]/g, '');
 
             return (
@@ -393,6 +457,21 @@ export default function CoachClients({
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold">{client.name}</p>
+                        {isInzan && (
+                          paidPtRemaining > 0 ? (
+                            <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                              Paid PT: {paidPtRemaining} left
+                            </Badge>
+                          ) : freePtRemaining > 0 ? (
+                            <Badge variant="outline" className="text-[10px] font-bold border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                              Free PT: {freePtRemaining} left
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] font-bold border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                              No Active PT Package • Awaiting Payment
+                            </Badge>
+                          )
+                        )}
                         {isLowBalance && (
                           <Badge
                             variant="outline"

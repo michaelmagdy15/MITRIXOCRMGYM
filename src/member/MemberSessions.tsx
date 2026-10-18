@@ -77,8 +77,14 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
   const [lateCancelReason, setLateCancelReason] = useState('');
 
   const { currentUser } = useAuth();
+  const isInzan = useMemo(() => {
+    const t = getTenantId().toLowerCase();
+    return t.includes('inzan') || t === 'db-inzanathletics' || t === 'default';
+  }, []);
 
   const [selectedRatingSession, setSelectedRatingSession] = useState<Session | null>(null);
+  const [memberAssessments, setMemberAssessments] = useState<any[]>([]);
+  const [rescheduleSuccessMsg, setRescheduleSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!client?.id) {
@@ -104,6 +110,19 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     }, (err) => {
       console.error("Error subscribing to member sessions:", err);
       setLoading(false);
+    });
+
+    // 1b. Subscribe to member's PT assessments
+    const assessQ = query(
+      collection(db, 'assessments'),
+      where('clientId', '==', client.id)
+    );
+    const unsubAssessments = onSnapshot(assessQ, (snap) => {
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      list.sort((a: any, b: any) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      setMemberAssessments(list);
+    }, () => {
+      setMemberAssessments([]);
     });
 
     // 2. Fetch active coaches (server endpoint + direct Firestore fallback)
@@ -138,6 +157,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
 
     return () => {
       unsubSessions();
+      unsubAssessments();
     };
   }, [client?.id]);
 
@@ -238,6 +258,50 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
 
   const selectedCoach = coaches.find(c => c.id === selectedCoachId);
 
+  const latestAssessment = memberAssessments[0] || null;
+  const assignedCoachIdFromProfile =
+    (client as any).assignedCoachId ||
+    latestAssessment?.assignedCoachId ||
+    null;
+  const assignedCoachNameFromProfile =
+    (client as any).assignedCoachName ||
+    (client as any).trainerName ||
+    latestAssessment?.assignedCoachName ||
+    null;
+
+  const hasCompletedOrAssignedAssessment = Boolean(
+    assignedCoachIdFromProfile ||
+      assignedCoachNameFromProfile ||
+      (client as any).ptAssessmentCompleted ||
+      memberAssessments.some((a) => a.assignedCoachId || a.status === 'Completed' || a.status === 'Scheduled')
+  );
+  const hasPendingAssessment = Boolean(
+    !hasCompletedOrAssignedAssessment &&
+      (memberAssessments.length > 0 || (client as any).ptAssessmentStatus === 'PendingFitnessManager')
+  );
+
+  const freePtTotal =
+    (client as any).freePtSessionsTotal ??
+    (Array.isArray(client.packages)
+      ? client.packages.reduce((acc: number, p: any) => acc + (Number(p?.freePtSessions) || 0), 0)
+      : 0);
+  const freePtUsed = (client as any).freePtSessionsUsed ?? 0;
+  const freePtRemaining = Math.max(0, freePtTotal - freePtUsed);
+
+  const activePackageBounds = useMemo(() => {
+    const activePkgs = Array.isArray(client.packages)
+      ? client.packages.filter((p: any) => p?.status === 'Active')
+      : [];
+    const ptPkg = activePkgs.find((p: any) =>
+      /pt|private|trainer/i.test(`${p?.category || ''} ${p?.packageName || ''}`)
+    );
+    const targetPkg = ptPkg || activePkgs[0];
+    return {
+      startDate: targetPkg?.startDate || client.startDate || null,
+      endDate: targetPkg?.endDate || client.membershipExpiry || null,
+    };
+  }, [client.packages, client.startDate, client.membershipExpiry]);
+
   const handleRequestBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCoachId || !bookingDate || !bookingTime || !client.id) return;
@@ -249,6 +313,20 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       return;
     }
 
+    if (isInzan && !hasCompletedOrAssignedAssessment) {
+      setBookingError(
+        'First-time PT members must submit a PT Assessment Request first so the Fitness Manager can assign your Coach.'
+      );
+      return;
+    }
+
+    if (isInzan && activePackageBounds.endDate && bookingDate > activePackageBounds.endDate) {
+      setBookingError(
+        `Session date (${bookingDate}) cannot exceed your active package expiry date (${activePackageBounds.endDate}).`
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     setBookingSuccess(false);
     setBookingError(null);
@@ -256,10 +334,10 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     try {
       const { checkEntitlement } = await import('../services/entitlementService');
       
-      // Enforce entitlement check
+      // Enforce entitlement check (or Free PT sessions for Inzan)
       const entitlementCheck = await checkEntitlement(client, 'pt');
-      if (!entitlementCheck.canBook) {
-        throw new Error(entitlementCheck.reason || "You do not have a valid entitlement to book this session.");
+      if (!entitlementCheck.canBook && !(isInzan && freePtRemaining > 0)) {
+        throw new Error(entitlementCheck.reason || "You do not have a valid PT package or Free PT entitlement to book this session.");
       }
 
       const selectedDateTime = new Date(`${bookingDate}T${bookingTime}`);
@@ -272,8 +350,6 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       const [hours = 0, minutes = 0] = bookingTime.split(':').map(Number);
       const endHours = String((hours + 1) % 24).padStart(2, '0');
       const endTime = `${endHours}:${String(minutes).padStart(2, '0')}`;
-
-      // Atomic deduction is now handled securely inside the server-side transaction!
 
       await bookSession({
         clientId: client.id,
@@ -317,6 +393,13 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       }
     }
 
+    if (isInzan && activePackageBounds.endDate && rescheduleDate > activePackageBounds.endDate) {
+      setRescheduleError(
+        `New date (${rescheduleDate}) cannot be after your package expiry date (${activePackageBounds.endDate}).`
+      );
+      return;
+    }
+
     setIsRescheduling(true);
     setRescheduleError(null);
 
@@ -327,11 +410,31 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       }
       
       const { updateDoc } = await import('firebase/firestore');
-      await updateDoc(doc(db, 'sessions', selectedRescheduleSession.id), {
-        date: rescheduleDate,
-        startTime: rescheduleTime,
-        status: 'Scheduled'
-      });
+      if (isInzan) {
+        // In Inzan Athletics, member reschedule sends an Edit Request to the Coach for confirmation
+        await updateDoc(doc(db, 'sessions', selectedRescheduleSession.id), {
+          rescheduleRequest: {
+            proposedDate: rescheduleDate,
+            proposedTime: rescheduleTime,
+            previousDate: selectedRescheduleSession.date,
+            previousTime: selectedRescheduleSession.startTime,
+            requestedBy: client.name || 'Member',
+            requestedAt: new Date().toISOString(),
+            status: 'PendingCoachApproval',
+          },
+          updatedAt: new Date().toISOString(),
+        });
+        setRescheduleSuccessMsg(
+          `Reschedule request (${rescheduleDate} at ${rescheduleTime}) sent to your Coach for confirmation!`
+        );
+        setTimeout(() => setRescheduleSuccessMsg(null), 5000);
+      } else {
+        await updateDoc(doc(db, 'sessions', selectedRescheduleSession.id), {
+          date: rescheduleDate,
+          startTime: rescheduleTime,
+          status: 'Scheduled'
+        });
+      }
 
       setSelectedRescheduleSession(null);
     } catch (err: any) {
@@ -389,10 +492,11 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     }
   };
 
-  const getTrainerName = (trainerId?: string) => {
+  const getTrainerName = (trainerId?: string, fallbackName?: string) => {
+    if (fallbackName && fallbackName !== 'Unassigned Coach') return fallbackName;
     if (!trainerId) return 'Unassigned Coach';
     const trainer = coaches.find(c => c.id === trainerId);
-    return trainer?.name || 'Trainer';
+    return trainer?.name || fallbackName || 'Trainer';
   };
 
   if (loading) {
@@ -419,7 +523,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
             >
               <ClipboardList className="h-3 w-3" /> Request Assessment
             </Button>
-            {onSwitchToStore && (
+            {onSwitchToStore && (!isInzan || hasCompletedOrAssignedAssessment) && (
               <Button 
                 onClick={onSwitchToStore} 
                 variant="outline" 
@@ -431,18 +535,34 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
             )}
           </div>
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">View scheduled personal training sessions and book new workouts.</p>
+        <p className="text-xs text-muted-foreground mt-0.5">View scheduled personal training sessions and manage your workouts.</p>
       </div>
 
-      {/* Session Balance */}
-      {((client.packages && client.packages.some(p => p.status === 'Active' && p.sessionsRemaining !== undefined)) || (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) || (typeof client.ptSessionsRemaining === 'number' && client.ptSessionsRemaining > 0)) && (
+      {rescheduleSuccessMsg && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 p-3 rounded-xl text-xs font-bold flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span>{rescheduleSuccessMsg}</span>
+        </div>
+      )}
+
+      {/* Session Balance + Free PT Balance */}
+      {((client.packages && client.packages.some(p => p.status === 'Active' && p.sessionsRemaining !== undefined)) || (typeof client.sessionsRemaining === 'number' && client.sessionsRemaining > 0) || (typeof client.ptSessionsRemaining === 'number' && client.ptSessionsRemaining > 0) || freePtRemaining > 0) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {freePtRemaining > 0 && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 flex flex-col justify-center items-center text-center">
+              <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">Complimentary PT</span>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 my-1">{freePtRemaining}</span>
+              <span className="text-[9px] text-muted-foreground">Free PT Sessions Left</span>
+            </div>
+          )}
           {client.packages && client.packages.some(p => p.status === 'Active' && p.sessionsRemaining !== undefined) ? (
             client.packages.filter(p => p.status === 'Active' && p.sessionsRemaining !== undefined).map(pkg => (
               <div key={pkg.id} className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex flex-col justify-center items-center text-center">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase">{pkg.packageName}</span>
                 <span className="text-2xl font-black text-primary my-1">{pkg.sessionsRemaining}</span>
-                <span className="text-[9px] text-muted-foreground">Sessions Remaining</span>
+                <span className="text-[9px] text-muted-foreground">
+                  Sessions Remaining {pkg.endDate ? `• Exp ${pkg.endDate}` : ''}
+                </span>
               </div>
             ))
           ) : (
@@ -455,197 +575,274 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
         </div>
       )}
 
-      {/* Book a new session Section */}
-      <Card className="border bg-card/40 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-bold flex items-center gap-2">
-            <CalendarRange className="h-4 w-4 text-primary" /> Request PT Session
-          </CardTitle>
-          <CardDescription className="text-[11px]">Select a coach and request a personalized training session.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleRequestBooking} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="coachSelect" className="text-xs font-bold text-muted-foreground">Select Coach</Label>
-              <Select value={selectedCoachId} onValueChange={(val) => setSelectedCoachId(val || '')}>
-                <SelectTrigger id="coachSelect" className="bg-background">
-                  <SelectValue placeholder="Choose a trainer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {coaches.map(coach => (
-                    <SelectItem key={coach.id} value={coach.id}>
-                      {coach.name} {coach.branch ? `(${coach.branch})` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* INZAN MANDATORY PT ASSESSMENT GATE */}
+      {isInzan && !hasCompletedOrAssignedAssessment ? (
+        <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card shadow-md">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <Badge variant="outline" className="bg-primary/15 text-primary border-primary/30 text-[10px] font-extrabold uppercase tracking-wider">
+                Mandatory First Step
+              </Badge>
+              {freePtRemaining > 0 && (
+                <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] font-bold">
+                  {freePtRemaining} Free PT Sessions Included
+                </Badge>
+              )}
             </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-muted-foreground">Session Type</Label>
-              <Select value={sessionType} onValueChange={(val) => setSessionType(val as SessionType)}>
-                <SelectTrigger className="bg-background">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1-on-1">1-on-1 PT</SelectItem>
-                  <SelectItem value="Partner">Partner Training</SelectItem>
-                  <SelectItem value="Small Group">Small Group</SelectItem>
-                  <SelectItem value="Class">Class</SelectItem>
-                  <SelectItem value="Nutrition">Nutrition</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Coach Availability Preview */}
-            {selectedCoachId && (
-              <div className="bg-muted/50 border rounded-xl p-3 space-y-2 animate-in fade-in">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-primary uppercase">
-                  <Clock className="h-3.5 w-3.5" />
-                  Coach Weekly Availability
+            <CardTitle className="text-base font-extrabold flex items-center gap-2 mt-2">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              {hasPendingAssessment
+                ? 'PT Assessment Request Under Fitness Manager Review'
+                : 'Step 1: Request Your PT Assessment First'}
+            </CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              {hasPendingAssessment
+                ? `Your PT Assessment request has been routed to the Fitness Manager${
+                    latestAssessment?.preferredCoachName ? ` (Preferred Coach: ${latestAssessment.preferredCoachName})` : ''
+                  }. Once the Fitness Manager assigns your Coach, your PT schedule and package options will unlock automatically.`
+                : 'At Inzan Athletics, all members starting Personal Training (including complimentary Free PT sessions) must first complete a PT Assessment Request. The Fitness Manager will review your profile and assign the best Coach for your goals.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2 flex flex-wrap items-center gap-3">
+            {hasPendingAssessment ? (
+              <div className="w-full p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs flex items-center justify-between gap-2">
+                <div>
+                  <p className="font-bold text-amber-700 dark:text-amber-300">Status: Awaiting Fitness Manager Coach Assignment</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Submitted {latestAssessment?.createdAt ? format(parseISO(latestAssessment.createdAt), 'dd MMM yyyy HH:mm') : 'recently'} • Shift: {latestAssessment?.timePeriod || 'Flexible'} ({latestAssessment?.preferredHour || 'Any'})
+                  </p>
                 </div>
-                {coachSchedule ? (
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-medium text-muted-foreground">
-                    {DAYS_ORDER.map(dayKey => {
-                      const dayConfig = coachSchedule[dayKey];
-                      return (
-                        <div key={dayKey} className="flex justify-between border-b border-border/40 py-0.5">
-                          <span className="capitalize">{dayKey.substring(0, 3)}:</span>
-                          <span>
-                            {dayConfig?.enabled 
-                              ? `${dayConfig.startTime} – ${dayConfig.endTime}` 
-                              : <span className="text-muted-foreground/70 font-semibold italic">Off</span>
-                            }
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground italic">No availability schedule set by this coach yet. You can still send a request.</p>
-                )}
+                <Button size="sm" variant="outline" className="h-8 text-xs font-bold shrink-0" onClick={() => setAssessmentDialogOpen(true)}>
+                  Update Request
+                </Button>
               </div>
+            ) : (
+              <Button
+                onClick={() => setAssessmentDialogOpen(true)}
+                className="w-full sm:w-auto font-extrabold gap-2 h-10 px-5 shadow-sm"
+              >
+                <ClipboardList className="h-4 w-4" /> Request PT Assessment Now
+              </Button>
             )}
-
-            <div className="grid grid-cols-2 gap-4">
+          </CardContent>
+        </Card>
+      ) : (
+        /* Book a new session Section */
+        <Card className="border bg-card/40 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <CalendarRange className="h-4 w-4 text-primary" /> Request PT Session
+                </CardTitle>
+                <CardDescription className="text-[11px]">
+                  {isInzan && assignedCoachNameFromProfile
+                    ? `Assigned Coach: ${assignedCoachNameFromProfile}. Your coach sets your recurring timetable, or you can request a slot below within your package validity.`
+                    : 'Select a coach and request a personalized training session.'}
+                </CardDescription>
+              </div>
+              {isInzan && activePackageBounds.endDate && (
+                <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">
+                  Valid until {activePackageBounds.endDate}
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleRequestBooking} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="bookDate" className="text-xs font-bold text-muted-foreground">Date</Label>
-                <Input
-                  id="bookDate"
-                  type="date"
-                  min={format(addDays(new Date(), 1), 'yyyy-MM-dd')}
-                  value={bookingDate}
-                  onChange={e => setBookingDate(e.target.value)}
-                  required
-                  className="bg-background"
+                <Label htmlFor="coachSelect" className="text-xs font-bold text-muted-foreground">Select Coach</Label>
+                <Select value={selectedCoachId} onValueChange={(val) => setSelectedCoachId(val || '')}>
+                  <SelectTrigger id="coachSelect" className="bg-background">
+                    <SelectValue placeholder="Choose a trainer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(isInzan && assignedCoachIdFromProfile
+                      ? coaches.filter((c) => c.id === assignedCoachIdFromProfile || c.name === assignedCoachNameFromProfile)
+                      : coaches
+                    ).map(coach => (
+                      <SelectItem key={coach.id} value={coach.id}>
+                        {coach.name} {coach.branch ? `(${coach.branch})` : ''}
+                      </SelectItem>
+                    ))}
+                    {isInzan && assignedCoachIdFromProfile && coaches.filter((c) => c.id === assignedCoachIdFromProfile || c.name === assignedCoachNameFromProfile).length === 0 && (
+                      coaches.map(coach => (
+                        <SelectItem key={coach.id} value={coach.id}>
+                          {coach.name} {coach.branch ? `(${coach.branch})` : ''}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-muted-foreground">Session Type</Label>
+                <Select value={sessionType} onValueChange={(val) => setSessionType(val as SessionType)}>
+                  <SelectTrigger className="bg-background">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1-on-1">1-on-1 PT</SelectItem>
+                    <SelectItem value="Partner">Partner Training</SelectItem>
+                    <SelectItem value="Small Group">Small Group</SelectItem>
+                    <SelectItem value="Class">Class</SelectItem>
+                    <SelectItem value="Nutrition">Nutrition</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Coach Availability Preview */}
+              {selectedCoachId && (
+                <div className="bg-muted/50 border rounded-xl p-3 space-y-2 animate-in fade-in">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-primary uppercase">
+                    <Clock className="h-3.5 w-3.5" />
+                    Coach Weekly Availability
+                  </div>
+                  {coachSchedule ? (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-medium text-muted-foreground">
+                      {DAYS_ORDER.map(dayKey => {
+                        const dayConfig = coachSchedule[dayKey];
+                        return (
+                          <div key={dayKey} className="flex justify-between border-b border-border/40 py-0.5">
+                            <span className="capitalize">{dayKey.substring(0, 3)}:</span>
+                            <span>
+                              {dayConfig?.enabled 
+                                ? `${dayConfig.startTime} – ${dayConfig.endTime}` 
+                                : <span className="text-muted-foreground/70 font-semibold italic">Off</span>
+                              }
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground italic">No availability schedule set by this coach yet. You can still send a request.</p>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="bookDate" className="text-xs font-bold text-muted-foreground">Date</Label>
+                  <Input
+                    id="bookDate"
+                    type="date"
+                    min={format(addDays(new Date(), 1), 'yyyy-MM-dd')}
+                    max={isInzan && activePackageBounds.endDate ? activePackageBounds.endDate : undefined}
+                    value={bookingDate}
+                    onChange={e => setBookingDate(e.target.value)}
+                    required
+                    className="bg-background"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="bookTime" className="text-xs font-bold text-muted-foreground">Time</Label>
+                  <Input
+                    id="bookTime"
+                    type="time"
+                    value={bookingTime}
+                    onChange={e => setBookingTime(e.target.value)}
+                    required
+                    className="bg-background"
+                  />
+                </div>
+              </div>
+
+              {/* Interactive Slot Pills for Selected Date */}
+              {dateDaySlots && (
+                <div className="space-y-2 pt-1 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-muted-foreground capitalize">
+                      Available Slots ({dateDaySlots.dayKey})
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground">1-tap to select time & type</span>
+                  </div>
+                  {!dateDaySlots.enabled ? (
+                    <p className="text-xs text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 font-medium">
+                      Coach is marked Off on {dateDaySlots.dayKey}. Please pick another date.
+                    </p>
+                  ) : dateDaySlots.slots.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      No open slots configured for this day.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      {dateDaySlots.slots.map(slot => {
+                        const isSelected = bookingTime === slot.startTime;
+                        return (
+                          <button
+                            key={slot.id}
+                            type="button"
+                            onClick={() => {
+                              setBookingTime(slot.startTime);
+                              if (slot.dedicatedType) {
+                                setSessionType(slot.dedicatedType);
+                              }
+                            }}
+                            className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between gap-1 ${
+                              isSelected
+                                ? 'bg-primary text-primary-foreground border-primary shadow-sm font-bold'
+                                : slot.matchesSelectedType
+                                  ? 'bg-background hover:border-primary/50 text-foreground border-border'
+                                  : 'bg-muted/40 hover:border-primary/40 text-muted-foreground border-dashed border-border'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-xs font-mono font-extrabold">
+                                {slot.startTime} – {slot.endTime}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-1 text-[10px]">
+                              <span className="truncate font-semibold">
+                                {slot.dedicatedType ? slot.dedicatedType : 'Any Type'}
+                              </span>
+                              <span className="font-mono opacity-80 shrink-0">
+                                Max {slot.capacity}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="bookMessage" className="text-xs font-bold text-muted-foreground">Message / Focus (Optional)</Label>
+                <Textarea
+                  id="bookMessage"
+                  rows={2}
+                  value={bookingMessage}
+                  onChange={e => setBookingMessage(e.target.value)}
+                  placeholder="e.g. Focus on strength, conditioning, mobility..."
+                  className="bg-background resize-none"
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="bookTime" className="text-xs font-bold text-muted-foreground">Time</Label>
-                <Input
-                  id="bookTime"
-                  type="time"
-                  value={bookingTime}
-                  onChange={e => setBookingTime(e.target.value)}
-                  required
-                  className="bg-background"
-                />
-              </div>
-            </div>
-
-            {/* Interactive Slot Pills for Selected Date */}
-            {dateDaySlots && (
-              <div className="space-y-2 pt-1 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-bold text-muted-foreground capitalize">
-                    Available Slots ({dateDaySlots.dayKey})
-                  </Label>
-                  <span className="text-[10px] text-muted-foreground">1-tap to select time & type</span>
+              {bookingError && (
+                <div className="bg-secondary border border-border text-muted-foreground p-3 rounded-lg flex items-center gap-2.5 text-xs">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{bookingError}</span>
                 </div>
-                {!dateDaySlots.enabled ? (
-                  <p className="text-xs text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 font-medium">
-                    Coach is marked Off on {dateDaySlots.dayKey}. Please pick another date.
-                  </p>
-                ) : dateDaySlots.slots.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">
-                    No open slots configured for this day.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    {dateDaySlots.slots.map(slot => {
-                      const isSelected = bookingTime === slot.startTime;
-                      return (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          onClick={() => {
-                            setBookingTime(slot.startTime);
-                            if (slot.dedicatedType) {
-                              setSessionType(slot.dedicatedType);
-                            }
-                          }}
-                          className={`p-2 rounded-xl border text-left transition-all flex flex-col justify-between gap-1 ${
-                            isSelected
-                              ? 'bg-primary text-primary-foreground border-primary shadow-sm font-bold'
-                              : slot.matchesSelectedType
-                                ? 'bg-background hover:border-primary/50 text-foreground border-border'
-                                : 'bg-muted/40 hover:border-primary/40 text-muted-foreground border-dashed border-border'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-xs font-mono font-extrabold">
-                              {slot.startTime} – {slot.endTime}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-1 text-[10px]">
-                            <span className="truncate font-semibold">
-                              {slot.dedicatedType ? slot.dedicatedType : 'Any Type'}
-                            </span>
-                            <span className="font-mono opacity-80 shrink-0">
-                              Max {slot.capacity}
-                            </span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="bookMessage" className="text-xs font-bold text-muted-foreground">Message / Focus (Optional)</Label>
-              <Textarea
-                id="bookMessage"
-                rows={2}
-                value={bookingMessage}
-                onChange={e => setBookingMessage(e.target.value)}
-                placeholder="e.g. Focus on boxing technique, pad work, cardio..."
-                className="bg-background resize-none"
-              />
-            </div>
+              {bookingSuccess && (
+                <div className="bg-green-500/10 border border-green-500/20 text-green-600 p-3 rounded-lg flex items-center gap-2.5 text-xs">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>Request sent successfully! Your coach will confirm soon.</span>
+                </div>
+              )}
 
-            {bookingError && (
-              <div className="bg-secondary border border-border text-muted-foreground p-3 rounded-lg flex items-center gap-2.5 text-xs">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{bookingError}</span>
-              </div>
-            )}
-
-            {bookingSuccess && (
-              <div className="bg-green-500/10 border border-green-500/20 text-green-600 p-3 rounded-lg flex items-center gap-2.5 text-xs">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span>Request sent successfully! Your coach will confirm soon.</span>
-              </div>
-            )}
-
-            <Button type="submit" disabled={isSubmitting || !selectedCoachId} className="w-full font-bold">
-              {isSubmitting ? 'Sending Request...' : 'Send Request'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <Button type="submit" disabled={isSubmitting || !selectedCoachId} className="w-full font-bold">
+                {isSubmitting ? 'Sending Request...' : 'Send Request'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upcoming Sessions */}
       <div className="space-y-3">
@@ -656,14 +853,15 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
           upcomingSessions.map(session => {
             const dateObj = new Date(`${session.date}T${session.startTime}`);
             const style = STATUS_STYLES[session.status] || { badge: 'bg-blue-500/10 text-blue-600 border-blue-200/50', text: 'Scheduled' };
+            const pendingReschedule = session.rescheduleRequest?.status === 'PendingCoachApproval' ? session.rescheduleRequest : null;
             
             return (
               <Card key={session.id} className="border bg-card/40 hover:bg-card/75 transition-colors shadow-sm">
                 <CardContent className="p-4 flex justify-between items-center gap-4">
-                  <div className="space-y-1">
+                  <div className="space-y-1 flex-1">
                     <div className="flex items-center gap-1.5 text-sm font-bold">
                       <UserIcon className="h-4 w-4 text-primary" />
-                      <span>{getTrainerName(session.coachId)}</span>
+                      <span>{getTrainerName(session.coachId, session.coachName)}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground font-semibold">
                       <span className="flex items-center gap-1 font-mono">
@@ -684,6 +882,14 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         </span>
                       )}
                     </div>
+                    {pendingReschedule && (
+                      <div className="mt-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-700 dark:text-amber-300 font-semibold flex items-center gap-1.5">
+                        <Clock className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          Edit Request Pending Coach Approval: Proposed {pendingReschedule.proposedDate} at {pendingReschedule.proposedTime}
+                        </span>
+                      </div>
+                    )}
                     {session.notes && (
                       <p className="text-[11px] text-muted-foreground flex items-start gap-1 bg-muted/40 p-2 rounded-lg mt-2 italic">
                         <MessageSquare className="h-3 w-3 shrink-0 mt-0.5" />
@@ -698,8 +904,8 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         buttonText="Add to Calendar"
                         className="text-[10px] text-primary border-primary/20 hover:border-primary/40 h-7 font-bold px-2.5 bg-primary/5 hover:bg-primary/10"
                         event={{
-                          title: `PT Session with ${getTrainerName(session.coachId)} (${session.type || '1-on-1'})`,
-                          description: `Personal Training Session with Coach ${getTrainerName(session.coachId)}.\nType: ${session.type || '1-on-1'}\nBranch: ${session.branch || 'Inzan Athletics'}${session.notes ? `\nFocus/Notes: ${session.notes}` : ''}`,
+                          title: `PT Session with ${getTrainerName(session.coachId, session.coachName)} (${session.type || '1-on-1'})`,
+                          description: `Personal Training Session with Coach ${getTrainerName(session.coachId, session.coachName)}.\nType: ${session.type || '1-on-1'}\nBranch: ${session.branch || 'Inzan Athletics'}${session.notes ? `\nFocus/Notes: ${session.notes}` : ''}`,
                           location: session.branch || 'Inzan Athletics',
                           startTime: getSessionEventDates(session).startIso,
                           endTime: getSessionEventDates(session).endIso
@@ -712,12 +918,12 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         className="text-[10px] text-primary border-primary/20 h-7 font-bold px-2.5"
                         onClick={() => {
                           setSelectedRescheduleSession(session);
-                          setRescheduleDate(session.date);
-                          setRescheduleTime(session.startTime);
+                          setRescheduleDate(pendingReschedule?.proposedDate || session.date);
+                          setRescheduleTime(pendingReschedule?.proposedTime || session.startTime);
                           setRescheduleError(null);
                         }}
                       >
-                        Reschedule
+                        {isInzan ? (pendingReschedule ? 'Update Edit Request' : 'Edit / Request Reschedule') : 'Reschedule'}
                       </Button>
                       <Button
                         size="xs"
@@ -731,7 +937,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                     </div>
                   </div>
                   <Badge className={`border text-xs px-2.5 py-0.5 rounded-full shrink-0 ${style.badge}`} variant="outline">
-                    {style.text}
+                    {pendingReschedule ? 'Edit Pending' : style.text}
                   </Badge>
                 </CardContent>
               </Card>
@@ -740,7 +946,9 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
         ) : (
           <Card className="border-dashed bg-muted/20">
             <CardContent className="py-8 text-center text-muted-foreground text-xs italic">
-              No upcoming sessions scheduled. Select a coach above to request a session.
+              {isInzan && !hasCompletedOrAssignedAssessment
+                ? 'Complete your PT Assessment Request above so your assigned Coach can schedule your sessions.'
+                : 'No upcoming sessions scheduled. Your assigned coach will set your sessions or you can request a slot above.'}
             </CardContent>
           </Card>
         )}

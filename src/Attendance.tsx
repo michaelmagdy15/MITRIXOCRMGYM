@@ -1582,14 +1582,60 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       </p>
                     )}
                   </div>
-                  {isInzan && (
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Invitation Passes</Label>
-                      <p className="text-sm font-bold text-primary">
-                        {Math.max(0, Number((lastScannedMember as any).invitationsTotal ?? 3) - Number((lastScannedMember as any).invitationsUsed ?? 0))} / {Number((lastScannedMember as any).invitationsTotal ?? 3)} left
-                      </p>
-                    </div>
-                  )}
+                  {isInzan && (() => {
+                    const m = lastScannedMember as any;
+                    const daysLeft = typeof m.daysRemaining === 'number'
+                      ? m.daysRemaining
+                      : (m.membershipExpiry ? Math.max(0, Math.ceil((new Date(m.membershipExpiry).getTime() - Date.now()) / 86400000)) : 0);
+                    const paidPtRem = Number(m.paidPtSessionsRemaining ?? Math.max(0, Number(m.paidPtSessionsTotal ?? 0) - Number(m.paidPtSessionsUsed ?? 0)));
+                    const paidPtTot = Number(m.paidPtSessionsTotal ?? 0);
+                    const freePtRem = Number(m.freePtSessionsRemaining ?? Math.max(0, Number(m.freePtSessionsTotal ?? 0) - Number(m.freePtSessionsUsed ?? 0)));
+                    const freePtTot = Number(m.freePtSessionsTotal ?? 0);
+                    const invRem = Number(m.invitationsRemaining ?? Math.max(0, Number(m.invitationsTotal ?? 0) - Number(m.invitationsUsed ?? 0)));
+                    const invTot = Number(m.invitationsTotal ?? 0);
+                    const freezeRem = Number(m.freezeDaysRemaining ?? m.freezeCoins ?? Math.max(0, Number(m.freezeAllowanceDays ?? 0) - Number(m.freezeDaysUsed ?? 0)));
+                    const freezeTot = Number(m.freezeAllowanceDays ?? 0);
+                    const secondaryName = m.secondaryPackageName || ((m.packages || []).find((p: any) => p.status === 'Active' && p.hierarchy === 'Secondary')?.packageName);
+
+                    return (
+                      <div className="col-span-2 rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          <div className="p-2 rounded-lg bg-background border border-emerald-500/25">
+                            <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 block">Primary Package</span>
+                            <span className="font-bold text-foreground truncate block">{m.primaryPackageName || selectedPackageName || m.packageType || '—'}</span>
+                            <span className={`text-[11px] font-semibold ${daysLeft <= 7 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                              {daysLeft} days left to renew {m.membershipExpiry ? `(${String(m.membershipExpiry).slice(0, 10)})` : ''}
+                            </span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-background border border-blue-500/25">
+                            <span className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400 block">Secondary Package</span>
+                            <span className="font-bold text-foreground truncate block">{secondaryName || 'No Secondary Package'}</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {paidPtTot > 0 ? `Paid PT: ${paidPtRem} / ${paidPtTot} left` : 'Add-on / PT Tier'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                          <div className="p-1.5 rounded-lg bg-background border">
+                            <span className="text-[9px] uppercase text-muted-foreground font-bold block">Paid PT</span>
+                            <span className="font-bold text-blue-500">{paidPtRem} / {paidPtTot}</span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-background border">
+                            <span className="text-[9px] uppercase text-muted-foreground font-bold block">Free PT</span>
+                            <span className="font-bold text-purple-500">{freePtRem} / {freePtTot}</span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-background border">
+                            <span className="text-[9px] uppercase text-muted-foreground font-bold block">Invites</span>
+                            <span className="font-bold text-primary">{invRem} / {invTot}</span>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-background border">
+                            <span className="text-[9px] uppercase text-muted-foreground font-bold block">Freeze Days</span>
+                            <span className="font-bold text-cyan-500">{freezeRem} / {freezeTot}d</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* RedGITS v17.12 Parity: 1-Click Guest Invitation Pass Redemption */}

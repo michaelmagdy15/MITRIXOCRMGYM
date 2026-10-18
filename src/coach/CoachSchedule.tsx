@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { db } from '../firebase';
 import { 
   doc, getDoc, setDoc, updateDoc, addDoc, 
@@ -620,6 +621,41 @@ export default function CoachSchedule({
     setAssignDialogOpen(true);
   };
 
+  const { settings } = useSettings();
+  const isInzan = settings.tenantId === 'inzanathletics' || (typeof window !== 'undefined' && window.location.hostname.includes('inzan'));
+  const isFitnessManagerOrAdmin = Boolean(
+    currentUser?.role === 'Admin' ||
+    currentUser?.role === 'Manager' ||
+    (currentUser?.role as string) === 'Fitness Manager' ||
+    (currentUser?.title || '').toLowerCase().includes('fitness manager') ||
+    (currentUser?.name || '').toLowerCase().includes('fitness manager')
+  );
+
+  const getClientPtEntitlement = (c: Client) => {
+    const raw = c as any;
+    const paidRem = c.sessionsRemaining === 'unlimited' ? 999 : Number(c.sessionsRemaining ?? 0);
+    const freeTotal = Number(raw.freePtSessions ?? raw.benefits?.freePtSessions ?? 0);
+    const freeUsed = Number(raw.freePtSessionsUsed ?? raw.benefits?.freePtSessionsUsed ?? 0);
+    // Also count already-scheduled upcoming Free PT sessions so coach cannot over-schedule beyond freeTotal
+    const scheduledFreeCount = sessions.filter(
+      s => s.clientId === c.id && s.status === 'Scheduled' && Boolean((s as any).isFreePtSession)
+    ).length;
+    const freeRem = Math.max(0, freeTotal - freeUsed - scheduledFreeCount);
+    const pkgs: any[] = Array.isArray(raw.packages) ? raw.packages : [];
+    const activePkg = pkgs.find((p: any) => p.status === 'Active' || !p.status) || pkgs[0];
+    const pkgStartDate = String(activePkg?.startDate || c.joinDate || '').slice(0, 10);
+    const pkgEndDate = String(activePkg?.endDate || c.expiryDate || '').slice(0, 10);
+    return {
+      paidRem,
+      freeTotal,
+      freeUsed,
+      freeRem,
+      hasEntitlement: paidRem > 0 || freeRem > 0,
+      pkgStartDate,
+      pkgEndDate,
+    };
+  };
+
   // Submit Member / Session Assignment
   const handleConfirmAssign = async () => {
     if (!currentUser) return;
@@ -638,11 +674,29 @@ export default function CoachSchedule({
       return;
     }
 
+    const bookingDateStr = format(selectedDate, 'yyyy-MM-dd');
+    const ent = getClientPtEntitlement(client);
+
+    if (isInzan && selectedSessionType !== 'Class') {
+      if (!ent.hasEntitlement) {
+        setBookingError('No active PT package — awaiting payment. This member has 0 Free PT and 0 Paid PT sessions remaining.');
+        return;
+      }
+      if (ent.pkgEndDate && bookingDateStr > ent.pkgEndDate) {
+        setBookingError(`Cannot schedule on ${bookingDateStr}: Member's active package expires on ${ent.pkgEndDate}.`);
+        return;
+      }
+      if (ent.pkgStartDate && bookingDateStr < ent.pkgStartDate) {
+        setBookingError(`Cannot schedule on ${bookingDateStr}: Member's package starts on ${ent.pkgStartDate}.`);
+        return;
+      }
+    }
+
     setIsSubmittingBooking(true);
     setBookingError(null);
 
     try {
-      const bookingDateStr = format(selectedDate, 'yyyy-MM-dd');
+      const isFreePtSession = isInzan && ent.paidRem === 0 && ent.freeRem > 0;
       await addDoc(collection(db, 'sessions'), {
         clientId: client.id,
         clientName: client.name || 'Member',
@@ -656,6 +710,7 @@ export default function CoachSchedule({
         status: 'Scheduled',
         notes: sessionNotes.trim(),
         branch: currentUser.branch || client.branch || 'ALL',
+        ...(isFreePtSession ? { isFreePtSession: true } : {}),
         createdAt: new Date().toISOString(),
       });
 
@@ -665,6 +720,46 @@ export default function CoachSchedule({
       setBookingError(err.message || 'Failed to assign member to slot.');
     } finally {
       setIsSubmittingBooking(false);
+    }
+  };
+
+  const handleResolveRescheduleRequest = async (session: Session, approve: boolean) => {
+    const req = (session as any).rescheduleRequest;
+    if (!req) return;
+    setIsUpdatingSession(true);
+    try {
+      const nowIso = new Date().toISOString();
+      if (approve) {
+        await updateDoc(doc(db, 'sessions', session.id), {
+          date: req.proposedDate || session.date,
+          startTime: req.proposedTime || session.startTime,
+          time: req.proposedTime || session.time,
+          status: 'Scheduled',
+          rescheduleRequest: {
+            ...req,
+            status: 'Approved',
+            resolvedAt: nowIso,
+            resolvedBy: currentUser?.name || 'Coach',
+          },
+          updatedAt: nowIso,
+        });
+      } else {
+        await updateDoc(doc(db, 'sessions', session.id), {
+          rescheduleRequest: {
+            ...req,
+            status: 'Rejected',
+            resolvedAt: nowIso,
+            resolvedBy: currentUser?.name || 'Coach',
+          },
+          updatedAt: nowIso,
+        });
+      }
+      setSelectedSession(null);
+    } catch (err) {
+      console.error('Error resolving reschedule request:', err);
+      alert('Failed to process reschedule request.');
+    } finally {
+      setIsUpdatingSession(false);
     }
   };
 
@@ -700,14 +795,21 @@ export default function CoachSchedule({
 
   // Filtered client list for assignment search
   const filteredClients = useMemo(() => {
-    if (!clientSearch.trim()) return clients.slice(0, 15);
+    const baseList = (isInzan && !isFitnessManagerOrAdmin)
+      ? clients.filter(c =>
+          c.assignedCoachId === currentUser?.id ||
+          (currentUser?.coachId && c.assignedCoachId === currentUser.coachId) ||
+          (currentUser?.name && c.assignedCoachName && c.assignedCoachName.toLowerCase() === currentUser.name.toLowerCase())
+        )
+      : clients;
+    if (!clientSearch.trim()) return baseList.slice(0, 15);
     const q = clientSearch.toLowerCase();
-    return clients.filter(c => 
+    return baseList.filter(c => 
       (c.name && c.name.toLowerCase().includes(q)) || 
       (c.phone && c.phone.includes(q)) ||
       (c.email && c.email.toLowerCase().includes(q))
     ).slice(0, 15);
-  }, [clients, clientSearch]);
+  }, [clients, clientSearch, isInzan, isFitnessManagerOrAdmin, currentUser]);
 
   const selectedClient = clients.find(c => c.id === selectedClientId);
 
@@ -1695,12 +1797,17 @@ export default function CoachSchedule({
               </div>
 
               {/* Client options list */}
-              <div className="max-h-36 overflow-y-auto border rounded-xl divide-y bg-background">
+              <div className="max-h-40 overflow-y-auto border rounded-xl divide-y bg-background">
                 {filteredClients.length === 0 ? (
-                  <p className="p-3 text-center text-xs text-muted-foreground">No members found.</p>
+                  <p className="p-3 text-center text-xs text-muted-foreground">
+                    {isInzan && !isFitnessManagerOrAdmin
+                      ? 'No assigned members found. Wait for the Fitness Manager to assign members to you.'
+                      : 'No members found.'}
+                  </p>
                 ) : (
                   filteredClients.map(c => {
                     const isSelected = selectedClientId === c.id;
+                    const ent = getClientPtEntitlement(c);
                     return (
                       <button
                         key={c.id}
@@ -1712,13 +1819,32 @@ export default function CoachSchedule({
                       >
                         <div className="min-w-0">
                           <p className="font-bold truncate">{c.name || 'Member'}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono truncate">{c.phone || c.email || 'No contact'}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">
+                            {c.phone || c.email || 'No contact'}
+                            {ent.pkgEndDate ? ` • Exp: ${ent.pkgEndDate}` : ''}
+                          </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {c.sessionsRemaining !== undefined && (
-                            <Badge variant="outline" className="text-[9px]">
-                              {c.sessionsRemaining} left
-                            </Badge>
+                          {isInzan ? (
+                            ent.paidRem > 0 ? (
+                              <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-700 border-emerald-300">
+                                {ent.paidRem === 999 ? 'Unlimited PT' : `${ent.paidRem} Paid PT left`}
+                              </Badge>
+                            ) : ent.freeRem > 0 ? (
+                              <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-700 border-blue-300">
+                                {ent.freeRem}/{ent.freeTotal} Free PT left
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-700 border-amber-300">
+                                No Active PT • Awaiting Payment
+                              </Badge>
+                            )
+                          ) : (
+                            c.sessionsRemaining !== undefined && (
+                              <Badge variant="outline" className="text-[9px]">
+                                {c.sessionsRemaining} left
+                              </Badge>
+                            )
                           )}
                           {isSelected && <Check className="h-4 w-4 text-primary" />}
                         </div>
@@ -1728,14 +1854,35 @@ export default function CoachSchedule({
                 )}
               </div>
 
-              {selectedClient && (
-                <div className="p-2.5 bg-primary/5 border border-primary/20 rounded-xl text-xs flex items-center justify-between">
-                  <span className="font-bold text-primary">Selected: {selectedClient.name}</span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {selectedClient.packageType || 'General PT'}
-                  </span>
-                </div>
-              )}
+              {selectedClient && (() => {
+                const ent = getClientPtEntitlement(selectedClient);
+                return (
+                  <div className="p-2.5 bg-primary/5 border border-primary/20 rounded-xl text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-primary">Selected: {selectedClient.name}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {selectedClient.packageType || 'General PT'}
+                      </span>
+                    </div>
+                    {isInzan && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] pt-1 border-t border-primary/10">
+                        <span className={ent.hasEntitlement ? 'text-emerald-600 font-semibold' : 'text-amber-600 font-semibold'}>
+                          {ent.paidRem > 0
+                            ? `Paid PT Balance: ${ent.paidRem} session(s)`
+                            : ent.freeRem > 0
+                              ? `Free PT Quota: ${ent.freeRem} of ${ent.freeTotal} available`
+                              : 'No active PT package — awaiting payment'}
+                        </span>
+                        {ent.pkgEndDate && (
+                          <span className="font-mono text-muted-foreground">
+                            Package Valid Until: {ent.pkgEndDate}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Session Type Selector */}
@@ -1829,9 +1976,16 @@ export default function CoachSchedule({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Type:</span>
-                  <Badge variant="outline" className="text-[10px] font-bold">
-                    {selectedSession.type}
-                  </Badge>
+                  <div className="flex items-center gap-1">
+                    {(selectedSession as any).isFreePtSession && (
+                      <Badge variant="outline" className="text-[10px] font-bold bg-blue-500/10 text-blue-600 border-blue-200">
+                        Free PT Quota
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-[10px] font-bold">
+                      {selectedSession.type}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Status:</span>
@@ -1846,6 +2000,43 @@ export default function CoachSchedule({
                   </div>
                 )}
               </div>
+
+              {/* Member Reschedule Request Approval Box */}
+              {(selectedSession as any).rescheduleRequest?.status === 'PendingCoachApproval' && (
+                <div className="p-3 rounded-xl border border-amber-300 bg-amber-500/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" /> Member Reschedule Request
+                    </span>
+                    <Badge className="bg-amber-500 text-black text-[10px] font-bold">Pending Approval</Badge>
+                  </div>
+                  <p className="text-xs text-foreground">
+                    Requested new slot:{' '}
+                    <span className="font-mono font-bold">
+                      {(selectedSession as any).rescheduleRequest.proposedDate} at {(selectedSession as any).rescheduleRequest.proposedTime}
+                    </span>
+                  </p>
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      disabled={isUpdatingSession}
+                      onClick={() => handleResolveRescheduleRequest(selectedSession, true)}
+                      className="h-7 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white flex-1"
+                    >
+                      Approve New Time
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isUpdatingSession}
+                      onClick={() => handleResolveRescheduleRequest(selectedSession, false)}
+                      className="h-7 text-xs font-bold border-red-300 text-red-600 hover:bg-red-50 flex-1"
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Launch Floor Mode Action */}
               {onStartFloor && (

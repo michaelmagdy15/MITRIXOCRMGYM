@@ -46,9 +46,14 @@ import {
   List,
   SlidersHorizontal,
   X,
-  Sparkles
+  Sparkles,
+  Edit,
+  Trash2,
+  Search,
+  UserPlus
 } from 'lucide-react';
 import { PTPackageRecord, Branch } from './types';
+import { isTenantInzan } from './utils/inzanOrg';
 
 interface GymClass {
   id: string;
@@ -64,6 +69,8 @@ interface GymClass {
   capacity: number;
   attendees: string[];   // clientIds
   waitlist?: string[];
+  checkedInAttendees?: string[];
+  noShowAttendees?: string[];
   type: 'Class' | 'Event';
   category?: string;
   status?: 'active' | 'cancelled' | 'completed';
@@ -94,6 +101,11 @@ export default function CalendarView() {
     return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
   }, [branding?.companyName]);
 
+  const isInzan = useMemo(() => {
+    const tenantId = getTenantId();
+    return isTenantInzan() || tenantId.toLowerCase().includes('inzan') || (branding?.companyName || '').toLowerCase().includes('inzan');
+  }, [branding?.companyName]);
+
   // Calendar State
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
@@ -114,6 +126,14 @@ export default function CalendarView() {
   // Gym Classes State
   const [gymClasses, setGymClasses] = useState<GymClass[]>([]);
   const [selectedClass, setSelectedClass] = useState<GymClass | null>(null);
+  const [rosterSearchQuery, setRosterSearchQuery] = useState('');
+  const [isEditingClassDetails, setIsEditingClassDetails] = useState(false);
+  const [editClassName, setEditClassName] = useState('');
+  const [editClassCoach, setEditClassCoach] = useState('');
+  const [editClassTime, setEditClassTime] = useState('');
+  const [editClassCapacity, setEditClassCapacity] = useState(15);
+  const [editClassDescription, setEditClassDescription] = useState('');
+  const [isSavingClassEdit, setIsSavingClassEdit] = useState(false);
 
   // Group Class Booking Form State
   const [bookingType, setBookingType] = useState<'pt' | 'class'>('pt');
@@ -168,6 +188,8 @@ export default function CalendarView() {
           capacity: Number(data.capacity) || 15,
           attendees: data.attendees || [],
           waitlist: data.waitlist || [],
+          checkedInAttendees: data.checkedInAttendees || [],
+          noShowAttendees: data.noShowAttendees || [],
           type: data.type || (data.category === 'Event' ? 'Event' : 'Class'),
           category: data.category || data.type || 'Class',
           status: data.status || 'active',
@@ -175,6 +197,7 @@ export default function CalendarView() {
         } as GymClass;
       });
       setGymClasses(events);
+      setSelectedClass(prev => prev ? (events.find(e => e.id === prev.id) || prev) : null);
     }, (err) => {
       console.error("Error loading class schedules:", err);
     });
@@ -1167,109 +1190,452 @@ export default function CalendarView() {
         })()}
       </Dialog>
 
-      {/* Class Details / Delete Class Modal Dialog */}
-      <Dialog open={selectedClass !== null} onOpenChange={(open) => !open && setSelectedClass(null)}>
+      {/* Class Details & Embedded Class Manager Modal Dialog */}
+      <Dialog
+        open={selectedClass !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedClass(null);
+            setIsEditingClassDetails(false);
+            setRosterSearchQuery('');
+          }
+        }}
+      >
         {selectedClass && (() => {
+          const liveClass = gymClasses.find(c => c.id === selectedClass.id) || selectedClass;
+          const attendeeIds = liveClass.attendees || [];
+          const waitlistIds = liveClass.waitlist || [];
+          const checkedInIds = liveClass.checkedInAttendees || [];
+          const noShowIds = liveClass.noShowAttendees || [];
+          const isFull = attendeeIds.length >= liveClass.capacity;
+
+          const matchingMembers = isInzan && rosterSearchQuery.trim().length >= 2
+            ? clients
+                .filter(c => {
+                  const q = rosterSearchQuery.toLowerCase();
+                  return (
+                    (c.name || '').toLowerCase().includes(q) ||
+                    String(c.memberId || '').toLowerCase().includes(q) ||
+                    (c.phone || '').toLowerCase().includes(q)
+                  );
+                })
+                .slice(0, 8)
+            : [];
+
+          const handleAddMemberToClass = async (memberId: string) => {
+            if (attendeeIds.includes(memberId) || waitlistIds.includes(memberId)) return;
+            try {
+              if (!isFull) {
+                const updated = [...attendeeIds, memberId];
+                await updateDoc(doc(db, 'classSchedules', liveClass.id), {
+                  attendees: updated,
+                  updatedAt: new Date().toISOString()
+                });
+              } else {
+                const updatedWaitlist = [...waitlistIds, memberId];
+                await updateDoc(doc(db, 'classSchedules', liveClass.id), {
+                  waitlist: updatedWaitlist,
+                  updatedAt: new Date().toISOString()
+                });
+              }
+              setRosterSearchQuery('');
+            } catch (err) {
+              console.error('Failed to add member to class:', err);
+            }
+          };
+
+          const handleRemoveMemberFromClass = async (memberId: string, fromWaitlist = false) => {
+            try {
+              if (fromWaitlist) {
+                await updateDoc(doc(db, 'classSchedules', liveClass.id), {
+                  waitlist: waitlistIds.filter(id => id !== memberId),
+                  updatedAt: new Date().toISOString()
+                });
+              } else {
+                const nextAttendees = attendeeIds.filter(id => id !== memberId);
+                const nextWaitlist = [...waitlistIds];
+                if (nextAttendees.length < liveClass.capacity && nextWaitlist.length > 0) {
+                  const promoted = nextWaitlist.shift()!;
+                  nextAttendees.push(promoted);
+                }
+                await updateDoc(doc(db, 'classSchedules', liveClass.id), {
+                  attendees: nextAttendees,
+                  waitlist: nextWaitlist,
+                  checkedInAttendees: checkedInIds.filter(id => id !== memberId),
+                  noShowAttendees: noShowIds.filter(id => id !== memberId),
+                  updatedAt: new Date().toISOString()
+                });
+              }
+            } catch (err) {
+              console.error('Failed to remove member from class:', err);
+            }
+          };
+
+          const handleToggleAttendeeStatus = async (memberId: string, statusType: 'checkedIn' | 'noShow') => {
+            try {
+              if (statusType === 'checkedIn') {
+                const nextCheckedIn = checkedInIds.includes(memberId)
+                  ? checkedInIds.filter(id => id !== memberId)
+                  : [...checkedInIds, memberId];
+                const nextNoShow = noShowIds.filter(id => id !== memberId);
+                await updateDoc(doc(db, 'classSchedules', liveClass.id), {
+                  checkedInAttendees: nextCheckedIn,
+                  noShowAttendees: nextNoShow,
+                  updatedAt: new Date().toISOString()
+                });
+              } else {
+                const nextNoShow = noShowIds.includes(memberId)
+                  ? noShowIds.filter(id => id !== memberId)
+                  : [...noShowIds, memberId];
+                const nextCheckedIn = checkedInIds.filter(id => id !== memberId);
+                await updateDoc(doc(db, 'classSchedules', liveClass.id), {
+                  noShowAttendees: nextNoShow,
+                  checkedInAttendees: nextCheckedIn,
+                  updatedAt: new Date().toISOString()
+                });
+              }
+            } catch (err) {
+              console.error('Failed to update attendee attendance status:', err);
+            }
+          };
+
+          const handleSaveClassEdit = async () => {
+            setIsSavingClassEdit(true);
+            try {
+              await updateDoc(doc(db, 'classSchedules', liveClass.id), {
+                name: editClassName || liveClass.name,
+                coachName: editClassCoach || liveClass.coachName,
+                instructorName: editClassCoach || liveClass.coachName,
+                time: editClassTime || liveClass.time,
+                capacity: Number(editClassCapacity) || liveClass.capacity,
+                description: editClassDescription,
+                updatedAt: new Date().toISOString()
+              });
+              setIsEditingClassDetails(false);
+            } catch (err) {
+              console.error('Failed to update class details:', err);
+            } finally {
+              setIsSavingClassEdit(false);
+            }
+          };
+
           return (
-            <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6 md:p-8">
+            <DialogContent className="w-[95vw] sm:max-w-2xl md:max-w-3xl max-h-[90vh] overflow-y-auto bg-background/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl p-6 md:p-8">
               <DialogHeader className="pb-3 border-b text-left">
-                <DialogTitle className="text-lg font-bold flex items-center justify-between">
-                  <span>{language === 'ar' ? 'تفاصيل الحصة الجماعية' : 'Group Class Details'}</span>
-                  <Badge className="px-2 py-0.5 rounded-lg border bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
-                    {selectedClass.type}
-                  </Badge>
+                <DialogTitle className="text-lg font-bold flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-indigo-400" />
+                    <span>{language === 'ar' ? 'تفاصيل وإدارة الحصة الجماعية' : (isInzan ? 'Group Class Details & Class Manager' : 'Group Class Details')}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className="px-2 py-0.5 rounded-lg border bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
+                      {liveClass.type}
+                    </Badge>
+                    {isInzan && (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1 rounded-lg"
+                          onClick={() => {
+                            if (!isEditingClassDetails) {
+                              setEditClassName(liveClass.name);
+                              setEditClassCoach(liveClass.coachName);
+                              setEditClassTime(liveClass.time);
+                              setEditClassCapacity(liveClass.capacity);
+                              setEditClassDescription(liveClass.description || '');
+                            }
+                            setIsEditingClassDetails(!isEditingClassDetails);
+                          }}
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                          {isEditingClassDetails ? 'Cancel Edit' : 'Edit Class'}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1 rounded-lg border-primary/30 text-primary hover:bg-primary/10"
+                          onClick={() => {
+                            setSelectedClass(null);
+                            setActiveTab('classes');
+                          }}
+                        >
+                          <SlidersHorizontal className="h-3.5 w-3.5" />
+                          Master Templates
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </DialogTitle>
               </DialogHeader>
 
               <div className="space-y-4 py-4 text-sm leading-relaxed">
-                <div className="flex items-center gap-3">
-                  <Sparkles className="h-5 w-5 text-indigo-400 flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase">{language === 'ar' ? 'اسم الحصة' : 'Class Name'}</p>
-                    <p className="font-bold text-foreground text-base">{selectedClass.name}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3">
-                    <Clock className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">{language === 'ar' ? 'الوقت' : 'Time'}</p>
-                      <p className="font-bold text-foreground">{format(parseISO(selectedClass.date), 'PPP')}</p>
-                      <p className="text-xs text-muted-foreground">{selectedClass.time}</p>
+                {isInzan && isEditingClassDetails ? (
+                  <div className="p-4 rounded-2xl border border-primary/30 bg-primary/5 space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-primary">Edit Class Schedule & Capacity</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Class Name</Label>
+                        <Input value={editClassName} onChange={(e) => setEditClassName(e.target.value)} className="h-9 rounded-xl bg-background" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Coach / Instructor</Label>
+                        <Input value={editClassCoach} onChange={(e) => setEditClassCoach(e.target.value)} className="h-9 rounded-xl bg-background" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Time Window (e.g. 18:00 - 19:15)</Label>
+                        <Input value={editClassTime} onChange={(e) => setEditClassTime(e.target.value)} className="h-9 rounded-xl bg-background" />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold">Max Capacity</Label>
+                        <Input type="number" value={editClassCapacity} onChange={(e) => setEditClassCapacity(Number(e.target.value) || 15)} className="h-9 rounded-xl bg-background" />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Description / Notes</Label>
+                      <Textarea value={editClassDescription} onChange={(e) => setEditClassDescription(e.target.value)} className="min-h-[60px] rounded-xl bg-background text-xs" />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setIsEditingClassDetails(false)}>Cancel</Button>
+                      <Button size="sm" onClick={handleSaveClassEdit} disabled={isSavingClassEdit}>
+                        {isSavingClassEdit ? 'Saving...' : 'Save Class Changes'}
+                      </Button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-3">
-                    <MapPin className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                    <div>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">{language === 'ar' ? 'الفرع' : 'Branch'}</p>
-                      <p className="font-bold text-foreground">{selectedClass.branch || 'General'}</p>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-3 bg-muted/20 p-3.5 rounded-2xl border border-border/50">
+                      <div className="flex items-center gap-3">
+                        <Sparkles className="h-5 w-5 text-indigo-400 flex-shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'ar' ? 'اسم الحصة' : 'Class Name'}</p>
+                          <p className="font-bold text-foreground text-base">{liveClass.name}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase">Capacity</p>
+                        <Badge variant="outline" className={`text-xs font-bold ${isFull ? 'border-amber-500/40 text-amber-500 bg-amber-500/10' : 'border-emerald-500/40 text-emerald-500 bg-emerald-500/10'}`}>
+                          {attendeeIds.length} / {liveClass.capacity} Booked
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-3">
-                  <UserIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase">{language === 'ar' ? 'المدرب' : 'Coach / Instructor'}</p>
-                    <p className="font-bold text-foreground">{selectedClass.coachName}</p>
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-muted/10 border border-border/40">
+                        <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'ar' ? 'الوقت' : 'Date & Time'}</p>
+                          <p className="font-bold text-foreground text-xs">{format(parseISO(liveClass.date), 'dd MMM yyyy')}</p>
+                          <p className="text-[11px] text-muted-foreground">{liveClass.time}</p>
+                        </div>
+                      </div>
 
-                {selectedClass.description && (
-                  <div className="bg-muted/10 p-3 rounded-xl border border-white/5 space-y-1">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'ar' ? 'الوصف' : 'Description'}</p>
-                    <p className="text-xs text-muted-foreground italic leading-relaxed">{selectedClass.description}</p>
+                      <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-muted/10 border border-border/40">
+                        <UserIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'ar' ? 'المدرب' : 'Coach / Instructor'}</p>
+                          <p className="font-bold text-foreground text-xs">{liveClass.coachName}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-muted/10 border border-border/40">
+                        <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'ar' ? 'الفرع' : 'Branch'}</p>
+                          <p className="font-bold text-foreground text-xs">{liveClass.branch || 'General'}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {liveClass.description && (
+                      <div className="bg-muted/10 p-3 rounded-xl border border-white/5 space-y-1">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase">{language === 'ar' ? 'الوصف' : 'Description'}</p>
+                        <p className="text-xs text-muted-foreground italic leading-relaxed">{liveClass.description}</p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Embedded Class Manager: Search & Add Member to Roster / Waitlist */}
+                {isInzan && (
+                  <div className="p-3.5 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Add Member to Class {isFull ? '(Adds to Waitlist)' : 'Roster'}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {checkedInIds.length} Checked In · {noShowIds.length} No-Show
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search member by name, ID (#), or phone to add to class..."
+                        value={rosterSearchQuery}
+                        onChange={(e) => setRosterSearchQuery(e.target.value)}
+                        className="pl-8 h-9 rounded-xl bg-background text-xs"
+                      />
+                    </div>
+                    {matchingMembers.length > 0 && (
+                      <div className="border rounded-xl bg-background divide-y max-h-44 overflow-y-auto shadow-md">
+                        {matchingMembers.map(m => {
+                          const alreadyInRoster = attendeeIds.includes(m.id);
+                          const alreadyInWaitlist = waitlistIds.includes(m.id);
+                          return (
+                            <div key={m.id} className="p-2 flex items-center justify-between text-xs hover:bg-muted/40">
+                              <div>
+                                <span className="font-bold text-foreground">{m.name}</span>
+                                <span className="text-muted-foreground ml-1.5 font-mono text-[10px]">#{m.memberId || 'N/A'}</span>
+                                <span className="text-muted-foreground ml-2 text-[10px]">{m.phone}</span>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant={alreadyInRoster || alreadyInWaitlist ? 'outline' : 'default'}
+                                disabled={alreadyInRoster || alreadyInWaitlist}
+                                className="h-7 text-[11px] px-2.5 rounded-lg"
+                                onClick={() => handleAddMemberToClass(m.id)}
+                              >
+                                {alreadyInRoster ? 'Booked' : alreadyInWaitlist ? 'Waitlisted' : isFull ? '+ Waitlist' : '+ Add to Class'}
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Attendees list */}
+                {/* Attendees Roster with Check-In / No-Show / Remove Controls */}
                 <div className="space-y-2">
                   <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide flex justify-between">
-                    <span>{language === 'ar' ? 'المشاركون' : 'Attendees'}</span>
-                    <span>{selectedClass.attendees?.length || 0} / {selectedClass.capacity}</span>
+                    <span>{language === 'ar' ? 'المشاركون' : 'Class Roster (Attendees)'}</span>
+                    <span>{attendeeIds.length} / {liveClass.capacity}</span>
                   </p>
-                  <div className="max-h-[150px] overflow-y-auto border border-white/5 rounded-xl bg-muted/10 divide-y divide-white/5">
-                    {!selectedClass.attendees || selectedClass.attendees.length === 0 ? (
+                  <div className="max-h-[220px] overflow-y-auto border border-white/5 rounded-xl bg-muted/10 divide-y divide-white/5">
+                    {attendeeIds.length === 0 ? (
                       <p className="text-xs text-muted-foreground italic p-3 text-center">
                         {language === 'ar' ? 'لا يوجد مشاركون بعد' : 'No attendees signed up yet'}
                       </p>
                     ) : (
-                      selectedClass.attendees.map(clientId => {
-                        const { client, displayName, displayPhone, rawId, isOrphaned } = resolveAttendee(clientId, clients);
+                      attendeeIds.map(clientId => {
+                        const { client, displayName, displayPhone, rawId } = resolveAttendee(clientId, clients);
+                        const memberKey = typeof clientId === 'string' ? clientId : rawId;
+                        const isCheckedIn = checkedInIds.includes(memberKey);
+                        const isNoShow = noShowIds.includes(memberKey);
                         return (
-                          <div key={typeof clientId === 'string' ? clientId : rawId} className="p-2 flex justify-between items-center text-xs">
-                            {client ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedClass(null);
-                                  setActiveTab('clients');
-                                  setActiveClientId(client.id);
-                                }}
-                                className="font-semibold text-foreground hover:text-primary transition-colors underline decoration-dotted text-left"
-                                title="View member profile in CRM"
-                              >
-                                {displayName}
-                              </button>
-                            ) : (
-                              <div className="flex items-center gap-1.5" title={`Profile no longer found (ID: ${rawId})`}>
-                                <span className="font-semibold text-muted-foreground line-through opacity-70">
+                          <div key={memberKey} className="p-2.5 flex flex-wrap justify-between items-center gap-2 text-xs">
+                            <div className="flex items-center gap-2">
+                              {client ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedClass(null);
+                                    setActiveTab('clients');
+                                    setActiveClientId(client.id);
+                                  }}
+                                  className="font-semibold text-foreground hover:text-primary transition-colors underline decoration-dotted text-left"
+                                  title="View member profile in CRM"
+                                >
                                   {displayName}
-                                </span>
-                                <Badge variant="outline" className="border-amber-500/40 text-amber-500 bg-amber-500/10 text-[9px] px-1 py-0 h-4">
-                                  Orphaned
+                                </button>
+                              ) : (
+                                <div className="flex items-center gap-1.5" title={`Profile no longer found (ID: ${rawId})`}>
+                                  <span className="font-semibold text-muted-foreground line-through opacity-70">
+                                    {displayName}
+                                  </span>
+                                  <Badge variant="outline" className="border-amber-500/40 text-amber-500 bg-amber-500/10 text-[9px] px-1 py-0 h-4">
+                                    Orphaned
+                                  </Badge>
+                                </div>
+                              )}
+                              <span className="text-muted-foreground text-[10px]">{displayPhone}</span>
+                              {isCheckedIn && (
+                                <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30 text-[9px] px-1.5 py-0 h-4">
+                                  ✓ Checked In
                                 </Badge>
+                              )}
+                              {isNoShow && (
+                                <Badge className="bg-rose-500/15 text-rose-500 border-rose-500/30 text-[9px] px-1.5 py-0 h-4">
+                                  ✗ No-Show
+                                </Badge>
+                              )}
+                            </div>
+
+                            {isInzan && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={isCheckedIn ? 'default' : 'outline'}
+                                  className={`h-6 px-2 text-[10px] rounded-md ${isCheckedIn ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'border-emerald-500/30 text-emerald-500'}`}
+                                  onClick={() => handleToggleAttendeeStatus(memberKey, 'checkedIn')}
+                                >
+                                  Check In
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={isNoShow ? 'default' : 'outline'}
+                                  className={`h-6 px-2 text-[10px] rounded-md ${isNoShow ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'border-rose-500/30 text-rose-500'}`}
+                                  onClick={() => handleToggleAttendeeStatus(memberKey, 'noShow')}
+                                >
+                                  No-Show
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-500"
+                                  title="Remove from class"
+                                  onClick={() => handleRemoveMemberFromClass(memberKey, false)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
                               </div>
                             )}
-                            <span className="text-muted-foreground text-[10px]">{displayPhone}</span>
                           </div>
                         );
                       })
                     )}
                   </div>
                 </div>
+
+                {/* Waitlist Section (if any) */}
+                {isInzan && waitlistIds.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-bold text-amber-500 uppercase tracking-wide flex justify-between">
+                      <span>Waitlist Queue</span>
+                      <span>{waitlistIds.length} Waiting</span>
+                    </p>
+                    <div className="border border-amber-500/20 rounded-xl bg-amber-500/5 divide-y divide-amber-500/10">
+                      {waitlistIds.map((wId, idx) => {
+                        const { displayName, displayPhone, rawId } = resolveAttendee(wId, clients);
+                        const wKey = typeof wId === 'string' ? wId : rawId;
+                        return (
+                          <div key={wKey} className="p-2 flex items-center justify-between text-xs">
+                            <div>
+                              <span className="font-mono text-[10px] text-amber-500 font-bold mr-2">#{idx + 1}</span>
+                              <span className="font-semibold text-foreground">{displayName}</span>
+                              <span className="text-muted-foreground text-[10px] ml-2">{displayPhone}</span>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-500"
+                              onClick={() => handleRemoveMemberFromClass(wKey, true)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Cancel / Delete Class button */}
                 <div className="pt-4 border-t">
@@ -1279,7 +1645,7 @@ export default function CalendarView() {
                     onClick={async () => {
                       if (window.confirm(language === 'ar' ? 'هل أنت متأكد من إلغاء وحذف هذه الحصة؟' : 'Are you sure you want to cancel and delete this class?')) {
                         try {
-                          await deleteDoc(doc(db, 'classSchedules', selectedClass.id));
+                          await deleteDoc(doc(db, 'classSchedules', liveClass.id));
                           setSelectedClass(null);
                         } catch (err) {
                           console.error("Failed to delete class:", err);
