@@ -10,6 +10,7 @@ import { useSettings } from './contexts/SettingsContext';
 import { Shield, Save, CheckCircle2, UserPlus, CreditCard, Scan, BarChart3, FileText, Coffee, Package, Smartphone, Phone, Search as SearchIcon, MessageSquare, Star, ClipboardList, Target, Database } from 'lucide-react';
 import ImportData from './ImportData';
 import ImportHistory from './ImportHistory';
+import { RedgitsLiveSyncDialog } from './components/RedgitsLiveSyncDialog';
 
 import { activeConfig } from './firebase';
 import { isTenantInzan } from './utils/inzanOrg';
@@ -475,7 +476,15 @@ export default function AdminHub() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-2">
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col gap-2">
+                  <div className="text-xs text-emerald-300 font-semibold">
+                    Live Cloud Sync (Direct from inzan.redgits.com → db-inzanathletics)
+                  </div>
+                  <div>
+                    <RedgitsLiveSyncDialog variant="admin-card" />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
                   <ImportData type="Active" />
                   <ImportData type="Lead" />
                 </div>

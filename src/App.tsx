@@ -63,6 +63,7 @@ import SuperAdminHub from './SuperAdminHub';
 import AdvancedReports from './AdvancedReports';
 import CallCenter from './CallCenter';
 import LostAndFound from './LostAndFound';
+import { RedgitsLiveSyncDialog } from './components/RedgitsLiveSyncDialog';
 import Complaints from './Complaints';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
@@ -1224,7 +1225,9 @@ function AppContent() {
             </div>
 
             <div className="flex items-center space-x-2 sm:space-x-4 ms-auto">
-
+              {isInzan && ['manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser.role) && (
+                <RedgitsLiveSyncDialog variant="header" />
+              )}
 
               {/* Search trigger on mobile */}
               <div className="md:hidden">

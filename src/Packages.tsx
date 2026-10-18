@@ -18,6 +18,7 @@ import { isTenantInzan } from './utils/inzanOrg';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import ImageCropperDialog from './components/ImageCropperDialog';
+import { RedgitsLiveSyncDialog } from './components/RedgitsLiveSyncDialog';
 
 export const INZAN_PACKAGE_CATEGORIES = [
   'Membership',
@@ -420,6 +421,7 @@ export default function Packages() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {isInzan && <RedgitsLiveSyncDialog variant="button" />}
           <Button
             variant="outline"
             size="sm"
