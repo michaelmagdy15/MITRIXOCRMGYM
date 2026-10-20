@@ -1,6 +1,29 @@
 # GAPS.md — MitrixoGYM CRM Gap Analysis & What's Remaining
 
-Updated: 2026-10-07 (Member Calendar Sync)
+Updated: 2026-10-20 (Platform Security & Production Rules Deploy)
+
+## RECENT WORK - 2026-10-20 (AUDIT.SECURITY.1 & DEPLOY.RULES.1)
+
+- **Comprehensive Security & Baseline Audit (23 Issues Remediated)**:
+  - Fixed cross-tenant password reset vulnerability in `server.ts` by validating target user tenant membership.
+  - Secured `GET /api/debug-trace` behind platform admin authorization.
+  - Fail-closed cron endpoints on missing/unmatched secret (`401 Unauthorized`).
+  - Purged hardcoded sync credentials in `src/routes/redgitsSync.ts`.
+  - Restricted desktop sync registration to verified staff/manager/admin roles.
+  - Wrapped request approvals in `src/services/approvalService.ts` with Firestore `runTransaction` to eliminate TOCTOU double refunds.
+  - Resolved 26 TypeScript compilation errors across coach, client, and member screens.
+  - Enforced strict read/write boundaries in `firestore.rules`, `firestore-tenant.rules`, and `storage.rules`.
+  - Added and mapped compound index for `payments (clientId ASC, created_at ASC)`.
+- **Bundle Optimization**:
+  - Split `xlsx` and `jspdf`/`html2canvas` into dedicated vendor chunks in `vite.config.ts`, shedding ~720 KB from the primary client bundle.
+  - Updated `caniuse-lite` database.
+- **Rules & Indexes Deployed to Production**:
+  - Successfully deployed hardened Firestore rules, Storage rules, and compound indexes to central project `faa-test-guide-v2` (including `db-inzanathletics`, `(default)`, `db-vbt`, `db-registry-2`).
+  - Successfully deployed hardened Firestore rules, Storage rules, and compound indexes to dedicated Strike project `strike-production-f5242`.
+  - Pushed all commits (`06d5f3f`, `37dd112`, `c5270df`) to `origin/master`.
+- **Proof**: 16/16 automated test suites (138/138 tests) passed 100%. `npm run lint` exits with 0 errors. `npm run build` exits with 0 errors. Live rule deployment logs confirmed on both projects.
+
+---
 
 ## RECENT WORK - 2026-10-08 (MARKETING.DOCS.1 — Bravo and Delta brochure)
 
