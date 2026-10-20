@@ -35,7 +35,8 @@
     },
     {
       "database": "db-inzanathletics",
-      "rules": "firestore-tenant.rules"
+      "rules": "firestore-tenant.rules",
+      "indexes": "firestore.indexes.json"
     }
   ],
   "storage": {
