@@ -63,7 +63,7 @@ service cloud.firestore {
     // we need a helper to verify if the requesting user actually owns that client profile.
     function ownsClientProfile(clientId) {
       let clientDoc = get(/databases/$(database)/documents/clients/$(clientId));
-      return clientDoc != null && clientDoc.data.portalUserId == request.auth.uid;
+      return clientDoc != null && (clientDoc.data.portalUserId == request.auth.uid || clientDoc.data.memberId == request.auth.uid);
     }
 
 
@@ -106,7 +106,10 @@ service cloud.firestore {
       // A client can read their own profile (either by uid matching clientId, or portalUserId matching)
       allow read: if isOwner(clientId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid) || isStaff();
       allow create: if isStaff();
-      allow update: if isStaff() || isOwner(clientId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid);
+      allow update: if isStaff() || (
+        (isOwner(clientId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid)) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'portalUserId', 'photoURL', 'expoPushToken', 'fcmToken', 'updatedAt'])
+      );
       allow delete: if isManager();
 
       match /notifications/{notificationId} {
@@ -249,8 +252,8 @@ service cloud.firestore {
     match /nutritionAppointments/{appointmentId}/notes/{noteId} {
       allow read, write: if isStaff(); // Clients CANNOT read notes
     }
-    
-    // ATTENDANCE (Check-in Records)
+
+    // ATTENDANCE (Member Check-Ins)
     match /attendance/{attendanceId} {
       allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
       allow create: if isStaff();
@@ -259,8 +262,24 @@ service cloud.firestore {
     
     // TASKS (Task Assignments)
     match /tasks/{taskId} {
-      allow read: if isManager() || (isAuthenticated() && (resource.data.assignedTo == request.auth.uid || resource.data.createdBy == request.auth.uid));
-      allow write: if isManager() || (isAuthenticated() && (resource.data.assignedTo == request.auth.uid || resource.data.createdBy == request.auth.uid));
+      allow read: if isStaff() || (isAuthenticated() && (resource.data.assignedTo == request.auth.uid || resource.data.createdBy == request.auth.uid));
+      allow create: if isStaff() || (request.resource.data.status == 'Pending' && request.resource.data.title.startsWith('Package Purchase Request:'));
+      allow update: if isStaff() || (isAuthenticated() && (resource.data.assignedTo == request.auth.uid || resource.data.createdBy == request.auth.uid));
+      allow delete: if isManager();
+    }
+
+    // BOOKING REQUESTS (Storefront / Member Orders)
+    match /bookingRequests/{requestId} {
+      allow create: if true;
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+      allow update, delete: if isStaff();
+    }
+
+    // POINTS WALLETS
+    match /pointsWallets/{walletId} {
+      allow read: if isStaff() || (isAuthenticated() && (walletId == request.auth.uid || ownsClientProfile(walletId)));
+      allow create, update: if isStaff();
+      allow delete: if isManager();
     }
     
     // COMPLAINTS (Tickets)

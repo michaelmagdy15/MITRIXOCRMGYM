@@ -1,4 +1,4 @@
-import { collection, addDoc, updateDoc, doc, getDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, getDoc, getDocs, query, where, serverTimestamp, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ApprovalRequest, ApprovalRequestType, ApprovalStatus } from '../types/approval';
 import { addAuditLog } from './auditService';
@@ -54,35 +54,31 @@ export const approveRequest = async (
   approverName: string
 ): Promise<void> => {
   const reqRef = doc(db, 'approvalRequests', requestId);
-  const reqSnap = await getDoc(reqRef);
-  
-  if (!reqSnap.exists()) {
-    throw new Error('Approval request not found');
-  }
-  
-  const request = reqSnap.data() as ApprovalRequest;
-  
-  if (request.status !== 'pending') {
-    throw new Error(`Request is already ${request.status}`);
-  }
-
-  // Anti-self-approval rule (Enforce Two-Person Maker-Checker rule from PRD)
-  if (request.requesterId && request.requesterId === approverId) {
-    throw new Error('Maker cannot approve their own request. A secondary manager or General Manager must countersign.');
-  }
+  const request = await runTransaction(db, async (txn) => {
+    const snap = await txn.get(reqRef);
+    if (!snap.exists()) {
+      throw new Error('Approval request not found');
+    }
+    const data = snap.data() as ApprovalRequest;
+    if (data.status !== 'pending') {
+      throw new Error(`Request is already ${data.status}`);
+    }
+    if (data.requesterId && data.requesterId === approverId) {
+      throw new Error('Maker cannot approve their own request. A secondary manager or General Manager must countersign.');
+    }
+    txn.update(reqRef, {
+      status: 'approved',
+      approvedBy: approverId,
+      approvedAt: new Date().toISOString(),
+      updatedAt: serverTimestamp()
+    });
+    return data;
+  });
 
   // 1. Execute specific logic based on type
   await executeApprovalSideEffects(request, approverName);
 
-  // 2. Mark as approved
-  await updateDoc(reqRef, {
-    status: 'approved',
-    approvedBy: approverId,
-    approvedAt: new Date().toISOString(),
-    updatedAt: serverTimestamp()
-  });
-
-  // 3. Audit log
+  // 2. Audit log
   await addAuditLog(
     'UPDATE',
     'SYSTEM',

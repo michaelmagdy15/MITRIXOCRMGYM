@@ -503,7 +503,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/debug-trace", async (req, res) => {
+  app.get("/api/debug-trace", requirePlatformAdmin, async (req, res) => {
     const trace: any = {};
     try {
       trace.env = {
@@ -1685,7 +1685,7 @@ async function startServer() {
   // Endpoint: POST /api/v1/bookings
   // Objective: Intercept and reject invalid bookings before insertion
   // ===============================================================
-  app.post("/api/v1/bookings", async (req, res) => {
+  app.post("/api/v1/bookings", requireAuth, async (req, res) => {
     try {
       const db = await getDbForRequest(req);
       const {
@@ -1755,7 +1755,7 @@ async function startServer() {
           ? Number(sessionRecord.cutoffMinutes)
           : 120;
         const cutoffDeadline = new Date(sessionStartTime.getTime() - cutoffMinutes * 60 * 1000);
-        const isStaff = isStaffRole(req.user?.role) || (req.body?.isAdminRequest && isStaffRole(req.body?.role));
+        const isStaff = isStaffRole(req.user?.role);
         if (!req.body?.isAdminRequest && !isStaff && now > cutoffDeadline) {
           return res.status(403).json({
             error: `Booking for this session closed ${cutoffMinutes} minutes before start time. Please see the front desk for walk-in availability.`,
@@ -1963,7 +1963,7 @@ async function startServer() {
 
       // 1. Validation checks
       if (client.status === 'Expired') {
-        return res.status(400).json({ error: `${client.name}'s membership is expired. They must head to the STRIKE branch to renew.` });
+        return res.status(400).json({ error: `${client.name}'s membership is expired. Please visit the front desk to renew.` });
       }
       if (client.status === 'Hold') {
         return res.status(400).json({ error: `${client.name}'s membership is currently on hold.` });
@@ -2200,7 +2200,10 @@ async function startServer() {
               : 0;
 
         let remainingCreditsAfter = rawRemaining;
-        const willDeduct = deductCredit === true || deductCredit === 'true';
+        const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+        const requesterRole = requesterDoc.data()?.role || req.user?.role;
+        const requesterIsStaff = isStaffRole(requesterRole);
+        const willDeduct = (deductCredit === false || deductCredit === 'false') ? (requesterIsStaff ? false : true) : true;
 
         if (willDeduct && !isUnlimited) {
           if (rawRemaining <= 0) {
@@ -3009,7 +3012,7 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         const currentClientData = currentClientDoc?.exists ? currentClientDoc.data() : null;
 
         // Points wallet read upfront
-        const walletRef = db.collection("pointsWallets").doc(memberIdStr);
+        const walletRef = db.collection("pointsWallets").doc(canonicalClientId);
         const walletDoc = await transaction.get(walletRef);
 
         // Entitlements read upfront (used for both join deductions and leave refunds)
@@ -4656,6 +4659,17 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         const existingSnap = await transaction.get(existingSessionsQuery);
 
         if (!clientDoc.exists) throw new Error("Client not found");
+        const client = clientDoc.data()!;
+        const requesterDoc = await db.collection('users').doc(req.user?.uid || '').get();
+        const requesterRole = requesterDoc.data()?.role || req.user?.role;
+        const requesterIsStaff = isStaffRole(requesterRole);
+        if (!requesterIsStaff) {
+          const clientPortalUid = client.portalUserId;
+          const isOwner = clientPortalUid === req.user?.uid || clientDoc.id === req.user?.uid || client.memberId === req.user?.uid;
+          if (!isOwner) {
+            throw new Error("Forbidden: You can only book sessions for your own profile.");
+          }
+        }
 
         // Standard default schedule if coach hasn't customized their schedule in portal yet
         const defaultDays: Record<string, any> = {
@@ -4701,8 +4715,6 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         if (existingSnap.docs.length >= capacity) {
           throw new Error(`This time slot is fully booked for ${sessionData.type} sessions`);
         }
-
-        const client = clientDoc.data()!;
 
         // Fallback guardrail: check client membership status
         const effectiveStatus = getEffectiveClientStatus(client);

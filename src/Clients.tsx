@@ -232,7 +232,7 @@ export default function Clients() {
       const client = clients.find(c => c.id === activeClientId);
       if (client) {
         setMemberFeedbackDraft(
-          String((client as any).memberFeedback || (client as any).stickyNote || (client as any).receptionNote || client.notes || '')
+          String((client as any).memberFeedback || (client as any).stickyNote || (client as any).receptionNote || (client as any).notes || '')
         );
         const migrationData = migratePackageData(client, packages);
         if (Object.keys(migrationData).length > 0) {
@@ -3655,7 +3655,7 @@ export default function Clients() {
                               )}
                             </div>
                             <span className="text-sm font-black font-mono text-primary">
-                              {pkg.sessionsRemaining === 'unlimited' ? '∞ Unlimited' : `${pkg.sessionsRemaining ?? 0} Sessions`}
+                              {String(pkg.sessionsRemaining) === 'unlimited' ? '∞ Unlimited' : `${pkg.sessionsRemaining ?? 0} Sessions`}
                             </span>
                           </div>
 

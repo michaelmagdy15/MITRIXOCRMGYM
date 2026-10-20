@@ -299,9 +299,9 @@ export function InzanMemberShow({
           id: pkgId,
           packageId: '',
           packageName: client.packageType || 'Membership Package',
-          startDate: client.joinDate || nowIso.slice(0, 10),
-          endDate: client.expiryDate || nowIso.slice(0, 10),
-          sessionsTotal: client.totalSessions || 'unlimited',
+          startDate: (client as any).joinDate || client.startDate || nowIso.slice(0, 10),
+          endDate: (client as any).expiryDate || client.membershipExpiry || nowIso.slice(0, 10),
+          sessionsTotal: ((client as any).totalSessions || 0) || 'unlimited',
           sessionsRemaining: client.sessionsRemaining ?? 'unlimited',
           status: (client.status === 'Active' ? 'Active' : 'Expired') as any,
           createdAt: client.createdAt || nowIso,
@@ -846,8 +846,8 @@ export function InzanMemberShow({
               ? {
                   packageName: rawC.primaryPackageName || client.packageType,
                   status: client.status,
-                  startDate: client.startDate || client.joinDate,
-                  endDate: client.membershipExpiry || client.expiryDate,
+                  startDate: client.startDate || (client as any).joinDate,
+                  endDate: client.membershipExpiry || (client as any).expiryDate,
                   createdAt: client.createdAt,
                   createdBy: rawC.salesName || 'System',
                 }
@@ -868,11 +868,11 @@ export function InzanMemberShow({
                 }
               : null);
 
-          const primaryExpiry = primaryPkg?.endDate || client.membershipExpiry || client.expiryDate;
+          const primaryExpiry = primaryPkg?.endDate || client.membershipExpiry || (client as any).expiryDate;
           const daysToRenew = getDaysRemainingToRenew(primaryExpiry);
           const b = resolvePackageBenefits(primaryPkg || allPkgs[0] || {});
 
-          const paidPtTotal = Number(rawC.paidPtSessionsTotal ?? activeSecondaryPkg?.totalSessions ?? (activeSecondaryPkg as any)?.sessionsTotal ?? 0);
+          const paidPtTotal = Number(rawC.paidPtSessionsTotal ?? (activeSecondaryPkg as any)?.totalSessions ?? (activeSecondaryPkg as any)?.sessionsTotal ?? 0);
           const paidPtRem = Number(rawC.paidPtSessionsRemaining ?? activeSecondaryPkg?.sessionsRemaining ?? 0);
           const paidPtUsed = Number(rawC.paidPtSessionsUsed ?? Math.max(0, paidPtTotal - paidPtRem));
 
@@ -1324,9 +1324,9 @@ export function InzanMemberShow({
                       id: `primary_${client.id}`,
                       packageId: '',
                       packageName: client.packageType,
-                      startDate: client.joinDate || client.startDate || '',
-                      endDate: client.expiryDate || client.membershipExpiry || '',
-                      sessionsTotal: client.totalSessions || 'unlimited',
+                      startDate: (client as any).joinDate || client.startDate || '',
+                      endDate: (client as any).expiryDate || client.membershipExpiry || '',
+                      sessionsTotal: (client as any).totalSessions || 'unlimited',
                       sessionsRemaining: client.sessionsRemaining ?? 'unlimited',
                       status: (client.status === 'Active' ? 'Active' : 'Expired') as any,
                       createdAt: client.createdAt || '',
@@ -1653,7 +1653,7 @@ export function InzanMemberShow({
                               <><Lock className="h-3.5 w-3.5 mr-1 text-amber-500" /> Locked (&gt;24h)</>
                             )}
                           </Button>
-                          {(currentUser?.role === 'Admin' || currentUser?.role === 'Manager') && (
+                          {(['admin', 'manager', 'super_admin', 'crm_admin'].includes(currentUser?.role || '')) && (
                             <Button
                               size="sm"
                               variant="ghost"

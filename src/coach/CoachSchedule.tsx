@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { db } from '../firebase';
+import { db, getTenantId } from '../firebase';
 import { 
   doc, getDoc, setDoc, updateDoc, addDoc, 
   collection, query, where, onSnapshot, getDocs 
@@ -621,13 +621,15 @@ export default function CoachSchedule({
     setAssignDialogOpen(true);
   };
 
-  const { settings } = useSettings();
-  const isInzan = settings.tenantId === 'inzanathletics' || (typeof window !== 'undefined' && window.location.hostname.includes('inzan'));
+  const tenantId = typeof window !== 'undefined' ? getTenantId() : 'default';
+  const isInzan = tenantId === 'inzanathletics' || (typeof window !== 'undefined' && window.location.hostname.includes('inzan'));
   const isFitnessManagerOrAdmin = Boolean(
-    currentUser?.role === 'Admin' ||
-    currentUser?.role === 'Manager' ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'manager' ||
+    currentUser?.role === 'super_admin' ||
+    currentUser?.role === 'crm_admin' ||
     (currentUser?.role as string) === 'Fitness Manager' ||
-    (currentUser?.title || '').toLowerCase().includes('fitness manager') ||
+    ((currentUser as any)?.jobTitle || '').toLowerCase().includes('fitness manager') ||
     (currentUser?.name || '').toLowerCase().includes('fitness manager')
   );
 
@@ -643,8 +645,8 @@ export default function CoachSchedule({
     const freeRem = Math.max(0, freeTotal - freeUsed - scheduledFreeCount);
     const pkgs: any[] = Array.isArray(raw.packages) ? raw.packages : [];
     const activePkg = pkgs.find((p: any) => p.status === 'Active' || !p.status) || pkgs[0];
-    const pkgStartDate = String(activePkg?.startDate || c.joinDate || '').slice(0, 10);
-    const pkgEndDate = String(activePkg?.endDate || c.expiryDate || '').slice(0, 10);
+    const pkgStartDate = String(activePkg?.startDate || (c as any).joinDate || c.startDate || '').slice(0, 10);
+    const pkgEndDate = String(activePkg?.endDate || (c as any).expiryDate || c.membershipExpiry || '').slice(0, 10);
     return {
       paidRem,
       freeTotal,
@@ -733,7 +735,7 @@ export default function CoachSchedule({
         await updateDoc(doc(db, 'sessions', session.id), {
           date: req.proposedDate || session.date,
           startTime: req.proposedTime || session.startTime,
-          time: req.proposedTime || session.time,
+          time: req.proposedTime || (session as any).time || session.startTime,
           status: 'Scheduled',
           rescheduleRequest: {
             ...req,
@@ -797,9 +799,9 @@ export default function CoachSchedule({
   const filteredClients = useMemo(() => {
     const baseList = (isInzan && !isFitnessManagerOrAdmin)
       ? clients.filter(c =>
-          c.assignedCoachId === currentUser?.id ||
-          (currentUser?.coachId && c.assignedCoachId === currentUser.coachId) ||
-          (currentUser?.name && c.assignedCoachName && c.assignedCoachName.toLowerCase() === currentUser.name.toLowerCase())
+          (c as any).assignedCoachId === currentUser?.id ||
+          (currentUser?.coachId && (c as any).assignedCoachId === currentUser.coachId) ||
+          (currentUser?.name && (c as any).assignedCoachName && (c as any).assignedCoachName.toLowerCase() === currentUser.name.toLowerCase())
         )
       : clients;
     if (!clientSearch.trim()) return baseList.slice(0, 15);

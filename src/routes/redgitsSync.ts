@@ -8,7 +8,7 @@ export const redgitsSyncRouter = Router();
 const INZAN_DATABASE_ID = 'db-inzanathletics';
 const REDGITS_ORIGIN = 'https://inzan.redgits.com';
 const DEFAULT_REDGITS_USER = process.env.REDGITS_USERNAME || 'mi5a';
-const DEFAULT_REDGITS_PASS = process.env.REDGITS_PASSWORD || 'Miko0019_!';
+const DEFAULT_REDGITS_PASS = process.env.REDGITS_PASSWORD || '';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
@@ -182,7 +182,7 @@ async function authenticateCallerForInzan(
       allowedRoles.includes(role) ||
       email === 'michaelmitry13@gmail.com' ||
       email === 'magd.gallab@gmail.com' ||
-      email.endsWith('@inzan.com')
+      (email.endsWith('@inzan.com') && decoded.email_verified === true)
     ) {
       return {
         uid: decoded.uid,

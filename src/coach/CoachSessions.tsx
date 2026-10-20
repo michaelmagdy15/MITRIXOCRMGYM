@@ -145,7 +145,7 @@ export default function CoachSessions() {
         await updateDoc(doc(db, 'sessions', session.id), {
           date: req.proposedDate || session.date,
           startTime: req.proposedTime || session.startTime,
-          time: req.proposedTime || session.time,
+          time: req.proposedTime || (session as any).time || session.startTime,
           status: 'Scheduled',
           rescheduleRequest: {
             ...req,

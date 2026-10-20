@@ -109,12 +109,7 @@ async function authenticateStaffUser(
       };
     }
 
-    return {
-      uid: decoded.uid,
-      email: decoded.email,
-      role: 'staff',
-      name: (decoded as any).name || undefined,
-    };
+    return null;
   } catch {
     // Development / automated test harness token support
     if (
@@ -244,6 +239,14 @@ desktopSyncRouter.post('/devices/register', async (req: Request, res: Response) 
       return res.status(401).json({
         error: 'UNAUTHORIZED_STAFF',
         message: 'Valid staff credentials or Authorization Bearer token is required to register a device.',
+      });
+    }
+
+    const ALLOWED_DEVICE_REG_ROLES = ['admin', 'manager', 'super_admin', 'crm_admin', 'staff', 'sales_manager', 'frontdesk'];
+    if (!ALLOWED_DEVICE_REG_ROLES.includes(staffUser.role || '')) {
+      return res.status(403).json({
+        error: 'FORBIDDEN_DEVICE_REGISTRATION',
+        message: 'Only authorized staff and managers can register desktop devices.',
       });
     }
 
