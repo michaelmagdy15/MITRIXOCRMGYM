@@ -106,6 +106,9 @@ export default defineConfig(({ mode }) => {
                 id.includes('node_modules/d3')) {
               return 'vendor-charts';
             }
+            // Export tools
+            if (id.includes('node_modules/xlsx')) return 'vendor-xlsx';
+            if (id.includes('node_modules/jspdf') || id.includes('node_modules/html2canvas')) return 'vendor-export';
             return;
           },
         },

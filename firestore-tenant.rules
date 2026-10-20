@@ -618,7 +618,7 @@ service cloud.firestore {
 
     match /bookingRequests/{requestId} {
       allow read: if isTenantStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId)));
-      allow create: if true;
+      allow create: if isAuthenticated();
       allow update, delete: if isTenantStaff();
     }
 
