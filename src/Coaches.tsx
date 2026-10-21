@@ -34,6 +34,7 @@ export default function Coaches() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [active, setActive] = useState(true);
+  const [isFitnessManager, setIsFitnessManager] = useState(false);
 
   // Manage Coach State
   const [isManageOpen, setIsManageOpen] = useState(false);
@@ -117,7 +118,8 @@ export default function Coaches() {
       await addCoach({
         name,
         active,
-        phone
+        phone,
+        isFitnessManager
       });
       setIsAddOpen(false);
       resetForm();
@@ -129,7 +131,8 @@ export default function Coaches() {
       await updateCoach(editingCoach.id, {
         name,
         active,
-        phone
+        phone,
+        isFitnessManager
       });
       setIsEditOpen(false);
       setEditingCoach(null);
@@ -154,6 +157,8 @@ export default function Coaches() {
     setName(coach.name);
     setActive(coach.active);
     setPhone(coach.phone || '');
+    const coachUser = users.find(u => u.id === coach.userId || ((u.role === 'coach' || u.role === 'fitness_manager') && u.name?.toLowerCase() === coach.name.toLowerCase()));
+    setIsFitnessManager(Boolean(coach.isFitnessManager || coachUser?.isFitnessManager || coachUser?.role === 'fitness_manager'));
     setIsEditOpen(true);
   };
 
@@ -161,6 +166,7 @@ export default function Coaches() {
     setName('');
     setPhone('');
     setActive(true);
+    setIsFitnessManager(false);
   };
 
   // Manage functions
@@ -279,7 +285,7 @@ export default function Coaches() {
 
   const linkedUser = React.useMemo(() => {
     if (!managingCoach) return null;
-    return users.find(u => u.id === managingCoach.userId || (u.role === 'coach' && u.name?.toLowerCase() === managingCoach.name?.toLowerCase()));
+    return users.find(u => u.id === managingCoach.userId || ((u.role === 'coach' || u.role === 'fitness_manager') && u.name?.toLowerCase() === managingCoach.name?.toLowerCase()));
   }, [managingCoach, users]);
 
   const rawEffectiveCoachId = managingCoach?.coachId || linkedUser?.coachId;
@@ -338,6 +344,23 @@ export default function Coaches() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {isInzan && (
+                <div className="flex items-center justify-between rounded-xl border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-3.5">
+                  <div className="space-y-0.5">
+                    <Label className="text-sm font-semibold text-amber-950 dark:text-amber-100 flex items-center gap-1.5">
+                      <Shield className="h-4 w-4 text-amber-600" /> Fitness Manager Role
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Grants access to Fitness Manager Triage board to distribute assessment requests and oversee all members & coaches.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={isFitnessManager}
+                    onCheckedChange={setIsFitnessManager}
+                  />
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddOpen(false)}>Cancel</Button>
@@ -361,7 +384,7 @@ export default function Coaches() {
             </TableHeader>
             <TableBody>
               {coaches.map(coach => {
-                const coachUser = users.find(u => u.id === coach.userId || (u.role === 'coach' && u.name?.toLowerCase() === coach.name.toLowerCase()));
+                const coachUser = users.find(u => u.id === coach.userId || ((u.role === 'coach' || u.role === 'fitness_manager') && u.name?.toLowerCase() === coach.name.toLowerCase()));
                 const rawCoachId = coach.coachId || coachUser?.coachId;
                 // Only treat as a valid coach ID if it matches COACH-XXX pattern
                 const rowCoachId = rawCoachId && /^COACH-\d+$/i.test(rawCoachId) ? rawCoachId : undefined;
@@ -426,7 +449,14 @@ export default function Coaches() {
                     </TableCell>
                     <TableCell className="font-medium">
                       <div>
-                        <p>{coach.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p>{coach.name}</p>
+                          {isInzan && (coach.isFitnessManager || coachUser?.isFitnessManager || coachUser?.role === 'fitness_manager') && (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-[10px] gap-1 font-semibold">
+                              <Shield className="w-2.5 h-2.5" /> Fitness Manager
+                            </Badge>
+                          )}
+                        </div>
                         {rowEmail && (
                           <p className="text-[11px] text-muted-foreground font-mono truncate max-w-[180px]">{rowEmail}</p>
                         )}
@@ -508,6 +538,23 @@ export default function Coaches() {
                 </SelectContent>
               </Select>
             </div>
+
+            {isInzan && (
+              <div className="flex items-center justify-between rounded-xl border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 p-3.5">
+                <div className="space-y-0.5">
+                  <Label className="text-sm font-semibold text-amber-950 dark:text-amber-100 flex items-center gap-1.5">
+                    <Shield className="h-4 w-4 text-amber-600" /> Fitness Manager Role
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Grants access to Fitness Manager Triage board to distribute assessment requests and oversee all members & coaches.
+                  </p>
+                </div>
+                <Switch
+                  checked={isFitnessManager}
+                  onCheckedChange={setIsFitnessManager}
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>Cancel</Button>
@@ -662,6 +709,49 @@ export default function Coaches() {
                       )}
                     </CardContent>
                   </Card>
+
+                  {isInzan && (
+                    <Card className="bg-muted/30 md:col-span-2 border-amber-200/60 dark:border-amber-900/40">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-amber-600" /> Fitness Manager Role
+                          </span>
+                          {(managingCoach?.isFitnessManager || linkedUser?.isFitnessManager || linkedUser?.role === 'fitness_manager') ? (
+                            <Badge className="bg-amber-600 text-white text-[10px]">
+                              Active Fitness Manager
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground text-[10px]">
+                              Standard Coach
+                            </Badge>
+                          )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <p className="text-sm font-semibold">Triage & Assignment Privileges</p>
+                            <p className="text-xs text-muted-foreground">
+                              When enabled, this coach logs in through the Coach Portal with the Fitness Manager Triage queue active.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={Boolean(managingCoach?.isFitnessManager || linkedUser?.isFitnessManager || linkedUser?.role === 'fitness_manager')}
+                            onCheckedChange={async (checked) => {
+                              if (!managingCoach) return;
+                              try {
+                                await updateCoach(managingCoach.id, { isFitnessManager: checked });
+                                setManagingCoach(prev => prev ? { ...prev, isFitnessManager: checked } : null);
+                              } catch (err: any) {
+                                alert(`Failed to update Fitness Manager status: ${err?.message || String(err)}`);
+                              }
+                            }}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </TabsContent>
 

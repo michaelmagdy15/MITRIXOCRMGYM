@@ -17,7 +17,7 @@ import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { calculatePricing, formatCurrencyAmount } from './utils/pricing';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
-import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt, RotateCcw } from 'lucide-react';
+import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt, RotateCcw, Tag } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog } from './components/AlertDialog';
 import { PaymentCategory, PAYMENT_CATEGORIES, resolvePaymentCategory } from './utils/paymentCategories';
@@ -790,6 +790,8 @@ export default function Payments() {
         clientStatus: client.status,
         clientPackages: client.packages,
         amount: amountToPay,
+        originalAmount: pkg.price,
+        amount_paid: amountToPay,
         method: upgradeMethod,
         instapayRef: upgradeMethod === 'Instapay' ? upgradeInstapayRef : undefined,
         packageType: pkg.name,
@@ -1019,12 +1021,22 @@ export default function Payments() {
                   ${payment.packageType}
                   ${payment.coachName ? `<br><span style="font-size: 12px; color: #888;">${labelCoachName}: ${payment.coachName}</span>` : ''}
                 </td>
-                <td class="text-end">${payment.amount.toLocaleString()} LE</td>
+                <td class="text-end">${(payment.originalAmount && payment.originalAmount > payment.amount ? payment.originalAmount : payment.amount).toLocaleString()} LE</td>
               </tr>
+              ${((payment.discountValue && payment.discountValue > 0) || (payment.originalAmount && payment.originalAmount > payment.amount)) ? `
+              <tr style="color: #d97706; font-size: 12px;">
+                <td>Discount ${payment.discountReason && payment.discountReason !== 'Standard' ? '(' + payment.discountReason + ')' : ''} ${payment.discountType === 'percentage' && payment.discountValue ? '(' + payment.discountValue + '%)' : ''}</td>
+                <td class="text-end">- ${((payment.originalAmount || payment.amount) - payment.amount).toLocaleString()} LE</td>
+              </tr>` : ''}
               <tr class="total-row">
                 <td class="text-end">${labelTotalPaid}</td>
-                <td class="text-end">${payment.amount.toLocaleString()} LE</td>
+                <td class="text-end">${(payment.amount_paid ?? payment.amount).toLocaleString()} LE</td>
               </tr>
+              ${(payment.remainingBalance && payment.remainingBalance > 0) ? `
+              <tr style="color: #dc2626; font-size: 12px;">
+                <td class="text-end">Remaining Debt</td>
+                <td class="text-end">${payment.remainingBalance.toLocaleString()} LE</td>
+              </tr>` : ''}
             </tbody>
           </table>
           
@@ -1100,6 +1112,8 @@ export default function Payments() {
           <div class="line"></div>
           <div class="bold">${payment.packageType}</div>
           ${payment.coachName ? `<div class="small">Trainer: ${payment.coachName}</div>` : ''}
+          ${(payment.originalAmount && payment.originalAmount > payment.amount) ? `<div class="row small"><span>Gross Catalog Price:</span><span>${payment.originalAmount.toLocaleString()} LE</span></div>` : ''}
+          ${((payment.discountValue && payment.discountValue > 0) || (payment.originalAmount && payment.originalAmount > payment.amount)) ? `<div class="row small" style="color: #b45309;"><span>Discount ${payment.discountReason && payment.discountReason !== 'Standard' ? '(' + payment.discountReason + ')' : ''}:</span><span>- ${((payment.originalAmount || payment.amount) - payment.amount).toLocaleString()} LE ${payment.discountType === 'percentage' && payment.discountValue ? '(' + payment.discountValue + '%)' : ''}</span></div>` : ''}
           <div class="row"><span>Net Package Total:</span><span>${netTotal.toLocaleString()} LE</span></div>
           <div class="row bold"><span>PAID NOW:</span><span>${paidNow.toLocaleString()} LE</span></div>
           ${
@@ -2765,7 +2779,51 @@ export default function Payments() {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="font-bold text-green-600 text-xs sm:text-sm">{payment.amount.toLocaleString()} {t('payments.currency_le')}</TableCell>
+                        <TableCell className="text-xs sm:text-sm">
+                          <div className="flex flex-col">
+                            {payment.originalAmount && payment.originalAmount > payment.amount ? (
+                              <span className="text-[11px] text-muted-foreground line-through font-mono">
+                                {payment.originalAmount.toLocaleString()} {t('payments.currency_le')}
+                              </span>
+                            ) : null}
+                            <span className="font-bold text-green-600">
+                              {payment.amount.toLocaleString()} {t('payments.currency_le')}
+                            </span>
+                            {(() => {
+                              const val = Number(payment.discountValue) || 0;
+                              const orig = Number(payment.originalAmount) || 0;
+                              const current = Number(payment.amount) || 0;
+                              if (val > 0) {
+                                const label = payment.discountType === 'percentage' ? `${val}% OFF` : `${val.toLocaleString()} LE OFF`;
+                                const reason = payment.discountReason && payment.discountReason !== 'Standard' ? ` (${payment.discountReason})` : '';
+                                return (
+                                  <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-semibold px-1 py-0 mt-0.5 w-fit inline-flex items-center gap-1">
+                                    <Tag className="w-2.5 h-2.5" />
+                                    {label}{reason}
+                                  </Badge>
+                                );
+                              } else if (orig > current && orig > 0) {
+                                return (
+                                  <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-semibold px-1 py-0 mt-0.5 w-fit inline-flex items-center gap-1">
+                                    <Tag className="w-2.5 h-2.5" />
+                                    {(orig - current).toLocaleString()} LE OFF
+                                  </Badge>
+                                );
+                              }
+                              return null;
+                            })()}
+                            {payment.amount_paid !== undefined && payment.amount_paid < payment.amount ? (
+                              <span className="text-[10px] text-amber-600 font-medium">
+                                Paid: {payment.amount_paid.toLocaleString()} LE
+                              </span>
+                            ) : null}
+                            {payment.remainingBalance && payment.remainingBalance > 0 ? (
+                              <span className="text-[10px] text-rose-500 font-medium">
+                                Debt: {payment.remainingBalance.toLocaleString()} LE
+                              </span>
+                            ) : null}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           {renderStatusBadge(payment.status)}
                         </TableCell>

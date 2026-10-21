@@ -1,16 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Client, GuestInvite } from '../types';
-import { db } from '../firebase';
-import { collection, query, where, onSnapshot, addDoc } from 'firebase/firestore';
+import { db, auth, getTenantId } from '../firebase';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, increment } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { UserPlus, Copy, Check, Info, Calendar, UserCheck, AlertCircle } from 'lucide-react';
+import { UserPlus, Copy, Check, Info, Calendar, UserCheck, AlertCircle, Ticket } from 'lucide-react';
+import { toast } from 'sonner';
+import { computeMemberBenefitsSummary } from '../utils/memberBenefitsWallet';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
-  Pending: { badge: 'bg-strike-green/10 text-strike-green border-strike-green/20', text: 'Active Invite' },
+  Pending: { badge: 'bg-primary/10 text-primary border-primary/20', text: 'Active Invite' },
   Attended: { badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', text: 'Checked In' },
   Expired: { badge: 'bg-secondary text-muted-foreground border-border', text: 'Expired' },
 };
@@ -24,6 +26,21 @@ export default function MemberInvites({ client }: { client: Client | null }) {
   const [generatedCode, setGeneratedCode] = useState('');
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [localRemainingOverride, setLocalRemainingOverride] = useState<number | null>(null);
+
+  const tenantId = getTenantId();
+  const isInzan = tenantId.toLowerCase().includes('inzan');
+  const gymName = isInzan ? 'Inzan Athletics' : 'Strike Boxing Club';
+
+  // Compute benefits from active package & member balances
+  const benefits = useMemo(() => {
+    if (!client) return null;
+    return computeMemberBenefitsSummary(client);
+  }, [client]);
+
+  const rawRemaining = benefits?.guestInvitations?.remaining ?? 0;
+  const totalInvites = benefits?.guestInvitations?.total ?? 3;
+  const remainingInvites = localRemainingOverride !== null ? localRemainingOverride : rawRemaining;
 
   useEffect(() => {
     if (!client?.id) {
@@ -60,48 +77,108 @@ export default function MemberInvites({ client }: { client: Client | null }) {
     for (let i = 0; i < 6; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return `ST-${code}`;
+    const prefix = isInzan ? 'INV' : 'ST';
+    return `${prefix}-${code}`;
   };
 
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!client || !guestName || !guestPhone || isSubmitting) return;
+    if (!client || !guestName.trim() || !guestPhone.trim() || isSubmitting) return;
+
+    if (remainingInvites <= 0) {
+      toast.error('You have no guest invitation passes remaining in your package.');
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitSuccess(false);
     setGeneratedCode('');
 
     try {
-      const inviteCode = generateInviteCode();
+      let finalInviteCode = '';
+      let apiSuccess = false;
 
-      await addDoc(collection(db, 'guestInvites'), {
-        hostClientId: client.id,
-        hostName: client.name,
-        guestName: guestName.trim(),
-        guestPhone: guestPhone.trim(),
-        inviteCode: inviteCode,
-        status: 'Pending',
-        createdAt: new Date().toISOString()
-      });
+      // 1. Attempt authoritative server-side endpoint with quota deduction & audit
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/member/guest-invite', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'x-tenant-id': tenantId,
+          },
+          body: JSON.stringify({
+            clientId: client.id,
+            guestName: guestName.trim(),
+            guestPhone: guestPhone.trim(),
+          }),
+        });
 
-      // Log in audit logs
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'CREATE',
-        entityType: 'SYSTEM',
-        entityId: client.id,
-        details: `Member ${client.name} invited guest ${guestName.trim()} (Phone: ${guestPhone.trim()}). Code: ${inviteCode}`,
-        timestamp: new Date().toISOString(),
-        userId: client.portalUserId || client.id,
-        userName: client.name,
-      });
+        if (res.ok) {
+          const data = await res.json();
+          finalInviteCode = data.inviteCode;
+          if (typeof data.remaining === 'number') {
+            setLocalRemainingOverride(data.remaining);
+          } else {
+            setLocalRemainingOverride(Math.max(0, remainingInvites - 1));
+          }
+          apiSuccess = true;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          if (res.status === 400 && errData.error?.includes('remaining')) {
+            toast.error(errData.error || 'No guest invitations remaining.');
+            setIsSubmitting(false);
+            return;
+          }
+          // If server error or offline, fallback to Firestore
+          console.warn('[MemberInvites] Server API returned error, falling back to direct Firestore:', errData);
+        }
+      } catch (apiErr) {
+        console.warn('[MemberInvites] API fetch failed, falling back to direct Firestore:', apiErr);
+      }
 
-      setGeneratedCode(inviteCode);
+      // 2. Direct Firestore fallback if API wasn't used or succeeded
+      if (!apiSuccess) {
+        finalInviteCode = generateInviteCode();
+        const nowIso = new Date().toISOString();
+
+        await addDoc(collection(db, 'guestInvites'), {
+          hostClientId: client.id,
+          hostId: client.id,
+          hostMemberId: (client as any).memberId || (client as any).legacyMemberId || '',
+          hostName: client.name,
+          guestName: guestName.trim(),
+          guestPhone: guestPhone.trim(),
+          inviteCode: finalInviteCode,
+          status: 'Pending',
+          createdAt: nowIso,
+          branch: client.branch || (client as any).homeBranch || 'MAIN',
+        });
+
+        // Deduct quota from client document
+        const newRemaining = Math.max(0, remainingInvites - 1);
+        const updates: Record<string, any> = {
+          guestInvitesRemaining: newRemaining,
+          invitationsRemaining: newRemaining,
+          invitationsUsed: increment(1),
+          updatedAt: nowIso,
+        };
+        await updateDoc(doc(db, 'clients', client.id), updates).catch((updateErr) => {
+          console.warn('[MemberInvites] Non-critical: could not update client doc:', updateErr);
+        });
+
+        setLocalRemainingOverride(newRemaining);
+      }
+
+      setGeneratedCode(finalInviteCode);
       setSubmitSuccess(true);
       setGuestName('');
       setGuestPhone('');
-    } catch (err) {
+      toast.success(`Guest pass generated! Code: ${finalInviteCode}`);
+    } catch (err: any) {
       console.error("Failed to create guest invite:", err);
-      alert("Failed to generate invitation. Please try again.");
+      toast.error(err?.message || "Failed to generate invitation. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -110,6 +187,7 @@ export default function MemberInvites({ client }: { client: Client | null }) {
   const handleCopyCode = (code: string, id: string) => {
     navigator.clipboard.writeText(code);
     setCopiedCodeId(id);
+    toast.success('Passcode copied to clipboard');
     setTimeout(() => setCopiedCodeId(null), 2000);
   };
 
@@ -125,14 +203,44 @@ export default function MemberInvites({ client }: { client: Client | null }) {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-          <UserPlus className="h-5 w-5 text-primary" /> Send Guest Invite
-        </h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Invite friends or family members for a free trial training session at Strike Boxing Club.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-primary" /> Send Guest Invite
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Invite friends or family members for a free trial training session at {gymName}.
+          </p>
+        </div>
+
+        {/* Quota Badge */}
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="outline"
+            className={`px-3 py-1 text-xs font-bold flex items-center gap-1.5 ${
+              remainingInvites > 0
+                ? 'bg-primary/10 text-primary border-primary/30'
+                : 'bg-destructive/10 text-destructive border-destructive/30'
+            }`}
+          >
+            <Ticket className="h-3.5 w-3.5" />
+            {remainingInvites > 0
+              ? `${remainingInvites} of ${totalInvites} Passes Left`
+              : '0 Passes Remaining'}
+          </Badge>
+        </div>
       </div>
+
+      {/* Quota Depleted Warning */}
+      {remainingInvites <= 0 && (
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive p-4 rounded-xl flex items-center gap-3 text-xs">
+          <AlertCircle className="h-5 w-5 shrink-0" />
+          <div>
+            <span className="font-bold block">No Guest Passes Remaining</span>
+            <span>You have utilized all {totalInvites} guest passes included with your membership package. Contact reception to upgrade or add passes.</span>
+          </div>
+        </div>
+      )}
 
       {/* Invite Creation Form */}
       <Card className="border bg-card/40 shadow-sm">
@@ -155,6 +263,7 @@ export default function MemberInvites({ client }: { client: Client | null }) {
                 value={guestName}
                 onChange={e => setGuestName(e.target.value)}
                 required
+                disabled={remainingInvites <= 0}
                 className="bg-background"
               />
             </div>
@@ -168,6 +277,7 @@ export default function MemberInvites({ client }: { client: Client | null }) {
                 value={guestPhone}
                 onChange={e => setGuestPhone(e.target.value)}
                 required
+                disabled={remainingInvites <= 0}
                 className="bg-background"
               />
             </div>
@@ -198,8 +308,12 @@ export default function MemberInvites({ client }: { client: Client | null }) {
               </div>
             )}
 
-            <Button type="submit" disabled={isSubmitting} className="w-full font-bold">
-              {isSubmitting ? 'Generating Pass...' : 'Create Invite Code'}
+            <Button
+              type="submit"
+              disabled={isSubmitting || remainingInvites <= 0}
+              className="w-full font-bold"
+            >
+              {isSubmitting ? 'Generating Pass...' : remainingInvites <= 0 ? 'No Passes Left' : 'Create Invite Code'}
             </Button>
           </form>
         </CardContent>
@@ -211,7 +325,7 @@ export default function MemberInvites({ client }: { client: Client | null }) {
           <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
           <div className="space-y-1">
             <span className="font-bold text-foreground block">Guest Trial Policy</span>
-            <p>Each guest code entitles one non-member to a single free trial session. Guests must present their code upon arrival. Checked-in guest profiles are registered in our CRM pipeline as leads.</p>
+            <p>Each guest code entitles one non-member to a single free trial session. Guests must present their code upon arrival at {gymName}. Checked-in guest profiles are registered in our CRM pipeline as leads.</p>
           </div>
         </CardContent>
       </Card>

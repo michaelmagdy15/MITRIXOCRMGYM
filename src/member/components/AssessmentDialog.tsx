@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { db, getTenantId } from '../../firebase';
+import { db, getTenantId, auth } from '../../firebase';
 import { collection, addDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
 import { Client, User, AssessmentTimePeriod, AssessmentAgeGroup, AssessmentMembershipType, AssessmentReferralSource } from '../../types';
 import { Clock, ShieldAlert, Sparkles, CheckCircle2, User as UserIcon, Phone, AlertCircle, Calendar, MessageSquare, Award } from 'lucide-react';
 
@@ -87,23 +88,33 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
 
     if (isInzan) {
       if (!fullName.trim()) {
-        setErrorMessage('Full Name is required.');
+        const msg = 'Full Name is required.';
+        setErrorMessage(msg);
+        toast.error(msg);
         return;
       }
       if (!phone.trim()) {
-        setErrorMessage('Phone Number (with WhatsApp) is required.');
+        const msg = 'Phone Number (with WhatsApp) is required.';
+        setErrorMessage(msg);
+        toast.error(msg);
         return;
       }
       if (!membershipId.trim()) {
-        setErrorMessage('Membership ID is required (enter Guest if none).');
+        const msg = 'Membership ID is required (enter Guest if none).';
+        setErrorMessage(msg);
+        toast.error(msg);
         return;
       }
       if (!preferredHour.trim()) {
-        setErrorMessage('Preferred Hour is required.');
+        const msg = 'Preferred Hour is required.';
+        setErrorMessage(msg);
+        toast.error(msg);
         return;
       }
-      if (hasCoachPreference === 'Yes' && !coachName.trim()) {
-        setErrorMessage('Please provide the name of the coach you prefer.');
+      if (hasCoachPreference === 'Yes' && preferredCoachId === 'any' && !coachName.trim()) {
+        const msg = 'Please select or enter the coach you prefer.';
+        setErrorMessage(msg);
+        toast.error(msg);
         return;
       }
     }
@@ -142,56 +153,100 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
               (Number(p?.sessionsRemaining) || 0) > 0
           ));
 
-      await addDoc(collection(db, 'assessments'), {
-        clientId: client.id || 'guest',
-        clientName: fullName.trim() || client.name || 'Anonymous',
-        phone: phone.trim() || client.phone || '',
-        membershipId: membershipId.trim() || 'Guest',
-        timePeriod: isInzan ? timePeriod : (preferredTime || 'Any'),
-        preferredHour: isInzan ? preferredHour.trim() : (preferredTime || ''),
-        ageGroup: isInzan ? ageGroup : undefined,
-        membershipType: isInzan ? membershipType : undefined,
-        notes: notes.trim(),
-        injuries: notes.trim(),
-        goals: goals.trim() || undefined,
-        hasCoachPreference: hasCoachPreference === 'Yes',
-        coachName: hasCoachPreference === 'Yes' ? (coachName.trim() || resolvedCoachName) : undefined,
-        referralSource: hasCoachPreference === 'Yes' ? referralSource : undefined,
-        preferredCoachId: resolvedCoachId,
-        preferredCoachName: hasCoachPreference === 'Yes' ? (resolvedCoachName || coachName) : 'Any Coach',
-        // In Inzan Athletics, all assessments route to Fitness Manager triage first; assignedCoachId stays null until Fitness Manager assigns
-        assignedCoachId: isInzan ? null : resolvedCoachId,
-        assignedCoachName: isInzan ? null : (hasCoachPreference === 'Yes' ? (resolvedCoachName || coachName) : null),
-        routedTo: isInzan ? 'fitness_manager' : 'coach',
-        triageStatus: isInzan ? 'AwaitingFitnessManager' : 'Assigned',
-        freePtSessionsRemaining: freePtRemaining,
-        hasPaidPtPackage: hasPaidPt,
-        ptEntitlementSummary: hasPaidPt
-          ? 'Paid PT Package Active'
-          : freePtRemaining > 0
-          ? `${freePtRemaining} Free PT Sessions Available`
-          : 'No PT Package — Awaiting Payment',
-        preferredDate: isInzan ? timePeriod : (preferredDate || ''),
-        preferredTime: isInzan ? preferredHour : (preferredTime || ''),
-        status: 'Pending',
-        tenantId: getTenantId(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
+      let submittedSuccessfully = false;
 
-      if (isInzan && client.id && client.id !== 'guest') {
-        try {
-          const { doc: fsDoc, updateDoc } = await import('firebase/firestore');
-          await updateDoc(fsDoc(db, 'clients', client.id), {
-            ptAssessmentStatus: 'PendingFitnessManager',
-            ptAssessmentRequestedAt: new Date().toISOString(),
-          });
-        } catch (updateErr) {
-          console.warn('Could not update client ptAssessmentStatus:', updateErr);
+      // 1. Authoritative server endpoint (with privileged audit logs + notification)
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/member/assessment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            'x-tenant-id': getTenantId(),
+          },
+          body: JSON.stringify({
+            clientId: client.id || 'guest',
+            fullName: fullName.trim() || client.name,
+            phone: phone.trim() || client.phone,
+            membershipId: membershipId.trim() || 'Guest',
+            timePeriod: isInzan ? timePeriod : (preferredTime || 'Any'),
+            preferredHour: isInzan ? preferredHour.trim() : (preferredTime || ''),
+            ageGroup: isInzan ? ageGroup : undefined,
+            membershipType: isInzan ? membershipType : undefined,
+            notes: notes.trim(),
+            goals: goals.trim() || undefined,
+            hasCoachPreference: hasCoachPreference === 'Yes',
+            preferredCoachId: resolvedCoachId,
+            preferredCoachName: resolvedCoachName,
+            referralSource: hasCoachPreference === 'Yes' ? referralSource : undefined,
+          }),
+        });
+
+        if (res.ok) {
+          submittedSuccessfully = true;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.warn('[AssessmentDialog] Server route error, falling back to direct Firestore:', errData);
         }
+      } catch (apiErr) {
+        console.warn('[AssessmentDialog] API fetch error, falling back to direct Firestore:', apiErr);
+      }
+
+      // 2. Direct Firestore fallback
+      if (!submittedSuccessfully) {
+        await addDoc(collection(db, 'assessments'), {
+          clientId: client.id || 'guest',
+          clientName: fullName.trim() || client.name || 'Anonymous',
+          phone: phone.trim() || client.phone || '',
+          membershipId: membershipId.trim() || 'Guest',
+          timePeriod: isInzan ? timePeriod : (preferredTime || 'Any'),
+          preferredHour: isInzan ? preferredHour.trim() : (preferredTime || ''),
+          ageGroup: isInzan ? ageGroup : undefined,
+          membershipType: isInzan ? membershipType : undefined,
+          notes: notes.trim(),
+          injuries: notes.trim(),
+          goals: goals.trim() || undefined,
+          hasCoachPreference: hasCoachPreference === 'Yes',
+          coachName: hasCoachPreference === 'Yes' ? (coachName.trim() || resolvedCoachName) : undefined,
+          referralSource: hasCoachPreference === 'Yes' ? referralSource : undefined,
+          preferredCoachId: resolvedCoachId,
+          preferredCoachName: hasCoachPreference === 'Yes' ? (resolvedCoachName || coachName) : 'Any Coach',
+          assignedCoachId: isInzan ? null : resolvedCoachId,
+          assignedCoachName: isInzan ? null : (hasCoachPreference === 'Yes' ? (resolvedCoachName || coachName) : null),
+          routedTo: isInzan ? 'fitness_manager' : 'coach',
+          triageStatus: isInzan ? 'AwaitingFitnessManager' : 'Assigned',
+          freePtSessionsRemaining: freePtRemaining,
+          hasPaidPtPackage: hasPaidPt,
+          ptEntitlementSummary: hasPaidPt
+            ? 'Paid PT Package Active'
+            : freePtRemaining > 0
+            ? `${freePtRemaining} Free PT Sessions Available`
+            : 'No PT Package — Awaiting Payment',
+          preferredDate: isInzan ? timePeriod : (preferredDate || ''),
+          preferredTime: isInzan ? preferredHour : (preferredTime || ''),
+          status: 'Pending',
+          tenantId: getTenantId(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+
+        if (isInzan && client.id && client.id !== 'guest') {
+          try {
+            const { doc: fsDoc, updateDoc } = await import('firebase/firestore');
+            await updateDoc(fsDoc(db, 'clients', client.id), {
+              ptAssessmentStatus: 'PendingFitnessManager',
+              ptAssessmentRequestedAt: new Date().toISOString(),
+            });
+          } catch (updateErr) {
+            console.warn('Could not update client ptAssessmentStatus:', updateErr);
+          }
+        }
+        submittedSuccessfully = true;
       }
 
       setSuccess(true);
+      toast.success('Assessment request submitted successfully!');
       setTimeout(() => {
         setSuccess(false);
         onOpenChange(false);
@@ -201,7 +256,9 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
       }, 2200);
     } catch (error) {
       console.error("Error submitting assessment:", error);
-      setErrorMessage("Failed to submit assessment request. Please try again.");
+      const msg = "Failed to submit assessment request. Please try again.";
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -512,13 +569,21 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
               </div>
             </div>
 
-            <DialogFooter className="p-4 border-t bg-muted/20 shrink-0 flex items-center justify-between sm:justify-between">
-              <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-                Cancel
-              </Button>
-              <Button type="submit" size="sm" disabled={isSubmitting} className="font-semibold px-5">
-                {isSubmitting ? 'Submitting Request...' : 'Submit Assessment Request'}
-              </Button>
+            <DialogFooter className="p-4 border-t bg-muted/20 shrink-0 flex flex-col sm:flex-row items-center justify-between sm:justify-between gap-3">
+              {errorMessage && (
+                <div className="w-full sm:w-auto flex-1 flex items-center gap-2 p-2.5 rounded-lg bg-destructive/10 text-destructive text-xs border border-destructive/20 order-first sm:order-none">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between w-full sm:w-auto gap-2 sm:ml-auto">
+                <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={isSubmitting} className="font-semibold px-5">
+                  {isSubmitting ? 'Submitting Request...' : 'Submit Assessment Request'}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         )}

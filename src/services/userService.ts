@@ -37,6 +37,8 @@ export interface InviteUserOptions {
   can_access_settings_and_history?: boolean;
   can_delete_records?: boolean;
   can_assign_leads?: boolean;
+  isFitnessManager?: boolean;
+  coachId?: string;
 }
 
 export const inviteUser = async (
@@ -79,7 +81,9 @@ export const inviteUser = async (
     ...(options?.can_view_global_dashboard !== undefined ? { can_view_global_dashboard: options.can_view_global_dashboard } : {}),
     ...(options?.can_access_settings_and_history !== undefined ? { can_access_settings_and_history: options.can_access_settings_and_history } : {}),
     ...(options?.can_delete_records !== undefined ? { can_delete_records: options.can_delete_records } : {}),
-    ...(options?.can_assign_leads !== undefined ? { can_assign_leads: options.can_assign_leads } : {})
+    ...(options?.can_assign_leads !== undefined ? { can_assign_leads: options.can_assign_leads } : {}),
+    ...(options?.isFitnessManager !== undefined ? { isFitnessManager: options.isFitnessManager } : (role === 'fitness_manager' ? { isFitnessManager: true } : {})),
+    ...(options?.coachId ? { coachId: options.coachId } : {})
   };
 
   await setDoc(doc(db, 'users', uid), cleanData(newUser));

@@ -108,7 +108,7 @@ service cloud.firestore {
       allow create: if isStaff();
       allow update: if isStaff() || (
         (isOwner(clientId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid)) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'portalUserId', 'photoURL', 'expoPushToken', 'fcmToken', 'updatedAt'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'portalUserId', 'photoURL', 'expoPushToken', 'fcmToken', 'updatedAt', 'ptAssessmentStatus', 'ptAssessmentRequestedAt', 'guestInvitesRemaining', 'invitationsRemaining', 'invitationsUsed'])
       );
       allow delete: if isManager();
 
@@ -164,7 +164,17 @@ service cloud.firestore {
 
     // GUEST INVITES & GUESTS
     match /guestInvites/{inviteId} {
-      allow read, write: if isStaff();
+      allow read: if isStaff() || (isAuthenticated() && (
+        (resource.data.hostId != null && isOwnClient(resource.data.hostId)) ||
+        (resource.data.hostClientId != null && isOwnClient(resource.data.hostClientId)) ||
+        (resource.data.hostClientId != null && resource.data.hostClientId == request.auth.uid)
+      ));
+      allow create: if isStaff() || (isAuthenticated() && (
+        (request.resource.data.hostId != null && isOwnClient(request.resource.data.hostId)) ||
+        (request.resource.data.hostClientId != null && isOwnClient(request.resource.data.hostClientId)) ||
+        (request.resource.data.hostClientId != null && request.resource.data.hostClientId == request.auth.uid)
+      ));
+      allow update, delete: if isStaff();
     }
 
     match /guests/{guestId} {

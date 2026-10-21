@@ -100,7 +100,17 @@ export default function Users() {
   const canInviteUsers = canChangeRoles || currentUser?.role === 'manager';
 
   const handleRoleChange = (userId: string, newRole: UserRole) => {
-    updateUser(userId, { role: newRole });
+    const updates: Partial<User> = { role: newRole };
+    if (newRole === 'fitness_manager') {
+      updates.isFitnessManager = true;
+      updates.department = 'Fitness';
+      updates.jobTitle = 'Fitness Manager';
+    } else if (newRole === 'coach') {
+      updates.isFitnessManager = false;
+      updates.department = 'Fitness';
+      updates.jobTitle = 'Coach';
+    }
+    updateUser(userId, updates);
   };
 
   const openEditDialog = (user: User) => {
@@ -281,6 +291,8 @@ export default function Users() {
       case 'admin': return <Badge className="bg-blue-500">Admin</Badge>;
       case 'super_admin': return <Badge className="bg-red-500"><Shield className="w-3 h-3 mr-1" /> Super Admin</Badge>;
       case 'crm_admin': return <Badge className="bg-emerald-500"><Shield className="w-3 h-3 mr-1" /> CRM Admin</Badge>;
+      case 'fitness_manager': return <Badge className="bg-amber-600 text-white"><Shield className="w-3 h-3 mr-1" /> Fitness Manager</Badge>;
+      case 'coach': return <Badge className="bg-indigo-600 text-white">Coach</Badge>;
       case 'rep': return <Badge variant="secondary">Rep</Badge>;
       default: return <Badge variant="outline">{role}</Badge>;
     }
@@ -368,9 +380,10 @@ export default function Users() {
           branch: inviteBranch || undefined,
           salesTarget: inviteTarget ? parseFloat(inviteTarget) : undefined,
           status: inviteStatus,
-          department: isInzan ? (inviteDepartment as InzanDepartment) || undefined : undefined,
-          jobTitle: isInzan ? (inviteJobTitle as InzanJobTitle) || undefined : undefined,
-          trainerType: (isInzan && inviteDepartment === 'Fitness') ? (inviteTrainerType as 'Full-Time' | 'Part-Time') : undefined,
+          department: isInzan ? ((inviteDepartment as InzanDepartment) || (inviteRole === 'fitness_manager' ? 'Fitness' : undefined)) : undefined,
+          jobTitle: isInzan ? ((inviteJobTitle as InzanJobTitle) || (inviteRole === 'fitness_manager' ? 'Fitness Manager' : undefined)) : undefined,
+          trainerType: (isInzan && (inviteDepartment === 'Fitness' || inviteRole === 'fitness_manager')) ? (inviteTrainerType as 'Full-Time' | 'Part-Time') : undefined,
+          isFitnessManager: isInzan && inviteRole === 'fitness_manager',
           customPermissions,
           ...legacy
         }
@@ -456,6 +469,8 @@ export default function Users() {
                               <SelectContent>
                                 <SelectItem value="rep">Rep</SelectItem>
                                 <SelectItem value="manager">Manager</SelectItem>
+                                {isInzan && <SelectItem value="fitness_manager">Fitness Manager</SelectItem>}
+                                <SelectItem value="coach">Coach</SelectItem>
                                 {canInviteUsers && (
                                   <SelectItem value="admin">Admin</SelectItem>
                                 )}
@@ -873,6 +888,8 @@ export default function Users() {
                             <SelectContent>
                               <SelectItem value="rep">Rep</SelectItem>
                               <SelectItem value="manager">Manager</SelectItem>
+                              {isInzan && <SelectItem value="fitness_manager">Fitness Manager</SelectItem>}
+                              <SelectItem value="coach">Coach</SelectItem>
                               <SelectItem value="admin">Admin</SelectItem>
                               <SelectItem value="crm_admin">CRM Admin</SelectItem>
                               <SelectItem value="super_admin">Super Admin</SelectItem>

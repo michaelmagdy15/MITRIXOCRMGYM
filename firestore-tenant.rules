@@ -115,7 +115,7 @@ service cloud.firestore {
     }
 
     function isSafeClientSelfEdit() {
-      let allowed = ['name', 'phone', 'portalUserId', 'photoURL', 'expoPushToken', 'fcmToken', 'updatedAt'];
+      let allowed = ['name', 'phone', 'portalUserId', 'photoURL', 'expoPushToken', 'fcmToken', 'updatedAt', 'ptAssessmentStatus', 'ptAssessmentRequestedAt', 'guestInvitesRemaining', 'invitationsRemaining', 'invitationsUsed'];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
              (!('portalUserId' in request.resource.data) || request.resource.data.portalUserId == request.auth.uid) &&
              (!('portalUserId' in resource.data) || resource.data.portalUserId == request.auth.uid);
@@ -653,8 +653,16 @@ service cloud.firestore {
     }
 
     match /guestInvites/{inviteId} {
-      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.hostId != null && isOwnClientRecord(resource.data.hostId));
-      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.hostId != null && isOwnClientRecord(request.resource.data.hostId));
+      allow read: if isTenantStaff() || (isAuthenticated() && (
+        (resource.data.hostId != null && isOwnClientRecord(resource.data.hostId)) ||
+        (resource.data.hostClientId != null && isOwnClientRecord(resource.data.hostClientId)) ||
+        (resource.data.hostClientId != null && resource.data.hostClientId == request.auth.uid)
+      ));
+      allow create: if isTenantStaff() || (isAuthenticated() && (
+        (request.resource.data.hostId != null && isOwnClientRecord(request.resource.data.hostId)) ||
+        (request.resource.data.hostClientId != null && isOwnClientRecord(request.resource.data.hostClientId)) ||
+        (request.resource.data.hostClientId != null && request.resource.data.hostClientId == request.auth.uid)
+      ));
       allow update, delete: if isTenantStaff();
     }
 
@@ -708,6 +716,97 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isTenantStaff();
     }
+
+
+    // ASSESSMENTS (PT & Fitness Assessment Requests)
+    match /assessments/{assessmentId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && (
+        (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId)) ||
+        (resource.data.portalUserId != null && resource.data.portalUserId == request.auth.uid)
+      ));
+      allow create: if isTenantStaff() || (isAuthenticated() && (
+        request.resource.data.clientId != null && (
+          isOwnClientRecord(request.resource.data.clientId) ||
+          request.resource.data.clientId == request.auth.uid ||
+          request.resource.data.clientId == 'guest'
+        )
+      ));
+      allow update: if isTenantStaff() || (isAuthenticated() && (
+        (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId)) ||
+        (resource.data.portalUserId != null && resource.data.portalUserId == request.auth.uid)
+      ));
+      allow delete: if isTenantAdmin();
+    }
+
+    // LEADS & REFERRALS
+    match /leads/{leadId} {
+      allow read: if isTenantStaff();
+      allow create: if isTenantStaff() || isAuthenticated();
+      allow update, delete: if isTenantStaff();
+    }
+
+    // CALL CENTER LOGS
+    match /callCenterLog/{logId} {
+      allow read, write: if isTenantStaff();
+    }
+
+    // LOST AND FOUND
+    match /lostAndFound/{itemId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
+    }
+    match /lostFoundCategories/{catId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
+    }
+
+    // BODY RECORDS / INBODY
+    match /bodyRecords/{recordId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && (
+        (resource.data.memberId != null && isOwnClientRecord(resource.data.memberId)) ||
+        (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId))
+      ));
+      allow create: if isTenantStaff() || (isAuthenticated() && (
+        (request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId)) ||
+        (request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId))
+      ));
+      allow update, delete: if isTenantStaff();
+    }
+
+    // COMPLAINT CATEGORIES
+    match /complaintCategories/{catId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
+    }
+
+    // ATTENDANCE LOGS
+    match /attendance_logs/{logId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isTenantStaff();
+      allow update, delete: if isTenantAdmin();
+    }
+    match /attendances/{attId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create: if isTenantStaff();
+      allow update, delete: if isTenantAdmin();
+    }
+
+    // GAMIFICATION, BADGES & REWARDS
+    match /badgeConfigs/{docId} { allow read: if isAuthenticated(); allow write: if isTenantAdmin(); }
+    match /badgeDefinitions/{docId} { allow read: if isAuthenticated(); allow write: if isTenantAdmin(); }
+    match /memberBadges/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
+    match /rewards/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
+    match /rewardsConfig/{docId} { allow read: if isAuthenticated(); allow write: if isTenantAdmin(); }
+    match /rewardRedemptions/{docId} { allow read: if isAuthenticated(); allow create: if isAuthenticated(); allow update, delete: if isTenantStaff(); }
+    match /coinsTransactions/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
+    match /pointTransactions/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
+    match /pointsBundles/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
+
+    // TRANSFER & UPGRADE AUDIT LOGS
+    match /salesTransferLogs/{docId} { allow read, write: if isTenantStaff(); }
+    match /trainerTransferLogs/{docId} { allow read, write: if isTenantStaff(); }
+    match /transfers/{docId} { allow read, write: if isTenantStaff(); }
+    match /upgrades/{docId} { allow read, write: if isTenantStaff(); }
 
     // ===============================================================
     // Platform Super Admin Bypass (Michael Mitry — God Mode)

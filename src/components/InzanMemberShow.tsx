@@ -23,7 +23,7 @@ import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage
 import { collection, query, where, onSnapshot, addDoc, orderBy, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { SalesTransferLog, TrainerTransferLog } from '../types';
 import { toast } from 'sonner';
-import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette, ArrowLeft, Gift, Sparkles, ShieldCheck, Edit3, RefreshCw } from 'lucide-react';
+import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette, ArrowLeft, Gift, Sparkles, ShieldCheck, Edit3, RefreshCw, UserPlus } from 'lucide-react';
 import { compressImage } from '../utils/imageUtils';
 import EntitlementManager from './EntitlementManager';
 import { AdjustPackageDatesDialog, canOverridePackageDates, buildPackageUpdates } from './AdjustPackageDatesDialog';
@@ -84,6 +84,7 @@ export function InzanMemberShow({
   setRenewStartDate
 }: InzanMemberShowProps) {
   const [activeTab, setActiveTab] = useState<TabType>('member_data');
+  const memberReferrals: any[] = Array.isArray((client as any).referrals) ? (client as any).referrals : [];
   const canAdjustDates = canOverridePackageDates(currentUser);
   const [adjustPkgId, setAdjustPkgId] = useState<string | null>(null);
   const [deletePkgId, setDeletePkgId] = useState<string | null>(null);
@@ -94,12 +95,76 @@ export function InzanMemberShow({
   const [formData, setFormData] = useState<Partial<Client>>({});
   const [isSaving, setIsSaving] = useState(false);
 
+  // Freezing management state
+  const [freezePkgId, setFreezePkgId] = useState<string>('');
+  const [freezeStartDate, setFreezeStartDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
+  const [freezeEndDate, setFreezeEndDate] = useState<string>('');
+  const [freezeReason, setFreezeReason] = useState<string>('');
+  const [isApplyingFreeze, setIsApplyingFreeze] = useState<boolean>(false);
+
+  // Quick Guest Invite state on Overview
+  const [showQuickInviteForm, setShowQuickInviteForm] = useState(false);
+  const [quickGuestName, setQuickGuestName] = useState('');
+  const [quickGuestPhone, setQuickGuestPhone] = useState('');
+  const [isSubmittingQuickInvite, setIsSubmittingQuickInvite] = useState(false);
+
   // Unlimited Referrals state (Overview quick-action)
   const [showAddReferralForm, setShowAddReferralForm] = useState(false);
   const [referralName, setReferralName] = useState('');
   const [referralPhone, setReferralPhone] = useState('');
   const [referralNotes, setReferralNotes] = useState('');
   const [isSubmittingReferral, setIsSubmittingReferral] = useState(false);
+
+  const handleSendQuickGuestInvite = async () => {
+    if (!quickGuestName.trim() || !quickGuestPhone.trim()) {
+      toast.error('Please enter guest name and phone number.');
+      return;
+    }
+    const invRem = Number(client.guestInvitesRemaining ?? (client as any).invitationsRemaining ?? 0);
+    if (invRem <= 0) {
+      toast.error('Member has 0 guest invitation passes remaining.');
+      return;
+    }
+    setIsSubmittingQuickInvite(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const code = `INV-${Math.floor(100000 + Math.random() * 900000)}`;
+      const newUsed = Number((client as any).invitationsUsed || 0) + 1;
+      const newRem = Math.max(0, invRem - 1);
+
+      await addDoc(collection(db, 'guestInvites'), {
+        hostClientId: client.id,
+        hostId: client.id,
+        hostMemberId: client.memberId || client.legacyMemberId || '',
+        hostName: client.name || '',
+        guestName: quickGuestName.trim(),
+        guestPhone: quickGuestPhone.trim(),
+        inviteCode: code,
+        status: 'Pending',
+        visitDate: nowIso.slice(0, 10),
+        attendanceDate: nowIso,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        source: 'front_desk_overview',
+      });
+
+      await onUpdateClient(client.id, {
+        guestInvitesRemaining: newRem,
+        invitationsRemaining: newRem,
+        invitationsUsed: newUsed,
+      } as any);
+
+      toast.success(`Guest invitation pass (${code}) issued for ${quickGuestName.trim()}! (1 pass deducted, ${newRem} remaining)`);
+      setQuickGuestName('');
+      setQuickGuestPhone('');
+      setShowQuickInviteForm(false);
+    } catch (err: any) {
+      console.error('Failed to issue quick guest invite:', err);
+      toast.error(err?.message || 'Failed to issue guest invitation.');
+    } finally {
+      setIsSubmittingQuickInvite(false);
+    }
+  };
 
   // Per-Package Same-Day Edit & Transfer state
   const [editingPkgId, setEditingPkgId] = useState<string | null>(null);
@@ -191,14 +256,28 @@ export function InzanMemberShow({
     const cb = rawClient.benefits || {};
     const catB = catalogMatch?.benefits || {};
 
-    const freezeTotal = Number(pb.freezeAllowanceDays ?? pkg?.freezeAllowanceDays ?? catB.freezeAllowanceDays ?? catalogMatch?.freezeAllowanceDays ?? cb.freezeAllowanceDays ?? rawClient.freezeAllowanceDays ?? 0);
+    let freezeTotal = Number(pb.freezeAllowanceDays ?? pkg?.freezeAllowanceDays ?? catB.freezeAllowanceDays ?? catalogMatch?.freezeAllowanceDays ?? cb.freezeAllowanceDays ?? rawClient.freezeAllowanceDays ?? 0);
     const freezeUsed = Number(pb.freezeDaysUsed ?? pkg?.freezeDaysUsed ?? cb.freezeDaysUsed ?? rawClient.freezeDaysUsed ?? 0);
-    const invTotal = Number(pb.guestInvitations ?? pkg?.guestInvitations ?? catB.guestInvitations ?? catalogMatch?.guestInvitations ?? cb.guestInvitations ?? rawClient.guestInvitations ?? 0);
+    let invTotal = Number(pb.guestInvitations ?? pkg?.guestInvitations ?? catB.guestInvitations ?? catalogMatch?.guestInvitations ?? cb.guestInvitations ?? rawClient.guestInvitations ?? 0);
     const invUsed = Number(pb.invitationsUsed ?? pkg?.invitationsUsed ?? cb.invitationsUsed ?? rawClient.invitationsUsed ?? 0);
-    const freePtTotal = Number(pb.freePtSessions ?? pkg?.freePtSessions ?? catB.freePtSessions ?? catalogMatch?.freePtSessions ?? cb.freePtSessions ?? rawClient.freePtSessions ?? rawClient.freePtSessionsTotal ?? 0);
+    let freePtTotal = Number(pb.freePtSessions ?? pkg?.freePtSessions ?? catB.freePtSessions ?? catalogMatch?.freePtSessions ?? cb.freePtSessions ?? rawClient.freePtSessions ?? rawClient.freePtSessionsTotal ?? 0);
     const freePtUsed = Number(pb.freePtSessionsUsed ?? pkg?.freePtSessionsUsed ?? cb.freePtSessionsUsed ?? rawClient.freePtSessionsUsed ?? 0);
-    const classTotal = Number(pb.freeClassTrials ?? pkg?.freeClassTrials ?? catB.freeClassTrials ?? catalogMatch?.freeClassTrials ?? cb.freeClassTrials ?? rawClient.freeClassTrials ?? rawClient.freeClassTrialsTotal ?? 0);
+    let classTotal = Number(pb.freeClassTrials ?? pkg?.freeClassTrials ?? catB.freeClassTrials ?? catalogMatch?.freeClassTrials ?? cb.freeClassTrials ?? rawClient.freeClassTrials ?? rawClient.freeClassTrialsTotal ?? 0);
     const classUsed = Number(pb.classTrialsUsed ?? pkg?.classTrialsUsed ?? pkg?.freeClassTrialsUsed ?? cb.classTrialsUsed ?? rawClient.freeClassTrialsUsed ?? 0);
+
+    // Redgits / DB zero-benefit fallback:
+    if (freezeTotal === 0 && invTotal === 0 && freePtTotal === 0) {
+      const s = `${pkgNameNorm} ${catalogMatch?.name || ''} ${pkg?.expiryDays || catalogMatch?.expiryDays || ''}`.toLowerCase();
+      if (s.includes('12') || s.includes('year') || s.includes('annual') || s.includes('365')) {
+        freezeTotal = 30; invTotal = 10; freePtTotal = 2; classTotal = 2;
+      } else if (s.includes('6') || s.includes('half') || s.includes('180')) {
+        freezeTotal = 15; invTotal = 5; freePtTotal = 1; classTotal = 1;
+      } else if (s.includes('3') || s.includes('quarter') || s.includes('90')) {
+        freezeTotal = 7; invTotal = 2; freePtTotal = 1; classTotal = 0;
+      } else if (s.includes('1') || s.includes('month') || s.includes('30')) {
+        freezeTotal = 0; invTotal = 1; freePtTotal = 0; classTotal = 0;
+      }
+    }
 
     return {
       freezeTotal,
@@ -279,6 +358,119 @@ export function InzanMemberShow({
       toast.error('Failed to save referral.');
     } finally {
       setIsSubmittingReferral(false);
+    }
+  };
+
+  const handleApplyPackageFreeze = async (targetPkgId?: string) => {
+    const pkgIdToFreeze = targetPkgId || freezePkgId;
+    if (!pkgIdToFreeze) {
+      toast.error('Please select a package to freeze.');
+      return;
+    }
+    if (!freezeStartDate || !freezeEndDate) {
+      toast.error('Please select freeze start and end dates.');
+      return;
+    }
+    const reqDays = Math.round((new Date(freezeEndDate).getTime() - new Date(freezeStartDate).getTime()) / 86400000);
+    if (reqDays <= 0) {
+      toast.error('Freeze end date must be after freeze start date.');
+      return;
+    }
+
+    const currentPkgs = Array.isArray(client.packages) ? [...client.packages] : [];
+    const idx = currentPkgs.findIndex(p => p.id === pkgIdToFreeze);
+    if (idx === -1 || !currentPkgs[idx]) {
+      toast.error('Selected package not found.');
+      return;
+    }
+    const p = currentPkgs[idx]!;
+
+    setIsApplyingFreeze(true);
+    try {
+      const curUsed = Number(p.freezeDaysUsed || 0);
+      const newUsed = curUsed + reqDays;
+
+      let newEndIso = p.endDate;
+      if (p.endDate) {
+        const curEnd = new Date(p.endDate);
+        curEnd.setDate(curEnd.getDate() + reqDays);
+        newEndIso = curEnd.toISOString();
+      }
+
+      currentPkgs[idx] = {
+        ...p,
+        status: 'Hold',
+        isOnHold: true,
+        holdReason: freezeReason || 'Member requested freeze',
+        holdDate: new Date().toISOString(),
+        freezeDaysUsed: newUsed,
+        endDate: newEndIso,
+      };
+
+      const nowIso = new Date().toISOString();
+      const newLog = {
+        packageId: pkgIdToFreeze,
+        packageName: p.packageName,
+        startDate: freezeStartDate,
+        endDate: freezeEndDate,
+        days: reqDays,
+        reason: freezeReason || 'Member requested freeze',
+        appliedBy: currentUser?.name || 'Staff',
+        appliedAt: nowIso,
+      };
+
+      const existingLogs = Array.isArray((client as any).freezeLogs) ? (client as any).freezeLogs : [];
+      const curClientUsed = Number((client as any).freezeDaysUsed || 0) + reqDays;
+      const curClientRem = Math.max(0, Number((client as any).freezeDaysRemaining ?? (client as any).freezeAllowanceDays ?? 30) - reqDays);
+
+      await onUpdateClient(client.id, {
+        status: 'Hold',
+        packages: currentPkgs,
+        freezeDaysUsed: curClientUsed,
+        freezeDaysRemaining: curClientRem,
+        freezeLogs: [newLog, ...existingLogs],
+      } as any);
+
+      await addAuditLog('UPDATE', 'PACKAGE_RECORD', client.id, `Frozen package "${p.packageName}" for ${reqDays} days (${freezeStartDate} to ${freezeEndDate}).`);
+      toast.success(`Package "${p.packageName}" frozen for ${reqDays} days! Expiry extended.`);
+      setFreezeReason('');
+      setFreezeEndDate('');
+      setFreezePkgId('');
+    } catch (err: any) {
+      console.error('Failed to freeze package:', err);
+      toast.error(err?.message || 'Failed to apply package freeze.');
+    } finally {
+      setIsApplyingFreeze(false);
+    }
+  };
+
+  const handleUnfreezePackageDirect = async (pkgId: string) => {
+    const currentPkgs = Array.isArray(client.packages) ? [...client.packages] : [];
+    const idx = currentPkgs.findIndex(p => p.id === pkgId);
+    if (idx === -1 || !currentPkgs[idx]) return;
+    const p = currentPkgs[idx]!;
+
+    try {
+      currentPkgs[idx] = {
+        ...p,
+        status: 'Active',
+        isOnHold: false,
+        holdReason: '',
+        holdDate: '',
+      };
+
+      const stillHasFrozen = currentPkgs.some(pkg => pkg.status === 'Hold' || (pkg as any).isOnHold);
+
+      await onUpdateClient(client.id, {
+        status: stillHasFrozen ? 'Hold' : 'Active',
+        packages: currentPkgs,
+      } as any);
+
+      await addAuditLog('UPDATE', 'PACKAGE_RECORD', client.id, `Unfroze package "${p.packageName}". Status restored to Active.`);
+      toast.success(`Package "${p.packageName}" unfrozen and restored to Active!`);
+    } catch (err: any) {
+      console.error('Failed to unfreeze package:', err);
+      toast.error(err?.message || 'Failed to unfreeze package.');
     }
   };
 
@@ -664,8 +856,8 @@ export function InzanMemberShow({
           <div className="h-4 w-px bg-border hidden sm:block shrink-0" />
           <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
             {[
-              { id: 'member_data', label: 'Overview (User Details)' },
-              { id: 'package_data', label: 'Packages & Invites' },
+              { id: 'member_data', label: 'Overview (Member Details & Actions)' },
+              { id: 'package_data', label: 'Packages & Benefits' },
               { id: 'financials', label: 'Financials' },
               { id: 'freezing', label: 'Freezing' },
               { id: 'activities', label: 'Activities' },
@@ -835,6 +1027,421 @@ export function InzanMemberShow({
           </div>
         </div>
 
+        {/* Tab Contents */}
+        {activeTab === 'member_data' && (
+          <div className="space-y-6">
+            {/* Desktop Two-Column Sidebar Layout (Strictly User Details Only) */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-left">
+              {/* Left Column: Photo & Redgits ID */}
+              <div className="md:col-span-1 space-y-4">
+                {/* Profile Card */}
+                <div className="border border-border rounded-xl p-4 bg-muted/10 flex flex-col items-center justify-center text-center">
+                  <div className="relative group cursor-pointer mb-3">
+                    {client.photoURL ? (
+                      <img 
+                        src={client.photoURL} 
+                        alt={client.name} 
+                        className="h-28 w-28 rounded-full border-2 border-primary object-cover"
+                      />
+                    ) : (
+                      <div className="h-28 w-28 rounded-full bg-muted border flex items-center justify-center text-muted-foreground">
+                        <UserIcon className="h-12 w-12" />
+                      </div>
+                    )}
+                    
+                    {/* Hover Overlay */}
+                    <div 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-all duration-200 border border-primary/40"
+                    >
+                      {isUploadingPhoto ? (
+                        <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      ) : (
+                        <>
+                          <Camera className="h-6 w-6 text-white mb-1" />
+                          <span className="text-[9px] text-white/90 font-bold uppercase tracking-wider">Upload</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {photoUploadStatus && (
+                    <span className="text-[10px] text-primary font-bold animate-pulse mb-2">{photoUploadStatus}</span>
+                  )}
+
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handlePhotoUpload} 
+                    accept="image/*" 
+                    className="hidden" 
+                  />
+
+                  <h3 className="font-bold text-sm text-foreground">{client.name}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">{client.phone}</p>
+                  <Badge className="mt-2 bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30">
+                    {client.status}
+                  </Badge>
+                </div>
+
+                {/* Redgits Member ID Badge */}
+                <div className="border border-border rounded-xl p-4 bg-muted/20 text-center flex flex-col justify-center items-center">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Redgits Member ID</span>
+                  <span className="text-3xl font-black text-rose-500 tracking-wider mt-1">{client.memberId || '—'}</span>
+                </div>
+              </div>
+
+              {/* Right Column: Key-Value User Details Grid */}
+              <div className="md:col-span-3 border border-border p-6 rounded-xl bg-muted/5">
+                <div className="flex items-center justify-between mb-4 border-b border-border pb-2">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-primary">User Profile Details</h3>
+                  <span className="text-[10px] text-muted-foreground">
+                    Packages &amp; Invitations are managed in the <strong>Packages &amp; Invites</strong> tab
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
+                  {renderField('Member Name', client.name, 'name', 'text', undefined, isFieldLockedForUser('name', currentUser, client))}
+                  {renderField('Username', client.memberId, 'legacyNotes', 'text', undefined, isFieldLockedForUser('legacyNotes', currentUser, client))}
+                  {renderField('Mobile', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client))}
+                  {renderField('Backup Mobile', client.backupPhone, 'backupPhone', 'text', undefined, isFieldLockedForUser('backupPhone', currentUser, client))}
+                  {renderField('Job', client.jobTitle, 'jobTitle', 'text', undefined, isFieldLockedForUser('jobTitle', currentUser, client))}
+                  {renderField('Birthday', (client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'yyyy-MM-dd', '') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date', undefined, isFieldLockedForUser('dateOfBirth', currentUser, client))}
+                  {renderField('National ID', client.nationalId, 'nationalId', 'text', undefined, isFieldLockedForUser('nationalId', currentUser, client))}
+                  {renderField('Email', client.email, 'email', 'text', undefined, isFieldLockedForUser('email', currentUser, client))}
+                  {renderField('Area', client.city, 'city', 'text', undefined, isFieldLockedForUser('city', currentUser, client))}
+                  {renderField(
+                    'Sales Man',
+                    users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || (client as any).salesName || 'unassigned',
+                    'salesRep',
+                    'select',
+                    users.filter(u => ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
+                    isFieldLockedForUser('salesRep', currentUser, client)
+                  )}
+                  {renderField('Trainer', users.find(u => u.id === (formData.assignedTo || client.assignedTo))?.name || (client as any).trainerName || 'unassigned', 'assignedTo', 'select',
+                    users.filter(u => ['coach'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
+                    isFieldLockedForUser('assignedTo', currentUser, client)
+                  )}
+                  {renderField('Weight (kg)', client.weight, 'weight', 'number', undefined, isFieldLockedForUser('weight', currentUser, client))}
+                  {renderField('Height (cm)', client.height, 'height', 'number', undefined, isFieldLockedForUser('height', currentUser, client))}
+                  {renderField('Level', client.activityLevel, 'activityLevel', 'select', [
+                    { value: 'Beginner', label: 'Beginner' },
+                    { value: 'Intermediate', label: 'Intermediate' },
+                    { value: 'Advanced', label: 'Advanced' }
+                  ], isFieldLockedForUser('activityLevel', currentUser, client))}
+                  {renderField('Goal', client.fitnessTarget, 'fitnessTarget', 'select', [
+                    { value: 'Loss Weight', label: 'Loss Weight' },
+                    { value: 'Build Muscle', label: 'Build Muscle' },
+                    { value: 'Fitness', label: 'Fitness' },
+                    { value: 'Rehab', label: 'Rehab' }
+                  ], isFieldLockedForUser('fitnessTarget', currentUser, client))}
+                  {renderField('Civil Status', client.civilStatus, 'civilStatus', 'text', undefined, isFieldLockedForUser('civilStatus', currentUser, client))}
+                  {renderField('Status', client.status)}
+                  {renderField('Address', client.address, 'address', 'text', undefined, isFieldLockedForUser('address', currentUser, client))}
+                  {renderField('Member Code', client.legacyMemberId, 'legacyMemberId', 'text', undefined, isFieldLockedForUser('legacyMemberId', currentUser, client))}
+                  {renderField('Emergency Contact', client.emergencyContactName, 'emergencyContactName', 'text', undefined, isFieldLockedForUser('emergencyContactName', currentUser, client))}
+                  {renderField('Gender', client.gender, 'gender', 'select', [
+                    { value: 'Male', label: 'Male' },
+                    { value: 'Female', label: 'Female' }
+                  ], isFieldLockedForUser('gender', currentUser, client))}
+                  {renderField('Type', client.typeOfClient, 'typeOfClient', 'text', undefined, isFieldLockedForUser('typeOfClient', currentUser, client))}
+                  {renderField('Guest Serial', client.guestSerial, 'guestSerial', 'text', undefined, isFieldLockedForUser('guestSerial', currentUser, client))}
+                  {renderField('Advertising Source', client.advertisingSource, 'advertisingSource', 'text', undefined, isFieldLockedForUser('advertisingSource', currentUser, client))}
+                  {renderField('Bar-code / RFID', client.barcode, 'barcode', 'text', undefined, isFieldLockedForUser('barcode', currentUser, client))}
+                  {renderField('Nationality', client.nationality, 'nationality', 'text', undefined, isFieldLockedForUser('nationality', currentUser, client))}
+                  {renderField('Civilian/Military', client.civilianOrMilitary, 'civilianOrMilitary', 'select', [
+                    { value: 'None', label: 'None' },
+                    { value: 'Civilian', label: 'Civilian' },
+                    { value: 'Military', label: 'Military' }
+                  ], isFieldLockedForUser('civilianOrMilitary', currentUser, client))}
+                  {renderField('Card ID', client.cardId, 'cardId', 'text', undefined, isFieldLockedForUser('cardId', currentUser, client))}
+                  {renderField('Medical Info', client.medicalInfo, 'medicalInfo', 'text', undefined, isFieldLockedForUser('medicalInfo', currentUser, client))}
+                  {renderField('Preferred Time', client.preferredTime, 'preferredTime', 'select', [
+                    { value: 'Morning', label: 'Morning' },
+                    { value: 'Afternoon', label: 'Afternoon' },
+                    { value: 'Evening', label: 'Evening' },
+                    { value: 'Night', label: 'Night' }
+                  ], isFieldLockedForUser('preferredTime', currentUser, client))}
+                  {renderField('Color Label', client.colorLabel, 'colorLabel', 'select', [
+                    { value: 'red', label: '🔴 Red' },
+                    { value: 'green', label: '🟢 Green' },
+                    { value: 'blue', label: '🔵 Blue' },
+                    { value: 'purple', label: '🟣 Purple' },
+                    { value: 'yellow', label: '🟡 Yellow' },
+                    { value: 'orange', label: '🟠 Orange' },
+                    { value: 'pink', label: '🩷 Pink' },
+                    { value: 'brown', label: '🟤 Brown' }
+                  ], isFieldLockedForUser('colorLabel', currentUser, client))}
+                  {renderField('Created On', safeFormatDate(client.createdAt, 'yyyy-MM-dd HH:mm:ss'))}
+                </div>
+              </div>
+            </div>
+
+            {/* Front Desk / Receptionist Quick Actions: Guest Invites & Unlimited Referrals */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+              {/* Card 1: Guest Invitations (Deducts from package quota) */}
+              <div className="p-4 rounded-xl border border-sky-500/30 bg-sky-500/5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserPlus className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-950 dark:text-sky-100">
+                      Guest Invitations (Workout Passes)
+                    </h4>
+                  </div>
+                  <Badge className="bg-sky-600 text-white font-bold text-xs">
+                    {Number(client.guestInvitesRemaining ?? (client as any).invitationsRemaining ?? 0)} Passes Left
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Official workout visitor pass. Deducts 1 pass from member's package quota upon invitation and check-in.
+                </p>
+
+                {showQuickInviteForm ? (
+                  <div className="space-y-2.5 pt-2 border-t border-sky-500/20">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Guest Full Name *"
+                        value={quickGuestName}
+                        onChange={e => setQuickGuestName(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                      <Input
+                        placeholder="Guest Phone Number *"
+                        value={quickGuestPhone}
+                        onChange={e => setQuickGuestPhone(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setShowQuickInviteForm(false)}
+                        className="h-7 text-xs"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={isSubmittingQuickInvite}
+                        onClick={handleSendQuickGuestInvite}
+                        className="h-7 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white"
+                      >
+                        {isSubmittingQuickInvite ? 'Issuing...' : 'Issue Guest Pass'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between pt-2 border-t border-sky-500/20">
+                    <button
+                      onClick={() => setActiveTab('package_data')}
+                      className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline font-semibold"
+                    >
+                      View all invite history in Packages tab →
+                    </button>
+                    <Button
+                      size="sm"
+                      onClick={() => setShowQuickInviteForm(true)}
+                      disabled={Number(client.guestInvitesRemaining ?? (client as any).invitationsRemaining ?? 0) <= 0}
+                      className="h-7 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Issue Guest Pass
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 2: Unlimited Referrals (0 quota used, for sales follow-up) */}
+              <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-950 dark:text-emerald-100">
+                      Unlimited Member Referrals
+                    </h4>
+                  </div>
+                  <Badge className="bg-emerald-600 text-white font-bold text-xs">
+                    ∞ Unlimited ({memberReferrals.length} Referred)
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Friend/family contact referral for Sales follow-up. Does NOT consume any guest invitations quota.
+                </p>
+
+                {showAddReferralForm ? (
+                  <div className="space-y-2.5 pt-2 border-t border-emerald-500/20">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Friend's Full Name *"
+                        value={referralName}
+                        onChange={e => setReferralName(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                      <Input
+                        placeholder="Phone Number *"
+                        value={referralPhone}
+                        onChange={e => setReferralPhone(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                    </div>
+                    <Input
+                      placeholder="Notes (optional, e.g. interested in 3 Months + PT)"
+                      value={referralNotes}
+                      onChange={e => setReferralNotes(e.target.value)}
+                      className="h-8 text-xs bg-background"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setShowAddReferralForm(false)}
+                        className="h-7 text-xs"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={isSubmittingReferral}
+                        onClick={handleAddUnlimitedReferral}
+                        className="h-7 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        {isSubmittingReferral ? 'Saving...' : 'Save Referral Lead'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20">
+                    <span className="text-[11px] text-muted-foreground truncate max-w-[60%]">
+                      {memberReferrals.length > 0
+                        ? `Total: ${memberReferrals.length} friend referral${memberReferrals.length > 1 ? 's' : ''}`
+                        : 'No referrals submitted yet.'}
+                    </span>
+                    <Button
+                      size="sm"
+                      onClick={() => setShowAddReferralForm(true)}
+                      className="h-7 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Referral Lead
+                    </Button>
+                  </div>
+                )}
+
+                {/* Referrals List Table */}
+                {memberReferrals.length > 0 && (
+                  <div className="pt-2 border-t border-emerald-500/20 space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider block">
+                      Member's Referred Contacts ({memberReferrals.length})
+                    </span>
+                    <div className="max-h-36 overflow-y-auto rounded-lg border border-emerald-500/20 bg-background/60">
+                      <table className="w-full text-left text-[11px]">
+                        <thead>
+                          <tr className="border-b border-border/40 text-muted-foreground text-[10px] bg-muted/30">
+                            <th className="p-1.5 font-bold">Name</th>
+                            <th className="p-1.5 font-bold">Phone</th>
+                            <th className="p-1.5 font-bold">Notes</th>
+                            <th className="p-1.5 font-bold text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {memberReferrals.map((r, i) => (
+                            <tr key={i} className="border-b border-border/20 last:border-0 hover:bg-muted/20">
+                              <td className="p-1.5 font-bold text-foreground">{r.name}</td>
+                              <td className="p-1.5 font-mono text-muted-foreground">{r.phone}</td>
+                              <td className="p-1.5 text-muted-foreground truncate max-w-[120px]">{r.notes || '—'}</td>
+                              <td className="p-1.5 text-right">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-5 text-[10px] text-emerald-600 hover:bg-emerald-500/10 px-1 font-bold"
+                                  onClick={() => {
+                                    const cleanNum = String(r.phone || '').replace(/\D/g, '');
+                                    window.open(`https://wa.me/${cleanNum.startsWith('0') ? '20' + cleanNum.substring(1) : cleanNum}`, '_blank');
+                                  }}
+                                >
+                                  WhatsApp
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Member Feedback & Staff Notes Section (Editable by Any Staff Member) */}
+            <div className="border border-border p-5 rounded-xl bg-muted/10 text-left space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5" /> Member Feedback &amp; Front-Desk Notes
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    Anyone on the team can update member feedback or add a quick feedback note below without unlocking core identity fields.
+                  </p>
+                </div>
+                {(client as any).lastFeedbackBy && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Last updated by <strong>{(client as any).lastFeedbackBy}</strong> on {safeFormatDate((client as any).lastFeedbackAt, 'dd MMM yyyy HH:mm')}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Pinned Profile Feedback / Note</Label>
+                  <Textarea
+                    value={quickFeedbackText}
+                    onChange={e => setQuickFeedbackText(e.target.value)}
+                    placeholder="Enter member feedback, preferences, or front-desk notes..."
+                    className="text-xs min-h-[75px] bg-background"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Log New Feedback Entry to Timeline (Optional)</Label>
+                  <Textarea
+                    value={newFeedbackEntry}
+                    onChange={e => setNewFeedbackEntry(e.target.value)}
+                    placeholder="Add a timestamped feedback log (e.g. Member requested morning coach follow-up)..."
+                    className="text-xs min-h-[75px] bg-background"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  disabled={isSavingFeedback}
+                  onClick={handleSaveMemberFeedback}
+                  className="h-8 text-xs font-bold bg-primary text-primary-foreground"
+                >
+                  {isSavingFeedback ? 'Saving Feedback...' : 'Save Member Feedback'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Save / Cancel buttons for Edit Mode */}
+            {isEditing && (
+              <div className="flex gap-3 justify-end pt-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="bg-sky-600 hover:bg-sky-700 text-white font-bold"
+                >
+                  {isSaving ? 'Saving...' : 'Save User Details'}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'package_data' && (
+          <div className="space-y-8 text-left">
         {/* Always-Visible Read-Only Primary & Secondary Package + Reconciled Quotas Banner */}
         {(() => {
           const rawC = client as any;
@@ -1070,227 +1677,7 @@ export function InzanMemberShow({
           );
         })()}
 
-        {/* Tab Contents */}
-        {activeTab === 'member_data' && (
-          <div className="space-y-6">
-            {/* Desktop Two-Column Sidebar Layout (Strictly User Details Only) */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-left">
-              {/* Left Column: Photo & Redgits ID */}
-              <div className="md:col-span-1 space-y-4">
-                {/* Profile Card */}
-                <div className="border border-border rounded-xl p-4 bg-muted/10 flex flex-col items-center justify-center text-center">
-                  <div className="relative group cursor-pointer mb-3">
-                    {client.photoURL ? (
-                      <img 
-                        src={client.photoURL} 
-                        alt={client.name} 
-                        className="h-28 w-28 rounded-full border-2 border-primary object-cover"
-                      />
-                    ) : (
-                      <div className="h-28 w-28 rounded-full bg-muted border flex items-center justify-center text-muted-foreground">
-                        <UserIcon className="h-12 w-12" />
-                      </div>
-                    )}
-                    
-                    {/* Hover Overlay */}
-                    <div 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-all duration-200 border border-primary/40"
-                    >
-                      {isUploadingPhoto ? (
-                        <Loader2 className="h-6 w-6 text-white animate-spin" />
-                      ) : (
-                        <>
-                          <Camera className="h-6 w-6 text-white mb-1" />
-                          <span className="text-[9px] text-white/90 font-bold uppercase tracking-wider">Upload</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
 
-                  {photoUploadStatus && (
-                    <span className="text-[10px] text-primary font-bold animate-pulse mb-2">{photoUploadStatus}</span>
-                  )}
-
-                  <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    onChange={handlePhotoUpload} 
-                    accept="image/*" 
-                    className="hidden" 
-                  />
-
-                  <h3 className="font-bold text-sm text-foreground">{client.name}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">{client.phone}</p>
-                  <Badge className="mt-2 bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30">
-                    {client.status}
-                  </Badge>
-                </div>
-
-                {/* Redgits Member ID Badge */}
-                <div className="border border-border rounded-xl p-4 bg-muted/20 text-center flex flex-col justify-center items-center">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Redgits Member ID</span>
-                  <span className="text-3xl font-black text-rose-500 tracking-wider mt-1">{client.memberId || '—'}</span>
-                </div>
-              </div>
-
-              {/* Right Column: Key-Value User Details Grid */}
-              <div className="md:col-span-3 border border-border p-6 rounded-xl bg-muted/5">
-                <div className="flex items-center justify-between mb-4 border-b border-border pb-2">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-primary">User Profile Details</h3>
-                  <span className="text-[10px] text-muted-foreground">
-                    Packages &amp; Invitations are managed in the <strong>Packages &amp; Invites</strong> tab
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
-                  {renderField('Member Name', client.name, 'name', 'text', undefined, isFieldLockedForUser('name', currentUser, client))}
-                  {renderField('Username', client.memberId, 'legacyNotes', 'text', undefined, isFieldLockedForUser('legacyNotes', currentUser, client))}
-                  {renderField('Mobile', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client))}
-                  {renderField('Backup Mobile', client.backupPhone, 'backupPhone', 'text', undefined, isFieldLockedForUser('backupPhone', currentUser, client))}
-                  {renderField('Job', client.jobTitle, 'jobTitle', 'text', undefined, isFieldLockedForUser('jobTitle', currentUser, client))}
-                  {renderField('Birthday', (client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'yyyy-MM-dd', '') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date', undefined, isFieldLockedForUser('dateOfBirth', currentUser, client))}
-                  {renderField('National ID', client.nationalId, 'nationalId', 'text', undefined, isFieldLockedForUser('nationalId', currentUser, client))}
-                  {renderField('Email', client.email, 'email', 'text', undefined, isFieldLockedForUser('email', currentUser, client))}
-                  {renderField('Area', client.city, 'city', 'text', undefined, isFieldLockedForUser('city', currentUser, client))}
-                  {renderField(
-                    'Sales Man',
-                    users.find(u => u.id === (formData.salesRep || client.salesRep))?.name || (client as any).salesName || 'unassigned',
-                    'salesRep',
-                    'select',
-                    users.filter(u => ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
-                    isFieldLockedForUser('salesRep', currentUser, client)
-                  )}
-                  {renderField('Trainer', users.find(u => u.id === (formData.assignedTo || client.assignedTo))?.name || (client as any).trainerName || 'unassigned', 'assignedTo', 'select',
-                    users.filter(u => ['coach'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
-                    isFieldLockedForUser('assignedTo', currentUser, client)
-                  )}
-                  {renderField('Weight (kg)', client.weight, 'weight', 'number', undefined, isFieldLockedForUser('weight', currentUser, client))}
-                  {renderField('Height (cm)', client.height, 'height', 'number', undefined, isFieldLockedForUser('height', currentUser, client))}
-                  {renderField('Level', client.activityLevel, 'activityLevel', 'select', [
-                    { value: 'Beginner', label: 'Beginner' },
-                    { value: 'Intermediate', label: 'Intermediate' },
-                    { value: 'Advanced', label: 'Advanced' }
-                  ], isFieldLockedForUser('activityLevel', currentUser, client))}
-                  {renderField('Goal', client.fitnessTarget, 'fitnessTarget', 'select', [
-                    { value: 'Loss Weight', label: 'Loss Weight' },
-                    { value: 'Build Muscle', label: 'Build Muscle' },
-                    { value: 'Fitness', label: 'Fitness' },
-                    { value: 'Rehab', label: 'Rehab' }
-                  ], isFieldLockedForUser('fitnessTarget', currentUser, client))}
-                  {renderField('Civil Status', client.civilStatus, 'civilStatus', 'text', undefined, isFieldLockedForUser('civilStatus', currentUser, client))}
-                  {renderField('Status', client.status)}
-                  {renderField('Address', client.address, 'address', 'text', undefined, isFieldLockedForUser('address', currentUser, client))}
-                  {renderField('Member Code', client.legacyMemberId, 'legacyMemberId', 'text', undefined, isFieldLockedForUser('legacyMemberId', currentUser, client))}
-                  {renderField('Emergency Contact', client.emergencyContactName, 'emergencyContactName', 'text', undefined, isFieldLockedForUser('emergencyContactName', currentUser, client))}
-                  {renderField('Gender', client.gender, 'gender', 'select', [
-                    { value: 'Male', label: 'Male' },
-                    { value: 'Female', label: 'Female' }
-                  ], isFieldLockedForUser('gender', currentUser, client))}
-                  {renderField('Type', client.typeOfClient, 'typeOfClient', 'text', undefined, isFieldLockedForUser('typeOfClient', currentUser, client))}
-                  {renderField('Guest Serial', client.guestSerial, 'guestSerial', 'text', undefined, isFieldLockedForUser('guestSerial', currentUser, client))}
-                  {renderField('Advertising Source', client.advertisingSource, 'advertisingSource', 'text', undefined, isFieldLockedForUser('advertisingSource', currentUser, client))}
-                  {renderField('Bar-code / RFID', client.barcode, 'barcode', 'text', undefined, isFieldLockedForUser('barcode', currentUser, client))}
-                  {renderField('Nationality', client.nationality, 'nationality', 'text', undefined, isFieldLockedForUser('nationality', currentUser, client))}
-                  {renderField('Civilian/Military', client.civilianOrMilitary, 'civilianOrMilitary', 'select', [
-                    { value: 'None', label: 'None' },
-                    { value: 'Civilian', label: 'Civilian' },
-                    { value: 'Military', label: 'Military' }
-                  ], isFieldLockedForUser('civilianOrMilitary', currentUser, client))}
-                  {renderField('Card ID', client.cardId, 'cardId', 'text', undefined, isFieldLockedForUser('cardId', currentUser, client))}
-                  {renderField('Medical Info', client.medicalInfo, 'medicalInfo', 'text', undefined, isFieldLockedForUser('medicalInfo', currentUser, client))}
-                  {renderField('Preferred Time', client.preferredTime, 'preferredTime', 'select', [
-                    { value: 'Morning', label: 'Morning' },
-                    { value: 'Afternoon', label: 'Afternoon' },
-                    { value: 'Evening', label: 'Evening' },
-                    { value: 'Night', label: 'Night' }
-                  ], isFieldLockedForUser('preferredTime', currentUser, client))}
-                  {renderField('Color Label', client.colorLabel, 'colorLabel', 'select', [
-                    { value: 'red', label: '🔴 Red' },
-                    { value: 'green', label: '🟢 Green' },
-                    { value: 'blue', label: '🔵 Blue' },
-                    { value: 'purple', label: '🟣 Purple' },
-                    { value: 'yellow', label: '🟡 Yellow' },
-                    { value: 'orange', label: '🟠 Orange' },
-                    { value: 'pink', label: '🩷 Pink' },
-                    { value: 'brown', label: '🟤 Brown' }
-                  ], isFieldLockedForUser('colorLabel', currentUser, client))}
-                  {renderField('Created On', safeFormatDate(client.createdAt, 'yyyy-MM-dd HH:mm:ss'))}
-                </div>
-              </div>
-            </div>
-
-            {/* Member Feedback & Staff Notes Section (Editable by Any Staff Member) */}
-            <div className="border border-border p-5 rounded-xl bg-muted/10 text-left space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
-                    <MessageSquare className="h-3.5 w-3.5" /> Member Feedback &amp; Front-Desk Notes
-                  </h4>
-                  <p className="text-[11px] text-muted-foreground">
-                    Anyone on the team can update member feedback or add a quick feedback note below without unlocking core identity fields.
-                  </p>
-                </div>
-                {(client as any).lastFeedbackBy && (
-                  <span className="text-[10px] text-muted-foreground">
-                    Last updated by <strong>{(client as any).lastFeedbackBy}</strong> on {safeFormatDate((client as any).lastFeedbackAt, 'dd MMM yyyy HH:mm')}
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Pinned Profile Feedback / Note</Label>
-                  <Textarea
-                    value={quickFeedbackText}
-                    onChange={e => setQuickFeedbackText(e.target.value)}
-                    placeholder="Enter member feedback, preferences, or front-desk notes..."
-                    className="text-xs min-h-[75px] bg-background"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase text-muted-foreground">Log New Feedback Entry to Timeline (Optional)</Label>
-                  <Textarea
-                    value={newFeedbackEntry}
-                    onChange={e => setNewFeedbackEntry(e.target.value)}
-                    placeholder="Add a timestamped feedback log (e.g. Member requested morning coach follow-up)..."
-                    className="text-xs min-h-[75px] bg-background"
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  disabled={isSavingFeedback}
-                  onClick={handleSaveMemberFeedback}
-                  className="h-8 text-xs font-bold bg-primary text-primary-foreground"
-                >
-                  {isSavingFeedback ? 'Saving Feedback...' : 'Save Member Feedback'}
-                </Button>
-              </div>
-            </div>
-
-            {/* Save / Cancel buttons for Edit Mode */}
-            {isEditing && (
-              <div className="flex gap-3 justify-end pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsEditing(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="bg-sky-600 hover:bg-sky-700 text-white font-bold"
-                >
-                  {isSaving ? 'Saving...' : 'Save User Details'}
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'package_data' && (
-          <div className="space-y-8 text-left">
             <div className="flex flex-wrap justify-between items-center gap-2 border-b border-border pb-3">
               <div>
                 <h3 className="text-sm font-bold uppercase text-primary">Packages, Invitations &amp; Referrals Hub</h3>
@@ -1456,43 +1843,114 @@ export function InzanMemberShow({
                           </div>
                         </div>
 
-                        {/* Resolved Package Benefits Grid */}
+                        {/* Resolved Package Benefits Grid with Direct Deduction / Use Actions */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-3 border-t border-border">
-                          <div className="p-2.5 rounded-lg border border-border bg-background/70">
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Freeze Allowance</span>
-                            <span className="text-sm font-black text-foreground">
-                              {b.freezeUsed} / {b.freezeTotal} Days
-                            </span>
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
-                              {b.freezeRem} days remaining
-                            </span>
+                          <div className="p-2.5 rounded-lg border border-border bg-background/70 flex flex-col justify-between">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase text-muted-foreground block">Freeze Allowance</span>
+                              <span className="text-sm font-black text-foreground">
+                                {b.freezeUsed} / {b.freezeTotal} Days
+                              </span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
+                                {b.freezeRem} days remaining
+                              </span>
+                            </div>
+                            <div className="pt-2 mt-1 border-t border-border/40">
+                              {pkg.status === 'Hold' || (pkg as any).isOnHold ? (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleUnfreezePackageDirect(pkg.id)}
+                                  className="h-6 w-full text-[10px] font-bold bg-amber-600 hover:bg-amber-700 text-white"
+                                >
+                                  Unfreeze Now
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={b.freezeRem <= 0}
+                                  onClick={() => {
+                                    setFreezePkgId(pkg.id);
+                                    setActiveTab('freezing');
+                                  }}
+                                  className="h-6 w-full text-[10px] font-bold border-cyan-500/30 text-cyan-600 hover:bg-cyan-500/10"
+                                >
+                                  ❄️ Apply Freeze
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div className="p-2.5 rounded-lg border border-border bg-background/70">
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Guest Invitations</span>
-                            <span className="text-sm font-black text-foreground">
-                              {b.invUsed} / {b.invTotal} Passes
-                            </span>
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
-                              {b.invRem} passes remaining
-                            </span>
+
+                          <div className="p-2.5 rounded-lg border border-border bg-background/70 flex flex-col justify-between">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase text-muted-foreground block">Guest Invitations</span>
+                              <span className="text-sm font-black text-foreground">
+                                {b.invUsed} / {b.invTotal} Passes
+                              </span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
+                                {b.invRem} passes remaining
+                              </span>
+                            </div>
+                            <div className="pt-2 mt-1 border-t border-border/40">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={b.invRem <= 0}
+                                onClick={() => {
+                                  setActiveTab('member_data');
+                                  setShowQuickInviteForm(true);
+                                }}
+                                className="h-6 w-full text-[10px] font-bold border-sky-500/30 text-sky-600 hover:bg-sky-500/10"
+                              >
+                                🎫 Issue Pass
+                              </Button>
+                            </div>
                           </div>
-                          <div className="p-2.5 rounded-lg border border-border bg-background/70">
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Free PT Sessions</span>
-                            <span className="text-sm font-black text-foreground">
-                              {b.freePtUsed} / {b.freePtTotal} Sessions
-                            </span>
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
-                              {b.freePtRem} free PT remaining
-                            </span>
+
+                          <div className="p-2.5 rounded-lg border border-border bg-background/70 flex flex-col justify-between">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase text-muted-foreground block">Free PT Sessions</span>
+                              <span className="text-sm font-black text-foreground">
+                                {b.freePtUsed} / {b.freePtTotal} Sessions
+                              </span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
+                                {b.freePtRem} free PT remaining
+                              </span>
+                            </div>
+                            <div className="pt-2 mt-1 border-t border-border/40">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={b.freePtRem <= 0}
+                                onClick={() => setActiveTab('activities')}
+                                className="h-6 w-full text-[10px] font-bold border-indigo-500/30 text-indigo-600 hover:bg-indigo-500/10"
+                              >
+                                🏋️ Book Free PT
+                              </Button>
+                            </div>
                           </div>
-                          <div className="p-2.5 rounded-lg border border-border bg-background/70">
-                            <span className="text-[10px] font-bold uppercase text-muted-foreground block">Free Class Trials</span>
-                            <span className="text-sm font-black text-foreground">
-                              {b.classUsed} / {b.classTotal} Classes
-                            </span>
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
-                              {b.classRem} classes remaining
-                            </span>
+
+                          <div className="p-2.5 rounded-lg border border-border bg-background/70 flex flex-col justify-between">
+                            <div>
+                              <span className="text-[10px] font-bold uppercase text-muted-foreground block">Free Class Trials</span>
+                              <span className="text-sm font-black text-foreground">
+                                {b.classUsed} / {b.classTotal} Classes
+                              </span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">
+                                {b.classRem} classes remaining
+                              </span>
+                            </div>
+                            <div className="pt-2 mt-1 border-t border-border/40">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={b.classRem <= 0}
+                                onClick={() => setActiveTab('activities')}
+                                className="h-6 w-full text-[10px] font-bold border-purple-500/30 text-purple-600 hover:bg-purple-500/10"
+                              >
+                                📅 Book Class
+                              </Button>
+                            </div>
                           </div>
                         </div>
 
@@ -1912,10 +2370,176 @@ export function InzanMemberShow({
         )}
 
         {activeTab === 'freezing' && (
-          <div className="space-y-4 text-left">
-            <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3">Freezing Logs</h3>
-            <div className="bg-muted/5 p-8 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs">
-              No active or historical package freezing requests recorded.
+          <div className="space-y-6 text-left">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-sm font-bold uppercase text-primary">Package Freezing Management</h3>
+                <p className="text-xs text-muted-foreground">
+                  Apply freeze to pause an active package and extend its expiration date, or unfreeze a package currently on hold.
+                </p>
+              </div>
+              <Badge className="bg-cyan-600 text-white font-bold text-xs">
+                {Number((client as any).freezeDaysRemaining ?? (client as any).freezeAllowanceDays ?? 30)} Freeze Days Balance
+              </Badge>
+            </div>
+
+            {/* Active Packages Freeze Controls */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Card 1: Apply Freeze Form */}
+              <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/5 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-cyan-950 dark:text-cyan-100 flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-cyan-600" /> Apply Package Freeze
+                </h4>
+
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Select Package to Freeze</Label>
+                    <select
+                      value={freezePkgId}
+                      onChange={e => setFreezePkgId(e.target.value)}
+                      className="h-8 w-full rounded border border-input bg-background px-2 text-xs mt-1"
+                    >
+                      <option value="">-- Choose Active Package --</option>
+                      {(client.packages || []).filter(p => p.status === 'Active').map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.packageName} (Expires: {safeFormatDate(p.endDate, 'dd MMM yyyy')})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Freeze Start Date</Label>
+                      <Input
+                        type="date"
+                        value={freezeStartDate}
+                        onChange={e => setFreezeStartDate(e.target.value)}
+                        className="h-8 text-xs bg-background mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">Freeze End Date</Label>
+                      <Input
+                        type="date"
+                        value={freezeEndDate}
+                        onChange={e => setFreezeEndDate(e.target.value)}
+                        className="h-8 text-xs bg-background mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Reason / Note (Optional)</Label>
+                    <Input
+                      placeholder="e.g. Travel, medical, exams..."
+                      value={freezeReason}
+                      onChange={e => setFreezeReason(e.target.value)}
+                      className="h-8 text-xs bg-background mt-1"
+                    />
+                  </div>
+
+                  <Button
+                    size="sm"
+                    disabled={isApplyingFreeze || !freezePkgId || !freezeEndDate}
+                    onClick={() => handleApplyPackageFreeze()}
+                    className="w-full h-8 text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white mt-1"
+                  >
+                    {isApplyingFreeze ? 'Applying Freeze...' : '❄️ Confirm Package Freeze'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Card 2: Packages Currently on Hold */}
+              <div className="p-4 rounded-xl border border-border bg-muted/10 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <AlertCircle className="h-4 w-4 text-amber-500" /> Packages Currently on Hold
+                </h4>
+
+                {(() => {
+                  const onHoldPkgs = (client.packages || []).filter(p => p.status === 'Hold' || (p as any).isOnHold);
+                  if (onHoldPkgs.length === 0) {
+                    return (
+                      <div className="p-6 text-center text-xs text-muted-foreground border border-dashed rounded-lg">
+                        No packages currently on hold for this member.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      {onHoldPkgs.map(hp => (
+                        <div key={hp.id} className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-xs text-foreground block">{hp.packageName}</span>
+                            <span className="text-[10px] text-amber-700 dark:text-amber-400 block">
+                              Frozen on {safeFormatDate((hp as any).holdDate || (hp as any).updatedAt, 'dd MMM yyyy')}
+                            </span>
+                            {(hp as any).holdReason && (
+                              <span className="text-[10px] text-muted-foreground block italic">
+                                &ldquo;{(hp as any).holdReason}&rdquo;
+                              </span>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handleUnfreezePackageDirect(hp.id)}
+                            className="h-7 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white"
+                          >
+                            Unfreeze
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Historical Freezing Logs */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Historical Freezing Activity</h4>
+              {(() => {
+                const logs: any[] = Array.isArray((client as any).freezeLogs) ? (client as any).freezeLogs : [];
+                if (logs.length === 0) {
+                  return (
+                    <div className="bg-muted/5 p-6 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs">
+                      No past freezing logs recorded for this member.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="rounded-xl border border-border overflow-hidden bg-background">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-border text-muted-foreground text-[10px] uppercase bg-muted/40 font-bold">
+                          <th className="p-2.5">Package</th>
+                          <th className="p-2.5">Freeze Window</th>
+                          <th className="p-2.5">Days</th>
+                          <th className="p-2.5">Reason</th>
+                          <th className="p-2.5">Staff</th>
+                          <th className="p-2.5">Date Logged</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logs.map((log, idx) => (
+                          <tr key={idx} className="border-b border-border/40 last:border-0 hover:bg-muted/10">
+                            <td className="p-2.5 font-bold text-foreground">{log.packageName || 'Membership'}</td>
+                            <td className="p-2.5 font-mono text-[11px]">
+                              {safeFormatDate(log.startDate, 'dd MMM yyyy')} → {safeFormatDate(log.endDate, 'dd MMM yyyy')}
+                            </td>
+                            <td className="p-2.5 font-bold text-cyan-600">{log.days}d</td>
+                            <td className="p-2.5 text-muted-foreground">{log.reason || '—'}</td>
+                            <td className="p-2.5 text-muted-foreground">{log.appliedBy || 'Staff'}</td>
+                            <td className="p-2.5 text-muted-foreground text-[10px]">{safeFormatDate(log.appliedAt, 'dd MMM yyyy HH:mm')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}

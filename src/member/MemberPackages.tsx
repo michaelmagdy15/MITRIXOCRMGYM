@@ -9,6 +9,7 @@ import { safeFormatDate } from '../utils/dateUtils';
 import { Calendar, CheckCircle2, AlertTriangle, PlayCircle, PauseCircle, Package, ShoppingBag, Clock } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
 
 export default function MemberPackages({ client, onSwitchToStore, onBookSession }: { 
   client: Client | null; 
@@ -73,8 +74,10 @@ export default function MemberPackages({ client, onSwitchToStore, onBookSession 
       const snap = await getDocs(q);
       const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPendingRequests(list);
-    } catch (err) {
+      toast.success('Freeze request submitted successfully. Gym staff will review your request.');
+    } catch (err: any) {
       console.error("Failed to request freeze:", err);
+      toast.error(err?.message || "Failed to submit freeze request. Please contact front desk.");
     } finally {
       setFreezingPkgId(null);
     }

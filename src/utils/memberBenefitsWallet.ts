@@ -145,11 +145,16 @@ export function computeMemberBenefitsSummary(
       : totalClassTrials;
   const trialsTotal = Math.max(totalClassTrials, trialsRemaining);
 
+  const clientTotalInvites = Number((client as any).invitationsTotal ?? (client as any).guestInvitations ?? (typeof client.guestInvitesRemaining === 'number' ? client.guestInvitesRemaining : 0));
+  const totalGuestInvitesFinal = Math.max(totalGuestInvites, clientTotalInvites);
+  const clientUsedCount = Number((client as any).invitationsUsed ?? usedInvitationsCount);
   const invitesRemaining =
     typeof client.guestInvitesRemaining === 'number'
       ? Math.max(0, client.guestInvitesRemaining)
-      : Math.max(0, totalGuestInvites - usedInvitationsCount);
-  const invitesTotal = Math.max(totalGuestInvites, invitesRemaining + usedInvitationsCount);
+      : typeof (client as any).invitationsRemaining === 'number'
+      ? Math.max(0, (client as any).invitationsRemaining)
+      : Math.max(0, totalGuestInvitesFinal - clientUsedCount);
+  const invitesTotal = Math.max(totalGuestInvitesFinal, invitesRemaining + clientUsedCount);
 
   const freezeRemaining = Math.max(0, totalFreezeAllowance - usedFreezeDays);
 

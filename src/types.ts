@@ -4,7 +4,7 @@ export type LeadCategory = 'Out of area zone' | 'Social class' | 'Price' | 'No a
 export type LeadSource = 'Call in' | 'Walk-in' | 'Word Of Mouth' | 'Instagram' | 'ADS' | 'Facebook' | 'Website' | 'Google' | 'WhatsApp' | 'TikTok' | 'Other';
 export type LeadStage = 'New' | 'Contacted' | 'Qualified' | 'Trial' | 'Trial/Visit' | 'Proposal' | 'Won' | 'Converted' | 'Lost' | 'Follow Up';
 export type PackageType = 'Private' | 'Group';
-export type UserRole = 'manager' | 'rep' | 'admin' | 'super_admin' | 'crm_admin' | 'coach' | 'client';
+export type UserRole = 'manager' | 'rep' | 'admin' | 'super_admin' | 'crm_admin' | 'coach' | 'fitness_manager' | 'client';
 
 // INZAN Athletics Commercial Gym Departmental Taxonomy
 export type InzanDepartment = 'Executive' | 'Operations' | 'Marketing' | 'Experience' | 'Fitness' | 'Finance' | 'Sales';
@@ -94,6 +94,7 @@ export interface Coach {
   email?: string;
   userId?: string; // links to users collection when coach has a login account
   phone?: string;
+  isFitnessManager?: boolean;
 }
 
 export interface PendingAccount {
@@ -270,6 +271,7 @@ export interface User {
   photoURL?: string;           // avatar image URL
   dismissedNotifications?: string[];
   status?: 'working' | 'nonworking';
+  isFitnessManager?: boolean;
   // INZAN Athletics Org Fields
   department?: InzanDepartment;
   jobTitle?: InzanJobTitle | string;

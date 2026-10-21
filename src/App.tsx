@@ -599,7 +599,7 @@ function AppContent() {
     return <ForcePasswordChangeDialog />;
   }
 
-  if (currentUser.role === 'coach') {
+  if (currentUser.role === 'coach' || currentUser.role === 'fitness_manager' || currentUser.isFitnessManager) {
     if (isStrike) {
       return (
         <MemberPortal 

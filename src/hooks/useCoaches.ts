@@ -65,14 +65,18 @@ export const useCoaches = () => {
           const email = `${tenantPrefix}-coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
           const uid = await createFirebaseUser(email, '12345678');
 
+          const isFitnessManager = Boolean(coach.isFitnessManager);
           const newUser: User = {
             id: uid,
             name: coach.name,
             email,
-            role: 'coach',
+            role: isFitnessManager ? 'fitness_manager' : 'coach',
             coachId,
             mustChangePassword: true,
-            phone: coach.phone || ''
+            phone: coach.phone || '',
+            isFitnessManager,
+            jobTitle: isFitnessManager ? 'Fitness Manager' : 'Coach',
+            department: 'Fitness'
           };
 
           await setDoc(doc(db, 'users', uid), newUser);
@@ -96,12 +100,23 @@ export const useCoaches = () => {
       const hasNoUser = !existing?.userId && !updates.userId;
 
       // Sync phone, name, or active status changes to linked user if user already exists
-      if (existing?.userId && (updates.phone !== undefined || updates.name !== undefined || updates.active !== undefined)) {
+      if (existing?.userId && (updates.phone !== undefined || updates.name !== undefined || updates.active !== undefined || updates.isFitnessManager !== undefined)) {
         try {
           const userUpdates: Partial<User> = {};
           if (updates.phone !== undefined) userUpdates.phone = updates.phone;
           if (updates.name !== undefined) userUpdates.name = updates.name;
           if (updates.active !== undefined) userUpdates.status = updates.active ? 'working' : 'nonworking';
+          if (updates.isFitnessManager !== undefined) {
+            userUpdates.isFitnessManager = updates.isFitnessManager;
+            if (updates.isFitnessManager) {
+              userUpdates.role = 'fitness_manager';
+              userUpdates.jobTitle = 'Fitness Manager';
+              userUpdates.department = 'Fitness';
+            } else {
+              userUpdates.role = 'coach';
+              userUpdates.jobTitle = 'Coach';
+            }
+          }
           await updateDoc(doc(db, 'users', existing.userId), cleanData(userUpdates));
         } catch (syncErr) {
           console.error("Failed to sync coach info to user account:", syncErr);
@@ -120,14 +135,18 @@ export const useCoaches = () => {
           const email = `${tenantPrefix}-coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
           const uid = await createFirebaseUser(email, '12345678');
 
+          const isFitnessManager = updates.isFitnessManager !== undefined ? updates.isFitnessManager : Boolean(existing?.isFitnessManager);
           const newUser: User = {
             id: uid,
             name: coachName,
             email,
-            role: 'coach',
+            role: isFitnessManager ? 'fitness_manager' : 'coach',
             coachId,
             mustChangePassword: true,
-            phone: updates.phone || existing?.phone || ''
+            phone: updates.phone || existing?.phone || '',
+            isFitnessManager,
+            jobTitle: isFitnessManager ? 'Fitness Manager' : 'Coach',
+            department: 'Fitness'
           };
 
           await setDoc(doc(db, 'users', uid), newUser);
@@ -157,14 +176,18 @@ export const useCoaches = () => {
       const email = `${tenantPrefix}-coach-${firstName.toLowerCase()}-${coachNum}@mitrixogymcrm-coach.local`;
       const uid = await createFirebaseUser(email, '12345678');
 
+      const isFitnessManager = Boolean(coach.isFitnessManager);
       const newUser: User = {
         id: uid,
         name: coach.name,
         email,
-        role: 'coach',
+        role: isFitnessManager ? 'fitness_manager' : 'coach',
         coachId,
         mustChangePassword: true,
-        phone: coach.phone || ''
+        phone: coach.phone || '',
+        isFitnessManager,
+        jobTitle: isFitnessManager ? 'Fitness Manager' : 'Coach',
+        department: 'Fitness'
       };
 
       await setDoc(doc(db, 'users', uid), newUser);

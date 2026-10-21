@@ -45,6 +45,7 @@ export default function CoachPortal() {
     const nameStr = String(currentUser.name || '').toLowerCase();
     const specStr = String((currentUser as any).specialty || (currentUser as any).department || '').toLowerCase();
     return (
+      Boolean(currentUser.isFitnessManager) ||
       roleStr === 'fitness_manager' ||
       roleStr === 'admin' ||
       roleStr === 'crm_admin' ||
@@ -60,10 +61,10 @@ export default function CoachPortal() {
   const [floorContext, setFloorContext] = useState<{ client?: Client | null; session?: Session | null } | null>(null);
 
   useEffect(() => {
-    if (canAccessFitnessManagerBoard && String(currentUser?.role || '').toLowerCase() === 'fitness_manager') {
+    if (canAccessFitnessManagerBoard && (String(currentUser?.role || '').toLowerCase() === 'fitness_manager' || currentUser?.isFitnessManager)) {
       setActiveTab('triage');
     }
-  }, [canAccessFitnessManagerBoard, currentUser?.role]);
+  }, [canAccessFitnessManagerBoard, currentUser?.role, currentUser?.isFitnessManager]);
 
   const navItems = useMemo(() => {
     if (!canAccessFitnessManagerBoard) return BASE_NAV_ITEMS;

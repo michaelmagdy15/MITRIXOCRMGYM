@@ -998,17 +998,18 @@ async function startServer() {
 
       // 1. Direct email match in users collection
       const usersByEmail = await db.collection("users")
-        .where("role", "==", "coach")
         .where("email", "==", lowerTerm)
         .limit(1)
         .get();
 
       if (!usersByEmail.empty) {
         const u = usersByEmail.docs[0]!.data();
-        resolvedEmail = u.email;
-        resolvedCoachId = u.coachId || '';
-        resolvedName = u.name || '';
-        resolvedUid = usersByEmail.docs[0]!.id;
+        if (u.role === 'coach' || u.role === 'fitness_manager' || u.isFitnessManager) {
+          resolvedEmail = u.email;
+          resolvedCoachId = u.coachId || '';
+          resolvedName = u.name || '';
+          resolvedUid = usersByEmail.docs[0]!.id;
+        }
       }
 
       // 2. Direct email match in coaches collection
@@ -1030,14 +1031,13 @@ async function startServer() {
       // 3. Search in users collection by coachId
       if (!resolvedEmail) {
         const usersByCoachId = await db.collection("users")
-          .where("role", "==", "coach")
           .where("coachId", "==", coachIdTerm)
           .limit(1)
           .get();
 
         if (!usersByCoachId.empty) {
           const u = usersByCoachId.docs[0]!.data();
-          if (u.email) {
+          if (u.email && (u.role === 'coach' || u.role === 'fitness_manager' || u.isFitnessManager)) {
             resolvedEmail = u.email;
             resolvedCoachId = u.coachId;
             resolvedName = u.name;
@@ -1075,16 +1075,17 @@ async function startServer() {
       // 5. Search by phone number
       if (!resolvedEmail) {
         const usersByPhone = await db.collection("users")
-          .where("role", "==", "coach")
           .where("phone", "==", cleanTerm)
           .limit(1)
           .get();
         if (!usersByPhone.empty) {
           const u = usersByPhone.docs[0]!.data();
-          resolvedEmail = u.email;
-          resolvedCoachId = u.coachId || '';
-          resolvedName = u.name || '';
-          resolvedUid = usersByPhone.docs[0]!.id;
+          if (u.role === 'coach' || u.role === 'fitness_manager' || u.isFitnessManager) {
+            resolvedEmail = u.email;
+            resolvedCoachId = u.coachId || '';
+            resolvedName = u.name || '';
+            resolvedUid = usersByPhone.docs[0]!.id;
+          }
         }
       }
 
@@ -1116,10 +1117,10 @@ async function startServer() {
 
       // 7. Search users collection by name
       if (!resolvedEmail) {
-        const allUsersSnap = await db.collection("users").where("role", "==", "coach").get();
+        const allUsersSnap = await db.collection("users").get();
         for (const d of allUsersSnap.docs) {
           const u = d.data();
-          if (u.name && u.name.toLowerCase() === lowerTerm) {
+          if ((u.role === 'coach' || u.role === 'fitness_manager' || u.isFitnessManager) && u.name && u.name.toLowerCase() === lowerTerm) {
             if (u.email) {
               resolvedEmail = u.email;
               resolvedCoachId = u.coachId;
@@ -5064,17 +5065,33 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         const pkg = packages[pkgIndex];
         if (pkg.status !== "Active") throw new Error("Can only freeze active packages");
         
-        // Add 7 days to endDate
+        // Add 7 days to endDate (or custom requested days)
+        const daysToAdd = reqData.days || 7;
         if (pkg.endDate) {
           const endDateObj = new Date(pkg.endDate);
-          endDateObj.setDate(endDateObj.getDate() + 7);
+          endDateObj.setDate(endDateObj.getDate() + daysToAdd);
           pkg.endDate = endDateObj.toISOString();
         }
         
         pkg.freezeCount = (pkg.freezeCount || 0) + 1;
+        pkg.freezeDaysUsed = (Number(pkg.freezeDaysUsed) || 0) + daysToAdd;
         packages[pkgIndex] = pkg;
+
+        const clientUpdates: Record<string, any> = { packages };
+        if (clientData.membershipExpiry) {
+          const mExp = new Date(clientData.membershipExpiry);
+          mExp.setDate(mExp.getDate() + daysToAdd);
+          clientUpdates.membershipExpiry = mExp.toISOString();
+          const todayMs = Date.now();
+          clientUpdates.daysRemaining = Math.max(0, Math.ceil((mExp.getTime() - todayMs) / (1000 * 60 * 60 * 24)));
+        }
+        const curFreezeUsed = Number(clientData.freezeDaysUsed || 0);
+        const curFreezeRem = Number(clientData.freezeDaysRemaining ?? clientData.freezeAllowanceDays ?? 30);
+        clientUpdates.freezeDaysUsed = curFreezeUsed + daysToAdd;
+        clientUpdates.freezeDaysRemaining = Math.max(0, curFreezeRem - daysToAdd);
+        clientUpdates.freezeCoins = clientUpdates.freezeDaysRemaining;
         
-        transaction.update(clientRef, { packages });
+        transaction.update(clientRef, clientUpdates);
         transaction.update(reqRef, { status: "Approved", updatedAt: new Date().toISOString() });
       });
       
@@ -5101,6 +5118,269 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
     } catch (err: any) {
       console.error("[Assessment Assign] Error:", err);
       return res.status(500).json({ error: err.message || "Failed to assign assessment" });
+    }
+  });
+
+  // --- Member Guest Invitations API (Authoritative Quota Deduction) ---
+  app.post("/api/member/guest-invite", requireAuth, async (req: any, res: any) => {
+    try {
+      const db = await getDbForRequest(req);
+      const { guestName, guestPhone, clientId: targetClientId, visitDate } = req.body;
+
+      if (!guestName || !guestPhone) {
+        return res.status(400).json({ error: "Guest name and phone number are required." });
+      }
+
+      let clientId = targetClientId;
+      if (!clientId) {
+        const userDoc = await db.collection("users").doc(req.user.uid).get();
+        if (userDoc.exists) {
+          const uData = userDoc.data() || {};
+          clientId = uData.clientDocId || uData.clientRecordId;
+        }
+        if (!clientId) {
+          const clientQuery = await db.collection("clients").where("portalUserId", "==", req.user.uid).limit(1).get();
+          if (!clientQuery.empty) {
+            clientId = clientQuery.docs[0]?.id;
+          }
+        }
+      }
+
+      if (!clientId) {
+        return res.status(404).json({ error: "Member profile not found." });
+      }
+
+      const clientRef = db.collection("clients").doc(clientId);
+      const clientSnap = await clientRef.get();
+      if (!clientSnap.exists) {
+        return res.status(404).json({ error: "Member profile not found." });
+      }
+
+      const clientData = clientSnap.data() || {};
+
+      const userRole = (req.user as any)?.role || "client";
+      const isStaffCaller = ["admin", "manager", "crm_admin", "super_admin", "staff", "receptionist", "frontdesk"].includes(userRole);
+      if (!isStaffCaller && clientData.portalUserId && clientData.portalUserId !== req.user.uid) {
+        return res.status(403).json({ error: "Unauthorized to issue guest invites for this member." });
+      }
+
+      const invitationsTotal = Number(clientData.invitationsTotal ?? clientData.guestInvitations ?? 3);
+      let currentRemaining: number;
+      if (typeof clientData.guestInvitesRemaining === "number") {
+        currentRemaining = clientData.guestInvitesRemaining;
+      } else if (typeof clientData.invitationsRemaining === "number") {
+        currentRemaining = clientData.invitationsRemaining;
+      } else {
+        const used = Number(clientData.invitationsUsed ?? 0);
+        currentRemaining = Math.max(0, invitationsTotal - used);
+      }
+
+      if (currentRemaining <= 0) {
+        return res.status(400).json({
+          error: "No guest invitations remaining in member's package.",
+          remaining: 0,
+          total: invitationsTotal,
+        });
+      }
+
+      const newRemaining = Math.max(0, currentRemaining - 1);
+      const currentUsed = Number(clientData.invitationsUsed ?? 0);
+      const newUsed = currentUsed + 1;
+
+      const tenantId = (req.headers["x-tenant-id"] as string) || "";
+      const prefix = tenantId.toLowerCase().includes("strike") ? "ST" : "INV";
+      const randDigits = Math.floor(100000 + Math.random() * 900000).toString();
+      const inviteCode = `${prefix}-${randDigits}`;
+
+      const nowIso = new Date().toISOString();
+      const invitePayload: Record<string, any> = {
+        hostClientId: clientId,
+        hostId: clientId,
+        hostMemberId: clientData.memberId || clientData.legacyMemberId || "",
+        hostName: clientData.name || "",
+        guestName: guestName.trim(),
+        guestPhone: guestPhone.trim(),
+        inviteCode,
+        status: "Pending",
+        createdAt: nowIso,
+        branch: clientData.branch || clientData.homeBranch || "MAIN",
+      };
+
+      if (visitDate) {
+        invitePayload.attendanceDate = new Date(`${visitDate}T12:00:00`).toISOString();
+      }
+
+      const inviteRef = db.collection("guestInvites").doc();
+      const auditRef = db.collection("auditLogs").doc();
+
+      const batch = db.batch();
+      batch.set(inviteRef, invitePayload);
+
+      const clientUpdates: Record<string, any> = {
+        guestInvitesRemaining: newRemaining,
+        invitationsRemaining: newRemaining,
+        invitationsUsed: newUsed,
+        invitationsTotal: Math.max(invitationsTotal, newRemaining + newUsed),
+        updatedAt: nowIso,
+      };
+
+      if (Array.isArray(clientData.packages)) {
+        clientUpdates.packages = clientData.packages.map((p: any) => {
+          if (p.status === "Active" && (p.guestInvitationsRemaining !== undefined || p.guestInvitations !== undefined)) {
+            return {
+              ...p,
+              guestInvitationsRemaining: Math.max(0, (Number(p.guestInvitationsRemaining ?? p.guestInvitations ?? 3)) - 1),
+              guestInvitationsUsed: (Number(p.guestInvitationsUsed) || 0) + 1,
+            };
+          }
+          return p;
+        });
+      }
+
+      batch.update(clientRef, clientUpdates);
+
+      batch.set(auditRef, {
+        action: "CREATE",
+        entityType: "CLIENT",
+        entityId: clientId,
+        details: `Guest invite issued for "${guestName.trim()}" (${guestPhone.trim()}) under ${clientData.name} (Code: ${inviteCode}). Remaining quota: ${newRemaining}/${invitationsTotal}`,
+        timestamp: nowIso,
+        userId: req.user.uid,
+        userName: clientData.name || "Member",
+      });
+
+      await batch.commit();
+
+      return res.json({
+        success: true,
+        invite: { id: inviteRef.id, ...invitePayload },
+        inviteCode,
+        remaining: newRemaining,
+        total: invitationsTotal,
+        used: newUsed,
+      });
+    } catch (err: any) {
+      console.error("[Guest Invite API] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to create guest invitation." });
+    }
+  });
+
+  // --- Member Assessment Request API ---
+  app.post("/api/member/assessment", requireAuth, async (req: any, res: any) => {
+    try {
+      const db = await getDbForRequest(req);
+      const {
+        clientId: targetClientId,
+        clientName,
+        phone,
+        membershipId,
+        timePeriod,
+        preferredHour,
+        ageGroup,
+        membershipType,
+        notes,
+        injuries,
+        goals,
+        hasCoachPreference,
+        preferredCoachId,
+        coachName,
+        referralSource,
+      } = req.body;
+
+      if (!clientName || !phone) {
+        return res.status(400).json({ error: "Client name and phone number are required." });
+      }
+
+      let clientId = targetClientId;
+      if (!clientId) {
+        const userDoc = await db.collection("users").doc(req.user.uid).get();
+        if (userDoc.exists) {
+          const uData = userDoc.data() || {};
+          clientId = uData.clientDocId || uData.clientRecordId;
+        }
+        if (!clientId) {
+          const q = await db.collection("clients").where("portalUserId", "==", req.user.uid).limit(1).get();
+          if (!q.empty) clientId = q.docs[0]?.id;
+        }
+      }
+
+      let freePtRemaining = 0;
+      let hasPaidPt = false;
+      let resolvedMemberId = membershipId || "Guest";
+
+      if (clientId && clientId !== "guest") {
+        const cSnap = await db.collection("clients").doc(clientId).get();
+        if (cSnap.exists) {
+          const cData = cSnap.data() || {};
+          resolvedMemberId = cData.memberId || cData.legacyMemberId || membershipId || "Guest";
+          const freePtCount = Number(cData.freePtSessionsTotal || 0);
+          const freePtUsed = Number(cData.freePtSessionsUsed || 0);
+          freePtRemaining = Math.max(0, freePtCount - freePtUsed);
+          hasPaidPt = (Number(cData.paidPtSessionsRemaining) || Number(cData.ptSessionsRemaining) || 0) > 0;
+        }
+      }
+
+      const tenantId = await getTenantIdForRequest(req);
+      const isInzan = tenantId === 'inzanathletics' || tenantId.includes('inzan');
+
+      const nowIso = new Date().toISOString();
+      const assessmentData: Record<string, any> = {
+        clientId: clientId || "guest",
+        portalUserId: req.user.uid,
+        clientName: clientName.trim(),
+        phone: phone.trim(),
+        membershipId: String(resolvedMemberId).trim(),
+        timePeriod: timePeriod || "Morning [8AM - 4PM]",
+        preferredHour: preferredHour || "10:00 AM",
+        ageGroup: ageGroup || "21 to 30",
+        membershipType: membershipType || "1 Month",
+        notes: notes?.trim() || "",
+        injuries: injuries?.trim() || notes?.trim() || "",
+        goals: goals?.trim() || "",
+        hasCoachPreference: Boolean(hasCoachPreference),
+        preferredCoachId: preferredCoachId && preferredCoachId !== "any" ? preferredCoachId : null,
+        preferredCoachName: coachName?.trim() || "Any Coach",
+        coachName: coachName?.trim() || null,
+        referralSource: referralSource || "Floor Service",
+        assignedCoachId: isInzan ? null : (preferredCoachId && preferredCoachId !== "any" ? preferredCoachId : null),
+        assignedCoachName: isInzan ? null : (hasCoachPreference ? (coachName?.trim() || null) : null),
+        routedTo: isInzan ? "fitness_manager" : "coach",
+        triageStatus: isInzan ? "AwaitingFitnessManager" : "Assigned",
+        status: "Pending",
+        freePtSessionsRemaining: freePtRemaining,
+        hasPaidPtPackage: hasPaidPt,
+        ptEntitlementSummary: hasPaidPt
+          ? "Paid PT Package Active"
+          : freePtRemaining > 0
+          ? `${freePtRemaining} Free PT Sessions Available`
+          : "No PT Package — Awaiting Payment",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      const asmntRef = await db.collection("assessments").add(assessmentData);
+
+      if (isInzan && clientId && clientId !== "guest") {
+        await db.collection("clients").doc(clientId).set({
+          ptAssessmentStatus: "PendingFitnessManager",
+          ptAssessmentRequestedAt: nowIso,
+        }, { merge: true });
+      }
+
+      await db.collection("auditLogs").add({
+        action: "CREATE",
+        entityType: "ASSESSMENT",
+        entityId: asmntRef.id,
+        details: `PT Assessment requested for ${clientName.trim()} (${phone.trim()}) - Preferred Coach: ${coachName?.trim() || "Any Coach"}`,
+        timestamp: nowIso,
+        userId: req.user.uid,
+        userName: clientName.trim(),
+      });
+
+      return res.json({ success: true, id: asmntRef.id });
+    } catch (err: any) {
+      console.error("[Assessment Request API] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to submit assessment request." });
     }
   });
 

@@ -25,7 +25,7 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import ImportData from './ImportData';
 import ImportHistory from './ImportHistory';
 import { WhatsAppDialog } from './components/WhatsAppDialog';
-import { MessageCircle } from 'lucide-react';
+import { MessageCircle, Tag } from 'lucide-react';
 import RenewalPipeline from './components/RenewalPipeline';
 import ResyncAssignments from './components/ResyncAssignments';
 import ResyncPayments from './components/ResyncPayments';
@@ -263,7 +263,7 @@ export default function Clients() {
   const [enrollReceiptSerial, setEnrollReceiptSerial] = useState('');
   const [enrollNotes, setEnrollNotes] = useState('');
   const [enrollPricing, setEnrollPricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
-  const canApplyDiscount = can('payments.apply_discount');
+  const canApplyDiscount = can('payments.apply_discount') || isManagerOrSama || (isInzanTenant && (currentUser?.role === 'admin' || currentUser?.role === 'manager' || currentUser?.role === 'super_admin'));
 
   const [upgradeDialogClientId, setUpgradeDialogClientId] = useState<string | null>(null);
   const [upgradePkgName, setUpgradePkgName] = useState('');
@@ -4428,9 +4428,44 @@ export default function Clients() {
                                       <TableRow key={payment.id} className="hover:bg-muted/20 border-b transition-colors">
                                         <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(payment.date, 'MMM d, yyyy')}</TableCell>
                                         <TableCell className="py-2.5 px-3 text-right">
-                                          <span className="text-xs font-bold text-green-600">
-                                            {payment.amount.toLocaleString()} {t('payments.currency_le')}
-                                          </span>
+                                          <div className="flex flex-col items-end">
+                                            {payment.originalAmount && payment.originalAmount > payment.amount ? (
+                                              <span className="text-[10px] text-muted-foreground line-through font-mono">
+                                                {payment.originalAmount.toLocaleString()} {t('payments.currency_le')}
+                                              </span>
+                                            ) : null}
+                                            <span className="text-xs font-bold text-green-600">
+                                              {payment.amount.toLocaleString()} {t('payments.currency_le')}
+                                            </span>
+                                            {(() => {
+                                              const val = Number(payment.discountValue) || 0;
+                                              const orig = Number(payment.originalAmount) || 0;
+                                              const current = Number(payment.amount) || 0;
+                                              if (val > 0) {
+                                                const label = payment.discountType === 'percentage' ? `${val}% OFF` : `${val.toLocaleString()} LE OFF`;
+                                                const reason = payment.discountReason && payment.discountReason !== 'Standard' ? ` (${payment.discountReason})` : '';
+                                                return (
+                                                  <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-semibold px-1 py-0 mt-0.5 inline-flex items-center gap-0.5">
+                                                    <Tag className="w-2.5 h-2.5" />
+                                                    {label}{reason}
+                                                  </Badge>
+                                                );
+                                              } else if (orig > current && orig > 0) {
+                                                return (
+                                                  <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-semibold px-1 py-0 mt-0.5 inline-flex items-center gap-0.5">
+                                                    <Tag className="w-2.5 h-2.5" />
+                                                    {(orig - current).toLocaleString()} LE OFF
+                                                  </Badge>
+                                                );
+                                              }
+                                              return null;
+                                            })()}
+                                            {payment.amount_paid !== undefined && payment.amount_paid < payment.amount ? (
+                                              <span className="text-[9px] text-amber-600 font-medium">
+                                                Paid: {payment.amount_paid.toLocaleString()} LE
+                                              </span>
+                                            ) : null}
+                                          </div>
                                         </TableCell>
                                         <TableCell className="py-2.5 px-3 text-xs max-w-[120px] truncate">{payment.packageType}</TableCell>
                                         <TableCell className="py-2.5 px-3 text-center">

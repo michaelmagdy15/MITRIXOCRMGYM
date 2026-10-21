@@ -648,7 +648,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                   </TabsTrigger>
                   {!isStrike && (
                     <TabsTrigger value="coach" className="flex items-center justify-center gap-1.5 text-xs py-2">
-                      <Dumbbell className="h-3.5 w-3.5" /> Coach
+                      <Dumbbell className="h-3.5 w-3.5" /> Coach / FM
                     </TabsTrigger>
                   )}
                   <TabsTrigger value="staff" className="flex items-center justify-center gap-1.5 text-xs py-2">
@@ -716,7 +716,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                   <TabsContent value="coach" className="space-y-4">
                     <form onSubmit={handleCoachLogin} className="space-y-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="coach-id">Coach ID or Email</Label>
+                        <Label htmlFor="coach-id">Coach / Fitness Manager ID or Email</Label>
                         <Input
                           id="coach-id"
                           placeholder="e.g. COACH-001 or testcoach@inzan.local"
@@ -746,7 +746,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                         </div>
                       </div>
                       <Button type="submit" className="w-full h-11 text-sm font-semibold" disabled={isLoading}>
-                        {isLoading ? 'Signing in...' : 'Sign In as Coach'}
+                        {isLoading ? 'Signing in...' : 'Sign In as Coach / Fitness Manager'}
                       </Button>
                     </form>
                     <div className="text-center text-xs pt-2">

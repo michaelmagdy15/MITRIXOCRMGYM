@@ -1123,9 +1123,15 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       return;
     }
 
-    const totalInvites = Number((lastScannedMember as any).invitationsTotal ?? 3);
+    const totalInvites = Number((lastScannedMember as any).invitationsTotal ?? (lastScannedMember as any).guestInvitations ?? 3);
     const usedInvites = Number((lastScannedMember as any).invitationsUsed ?? 0);
-    if (totalInvites - usedInvites <= 0) {
+    const curRemaining = typeof (lastScannedMember as any).guestInvitesRemaining === "number"
+      ? (lastScannedMember as any).guestInvitesRemaining
+      : typeof (lastScannedMember as any).invitationsRemaining === "number"
+      ? (lastScannedMember as any).invitationsRemaining
+      : Math.max(0, totalInvites - usedInvites);
+
+    if (curRemaining <= 0) {
       setError(`${lastScannedMember.name} has 0 remaining invitation passes (${usedInvites}/${totalInvites} used).`);
       return;
     }
@@ -1135,10 +1141,35 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     setSuccessMessage(null);
     try {
       const inviteSerial = `INV-${Date.now().toString().slice(-6)}`;
+      const newUsed = usedInvites + 1;
+      const newRemaining = Math.max(0, curRemaining - 1);
       await updateClient(lastScannedMember.id, {
-        invitationsTotal: totalInvites,
-        invitationsUsed: usedInvites + 1,
+        invitationsTotal: Math.max(totalInvites, newUsed + newRemaining),
+        invitationsUsed: newUsed,
+        invitationsRemaining: newRemaining,
+        guestInvitesRemaining: newRemaining,
       } as any);
+
+      // Record in guestInvites collection so it shows up in MemberInvites & MemberGuestInvitationsTab
+      try {
+        const { collection: fsCol, addDoc: fsAddDoc } = await import("firebase/firestore");
+        await fsAddDoc(fsCol(db, "guestInvites"), {
+          hostClientId: lastScannedMember.id,
+          hostId: lastScannedMember.id,
+          hostMemberId: (lastScannedMember as any).memberId || (lastScannedMember as any).legacyMemberId || "",
+          hostName: lastScannedMember.name || "",
+          guestName: trimmedName,
+          guestPhone: trimmedPhone,
+          inviteCode: inviteSerial,
+          status: "Attended",
+          attendedAt: new Date().toISOString(),
+          attendanceDate: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          branch: selectedBranch || lastScannedMember.branch || "MAIN",
+        });
+      } catch (giErr) {
+        console.warn("Could not record into guestInvites collection:", giErr);
+      }
 
       // Auto-create a Sales Lead if phone does not already exist
       const existingLeadOrMember = clients.find((c) => c.phone === trimmedPhone);
@@ -1589,12 +1620,31 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       : (m.membershipExpiry ? Math.max(0, Math.ceil((new Date(m.membershipExpiry).getTime() - Date.now()) / 86400000)) : 0);
                     const paidPtRem = Number(m.paidPtSessionsRemaining ?? Math.max(0, Number(m.paidPtSessionsTotal ?? 0) - Number(m.paidPtSessionsUsed ?? 0)));
                     const paidPtTot = Number(m.paidPtSessionsTotal ?? 0);
-                    const freePtRem = Number(m.freePtSessionsRemaining ?? Math.max(0, Number(m.freePtSessionsTotal ?? 0) - Number(m.freePtSessionsUsed ?? 0)));
-                    const freePtTot = Number(m.freePtSessionsTotal ?? 0);
-                    const invRem = Number(m.invitationsRemaining ?? Math.max(0, Number(m.invitationsTotal ?? 0) - Number(m.invitationsUsed ?? 0)));
-                    const invTot = Number(m.invitationsTotal ?? 0);
-                    const freezeRem = Number(m.freezeDaysRemaining ?? m.freezeCoins ?? Math.max(0, Number(m.freezeAllowanceDays ?? 0) - Number(m.freezeDaysUsed ?? 0)));
-                    const freezeTot = Number(m.freezeAllowanceDays ?? 0);
+
+                    let rawFreePtTot = Number(m.freePtSessionsTotal ?? m.freePtSessions ?? (m as any).benefits?.freePtSessions ?? 0);
+                    let rawInvTot = Number(m.invitationsTotal ?? (m as any).guestInvitations ?? (m as any).benefits?.guestInvitations ?? 0);
+                    let rawFreezeTot = Number(m.freezeAllowanceDays ?? (m as any).benefits?.freezeAllowanceDays ?? 0);
+
+                    // Redgits / DB zero-benefit fallback:
+                    if (isInzan && rawFreezeTot === 0 && rawInvTot === 0 && rawFreePtTot === 0) {
+                      const pkgStr = String(m.primaryPackageName || selectedPackageName || m.packageType || '').toLowerCase();
+                      if (pkgStr.includes('12') || pkgStr.includes('year') || pkgStr.includes('annual') || pkgStr.includes('365')) {
+                        rawFreezeTot = 30; rawInvTot = 10; rawFreePtTot = 2;
+                      } else if (pkgStr.includes('6') || pkgStr.includes('half') || pkgStr.includes('180')) {
+                        rawFreezeTot = 15; rawInvTot = 5; rawFreePtTot = 1;
+                      } else if (pkgStr.includes('3') || pkgStr.includes('quarter') || pkgStr.includes('90')) {
+                        rawFreezeTot = 7; rawInvTot = 2; rawFreePtTot = 1;
+                      } else if (pkgStr.includes('1') || pkgStr.includes('month') || pkgStr.includes('30')) {
+                        rawFreezeTot = 0; rawInvTot = 1; rawFreePtTot = 0;
+                      }
+                    }
+
+                    const freePtTot = rawFreePtTot;
+                    const freePtRem = Number(m.freePtSessionsRemaining ?? Math.max(0, freePtTot - Number(m.freePtSessionsUsed ?? 0)));
+                    const invTot = rawInvTot;
+                    const invRem = Number(m.invitationsRemaining ?? (m as any).guestInvitesRemaining ?? Math.max(0, invTot - Number((m as any).invitationsUsed ?? 0)));
+                    const freezeTot = rawFreezeTot;
+                    const freezeRem = Number(m.freezeDaysRemaining ?? m.freezeCoins ?? Math.max(0, freezeTot - Number(m.freezeDaysUsed ?? 0)));
                     const secondaryName = m.secondaryPackageName || ((m.packages || []).find((p: any) => p.status === 'Active' && p.hierarchy === 'Secondary')?.packageName);
 
                     return (

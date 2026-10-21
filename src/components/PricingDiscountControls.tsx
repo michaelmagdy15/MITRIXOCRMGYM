@@ -72,19 +72,25 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
     });
   }, [grossAmount, upgradeCredit, value.discountType, value.discountValue, value.amountPaid]);
 
+  // Sync pricing to parent if external grossAmount or upgradeCredit changes
   useEffect(() => {
     onChange(value, pricing);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pricing.grossAmount, pricing.netAmount, pricing.discountAmount, pricing.amountPaid, pricing.remainingBalance, pricing.valid]);
+  }, [grossAmount, upgradeCredit]);
 
-  const setField = <K extends keyof PricingControlsState>(field: K, fieldValue: PricingControlsState[K]) => {
-    onChange({ ...value, [field]: fieldValue }, calculatePricing({
+  const updateState = (next: PricingControlsState) => {
+    const nextPricing = calculatePricing({
       grossAmount,
       upgradeCredit,
-      discountType: field === 'discountType' ? (fieldValue as DiscountType) : value.discountType,
-      discountValue: field === 'discountValue' ? (fieldValue ? Number(fieldValue) : undefined) : (value.discountValue ? Number(value.discountValue) : undefined),
-      amountPaid: field === 'amountPaid' ? (fieldValue ? Number(fieldValue) : undefined) : (value.amountPaid ? Number(value.amountPaid) : undefined),
-    }));
+      discountType: next.discountType,
+      discountValue: next.discountValue ? Number(next.discountValue) : undefined,
+      amountPaid: next.amountPaid ? Number(next.amountPaid) : undefined,
+    });
+    onChange(next, nextPricing);
+  };
+
+  const setField = <K extends keyof PricingControlsState>(field: K, fieldValue: PricingControlsState[K]) => {
+    updateState({ ...value, [field]: fieldValue });
   };
 
   const discountTypeId = `${idPrefix}-discount-type`;
@@ -107,14 +113,14 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
           <Select
             value={value.discountType}
             onValueChange={(v) => {
-              const next: PricingControlsState = { ...value, discountType: v as DiscountType };
-              if (v === 'none') {
-                next.discountValue = '';
-                next.discountReason = 'Standard';
-              }
-              setField('discountType', next.discountType);
-              setField('discountValue', next.discountValue);
-              setField('discountReason', next.discountReason);
+              const dt = v as DiscountType;
+              const next: PricingControlsState = {
+                ...value,
+                discountType: dt,
+                discountValue: dt === 'none' ? '' : value.discountValue,
+                discountReason: dt === 'none' ? 'Standard' : value.discountReason,
+              };
+              updateState(next);
             }}
             disabled={!canApplyDiscount}
           >

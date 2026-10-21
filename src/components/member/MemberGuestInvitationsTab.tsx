@@ -312,17 +312,26 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
         payload.attendanceDate = chosenAttendanceIso;
       }
 
-      const tracksInvites = typeof client.guestInvitesRemaining === 'number';
-      if (tracksInvites && (client.guestInvitesRemaining as number) <= 0) {
+      const curRemaining = typeof client.guestInvitesRemaining === 'number'
+        ? client.guestInvitesRemaining
+        : typeof (client as any).invitationsRemaining === 'number'
+        ? (client as any).invitationsRemaining
+        : Math.max(0, Number((client as any).invitationsTotal ?? (client as any).guestInvitations ?? 3) - Number((client as any).invitationsUsed ?? 0));
+
+      if (curRemaining <= 0) {
         toast.error(`${client.name} has used all guest invitations included in their package.`);
         return;
       }
 
       await addDoc(collection(db, 'guestInvites'), payload);
 
-      if (tracksInvites) {
-        await updateDoc(doc(db, 'clients', client.id), { guestInvitesRemaining: increment(-1) });
-      }
+      const newRemaining = Math.max(0, curRemaining - 1);
+      await updateDoc(doc(db, 'clients', client.id), {
+        guestInvitesRemaining: newRemaining,
+        invitationsRemaining: newRemaining,
+        invitationsUsed: increment(1),
+        updatedAt: nowIso,
+      });
 
       await addDoc(collection(db, 'auditLogs'), {
         action: 'CREATE',
@@ -456,11 +465,20 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
             <span className="text-2xl font-black text-foreground mt-1 block">
               {kpis.total}
             </span>
-            {typeof client.guestInvitesRemaining === 'number' && (
-              <span className="text-[11px] font-semibold text-primary block">
-                {client.guestInvitesRemaining} package invite(s) left
-              </span>
-            )}
+            {(() => {
+              const rem = typeof client.guestInvitesRemaining === 'number'
+                ? client.guestInvitesRemaining
+                : typeof (client as any).invitationsRemaining === 'number'
+                ? (client as any).invitationsRemaining
+                : (client as any).invitationsTotal
+                ? Math.max(0, Number((client as any).invitationsTotal) - Number((client as any).invitationsUsed ?? 0))
+                : null;
+              return rem !== null ? (
+                <span className="text-[11px] font-semibold text-primary block">
+                  {rem} package invite(s) left
+                </span>
+              ) : null;
+            })()}
           </div>
           <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
             <Users className="h-5 w-5" />

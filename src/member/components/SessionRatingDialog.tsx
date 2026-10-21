@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Star } from 'lucide-react';
+import { toast } from 'sonner';
 import { db } from '../../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { Session } from '../../types';
@@ -36,10 +37,11 @@ export function SessionRatingDialog({ session, onOpenChange }: SessionRatingDial
         feedback,
         updatedAt: new Date().toISOString()
       });
+      toast.success('Thank you for rating your session!');
       onOpenChange(false);
     } catch (error) {
       console.error("Error submitting rating:", error);
-      alert("Failed to submit rating. Please try again.");
+      toast.error("Failed to submit rating. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
