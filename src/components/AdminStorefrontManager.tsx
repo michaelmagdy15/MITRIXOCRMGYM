@@ -82,7 +82,7 @@ export default function AdminStorefrontManager() {
     try {
       const path = `${uploadTarget.type}/${uploadTarget.id}_${Date.now()}.jpg`;
       const ref = storageRef(storage, `storefront/${path}`);
-      await uploadBytes(ref, blob);
+      await uploadBytes(ref, blob, { contentType: blob.type || 'image/jpeg' });
       const url = await getDownloadURL(ref);
 
       if (uploadTarget.type === 'hero') {

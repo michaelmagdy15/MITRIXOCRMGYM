@@ -110,7 +110,7 @@ export default function Packages() {
     try {
       const path = `packages/pkg_${Date.now()}.jpg`;
       const ref = storageRef(storage, path);
-      await uploadBytes(ref, blob);
+      await uploadBytes(ref, blob, { contentType: blob.type || 'image/jpeg' });
       const url = await getDownloadURL(ref);
       setImageUrl(url);
     } catch (err: any) {

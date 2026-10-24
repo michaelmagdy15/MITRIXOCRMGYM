@@ -2,84 +2,121 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
-    // Staff of the tenant in the path. role/tenantId are custom claims synced by server requireAuth.
-    function isTenantStaff(tenantId) {
+    function isPlatformAdminEmail() {
       return request.auth != null
-        && request.auth.token.tenantId == tenantId
-        && request.auth.token.role in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'owner',
-                                       'rep', 'sales_rep', 'coach', 'staff', 'sales', 'frontdesk', 'receptionist'];
+        && 'email' in request.auth.token
+        && request.auth.token.email in [
+          'michaelmitry13@gmail.com',
+          'magd.gallab@gmail.com',
+          'strike.egyptt@gmail.com',
+          'admin@strike.eg'
+        ];
+    }
+
+    function hasStaffCustomClaim() {
+      return request.auth != null
+        && 'role' in request.auth.token
+        && request.auth.token.role in [
+          'admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'owner',
+          'rep', 'sales_rep', 'coach', 'staff', 'sales', 'frontdesk', 'receptionist',
+          'nutritionist', 'doctor', 'fitness_manager'
+        ];
+    }
+
+    function hasStaffFirestoreRole() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in [
+          'admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'owner',
+          'rep', 'sales_rep', 'coach', 'staff', 'sales', 'frontdesk', 'receptionist',
+          'nutritionist', 'doctor', 'fitness_manager'
+        ];
     }
 
     function isStaffOrAdmin() {
-      return request.auth != null
-        && (
-          request.auth.token.role in ['admin', 'super_admin', 'crm_admin', 'manager', 'sales_manager', 'rep', 'staff']
-          || request.auth.token.email == 'michaelmitry13@gmail.com'
-        );
+      return isPlatformAdminEmail() || hasStaffCustomClaim() || hasStaffFirestoreRole();
     }
 
-    // User avatars — each user can only read/write their own avatar
+    // Staff of the tenant in the path.
+    function isTenantStaff(tenantId) {
+      return isStaffOrAdmin()
+        && (!('tenantId' in request.auth.token) || request.auth.token.tenantId == tenantId || isPlatformAdminEmail());
+    }
+
+    // User avatars — each user can read/write their own avatar, or staff can manage
     match /avatars/{userId} {
-      allow read:  if request.auth != null;
+      allow read: if request.auth != null;
       allow create, update: if request.auth != null
-                   && request.auth.uid == userId
-                   && request.resource.size  < 10 * 1024 * 1024  // max 10 MB pre-compression
+                   && (request.auth.uid == userId || isStaffOrAdmin())
+                   && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
       allow delete: if request.auth != null
-                   && request.auth.uid == userId;
+                   && (request.auth.uid == userId || isStaffOrAdmin());
     }
 
-    // Member photos — readable by authenticated users, writeable by staff only
+    // Member photos — readable and writeable by authenticated users (members updating own photo or staff)
     match /member_photos/{fileName} {
-      allow read:  if request.auth != null;
-      allow write: if isStaffOrAdmin()
-                   && request.resource.size < 5 * 1024 * 1024
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
     }
 
-    // Branding assets (e.g. logos) must be publicly readable to display on the login screen,
-    // and writeable only by authenticated admin/manager.
+    // Branding assets (logos, splash screens) — publicly readable, writeable by staff/admin/owner
     match /branding/{fileName} {
       allow read: if true;
-      allow write: if request.auth != null
-                   && (request.auth.token.role in ['admin', 'super_admin', 'crm_admin', 'manager'] || request.auth.token.email == 'michaelmitry13@gmail.com')
-                   && request.resource.size < 5 * 1024 * 1024
+      allow write: if isStaffOrAdmin()
+                   && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
+    }
+
+    // Storefront assets (hero slides, sections, offers)
+    match /storefront/{allPaths=**} {
+      allow read: if true;
+      allow write: if isStaffOrAdmin()
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Corporate proof documents uploaded during payment creation
+    match /corporate_proofs/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if isStaffOrAdmin()
+                   && request.resource.size < 10 * 1024 * 1024
+                   && (request.resource.contentType.matches('image/.*')
+                       || request.resource.contentType == 'application/pdf');
     }
 
     // Member documents (IDs, contracts, medical reports) — tenant-scoped.
-    // Access requires staff of this tenant via {role, tenantId} custom claims (synced in server requireAuth).
-    // Also: no listing, create-only from clients, strict size + type limits.
     match /tenants/{tenantId}/member_documents/{clientId}/{fileName} {
       allow get: if isTenantStaff(tenantId);
       allow list: if false;
-      allow create: if isTenantStaff(tenantId)
+      allow create, update: if isTenantStaff(tenantId)
                    && request.resource.size < 15 * 1024 * 1024
                    && (request.resource.contentType.matches('image/.*')
                        || request.resource.contentType == 'application/pdf'
                        || request.resource.contentType == 'application/msword'
                        || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      allow update, delete: if false;
+      allow delete: if false;
     }
 
     // Master class profile images — tenant-scoped, images only.
     match /tenants/{tenantId}/master_classes/{fileName} {
-      allow get: if request.auth != null && request.auth.token.tenantId == tenantId;
-      allow list: if false;
-      allow create: if isTenantStaff(tenantId)
-                   && request.resource.size < 5 * 1024 * 1024
-                   && request.resource.contentType.matches('image/.*');
-      allow update, delete: if false;
-    }
-
-    // Package images (existing Packages.tsx upload path) — images only, staff only.
-    match /packages/{fileName} {
       allow get: if request.auth != null;
       allow list: if false;
-      allow create: if isStaffOrAdmin()
-                   && request.resource.size < 5 * 1024 * 1024
+      allow create, update: if isTenantStaff(tenantId)
+                   && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
-      allow update, delete: if false;
+      allow delete: if false;
+    }
+
+    // Package images (Packages.tsx upload path) — images only, staff/admin/owner.
+    match /packages/{fileName} {
+      allow read: if true;
+      allow create, update: if isStaffOrAdmin()
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow delete: if isStaffOrAdmin();
     }
 
     // Everything else is denied
