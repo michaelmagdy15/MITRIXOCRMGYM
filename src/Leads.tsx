@@ -876,7 +876,7 @@ export default function Leads() {
             <TableHead className="hidden md:table-cell">{t('leads.table.last_contact')}</TableHead>
             <TableHead>{t('leads.table.next_reminder')}</TableHead>
             {canAssignLeads && <TableHead className="hidden lg:table-cell">{t('leads.assigned_to')}</TableHead>}
-            <TableHead>{t('leads.table.actions')}</TableHead>
+            <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">{t('leads.table.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -983,8 +983,8 @@ export default function Leads() {
                   </Select>
                 </TableCell>
               )}
-              <TableCell>
-                <div className="flex items-center gap-2">
+              <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-end gap-1.5">
                   <Button
                     variant="ghost"
                     size="icon"

@@ -736,7 +736,7 @@ export default function Packages() {
                 <TableHead>Price</TableHead>
                 {isInzan && <TableHead>Status</TableHead>}
                 {isInzan && <TableHead>Created</TableHead>}
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -747,7 +747,7 @@ export default function Packages() {
                 const hierarchy = pkg.hierarchy || 'Primary';
                 const targetTeam = pkg.targetTeam || 'Sales';
                 return (
-                  <TableRow key={pkg.id} className={archived ? 'opacity-60 bg-muted/30' : onHold ? 'bg-amber-500/5' : undefined}>
+                  <TableRow key={pkg.id} className={`${archived ? 'opacity-60 bg-muted/30' : onHold ? 'bg-amber-500/5' : ''} group hover:bg-muted/40 transition-colors`}>
                     <TableCell className="font-medium">
                       <div className="flex flex-col">
                         <span>{pkg.name}</span>
@@ -837,7 +837,7 @@ export default function Packages() {
                         </div>
                       </TableCell>
                     )}
-                    <TableCell className="text-right">
+                    <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors">
                       <div className="flex items-center justify-end gap-1">
                         {!archived && (
                           <>

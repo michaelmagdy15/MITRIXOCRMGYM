@@ -1702,12 +1702,14 @@ export default function Clients() {
             return u ? (u.name || u.email) : client.salesName || client.assignedTo;
           })();
           return (
-            <div key={client.id} className="flex items-center gap-3 px-4 py-3">
-              <Checkbox
-                checked={selectedClientIds.includes(client.id)}
-                onCheckedChange={(checked) => handleSelectClient(client.id, !!checked)}
-                className="shrink-0"
-              />
+            <div key={client.id} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setActiveClientId(client.id)}>
+              <div onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={selectedClientIds.includes(client.id)}
+                  onCheckedChange={(checked) => handleSelectClient(client.id, !!checked)}
+                  className="shrink-0"
+                />
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   {client.memberId && <span className="text-[10px] font-bold text-muted-foreground">#{client.memberId}</span>}
@@ -1737,7 +1739,7 @@ export default function Clients() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1789,7 +1791,7 @@ export default function Clients() {
             <TableHead className="hidden sm:table-cell">{t('members.table.expiry_date')}</TableHead>
             {canViewGlobalDashboard && <TableHead className="hidden lg:table-cell">{t('members.table.total_paid')}</TableHead>}
             {canViewGlobalDashboard && <TableHead className="hidden xl:table-cell">{t('leads.assigned_to')}</TableHead>}
-            <TableHead>{t('leads.table.actions')}</TableHead>
+            <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">{t('leads.table.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1797,8 +1799,8 @@ export default function Clients() {
             const totalPaid = totalPaidByClientId.get(client.id) || 0;
             
             return (
-            <TableRow key={client.id}>
-              <TableCell>
+            <TableRow key={client.id} className="cursor-pointer hover:bg-muted/40 transition-colors group" onClick={() => setActiveClientId(client.id)}>
+              <TableCell onClick={(e) => e.stopPropagation()}>
                 <Checkbox 
                   checked={selectedClientIds.includes(client.id)}
                   onCheckedChange={(checked) => handleSelectClient(client.id, !!checked)}
@@ -1860,7 +1862,7 @@ export default function Clients() {
                 </TableCell>
               )}
               {canViewGlobalDashboard && (
-                <TableCell className="hidden xl:table-cell">
+                <TableCell className="hidden xl:table-cell" onClick={(e) => e.stopPropagation()}>
                   {(() => {
                     const isAssigned = isInzanTenant && Boolean(client.assignedTo && client.assignedTo !== 'unassigned');
                     const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
@@ -1881,8 +1883,8 @@ export default function Clients() {
                   })()}
                 </TableCell>
               )}
-              <TableCell>
-                <div className="flex items-center gap-2">
+              <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-end gap-1.5">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1939,32 +1941,44 @@ export default function Clients() {
             {otherGenderCount > 0 && <span className="flex items-center gap-1">Other: <strong className="text-foreground">{otherGenderCount}</strong></span>}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={exportToCSV}>
-            <Download className="mr-2 h-4 w-4" />
-            {t('leads.export_csv')}
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setIsRecalculateConfirmOpen(true)}
-            disabled={isRecalculating}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${isRecalculating ? 'animate-spin' : ''}`} />
-            {t('members.recalculate_expiry')}
-          </Button>
-          <ImportData type="Active" />
-          <ImportHistory />
-          {isManagerOrSama && (
-            <>
-              <ResyncAssignments clients={clients} users={users} currentUser={currentUser} />
-              <ResyncPayments clients={clients} users={users} />
-            </>
-          )}
+        <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2.5 w-full sm:w-auto">
+          {/* Primary Action: Add Member */}
           <Dialog open={isNewMemberOpen} onOpenChange={setIsNewMemberOpen}>
-            <DialogTrigger render={<Button size="sm" />}>
-              <Plus className="mr-2 h-4 w-4" /> {t('members.add_member')}
+            <DialogTrigger render={<Button size="sm" className="font-semibold shadow-sm" />}>
+              <Plus className="mr-1.5 h-4 w-4" /> {t('members.add_member')}
             </DialogTrigger>
+
+          {/* Export & Import Tools */}
+          <div className="flex items-center gap-1.5">
+            <Button variant="outline" size="sm" onClick={exportToCSV}>
+              <Download className="mr-1.5 h-4 w-4" />
+              {t('leads.export_csv')}
+            </Button>
+            <ImportData type="Active" />
+          </div>
+
+          {/* Data Maintenance & Sync Toolbar */}
+          <div className="flex items-center gap-1 bg-muted/40 p-1 rounded-xl border border-border/50">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 text-xs font-medium text-muted-foreground hover:text-foreground"
+              onClick={() => setIsRecalculateConfirmOpen(true)}
+              disabled={isRecalculating}
+              title={t('members.recalculate_expiry')}
+            >
+              <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isRecalculating ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{t('members.recalculate_expiry')}</span>
+              <span className="sm:hidden">Recalc</span>
+            </Button>
+            <ImportHistory />
+            {isManagerOrSama && (
+              <>
+                <ResyncAssignments clients={clients} users={users} currentUser={currentUser} />
+                <ResyncPayments clients={clients} users={users} />
+              </>
+            )}
+          </div>
           <DialogContent className="!w-full !max-w-[1200px] max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-3xl bg-background/95 backdrop-blur-xl">
             <DialogHeader className="p-10 pb-6 bg-muted/30 border-b">
               <DialogTitle className="text-3xl font-extrabold tracking-tight flex items-center gap-3">

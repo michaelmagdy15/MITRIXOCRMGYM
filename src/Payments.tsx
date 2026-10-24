@@ -2697,7 +2697,7 @@ export default function Payments() {
                   {isInzan && <TableHead className="hidden lg:table-cell">Created By</TableHead>}
                   <TableHead className="hidden xl:table-cell">{t('payments.table.sales_member')}</TableHead>
                   <TableHead className="hidden xl:table-cell">{t('payments.table.notes')}</TableHead>
-                  <TableHead className="text-right">{t('payments.table.actions')}</TableHead>
+                  <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">{t('payments.table.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2722,7 +2722,7 @@ export default function Payments() {
                       || (payment as any).sales_rep_name
                       || '—';
                     return (
-                      <TableRow key={payment.id}>
+                      <TableRow key={payment.id} className="group hover:bg-muted/40 transition-colors">
                         <TableCell className="text-xs sm:text-sm">
                           {payment.date ? (() => {
                             const egyptDate = getEgyptDate(payment.date);
@@ -2924,7 +2924,7 @@ export default function Payments() {
                           ) : '-'}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs hidden xl:table-cell">{payment.notes || '-'}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors">
                           <div className="flex items-center justify-end gap-1">
                             {(() => {
                               const waUrl = buildWhatsAppPaymentReceiptUrl({

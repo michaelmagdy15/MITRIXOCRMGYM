@@ -30,11 +30,15 @@ import AdminPointsManager from './components/AdminPointsManager';
 import AdminActivityFeed from './components/AdminActivityFeed';
 import AdminGamificationManager from './components/AdminGamificationManager';
 import AdminStorefrontManager from './components/AdminStorefrontManager';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import NotificationTemplateSettings from './components/NotificationTemplateSettings';
 
 export default function Settings() {
   const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches, defaultPayoutRates, updateDefaultPayoutRates } = useAppContext();
   const { changeMyPassword, runExistingUsersMigration } = useAuth();
+  const [activeTab, setActiveTab] = useState('my-profile');
   const [companyName, setCompanyName] = useState(branding.companyName);
   const [logoUrl, setLogoUrl] = useState(branding.logoUrl);
   const [currencyCode, setCurrencyCode] = useState(branding.currencyCode || 'EGP');
@@ -638,83 +642,190 @@ export default function Settings() {
     );
   }
 
+  const SETTINGS_NAV_GROUPS = [
+    {
+      title: 'Account',
+      items: [
+        { id: 'my-profile', label: 'My Profile', icon: UserCircle2, description: 'Manage your credentials, personal profile & preferences' },
+      ],
+    },
+    {
+      title: 'Organization & Staff',
+      items: [
+        { id: 'branding', label: 'Branding', icon: Building2, description: 'Gym identity, club name, logo, currency and theme colors' },
+        { id: 'branches', label: 'Branches', icon: MapPin, description: 'Club locations and branch QR check-in posters' },
+        { id: 'users', label: 'Users & Roles', icon: Users, description: 'Staff accounts, role assignments and security permissions' },
+        { id: 'coaches', label: 'Coaches', icon: Dumbbell, description: 'Trainer directory, bios and specialties' },
+      ],
+    },
+    {
+      title: 'Catalog & Finance',
+      items: [
+        { id: 'packages', label: 'Packages', icon: Package, description: 'Membership plans, session counts, validity and pricing tiers' },
+        { id: 'commission', label: 'Commissions', icon: BadgePercent, description: 'Sales rep commission tiers and monthly targets' },
+        { id: 'payouts', label: 'Payout Rates', icon: Coins, description: 'Coach class and private training compensation rules' },
+      ],
+    },
+    {
+      title: 'Engagement & Operations',
+      items: [
+        { id: 'notifications', label: 'Notification Templates', icon: Bell, description: 'Automated WhatsApp and SMS notification templates' },
+        { id: 'announcements', label: 'Announcements', icon: Megaphone, description: 'Member bulletins, alerts, and promotional announcements' },
+        { id: 'gamification', label: 'Gamification', icon: Trophy, description: 'Badges, streaks, achievement levels and leaderboards' },
+        { id: 'points', label: 'Points Engine', icon: Sparkles, description: 'Loyalty points earn rates and redemption options' },
+        { id: 'storefront', label: 'Storefront', icon: Smartphone, description: 'Mobile app storefront items, banners and packages' },
+      ],
+    },
+    {
+      title: 'System & Security',
+      items: [
+        { id: 'backup', label: 'Backup Station', icon: Download, description: 'Full database export, offline station, and restore' },
+        { id: 'activity', label: 'Activity Feed', icon: Activity, description: 'System audit logs and staff activity tracking' },
+        { id: 'danger', label: 'Danger Zone', icon: AlertTriangle, description: 'System reset and database wipes', danger: true, hidden: !canWipe },
+      ],
+    },
+  ];
+
+  const currentNavItem = SETTINGS_NAV_GROUPS.flatMap(g => g.items).find(i => i.id === activeTab);
+  const currentNavGroup = SETTINGS_NAV_GROUPS.find(g => g.items.some(i => i.id === activeTab));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Settings</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Configure system parameters, organization preferences, and operational rules</p>
+        </div>
       </div>
 
-      <Tabs defaultValue="my-profile" className="space-y-6">
-        <TabsList className="bg-muted/50 p-1 w-full justify-start overflow-x-auto flex-nowrap h-auto gap-1 no-scrollbar">
-          <TabsTrigger value="my-profile" className="flex items-center gap-2 whitespace-nowrap">
-            <UserCircle2 className="h-4 w-4" />
-            My Profile
-          </TabsTrigger>
-          <TabsTrigger value="branding" className="flex items-center gap-2 whitespace-nowrap">
-            <Building2 className="h-4 w-4" />
-            Branding
-          </TabsTrigger>
-          <TabsTrigger value="users" className="flex items-center gap-2 whitespace-nowrap">
-            <Users className="h-4 w-4" />
-            Users
-          </TabsTrigger>
-          <TabsTrigger value="branches" className="flex items-center gap-2 whitespace-nowrap">
-            <MapPin className="h-4 w-4" />
-            Branches
-          </TabsTrigger>
-          <TabsTrigger value="packages" className="flex items-center gap-2 whitespace-nowrap">
-            <Package className="h-4 w-4" />
-            Packages
-          </TabsTrigger>
-          <TabsTrigger value="coaches" className="flex items-center gap-2 whitespace-nowrap">
-            <Dumbbell className="h-4 w-4" />
-            Coaches
-          </TabsTrigger>
-          <TabsTrigger value="commission" className="flex items-center gap-2 whitespace-nowrap">
-            <BadgePercent className="w-4 h-4" />
-            Commissions
-          </TabsTrigger>
-          <TabsTrigger value="payouts" className="flex items-center gap-2 whitespace-nowrap">
-            <Coins className="w-4 h-4" />
-            Payout Rates
-          </TabsTrigger>
-          <TabsTrigger value="notifications" className="flex items-center gap-2 whitespace-nowrap">
-            <Bell className="w-4 h-4" />
-            Notification Templates
-          </TabsTrigger>
-          <TabsTrigger value="backup" className="flex items-center gap-2 whitespace-nowrap">
-            <Download className="h-4 w-4" />
-            Backup
-          </TabsTrigger>
-          <TabsTrigger value="announcements" className="flex items-center gap-2 whitespace-nowrap">
-            <Megaphone className="h-4 w-4" />
-            Announcements
-          </TabsTrigger>
-          <TabsTrigger value="points" className="flex items-center gap-2 whitespace-nowrap">
-            <Coins className="h-4 w-4" />
-            Points
-          </TabsTrigger>
-          <TabsTrigger value="activity" className="flex items-center gap-2 whitespace-nowrap">
-            <Activity className="h-4 w-4" />
-            Activity
-          </TabsTrigger>
-          <TabsTrigger value="gamification" className="flex items-center gap-2 whitespace-nowrap">
-            <Trophy className="h-4 w-4" />
-            Gamification
-          </TabsTrigger>
-          <TabsTrigger value="storefront" className="flex items-center gap-2 whitespace-nowrap">
-            <Smartphone className="h-4 w-4" />
-            Storefront
-          </TabsTrigger>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        {/* Mobile & Tablet Header Navigation (< lg): Categorized Dropdown */}
+        <div className="lg:hidden bg-card border rounded-2xl p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Section:</span>
+              <span className="text-sm font-bold text-foreground truncate">{currentNavItem?.label || 'Settings'}</span>
+            </div>
+            {currentNavGroup && (
+              <Badge variant="secondary" className="text-[10px] font-bold uppercase tracking-wider shrink-0">
+                {currentNavGroup.title}
+              </Badge>
+            )}
+          </div>
 
+          <Select value={activeTab} onValueChange={(val) => val && setActiveTab(val)}>
+            <SelectTrigger className="w-full h-11 bg-background font-medium rounded-xl">
+              <SelectValue placeholder="Jump to section..." />
+            </SelectTrigger>
+            <SelectContent className="max-h-[60vh]">
+              {SETTINGS_NAV_GROUPS.map((group) => {
+                const visibleItems = group.items.filter(item => !item.hidden);
+                if (visibleItems.length === 0) return null;
+                return (
+                  <SelectGroup key={group.title}>
+                    <SelectLabel className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground px-2 py-1.5">
+                      {group.title}
+                    </SelectLabel>
+                    {visibleItems.map(item => {
+                      const Icon = item.icon;
+                      return (
+                        <SelectItem key={item.id} value={item.id} className={item.danger ? "text-destructive focus:text-destructive" : ""}>
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 shrink-0" />
+                            <span>{item.label}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectGroup>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
 
-          {canWipe && (
-            <TabsTrigger value="danger" className="flex items-center gap-2 whitespace-nowrap text-destructive data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground">
-              <AlertTriangle className="h-4 w-4" />
-              Danger Zone
-            </TabsTrigger>
-          )}
+        {/* Base-UI compatibility hidden tab list */}
+        <TabsList className="sr-only">
+          {SETTINGS_NAV_GROUPS.flatMap(g => g.items).map(item => (
+            <TabsTrigger key={item.id} value={item.id}>{item.label}</TabsTrigger>
+          ))}
         </TabsList>
+
+        {/* 2-Column Responsive Layout: Left Sidebar (Desktop) + Right Content */}
+        <div className="flex flex-col lg:flex-row gap-8 items-start">
+          {/* Left Sidebar Navigation (Desktop lg+) */}
+          <aside className="hidden lg:block w-72 shrink-0">
+            <div className="bg-card border rounded-2xl p-3 shadow-sm sticky top-6 space-y-5">
+              <div className="px-3 pt-1">
+                <h3 className="font-bold text-sm tracking-tight">Navigation</h3>
+                <p className="text-[11px] text-muted-foreground">Select a settings category</p>
+              </div>
+
+              {SETTINGS_NAV_GROUPS.map((group) => {
+                const visibleItems = group.items.filter(item => !item.hidden);
+                if (visibleItems.length === 0) return null;
+                return (
+                  <div key={group.title} className="space-y-1">
+                    <div className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground/70">
+                      {group.title}
+                    </div>
+                    <div className="space-y-1">
+                      {visibleItems.map(item => {
+                        const Icon = item.icon;
+                        const isActive = activeTab === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setActiveTab(item.id)}
+                            className={cn(
+                              "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all text-left group",
+                              isActive
+                                ? (item.danger
+                                    ? "bg-destructive text-destructive-foreground font-semibold shadow-sm"
+                                    : "bg-primary text-primary-foreground font-semibold shadow-sm")
+                                : (item.danger
+                                    ? "text-destructive hover:bg-destructive/10"
+                                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60")
+                            )}
+                          >
+                            <Icon className={cn("h-4 w-4 shrink-0 transition-transform group-hover:scale-110", isActive && "text-current")} />
+                            <div className="flex-1 min-w-0">
+                              <div className="truncate font-semibold">{item.label}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </aside>
+
+          {/* Right Main Content Area */}
+          <main className="flex-1 min-w-0 w-full space-y-6">
+            <div className="flex items-center justify-between pb-3 border-b">
+              <div className="flex items-center gap-3">
+                {currentNavItem && (
+                  <div className={cn(
+                    "p-2.5 rounded-xl",
+                    currentNavItem.danger ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
+                  )}>
+                    {React.createElement(currentNavItem.icon, { className: "h-5 w-5" })}
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight">{currentNavItem?.label || 'Settings'}</h3>
+                  <p className="text-xs text-muted-foreground">{currentNavItem?.description}</p>
+                </div>
+              </div>
+              {currentNavGroup && (
+                <Badge variant="outline" className="hidden sm:inline-flex text-[11px] font-semibold text-muted-foreground">
+                  {currentNavGroup.title}
+                </Badge>
+              )}
+            </div>
 
         {/* ── My Profile ── */}
         <TabsContent value="my-profile" className="space-y-6 animate-in fade-in-50 duration-500">
@@ -1722,6 +1833,8 @@ export default function Settings() {
             </Card>
           </TabsContent>
         )}
+          </main>
+        </div>
       </Tabs>
 
       <Dialog open={isWipeDialogOpen} onOpenChange={setIsWipeDialogOpen}>

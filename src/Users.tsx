@@ -799,12 +799,12 @@ export default function Users() {
                     <TableHead>Permissions</TableHead>
                     {isInzan && <TableHead>Department & Title</TableHead>}
                     <TableHead>Change Role</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.map(user => (
-                    <TableRow key={user.id}>
+                    <TableRow key={user.id} className="group hover:bg-muted/40 transition-colors">
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <UserIcon className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -899,7 +899,7 @@ export default function Users() {
                           <span className="text-sm text-muted-foreground">Restricted</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors">
                         <div className="flex items-center justify-end gap-1">
                           {/* Activate button for pending-invite users */}
                           {user.isPending && canChangeRoles && user.id !== currentUser.id && (
@@ -990,7 +990,7 @@ export default function Users() {
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Requested</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1079,12 +1079,12 @@ export default function Users() {
                       <TableHead>Role</TableHead>
                       <TableHead>Email (Login Username)</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {searchResults.map(user => (
-                      <TableRow key={user.id}>
+                      <TableRow key={user.id} className="group hover:bg-muted/40 transition-colors">
                         <TableCell className="font-mono text-sm">{user.clientRecordId || user.coachId || '—'}</TableCell>
                         <TableCell className="font-semibold">{user.name}</TableCell>
                         <TableCell>
@@ -1116,7 +1116,7 @@ export default function Users() {
                             </span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors">
                           <div className="flex items-center justify-end gap-1">
                             <Button
                               variant="ghost"
