@@ -246,12 +246,26 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     const clientPackages = clientData.packages || [];
     const legacyStartDate = clientData.startDate || params.startDate;
 
-    // Fetch wallet details inside transaction before any writes to satisfy Firestore rules
+    // Fetch wallet details and member ID counter inside transaction before any writes to satisfy Firestore rules
     const pointsEarned = Math.floor(actualAmountPaid / 100);
     const walletRef = doc(db, 'pointsWallets', params.clientId);
     let walletSnap: any = null;
     if (pointsEarned > 0) {
       walletSnap = await transaction.get(walletRef);
+    }
+
+    const existingMemberId = String(clientData.memberId || '').trim();
+    const existingLeadId = String(clientData.leadId || clientData.redgitsId || '').trim();
+    const needsNewMemberId =
+      clientData.status === 'Lead' ||
+      !existingMemberId ||
+      (existingLeadId !== '' && existingMemberId === existingLeadId);
+    const memberCounterRef = doc(db, 'counters', 'clients');
+    let memberCounterSnap: any = null;
+    if (needsNewMemberId && params.paymentStatus !== 'pending' && params.paymentStatus !== 'failed') {
+      try {
+        memberCounterSnap = await transaction.get(memberCounterRef);
+      } catch {}
     }
 
     // A. Validation: Prevent duplicate active packages if not an upgrade payment and not a renewal
@@ -552,6 +566,15 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       }
       if (clientData.status === 'Lead') {
         clientUpdate.stage = 'Converted';
+      }
+      if (needsNewMemberId) {
+        const lastId = memberCounterSnap?.exists?.() ? Number(memberCounterSnap.data()?.lastId || 111) : 111;
+        const nextMemberId = lastId + 1;
+        transaction.set(memberCounterRef, { lastId: nextMemberId }, { merge: true });
+        clientUpdate.memberId = String(nextMemberId);
+        if (existingLeadId && !clientData.leadId) {
+          clientUpdate.leadId = existingLeadId;
+        }
       }
 
       // Award points on actual money collected (1 Point per 100 LE/EGP spent)

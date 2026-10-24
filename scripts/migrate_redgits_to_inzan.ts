@@ -327,9 +327,10 @@ async function main() {
   }
 
   // 2. Build Unmasked Phone & Subscription Lookup from /admin/packagelist
-  const phoneByMemberId = new Map<string, string>();
+  const phoneByRedgitsId = new Map<string, string>();
+  const phoneByCardId = new Map<string, string>();
   const phoneByName = new Map<string, string>();
-  const subscriptionsByMemberId = new Map<string, any[]>();
+  const subscriptionsByRedgitsId = new Map<string, any[]>();
 
   const pkgListRows: string[][] =
     liveV2?.tables?.packageSubscriptions?.rows ||
@@ -342,15 +343,16 @@ async function main() {
     const memberName = String(rawMemberName || '').replace(/\s*\[ID:\d+\]\s*/g, '').trim();
     const idTagMatch = String(rawMemberName || '').match(/\[ID:(\d+)\]/);
     const cleanPhone = normalizePhone(rawMobile);
-    if (cleanPhone && memberId) phoneByMemberId.set(String(memberId).trim(), cleanPhone);
-    if (cleanPhone && idTagMatch?.[1]) phoneByMemberId.set(idTagMatch[1], cleanPhone);
+    if (cleanPhone && idTagMatch?.[1]) phoneByRedgitsId.set(idTagMatch[1], cleanPhone);
+    if (cleanPhone && memberId) phoneByCardId.set(String(memberId).trim(), cleanPhone);
     if (cleanPhone && memberName) phoneByName.set(memberName.toLowerCase(), cleanPhone);
     if (salesman) ensureSalesRepUser(salesman);
 
     const subRecord = {
       createdAt,
       memberName,
-      memberId: String(memberId || idTagMatch?.[1] || '').trim(),
+      memberId: String(memberId || '').trim(),
+      redgitsId: idTagMatch?.[1] || '',
       packageName: pkgName,
       subType,
       amount: parseFloat(String(paymentAmt).replace(/[^\d.]/g, '')) || 0,
@@ -361,17 +363,11 @@ async function main() {
       salesman: cleanSalesRepName(salesman),
       createdBy: cleanSalesRepName(createdBy),
     };
-    if (memberId) {
-      const key = String(memberId).trim();
-      const arr = subscriptionsByMemberId.get(key) || [];
+    if (idTagMatch?.[1]) {
+      const key = idTagMatch[1];
+      const arr = subscriptionsByRedgitsId.get(key) || [];
       arr.push(subRecord);
-      subscriptionsByMemberId.set(key, arr);
-    }
-    if (idTagMatch?.[1] && idTagMatch[1] !== String(memberId).trim()) {
-      const key2: string = idTagMatch[1];
-      const arr2 = subscriptionsByMemberId.get(key2) || [];
-      arr2.push(subRecord);
-      subscriptionsByMemberId.set(key2, arr2);
+      subscriptionsByRedgitsId.set(key, arr);
     }
   }
 
@@ -555,10 +551,7 @@ async function main() {
     name = name.replace(/\s*\[ID:\d+\]\s*/g, '').trim();
     if (!name) continue;
 
-    const memberSubs =
-      subscriptionsByMemberId.get(String(rId).trim()) ||
-      subscriptionsByMemberId.get(String(cardMemberId).trim()) ||
-      [];
+    const memberSubs = subscriptionsByRedgitsId.get(String(rId).trim()) || [];
 
     const fallbackSalesName =
       cleanSalesRepName(rawSalesName) ||
@@ -591,8 +584,8 @@ async function main() {
     const phone =
       normalizePhone(fields['Phone']) ||
       normalizePhone(fields['Mobile']) ||
-      phoneByMemberId.get(String(cardMemberId).trim()) ||
-      phoneByMemberId.get(String(rId).trim()) ||
+      phoneByRedgitsId.get(String(rId).trim()) ||
+      (cardMemberId && cardMemberId !== rId ? phoneByCardId.get(String(cardMemberId).trim()) : undefined) ||
       phoneByName.get(name.toLowerCase()) ||
       normalizePhone(fields['Backup Mobile']) ||
       '';
@@ -708,11 +701,19 @@ async function main() {
       }
     }
 
+    const cleanCardMemberId =
+      status === 'Lead'
+        ? ''
+        : cardMemberId && String(cardMemberId).trim() !== String(rId).trim() && String(cardMemberId).trim() !== '0'
+        ? String(cardMemberId).trim()
+        : '';
+
     const clientData: Record<string, any> = {
       id: clientDocId,
       redgitsId: String(rId),
       legacyMemberId: String(rId),
-      memberId: String(cardMemberId || rId).trim(),
+      leadId: String(rId),
+      memberId: cleanCardMemberId || undefined,
       name,
       phone,
       backupPhone,
@@ -737,7 +738,7 @@ async function main() {
       typeOfClient: fields['Type']?.replace(/\s*Change$/i, '').trim() || 'Member',
       referredByName: referredByName || undefined,
       referredBy: referredByName || undefined,
-      barcode,
+      barcode: rawBarcode || cleanCardMemberId || String(rId).trim(),
       cardId,
       civilianOrMilitary: 'None',
       address: (fields['Address'] || fields['Area'] || '').trim() || undefined,
@@ -772,7 +773,8 @@ async function main() {
         const [fCreatedAt, finCode, fPkgName, fPaidStr, , fSn, fContract, , fCreatedBy, fDetails] = fRow;
         const amt = parseFloat(String(fPaidStr || '0').replace(/[^\d.]/g, '')) || 0;
         if (amt <= 0) continue;
-        const payId = fSn ? `redgits-fin-${rId}-${fSn}` : `redgits-fin-${rId}-${finCode || fIdx + 1}`;
+        const canonicalSn = fContract && fContract !== '0' ? fContract : fSn;
+        const payId = canonicalSn ? `redgits-fin-${rId}-${canonicalSn}` : `redgits-fin-${rId}-${finCode || fIdx + 1}`;
         paymentDocsMap.set(payId, {
           id: payId,
           data: {
@@ -806,7 +808,7 @@ async function main() {
             client_name: name,
             amount: sub.amount,
             amount_paid: sub.amount,
-            date: sub.startDate || nowIso.slice(0, 10),
+            date: (sub.createdAt || sub.startDate || nowIso).slice(0, 10),
             method: inferPaymentMethod('', sub.method),
             packageType: sub.packageName || packageName || 'Membership',
             branch: 'Garden 8',

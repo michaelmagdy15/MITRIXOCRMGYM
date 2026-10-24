@@ -117,7 +117,7 @@ export const MemberBenefitsWallet: React.FC<MemberBenefitsWalletProps> = ({
       </div>
 
       {/* Benefits Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-2 2xl:grid-cols-4 gap-2.5">
         {/* 1. Free PT Sessions */}
         <div className="rounded-xl border border-border/50 bg-background/80 p-2.5 space-y-1.5">
           <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">

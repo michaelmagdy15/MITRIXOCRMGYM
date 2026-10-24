@@ -91,8 +91,21 @@ function AppContent() {
   const [pinError, setPinError] = React.useState(false);
   const [searchFallbackOpen, setSearchFallbackOpen] = React.useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768 && window.innerWidth < 1240) {
+      return true;
+    }
     return localStorage.getItem('sidebar_collapsed') === 'true';
   });
+
+  React.useEffect(() => {
+    const handleViewportResize = () => {
+      if (window.innerWidth >= 768 && window.innerWidth < 1200) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+    window.addEventListener('resize', handleViewportResize);
+    return () => window.removeEventListener('resize', handleViewportResize);
+  }, []);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState(false);
   const [showPortalOverride, setShowPortalOverride] = React.useState<'crm' | 'store' | 'member' | null>(null);
   const [clientViewMode, setClientViewMode] = React.useState<'portal' | 'store'>('portal');
@@ -1302,7 +1315,7 @@ function AppContent() {
           </div>
 
           {/* Main scrollable viewport */}
-          <main className="flex-grow overflow-y-auto p-4 md:p-8">
+          <main className="flex-grow overflow-y-auto p-3 sm:p-4 lg:p-6 xl:p-8 min-w-0">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
               <TabsContent value="dashboard" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <Dashboard />

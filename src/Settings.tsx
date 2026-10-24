@@ -699,8 +699,8 @@ export default function Settings() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        {/* Mobile & Tablet Header Navigation (< lg): Categorized Dropdown */}
-        <div className="lg:hidden bg-card border rounded-2xl p-4 shadow-sm space-y-3">
+        {/* Mobile Header Navigation (< md): Categorized Dropdown */}
+        <div className="md:hidden bg-card border rounded-2xl p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Section:</span>
@@ -744,6 +744,64 @@ export default function Settings() {
           </Select>
         </div>
 
+        {/* Tablet & Desktop Categorized Top Navigation Bar (md+) — gives 100% full width to content below */}
+        <div className="hidden md:block bg-card border rounded-2xl p-3.5 shadow-sm space-y-2.5">
+          {/* Row 1: Category Selector Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 pb-2 border-b border-border/60">
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-muted-foreground mr-1.5">
+              Category:
+            </span>
+            {SETTINGS_NAV_GROUPS.map((group) => {
+              const visibleItems = group.items.filter(item => !item.hidden);
+              if (visibleItems.length === 0) return null;
+              const isGroupActive = currentNavGroup?.title === group.title;
+              return (
+                <button
+                  key={group.title}
+                  type="button"
+                  onClick={() => { if (visibleItems[0]) setActiveTab(visibleItems[0].id); }}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                    isGroupActive
+                      ? "bg-primary/15 text-primary border border-primary/30 shadow-2xs"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/60 border border-transparent"
+                  )}
+                >
+                  {group.title}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Row 2: Active Category Section Tabs (with quick jump to all tabs wrapped cleanly) */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {SETTINGS_NAV_GROUPS.flatMap(g => g.items.filter(i => !i.hidden)).map(item => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer",
+                    isActive
+                      ? (item.danger
+                          ? "bg-destructive text-destructive-foreground shadow-xs"
+                          : "bg-primary text-primary-foreground shadow-xs")
+                      : (item.danger
+                          ? "text-destructive hover:bg-destructive/10"
+                          : "text-muted-foreground hover:text-foreground bg-muted/30 hover:bg-muted/70")
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Base-UI compatibility hidden tab list */}
         <TabsList className="sr-only">
           {SETTINGS_NAV_GROUPS.flatMap(g => g.items).map(item => (
@@ -751,60 +809,9 @@ export default function Settings() {
           ))}
         </TabsList>
 
-        {/* 2-Column Responsive Layout: Left Sidebar (Desktop) + Right Content */}
-        <div className="flex flex-col lg:flex-row gap-8 items-start">
-          {/* Left Sidebar Navigation (Desktop lg+) */}
-          <aside className="hidden lg:block w-72 shrink-0">
-            <div className="bg-card border rounded-2xl p-3 shadow-sm sticky top-6 space-y-5">
-              <div className="px-3 pt-1">
-                <h3 className="font-bold text-sm tracking-tight">Navigation</h3>
-                <p className="text-[11px] text-muted-foreground">Select a settings category</p>
-              </div>
-
-              {SETTINGS_NAV_GROUPS.map((group) => {
-                const visibleItems = group.items.filter(item => !item.hidden);
-                if (visibleItems.length === 0) return null;
-                return (
-                  <div key={group.title} className="space-y-1">
-                    <div className="px-3 text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground/70">
-                      {group.title}
-                    </div>
-                    <div className="space-y-1">
-                      {visibleItems.map(item => {
-                        const Icon = item.icon;
-                        const isActive = activeTab === item.id;
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setActiveTab(item.id)}
-                            className={cn(
-                              "w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium transition-all text-left group",
-                              isActive
-                                ? (item.danger
-                                    ? "bg-destructive text-destructive-foreground font-semibold shadow-sm"
-                                    : "bg-primary text-primary-foreground font-semibold shadow-sm")
-                                : (item.danger
-                                    ? "text-destructive hover:bg-destructive/10"
-                                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60")
-                            )}
-                          >
-                            <Icon className={cn("h-4 w-4 shrink-0 transition-transform group-hover:scale-110", isActive && "text-current")} />
-                            <div className="flex-1 min-w-0">
-                              <div className="truncate font-semibold">{item.label}</div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </aside>
-
-          {/* Right Main Content Area */}
-          <main className="flex-1 min-w-0 w-full space-y-6">
+        {/* Full-Width Content Container */}
+        <div className="w-full min-w-0">
+          <main className="w-full min-w-0 space-y-6">
             <div className="flex items-center justify-between pb-3 border-b">
               <div className="flex items-center gap-3">
                 {currentNavItem && (
@@ -928,295 +935,6 @@ export default function Settings() {
                     <Save className="mr-2 h-4 w-4" />
                     {isSaving ? 'Saving...' : 'Save Branding'}
                   </Button>
-                </CardContent>
-              </Card>
-
-              {/* ── Mobile App Splash Screen Manager (iOS & Android) ── */}
-              <Card className="border-border shadow-sm">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Smartphone className="w-5 h-5 text-rose-500" />
-                        <CardTitle className="text-xl">Mobile App Splash Screen</CardTitle>
-                      </div>
-                      <CardDescription>
-                        Configure the launch screen displayed when members and coaches open the mobile app on iPhones and Android devices.
-                      </CardDescription>
-                    </div>
-                    <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                      <Sparkles className="w-3.5 h-3.5" /> iOS & Android Native
-                    </span>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                    {/* Controls (Left 7 cols) */}
-                    <div className="lg:col-span-7 space-y-5">
-                      {/* Wallpaper Controls */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="splashBgInput" className="font-semibold text-sm flex items-center gap-2">
-                            <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                            Splash Wallpaper / Background
-                          </Label>
-                          {splashScreenUrl && (
-                            <button
-                              type="button"
-                              onClick={() => setSplashScreenUrl('')}
-                              className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1"
-                            >
-                              <RotateCcw className="w-3 h-3" /> Clear Image
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Input
-                            id="splashBgInput"
-                            value={splashScreenUrl}
-                            onChange={(e) => setSplashScreenUrl(e.target.value)}
-                            placeholder="https://... or /strike_slide_outdoor.png"
-                            className="flex-1 text-xs font-mono"
-                          />
-                          <input
-                            ref={splashBgFileInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleSplashBgUpload}
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => splashBgFileInputRef.current?.click()}
-                            disabled={isUploadingSplashBg}
-                            className="shrink-0 font-semibold cursor-pointer"
-                          >
-                            <Upload className="w-3.5 h-3.5 mr-1.5" />
-                            {isUploadingSplashBg ? 'Uploading...' : 'Upload Wallpaper'}
-                          </Button>
-                        </div>
-                        {splashBgUploadStatus && (
-                          <p className={`text-xs ${splashBgUploadStatus.includes('successfully') ? 'text-emerald-500 font-medium' : 'text-destructive'}`}>
-                            {splashBgUploadStatus}
-                          </p>
-                        )}
-
-                        {/* Wallpaper Presets */}
-                        <div className="pt-1">
-                          <span className="text-[11px] text-muted-foreground font-medium block mb-1.5">Preset Wallpapers:</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {[
-                              { label: 'Strike Outdoor', url: '/strike_slide_outdoor.png' },
-                              { label: 'Strike Arena', url: '/strike_impact_outdoor.png' },
-                              { label: 'Strike Kids', url: '/strike_kids_outdoor.png' },
-                              { label: 'Pure Dark', url: '' },
-                            ].map((preset) => (
-                              <button
-                                key={preset.label}
-                                type="button"
-                                onClick={() => setSplashScreenUrl(preset.url)}
-                                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer ${
-                                  splashScreenUrl === preset.url
-                                    ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 shadow-xs'
-                                    : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
-                                }`}
-                              >
-                                {preset.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Splash Logo Controls */}
-                      <div className="space-y-2 pt-2 border-t border-border">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="splashLogoInput" className="font-semibold text-sm flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-muted-foreground" />
-                            Splash Screen Logo (Luminous Overlay)
-                          </Label>
-                          {splashScreenLogoUrl && (
-                            <button
-                              type="button"
-                              onClick={() => setSplashScreenLogoUrl('')}
-                              className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1"
-                            >
-                              <RotateCcw className="w-3 h-3" /> Reset Default
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Input
-                            id="splashLogoInput"
-                            value={splashScreenLogoUrl}
-                            onChange={(e) => setSplashScreenLogoUrl(e.target.value)}
-                            placeholder="Defaults to white gym logo"
-                            className="flex-1 text-xs font-mono"
-                          />
-                          <input
-                            ref={splashLogoFileInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleSplashLogoUpload}
-                          />
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            onClick={() => splashLogoFileInputRef.current?.click()}
-                            disabled={isUploadingSplashLogo}
-                            className="shrink-0 font-semibold cursor-pointer"
-                          >
-                            <Upload className="w-3.5 h-3.5 mr-1.5" />
-                            {isUploadingSplashLogo ? 'Uploading...' : 'Upload Logo'}
-                          </Button>
-                        </div>
-                        {splashLogoUploadStatus && (
-                          <p className={`text-xs ${splashLogoUploadStatus.includes('successfully') ? 'text-emerald-500 font-medium' : 'text-destructive'}`}>
-                            {splashLogoUploadStatus}
-                          </p>
-                        )}
-                        <div className="flex flex-wrap gap-2 pt-1">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 cursor-pointer"
-                            onClick={() => setSplashScreenLogoUrl(logoUrl || '/strikelogo_white.png')}
-                          >
-                            Use Main Brand Logo
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 cursor-pointer"
-                            onClick={() => setSplashScreenLogoUrl('/strikelogo_white.png')}
-                          >
-                            Strike White Logo
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 cursor-pointer"
-                            onClick={() => setSplashScreenLogoUrl('/inzanlogo.png')}
-                          >
-                            Inzan Logo
-                          </Button>
-                        </div>
-                      </div>
-
-                      {/* Tagline / Subtitle */}
-                      <div className="space-y-2 pt-2 border-t border-border">
-                        <Label htmlFor="splashTaglineInput" className="font-semibold text-sm">
-                          Splash Screen Tagline / Subtitle
-                        </Label>
-                        <Input
-                          id="splashTaglineInput"
-                          value={splashScreenTagline}
-                          onChange={(e) => setSplashScreenTagline(e.target.value)}
-                          placeholder="e.g. STRIKE BOXING CLUB"
-                          className="text-sm font-semibold tracking-wider uppercase"
-                        />
-                        <p className="text-[11px] text-muted-foreground">
-                          Renders at the bottom of the splash screen underneath the glowing progress bar.
-                        </p>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
-                        <Button
-                          className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 cursor-pointer shadow-sm transition-all"
-                          onClick={handleSaveSplashScreen}
-                          disabled={isSaving}
-                        >
-                          <Save className="mr-2 h-4 w-4" />
-                          {isSaving ? 'Saving Splash Screen...' : 'Save Splash Screen'}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="font-semibold py-2.5 cursor-pointer border-rose-500/40 text-rose-500 hover:bg-rose-500/10 transition-all shrink-0"
-                          onClick={() => setIsPreviewingSplash(true)}
-                        >
-                          <Eye className="mr-2 h-4 w-4" />
-                          Test Fullscreen
-                        </Button>
-                      </div>
-
-                      <div className="bg-muted/40 rounded-lg p-3 border border-border text-xs text-muted-foreground space-y-1">
-                        <p className="font-semibold text-foreground flex items-center gap-1.5">
-                          📱 Mobile-First Native Launch
-                        </p>
-                        <p>
-                          This splash screen launches automatically for gym members & coaches on <strong>iOS iPhones</strong>, <strong>Android devices</strong>, and mobile browsers (&lt;768px). Desktop browser reload skips it by design to keep dashboard workflows instant. Click <strong>&quot;Test Fullscreen&quot;</strong> above to preview it on your PC anytime!
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Live Mobile Device Mockup Preview (Right 5 cols) */}
-                    <div className="lg:col-span-5 flex flex-col items-center justify-center p-3 sm:p-4 bg-muted/40 rounded-xl border border-border">
-                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                        <Smartphone className="w-3.5 h-3.5 text-rose-500" /> Live Mobile Preview
-                      </span>
-
-                      {/* Phone Shell */}
-                      <div className="relative w-[230px] h-[460px] bg-[#050507] rounded-[36px] border-[5px] border-zinc-700 shadow-2xl overflow-hidden flex flex-col justify-between items-center select-none">
-                        {/* Dynamic Island */}
-                        <div className="absolute top-2.5 z-30 w-20 h-4 bg-black rounded-full shadow-inner flex items-center justify-end px-2">
-                          <div className="w-2 h-2 rounded-full bg-zinc-900 border border-zinc-800" />
-                        </div>
-
-                        {/* Background Wallpaper */}
-                        <div
-                          className="absolute inset-0 z-0 bg-cover bg-center transition-all duration-300"
-                          style={{
-                            backgroundImage: splashScreenUrl ? `url('${splashScreenUrl}')` : undefined,
-                            backgroundColor: '#050507',
-                            filter: 'brightness(0.68) contrast(1.1)',
-                          }}
-                        />
-
-                        {/* Dark Radial & Gradient Vignette Overlay */}
-                        <div className="absolute inset-0 z-10 bg-radial from-black/25 via-black/65 to-black/95 pointer-events-none" />
-
-                        {/* Top spacer */}
-                        <div className="h-10 z-20" />
-
-                        {/* Centered Luminous Logo */}
-                        <div className="relative z-20 flex flex-col items-center justify-center px-4 w-full">
-                          {/* Radial Glow */}
-                          <div className="absolute w-24 h-24 rounded-full bg-rose-600/30 blur-xl pointer-events-none animate-pulse" />
-                          <img
-                            src={splashScreenLogoUrl || logoUrl || '/strikelogo_white.png'}
-                            alt="Splash Logo"
-                            className="relative max-w-[130px] max-h-[65px] object-contain drop-shadow-[0_8px_20px_rgba(0,0,0,0.9)] transition-all"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = '/strikelogo_white.png';
-                            }}
-                          />
-                        </div>
-
-                        {/* Bottom Footer with Progress Pill & Tagline */}
-                        <div className="relative z-20 flex flex-col items-center gap-2 pb-6 px-3 w-full">
-                          {/* Progress Bar Track */}
-                          <div className="w-24 h-1 bg-white/20 rounded-full overflow-hidden relative shadow-inner">
-                            <div className="absolute top-0 bottom-0 left-0 w-8 bg-gradient-to-r from-rose-500 to-white rounded-full animate-[pulse_1.5s_ease-in-out_infinite]" />
-                          </div>
-                          <span className="text-[8.5px] font-extrabold tracking-[0.3em] uppercase text-white/70 text-center leading-tight">
-                            {splashScreenTagline || companyName || 'STRIKE BOXING CLUB'}
-                          </span>
-                        </div>
-
-                        {/* Home Indicator Bar */}
-                        <div className="absolute bottom-1 z-30 w-24 h-1 bg-white/30 rounded-full" />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground text-center mt-3 max-w-[230px]">
-                        Matches iOS and Android full-screen launch experience with smooth 2.0s display timing.
-                      </p>
-                    </div>
-                  </div>
                 </CardContent>
               </Card>
 
@@ -1370,6 +1088,295 @@ export default function Settings() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Mobile App Splash Screen Manager (Full Width for Zero Overlap) ── */}
+          <Card className="border-border shadow-sm w-full overflow-hidden">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Smartphone className="w-5 h-5 text-rose-500" />
+                    <CardTitle className="text-xl">Mobile App Splash Screen</CardTitle>
+                  </div>
+                  <CardDescription>
+                    Configure the launch screen displayed when members and coaches open the mobile app on iPhones and Android devices.
+                  </CardDescription>
+                </div>
+                <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                  <Sparkles className="w-3.5 h-3.5" /> iOS & Android Native
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Controls (Left 7 cols) */}
+                <div className="lg:col-span-7 min-w-0 space-y-5">
+                  {/* Wallpaper Controls */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="splashBgInput" className="font-semibold text-sm flex items-center gap-2">
+                        <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                        Splash Wallpaper / Background
+                      </Label>
+                      {splashScreenUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setSplashScreenUrl('')}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3 h-3" /> Clear Image
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        id="splashBgInput"
+                        value={splashScreenUrl}
+                        onChange={(e) => setSplashScreenUrl(e.target.value)}
+                        placeholder="https://... or /strike_slide_outdoor.png"
+                        className="flex-1 min-w-0 text-xs font-mono"
+                      />
+                      <input
+                        ref={splashBgFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleSplashBgUpload}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => splashBgFileInputRef.current?.click()}
+                        disabled={isUploadingSplashBg}
+                        className="shrink-0 font-semibold cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5 mr-1.5" />
+                        {isUploadingSplashBg ? 'Uploading...' : 'Upload Wallpaper'}
+                      </Button>
+                    </div>
+                    {splashBgUploadStatus && (
+                      <p className={`text-xs ${splashBgUploadStatus.includes('successfully') ? 'text-emerald-500 font-medium' : 'text-destructive'}`}>
+                        {splashBgUploadStatus}
+                      </p>
+                    )}
+
+                    {/* Wallpaper Presets */}
+                    <div className="pt-1">
+                      <span className="text-[11px] text-muted-foreground font-medium block mb-1.5">Preset Wallpapers:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { label: 'Strike Outdoor', url: '/strike_slide_outdoor.png' },
+                          { label: 'Strike Arena', url: '/strike_impact_outdoor.png' },
+                          { label: 'Strike Kids', url: '/strike_kids_outdoor.png' },
+                          { label: 'Pure Dark', url: '' },
+                        ].map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => setSplashScreenUrl(preset.url)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all cursor-pointer ${
+                              splashScreenUrl === preset.url
+                                ? 'bg-rose-500/15 text-rose-400 border-rose-500/40 shadow-xs'
+                                : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Splash Logo Controls */}
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="splashLogoInput" className="font-semibold text-sm flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-muted-foreground" />
+                        Splash Screen Logo (Luminous Overlay)
+                      </Label>
+                      {splashScreenLogoUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setSplashScreenLogoUrl('')}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1"
+                        >
+                          <RotateCcw className="w-3 h-3" /> Reset Default
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        id="splashLogoInput"
+                        value={splashScreenLogoUrl}
+                        onChange={(e) => setSplashScreenLogoUrl(e.target.value)}
+                        placeholder="Defaults to white gym logo"
+                        className="flex-1 min-w-0 text-xs font-mono"
+                      />
+                      <input
+                        ref={splashLogoFileInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleSplashLogoUpload}
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => splashLogoFileInputRef.current?.click()}
+                        disabled={isUploadingSplashLogo}
+                        className="shrink-0 font-semibold cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5 mr-1.5" />
+                        {isUploadingSplashLogo ? 'Uploading...' : 'Upload Logo'}
+                      </Button>
+                    </div>
+                    {splashLogoUploadStatus && (
+                      <p className={`text-xs ${splashLogoUploadStatus.includes('successfully') ? 'text-emerald-500 font-medium' : 'text-destructive'}`}>
+                        {splashLogoUploadStatus}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7 cursor-pointer"
+                        onClick={() => setSplashScreenLogoUrl(logoUrl || '/strikelogo_white.png')}
+                      >
+                        Use Main Brand Logo
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7 cursor-pointer"
+                        onClick={() => setSplashScreenLogoUrl('/strikelogo_white.png')}
+                      >
+                        Strike White Logo
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7 cursor-pointer"
+                        onClick={() => setSplashScreenLogoUrl('/inzanlogo.png')}
+                      >
+                        Inzan Logo
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Tagline / Subtitle */}
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <Label htmlFor="splashTaglineInput" className="font-semibold text-sm">
+                      Splash Screen Tagline / Subtitle
+                    </Label>
+                    <Input
+                      id="splashTaglineInput"
+                      value={splashScreenTagline}
+                      onChange={(e) => setSplashScreenTagline(e.target.value)}
+                      placeholder="e.g. STRIKE BOXING CLUB"
+                      className="text-sm font-semibold tracking-wider uppercase"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Renders at the bottom of the splash screen underneath the glowing progress bar.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                    <Button
+                      className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 cursor-pointer shadow-sm transition-all"
+                      onClick={handleSaveSplashScreen}
+                      disabled={isSaving}
+                    >
+                      <Save className="mr-2 h-4 w-4" />
+                      {isSaving ? 'Saving Splash Screen...' : 'Save Splash Screen'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="font-semibold py-2.5 cursor-pointer border-rose-500/40 text-rose-500 hover:bg-rose-500/10 transition-all shrink-0"
+                      onClick={() => setIsPreviewingSplash(true)}
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
+                      Test Fullscreen
+                    </Button>
+                  </div>
+
+                  <div className="bg-muted/40 rounded-lg p-3 border border-border text-xs text-muted-foreground space-y-1">
+                    <p className="font-semibold text-foreground flex items-center gap-1.5">
+                      📱 Mobile-First Native Launch
+                    </p>
+                    <p>
+                      This splash screen launches automatically for gym members & coaches on <strong>iOS iPhones</strong>, <strong>Android devices</strong>, and mobile browsers (&lt;768px). Desktop browser reload skips it by design to keep dashboard workflows instant. Click <strong>&quot;Test Fullscreen&quot;</strong> above to preview it on your PC anytime!
+                    </p>
+                  </div>
+                </div>
+
+                {/* Live Mobile Device Mockup Preview (Right 5 cols) */}
+                <div className="lg:col-span-5 min-w-0 flex flex-col items-center justify-center p-4 bg-muted/40 rounded-xl border border-border">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-rose-500" /> Live Mobile Preview
+                  </span>
+
+                  {/* Phone Shell */}
+                  <div className="relative w-[230px] h-[460px] bg-[#050507] rounded-[36px] border-[5px] border-zinc-700 shadow-2xl overflow-hidden flex flex-col justify-between items-center select-none shrink-0">
+                    {/* Dynamic Island */}
+                    <div className="absolute top-2.5 z-30 w-20 h-4 bg-black rounded-full shadow-inner flex items-center justify-end px-2">
+                      <div className="w-2 h-2 rounded-full bg-zinc-900 border border-zinc-800" />
+                    </div>
+
+                    {/* Background Wallpaper */}
+                    <div
+                      className="absolute inset-0 z-0 bg-cover bg-center transition-all duration-300"
+                      style={{
+                        backgroundImage: splashScreenUrl ? `url('${splashScreenUrl}')` : undefined,
+                        backgroundColor: '#050507',
+                        filter: 'brightness(0.68) contrast(1.1)',
+                      }}
+                    />
+
+                    {/* Dark Radial & Gradient Vignette Overlay */}
+                    <div className="absolute inset-0 z-10 bg-radial from-black/25 via-black/65 to-black/95 pointer-events-none" />
+
+                    {/* Top spacer */}
+                    <div className="h-10 z-20" />
+
+                    {/* Centered Luminous Logo */}
+                    <div className="relative z-20 flex flex-col items-center justify-center px-4 w-full">
+                      {/* Radial Glow */}
+                      <div className="absolute w-24 h-24 rounded-full bg-rose-600/30 blur-xl pointer-events-none animate-pulse" />
+                      <img
+                        src={splashScreenLogoUrl || logoUrl || '/strikelogo_white.png'}
+                        alt="Splash Logo"
+                        className="relative max-w-[130px] max-h-[65px] object-contain drop-shadow-[0_8px_20px_rgba(0,0,0,0.9)] transition-all"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/strikelogo_white.png';
+                        }}
+                      />
+                    </div>
+
+                    {/* Bottom Footer with Progress Pill & Tagline */}
+                    <div className="relative z-20 flex flex-col items-center gap-2 pb-6 px-3 w-full">
+                      {/* Progress Bar Track */}
+                      <div className="w-24 h-1 bg-white/20 rounded-full overflow-hidden relative shadow-inner">
+                        <div className="absolute top-0 bottom-0 left-0 w-8 bg-gradient-to-r from-rose-500 to-white rounded-full animate-[pulse_1.5s_ease-in-out_infinite]" />
+                      </div>
+                      <span className="text-[8.5px] font-extrabold tracking-[0.3em] uppercase text-white/70 text-center leading-tight">
+                        {splashScreenTagline || companyName || 'STRIKE BOXING CLUB'}
+                      </span>
+                    </div>
+
+                    {/* Home Indicator Bar */}
+                    <div className="absolute bottom-1 z-30 w-24 h-1 bg-white/30 rounded-full" />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground text-center mt-3 max-w-[230px]">
+                    Matches iOS and Android full-screen launch experience with smooth 2.0s display timing.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           {ChangePasswordCard}
         </TabsContent>
 

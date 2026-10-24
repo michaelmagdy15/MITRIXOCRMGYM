@@ -312,10 +312,16 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           } catch {}
         }
 
-        // Query by memberId exact match
+        // Query by memberId or leadId exact match
         const qMemberId = query(collection(db, 'clients'), where('memberId', '==', term));
         const memberIdSnap = await getDocs(qMemberId);
         if (active) memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+
+        try {
+          const qLeadId = query(collection(db, 'clients'), where('leadId', '==', term));
+          const leadIdSnap = await getDocs(qLeadId);
+          if (active) leadIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        } catch {}
 
         // Query by name prefix match (capitalized prefix logic)
         const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
@@ -379,6 +385,25 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     } catch (error) {
       console.error('Error generating member ID:', error);
       return Math.floor(Math.random() * 10000).toString();
+    }
+  };
+
+  const generateLeadId = async (): Promise<string> => {
+    const counterRef = doc(db, 'counters', 'leads');
+    try {
+      const newId = await runTransaction(db, async (transaction) => {
+        const counterDoc = await transaction.get(counterRef);
+        let nextId = 1001;
+        if (counterDoc.exists()) {
+          nextId = (counterDoc.data().lastId || 1000) + 1;
+        }
+        transaction.set(counterRef, { lastId: nextId }, { merge: true });
+        return nextId;
+      });
+      return newId.toString();
+    } catch (error) {
+      console.error('Error generating lead ID:', error);
+      return Math.floor(10000 + Math.random() * 90000).toString();
     }
   };
 
@@ -468,7 +493,13 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
       if (clientData.paid === undefined) clientData.paid = false;
 
-      if (!clientData.memberId) {
+      if (clientData.status === 'Lead') {
+        // Leads never reserve a memberId; they get a separate sequential leadId
+        delete (clientData as any).memberId;
+        if (!clientData.leadId) {
+          clientData.leadId = await generateLeadId();
+        }
+      } else if (!clientData.memberId) {
         clientData.memberId = await generateMemberId();
       }
 
@@ -554,10 +585,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       return true;
     });
 
-    const clientsNeedingId = validNewClients.filter(c => !c.memberId).length;
+    const membersNeedingId = validNewClients.filter(c => c.status !== 'Lead' && !c.memberId).length;
+    const leadsNeedingId = validNewClients.filter(c => c.status === 'Lead' && !c.leadId).length;
     let nextMemberId = 112;
+    let nextLeadId = 1001;
 
-    if (clientsNeedingId > 0) {
+    if (membersNeedingId > 0) {
       const counterRef = doc(db, 'counters', 'clients');
       try {
         nextMemberId = await runTransaction(db, async (transaction) => {
@@ -566,12 +599,30 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           if (counterDoc.exists()) {
             currentId = (counterDoc.data().lastId || 111) + 1;
           }
-          transaction.set(counterRef, { lastId: currentId + clientsNeedingId }, { merge: true });
+          transaction.set(counterRef, { lastId: currentId + membersNeedingId - 1 }, { merge: true });
           return currentId;
         });
       } catch (error) {
         console.error('Error generating bulk member IDs:', error);
         nextMemberId = Math.floor(Math.random() * 10000);
+      }
+    }
+
+    if (leadsNeedingId > 0) {
+      const leadCounterRef = doc(db, 'counters', 'leads');
+      try {
+        nextLeadId = await runTransaction(db, async (transaction) => {
+          const counterDoc = await transaction.get(leadCounterRef);
+          let currentId = 1001;
+          if (counterDoc.exists()) {
+            currentId = (counterDoc.data().lastId || 1000) + 1;
+          }
+          transaction.set(leadCounterRef, { lastId: currentId + leadsNeedingId - 1 }, { merge: true });
+          return currentId;
+        });
+      } catch (error) {
+        console.error('Error generating bulk lead IDs:', error);
+        nextLeadId = Math.floor(10000 + Math.random() * 90000);
       }
     }
 
@@ -585,7 +636,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           if (!client) continue;
           const { id, comments, ...clientData } = client;
 
-          if (!clientData.memberId) {
+          if (clientData.status === 'Lead') {
+            delete (clientData as any).memberId;
+            if (!clientData.leadId) {
+              clientData.leadId = (nextLeadId++).toString();
+            }
+          } else if (!clientData.memberId) {
             clientData.memberId = (nextMemberId++).toString();
           }
           if (clientData.paid === undefined) clientData.paid = false;
@@ -706,9 +762,22 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       }
 
-      if (!updateData.memberId) {
-        if (existing && !existing.memberId) {
+      const nextEffectiveStatus = updateData.status || existing?.status || 'Active';
+      if (nextEffectiveStatus === 'Lead') {
+        // Still a Lead — never assign a memberId; ensure leadId is present
+        if (!existing?.leadId && !updateData.leadId) {
+          updateData.leadId = existing?.redgitsId || (await generateLeadId());
+        }
+      } else if (!updateData.memberId) {
+        const existingMemberId = String(existing?.memberId || '').trim();
+        const existingLeadId = String(existing?.leadId || existing?.redgitsId || '').trim();
+        const isConvertingFromLead = existing?.status === 'Lead';
+        const hasDistinctMemberId = Boolean(existingMemberId) && (!existingLeadId || existingMemberId !== existingLeadId);
+        if (isConvertingFromLead || !hasDistinctMemberId) {
           updateData.memberId = await generateMemberId();
+          if (existingLeadId && !existing?.leadId && !updateData.leadId) {
+            updateData.leadId = existingLeadId;
+          }
         }
       }
 

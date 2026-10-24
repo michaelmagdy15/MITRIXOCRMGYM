@@ -785,123 +785,123 @@ export default function Users() {
             )}
           </div>
 
-          <Card>
+          <Card className="overflow-hidden">
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Branch</TableHead>
-                    <TableHead>Last Seen</TableHead>
-                    <TableHead>Current Role</TableHead>
-                    <TableHead>Permissions</TableHead>
-                    {isInzan && <TableHead>Department & Title</TableHead>}
-                    <TableHead>Change Role</TableHead>
-                    <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">Actions</TableHead>
+                    <TableHead className="pl-4">Staff Member & Contact</TableHead>
+                    <TableHead className="hidden sm:table-cell">Branch & Activity</TableHead>
+                    <TableHead>Role{isInzan ? ' & Department' : ''}</TableHead>
+                    <TableHead className="hidden md:table-cell">Access & Role Switcher</TableHead>
+                    <TableHead className="text-right pr-4">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.map(user => (
                     <TableRow key={user.id} className="group hover:bg-muted/40 transition-colors">
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <UserIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                          <span>{user.name}</span>
-                          {user.id === currentUser.id && <Badge variant="outline" className="ml-1">You</Badge>}
-                          {user.status === 'nonworking' && (
-                            <Badge variant="destructive" className="ml-1 bg-red-50 text-red-700 border-red-200">Non-Working</Badge>
+                      {/* Column 1: Name + Status Badges + Email + Phone */}
+                      <TableCell className="pl-4 py-3 align-top font-medium">
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <UserIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <span className="font-bold text-sm text-foreground">{user.name}</span>
+                            {user.id === currentUser.id && <Badge variant="outline" className="text-[10px] px-1.5 py-0">You</Badge>}
+                            {user.status === 'nonworking' && (
+                              <Badge variant="destructive" className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0">Non-Working</Badge>
+                            )}
+                            {user.isPending && (
+                              <Badge variant="outline" className="text-amber-600 border-amber-400 bg-amber-50 gap-1 text-[10px] px-1.5 py-0">
+                                <Clock className="h-2.5 w-2.5" /> Pending Invite
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                            <span className="truncate max-w-[220px]">{user.email}</span>
+                            <span>•</span>
+                            {user.phone ? (
+                              <span className="font-mono text-xs text-foreground/80">{user.phone}</span>
+                            ) : (
+                              <span className="text-amber-600 text-[11px]">No Phone</span>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      {/* Column 2: Branch + Last Seen */}
+                      <TableCell className="hidden sm:table-cell py-3 align-top">
+                        <div className="flex flex-col gap-1 items-start">
+                          {user.branch ? (
+                            <Badge variant="outline" className="font-medium text-xs">{user.branch}</Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs font-normal">All Branches</Badge>
                           )}
-                          {user.isPending && (
-                            <Badge variant="outline" className="ml-1 text-amber-600 border-amber-400 bg-amber-50 gap-1">
-                              <Clock className="h-3 w-3" /> Pending Invite
-                            </Badge>
+                          <span className="text-[11px] text-muted-foreground">
+                            Seen: {safeFormatDistanceToNow(user.lastSeen, { addSuffix: true }, 'Never')}
+                          </span>
+                        </div>
+                      </TableCell>
+
+                      {/* Column 3: Role + Department/Job Title */}
+                      <TableCell className="py-3 align-top">
+                        <div className="flex flex-col gap-1 items-start">
+                          {getRoleBadge(user.role)}
+                          {isInzan && user.department && (
+                            <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                              <span className="font-semibold text-foreground/80">{user.department}</span>
+                              {user.jobTitle && <span>• {user.jobTitle}</span>}
+                              {user.trainerType && <span className="text-[10px] text-primary font-mono">({user.trainerType})</span>}
+                            </div>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        {user.phone ? (
-                          <span className="font-mono text-sm">{user.phone}</span>
-                        ) : (
-                          <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50/50 text-xs font-normal">
-                            No Phone
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {user.branch ? (
-                          <Badge variant="outline" className="font-normal">{user.branch}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">All</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {safeFormatDistanceToNow(user.lastSeen, { addSuffix: true }, 'Never')}
-                      </TableCell>
-                      <TableCell>{getRoleBadge(user.role)}</TableCell>
-                      <TableCell>
-                        {user.permissionTemplateId ? (
-                          <div className="flex flex-col gap-1">
-                            <Badge variant="outline" className="w-fit text-xs font-medium border-primary/40 text-primary bg-primary/5">
-                              <Sliders className="w-3 h-3 mr-1" />
-                              {permissionTemplates.find(t => t.id === user.permissionTemplateId)?.name || 'Assigned Template'}
-                            </Badge>
+
+                      {/* Column 4: Permissions & Role Switcher */}
+                      <TableCell className="hidden md:table-cell py-3 align-top">
+                        <div className="flex flex-col gap-1.5 items-start">
+                          {canChangeRoles ? (
+                            <Select
+                              defaultValue={user.role}
+                              onValueChange={(v) => handleRoleChange(user.id, v as UserRole)}
+                              disabled={user.id === currentUser.id}
+                            >
+                              <SelectTrigger className="w-[140px] h-8 text-xs">
+                                <SelectValue placeholder="Select role" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="rep">Rep</SelectItem>
+                                <SelectItem value="manager">Manager</SelectItem>
+                                {isInzan && <SelectItem value="fitness_manager">Fitness Manager</SelectItem>}
+                                <SelectItem value="coach">Coach</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                                <SelectItem value="crm_admin">CRM Admin</SelectItem>
+                                <SelectItem value="super_admin">Super Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Restricted</span>
+                          )}
+                          <div className="flex flex-wrap items-center gap-1">
+                            {user.permissionTemplateId ? (
+                              <Badge variant="outline" className="w-fit text-[10px] font-medium border-primary/40 text-primary bg-primary/5 px-1.5 py-0">
+                                <Sliders className="w-2.5 h-2.5 mr-1" />
+                                {permissionTemplates.find(t => t.id === user.permissionTemplateId)?.name || 'Assigned Template'}
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">Role Defaults</span>
+                            )}
                             {user.customPermissions && Object.keys(user.customPermissions).length > 0 && (
-                              <Badge className="w-fit text-[10px] bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                              <Badge className="w-fit text-[9px] bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 px-1.5 py-0">
                                 Custom Overrides
                               </Badge>
                             )}
                           </div>
-                        ) : user.customPermissions && Object.keys(user.customPermissions).length > 0 ? (
-                          <Badge className="w-fit text-xs bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                            Custom Overrides
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Role Defaults</span>
-                        )}
+                        </div>
                       </TableCell>
-                      {isInzan && (
-                        <TableCell>
-                          {user.department ? (
-                            <div className="flex flex-col gap-0.5">
-                              <Badge variant="secondary" className="w-fit text-[11px] font-semibold">{user.department}</Badge>
-                              {user.jobTitle && <span className="text-[10px] text-muted-foreground font-medium">{user.jobTitle}</span>}
-                              {user.trainerType && <span className="text-[9px] text-primary font-mono">{user.trainerType}</span>}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
-                        </TableCell>
-                      )}
-                      <TableCell>
-                        {canChangeRoles ? (
-                          <Select 
-                            defaultValue={user.role} 
-                            onValueChange={(v) => handleRoleChange(user.id, v as UserRole)}
-                            disabled={user.id === currentUser.id} // Prevent self-demotion
-                          >
-                            <SelectTrigger className="w-[150px]">
-                              <SelectValue placeholder="Select role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="rep">Rep</SelectItem>
-                              <SelectItem value="manager">Manager</SelectItem>
-                              {isInzan && <SelectItem value="fitness_manager">Fitness Manager</SelectItem>}
-                              <SelectItem value="coach">Coach</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="crm_admin">CRM Admin</SelectItem>
-                              <SelectItem value="super_admin">Super Admin</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Restricted</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors">
-                        <div className="flex items-center justify-end gap-1">
-                          {/* Activate button for pending-invite users */}
+
+                      {/* Column 5: Actions */}
+                      <TableCell className="text-right pr-4 py-3 align-top whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-0.5">
                           {user.isPending && canChangeRoles && user.id !== currentUser.id && (
                             <Button
                               variant="ghost"
@@ -909,7 +909,7 @@ export default function Users() {
                               onClick={() => handleActivatePending(user)}
                               disabled={activatingUserId === user.id}
                               title="Activate account — creates login with password 12345678"
-                              className="text-amber-600 hover:bg-amber-50"
+                              className="h-8 w-8 text-amber-600 hover:bg-amber-50"
                             >
                               {activatingUserId === user.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -924,6 +924,7 @@ export default function Users() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              className="h-8 w-8"
                               onClick={() => setPerformanceUser(user)}
                               title="View Performance & Save Targets"
                             >
@@ -935,14 +936,16 @@ export default function Users() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="h-8 w-8"
                                 onClick={() => openEditDialog(user)}
+                                title="Edit User & Permissions"
                               >
                                 <Edit className="h-4 w-4 text-muted-foreground" />
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="text-amber-600 hover:bg-amber-50"
+                                className="h-8 w-8 text-amber-600 hover:bg-amber-50"
                                 onClick={() => handleForcePasswordReset(user)}
                                 disabled={forcingResetUserId === user.id}
                                 title="Force password reset on next login"
@@ -954,9 +957,10 @@ export default function Users() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="text-destructive hover:bg-destructive/10"
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
                                 onClick={() => handleDeleteUser(user.id)}
                                 disabled={user.role === 'super_admin'}
+                                title="Delete User"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>

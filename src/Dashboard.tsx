@@ -38,7 +38,6 @@ const PRIVATE_PACKAGES = [
 ];
 
 const GROUP_PACKAGES = [
-  '6 month',
   '10s gt (adult)',
   '10s gt (kids/juniors)',
   '20s gt (adult)',
@@ -52,13 +51,15 @@ const GROUP_PACKAGES = [
 export const isPrivatePackage = (pkg: string) => {
   if (!pkg) return false;
   const lower = pkg.toLowerCase().trim();
+  if (lower.includes('group pt')) return false;
   return PRIVATE_PACKAGES.includes(lower) || /\bpt\b/i.test(pkg) || lower.includes('private');
 };
 
 export const isGroupPackage = (pkg: string) => {
   if (!pkg) return false;
   const lower = pkg.toLowerCase().trim();
-  return GROUP_PACKAGES.includes(lower) || lower.includes('group') || lower.includes('gt');
+  if (isPrivatePackage(pkg)) return false;
+  return GROUP_PACKAGES.includes(lower) || lower.includes('group') || lower.includes('gt') || lower.includes('sgf');
 };
 import { Target, Users, CalendarDays, AlertTriangle, Gift, Settings, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Trophy, Download, ArrowUpDown, UserCheck, UserPlus, Snowflake, Clock, Send, Megaphone } from 'lucide-react';
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -453,7 +454,20 @@ export default function Dashboard() {
 
     for (const c of clients) {
       if (c.status === 'Lead') leadCount++;
-      else if (c.status === 'Active') activeCount++;
+      else if (c.status === 'Active') {
+        activeCount++;
+        if (c.isNearlyExpired) {
+          nearlyExpiredArr.push(c);
+        } else if (c.membershipExpiry) {
+          const expD = safeParseISO(c.membershipExpiry);
+          if (!isNaN(expD.getTime())) {
+            const diffDays = Math.ceil((expD.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays <= 14) {
+              nearlyExpiredArr.push(c);
+            }
+          }
+        }
+      }
       else if (c.status === 'Nearly Expired') nearlyExpiredArr.push(c);
       else if (c.status === 'Expired') expiredArr.push(c);
 
@@ -850,6 +864,7 @@ export default function Dashboard() {
     const monthStart = startOfMonth(selectedMonth);
     const monthEnd = endOfMonth(selectedMonth);
     const newCount = clients.filter(c => {
+      if (c.status === 'Lead') return false;
       if (!c.startDate) return false;
       const d = safeParseISO(c.startDate);
       if (isNaN(d.getTime())) return false;

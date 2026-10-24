@@ -17,7 +17,8 @@ import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { calculatePricing, formatCurrencyAmount } from './utils/pricing';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
-import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt, RotateCcw, Tag } from 'lucide-react';
+import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt, RotateCcw, Tag, MoreHorizontal, SlidersHorizontal, X } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AlertDialog } from './components/AlertDialog';
 import { PaymentCategory, PAYMENT_CATEGORIES, resolvePaymentCategory } from './utils/paymentCategories';
@@ -79,6 +80,7 @@ export default function Payments() {
   const [isNewPaymentOpen, setIsNewPaymentOpen] = useState(false);
   const [isShiftHandoverOpen, setIsShiftHandoverOpen] = useState(false);
   const [bnplMonths, setBnplMonths] = useState<3 | 6 | 9 | 12>(6);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const isInzan = isTenantInzan(branding?.companyName) || getTenantId() === 'inzanathletics';
   const isCurrentUserAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin';
@@ -2491,144 +2493,199 @@ export default function Payments() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4 mb-6 bg-card p-4 rounded-xl border shadow-sm">
-        <div className="space-y-1.5 xl:col-span-1">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.search')}</Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder={t('payments.filters.search')} 
-              className="pl-9 h-11 bg-muted/30 border-none focus-visible:ring-1"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+      {(() => {
+        const activeAdvCount = [
+          filterPackage !== 'All',
+          filterCoach !== 'All',
+          filterSalesName !== 'All',
+          Boolean(filterDateFrom),
+          Boolean(filterDateTo),
+          Boolean(filterShowOnlyHeld),
+        ].filter(Boolean).length;
+
+        return (
+          <div className="mb-5 bg-card p-3 sm:p-4 rounded-xl border shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder={t('payments.filters.search')}
+                  className="pl-9 h-10 bg-muted/30 border-border/50 focus-visible:ring-1 text-sm"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <select
+                aria-label={t('payments.filters.method')}
+                className="flex h-10 w-[135px] sm:w-[155px] items-center justify-between rounded-md bg-muted/30 border border-border/50 px-2.5 py-1.5 text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+                value={filterMethod}
+                onChange={(e) => setFilterMethod(e.target.value)}
+              >
+                <option value="All">{t('common.all_methods')}</option>
+                <option value="Cash">{t('dashboard.cash')}</option>
+                <option value="Credit Card">{t('dashboard.visa')}</option>
+                <option value="Instapay">{t('dashboard.instapay')}</option>
+                <option value="ValU">ValU</option>
+                <option value="Sympl">Sympl</option>
+                <option value="Souhoola">Souhoola</option>
+                <option value="Fawry">Fawry</option>
+                <option value="Bank Transfer">{t('common.bank_transfer')}</option>
+                <option value="Other">{t('common.other')}</option>
+              </select>
+
+              <select
+                aria-label={t('payments.filters.branch')}
+                className="flex h-10 w-[135px] sm:w-[155px] items-center justify-between rounded-md bg-muted/30 border border-border/50 px-2.5 py-1.5 text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+                value={filterBranch}
+                onChange={(e) => setFilterBranch(e.target.value)}
+              >
+                <option value="All">{t('dashboard.all_branches')}</option>
+                {branches.map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+
+              <select
+                aria-label={t('payments.filters.sort_by')}
+                className="flex h-10 w-[145px] sm:w-[170px] items-center justify-between rounded-md bg-muted/30 border border-border/50 px-2.5 py-1.5 text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+                value={`${sortConfig.key}-${sortConfig.direction}`}
+                onChange={(e) => {
+                  const [key, direction] = e.target.value.split('-');
+                  setSortConfig({ key: key as keyof Payment, direction: direction as 'asc' | 'desc' });
+                }}
+              >
+                <option value="date-desc">{t('payments.filters.sort_options.newest_first')}</option>
+                <option value="date-asc">{t('payments.filters.sort_options.oldest_first')}</option>
+                <option value="amount-desc">{t('payments.filters.sort_options.amount_high_low')}</option>
+                <option value="amount-asc">{t('payments.filters.sort_options.amount_low_high')}</option>
+              </select>
+
+              <Button
+                type="button"
+                variant={showAdvancedFilters || activeAdvCount > 0 ? 'default' : 'outline'}
+                size="sm"
+                className="h-10 gap-1.5 px-3 text-xs font-semibold shrink-0"
+                onClick={() => setShowAdvancedFilters(prev => !prev)}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>Filters & Dates</span>
+                {activeAdvCount > 0 && (
+                  <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-background/20 px-1 text-[10px] font-bold">
+                    {activeAdvCount}
+                  </span>
+                )}
+              </Button>
+            </div>
+
+            {(showAdvancedFilters || activeAdvCount > 0) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 pt-3 border-t border-border/50">
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground ml-1">{t('payments.filters.package')}</Label>
+                  <select
+                    className="flex h-9 w-full items-center justify-between rounded-md bg-muted/30 border border-border/50 px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                    value={filterPackage}
+                    onChange={(e) => setFilterPackage(e.target.value)}
+                  >
+                    <option value="All">{t('common.all_packages')}</option>
+                    {uniquePackageNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground ml-1">{t('payments.filters.pt_coach')}</Label>
+                  <select
+                    className="flex h-9 w-full items-center justify-between rounded-md bg-muted/30 border border-border/50 px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                    value={filterCoach}
+                    onChange={(e) => setFilterCoach(e.target.value)}
+                  >
+                    <option value="All">{t('common.all_coaches')}</option>
+                    {uniqueCoachNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground ml-1">{t('payments.filters.sales_person')}</Label>
+                  <select
+                    className="flex h-9 w-full items-center justify-between rounded-md bg-muted/30 border border-border/50 px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                    value={filterSalesName}
+                    onChange={(e) => setFilterSalesName(e.target.value)}
+                  >
+                    <option value="All">{t('dashboard.all_reps')}</option>
+                    {uniqueSalesNames.map((name: string) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground ml-1">{t('payments.filters.from_date')}</Label>
+                  <Input
+                    type="date"
+                    className="flex h-9 w-full rounded-md bg-muted/30 border border-border/50 px-2.5 py-1 text-xs focus-visible:ring-1"
+                    value={filterDateFrom}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-muted-foreground ml-1">{t('payments.filters.to_date')}</Label>
+                  <Input
+                    type="date"
+                    className="flex h-9 w-full rounded-md bg-muted/30 border border-border/50 px-2.5 py-1 text-xs focus-visible:ring-1"
+                    value={filterDateTo}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex flex-col justify-end gap-1.5">
+                  <div className="flex items-center gap-2 h-9">
+                    <Checkbox
+                      id="filterHeld"
+                      checked={filterShowOnlyHeld}
+                      onCheckedChange={(checked) => setFilterShowOnlyHeld(checked as boolean)}
+                    />
+                    <Label htmlFor="filterHeld" className="text-xs font-semibold text-muted-foreground cursor-pointer">
+                      {t('payments.filters.show_only_held')}
+                    </Label>
+                    {activeAdvCount > 0 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground ml-auto"
+                        onClick={() => {
+                          setFilterPackage('All');
+                          setFilterCoach('All');
+                          setFilterSalesName('All');
+                          setFilterDateFrom('');
+                          setFilterDateTo('');
+                          setFilterShowOnlyHeld(false);
+                        }}
+                      >
+                        Reset
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-        
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.method')}</Label>
-          <select 
-            className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
-            value={filterMethod}
-            onChange={(e) => setFilterMethod(e.target.value)}
-          >
-            <option value="All">{t('common.all_methods')}</option>
-            <option value="Cash">{t('dashboard.cash')}</option>
-            <option value="Credit Card">{t('dashboard.visa')}</option>
-            <option value="Instapay">{t('dashboard.instapay')}</option>
-            <option value="ValU">ValU</option>
-            <option value="Sympl">Sympl</option>
-            <option value="Souhoola">Souhoola</option>
-            <option value="Fawry">Fawry</option>
-            <option value="Bank Transfer">{t('common.bank_transfer')}</option>
-            <option value="Other">{t('common.other')}</option>
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.branch')}</Label>
-          <select 
-            className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
-            value={filterBranch}
-            onChange={(e) => setFilterBranch(e.target.value)}
-          >
-            <option value="All">{t('dashboard.all_branches')}</option>
-            {branches.map(b => (
-              <option key={b} value={b}>{b}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.package')}</Label>
-          <select
-            className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
-            value={filterPackage}
-            onChange={(e) => setFilterPackage(e.target.value)}
-          >
-            <option value="All">{t('common.all_packages')}</option>
-            {uniquePackageNames.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.pt_coach')}</Label>
-          <select
-            className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
-            value={filterCoach}
-            onChange={(e) => setFilterCoach(e.target.value)}
-          >
-            <option value="All">{t('common.all_coaches')}</option>
-            {uniqueCoachNames.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.sales_person')}</Label>
-          <select 
-            className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
-            value={filterSalesName}
-            onChange={(e) => setFilterSalesName(e.target.value)}
-          >
-            <option value="All">{t('dashboard.all_reps')}</option>
-            {uniqueSalesNames.map((name: string) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.from_date')}</Label>
-          <Input 
-            type="date"
-            className="flex h-11 w-full rounded-md bg-muted/30 px-3 py-2 text-sm border-none focus-visible:ring-1"
-            value={filterDateFrom}
-            onChange={(e) => setFilterDateFrom(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.to_date')}</Label>
-          <Input 
-            type="date"
-            className="flex h-11 w-full rounded-md bg-muted/30 px-3 py-2 text-sm border-none focus-visible:ring-1"
-            value={filterDateTo}
-            onChange={(e) => setFilterDateTo(e.target.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('payments.filters.sort_by')}</Label>
-          <select
-            className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 border-none"
-            value={`${sortConfig.key}-${sortConfig.direction}`}
-            onChange={(e) => {
-              const [key, direction] = e.target.value.split('-');
-              setSortConfig({ key: key as keyof Payment, direction: direction as 'asc' | 'desc' });
-            }}
-          >
-            <option value="date-desc">{t('payments.filters.sort_options.newest_first')}</option>
-            <option value="date-asc">{t('payments.filters.sort_options.oldest_first')}</option>
-            <option value="amount-desc">{t('payments.filters.sort_options.amount_high_low')}</option>
-            <option value="amount-asc">{t('payments.filters.sort_options.amount_low_high')}</option>
-          </select>
-        </div>
-
-        <div className="flex items-center gap-3 xl:col-span-1">
-          <Checkbox
-            id="filterHeld"
-            checked={filterShowOnlyHeld}
-            onCheckedChange={(checked) => setFilterShowOnlyHeld(checked as boolean)}
-          />
-          <Label htmlFor="filterHeld" className="text-xs font-semibold text-muted-foreground cursor-pointer">
-            {t('payments.filters.show_only_held')}
-          </Label>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* ── PT Coach Earnings (visible only when there are PT payments in the current view) ── */}
       {coachEarnings.length > 0 && (
@@ -2679,25 +2736,18 @@ export default function Payments() {
         </Card>
       )}
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('payments.table.date')}</TableHead>
-                  <TableHead>{t('payments.table.client')}</TableHead>
+                  <TableHead className="pl-4">{t('payments.table.date')}</TableHead>
+                  <TableHead>{t('payments.table.client')} & {t('payments.table.package')}</TableHead>
                   <TableHead>{t('payments.table.amount')}</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden sm:table-cell">{t('payments.table.branch')}</TableHead>
-                  <TableHead className="hidden sm:table-cell">{t('payments.table.method')}</TableHead>
-                  <TableHead className="hidden md:table-cell">{t('payments.table.package')}</TableHead>
-                  <TableHead className="hidden lg:table-cell">{t('payments.receipt_no')}</TableHead>
-                  {isInzan && <TableHead className="hidden lg:table-cell">Created Date</TableHead>}
-                  {isInzan && <TableHead className="hidden lg:table-cell">Created By</TableHead>}
-                  <TableHead className="hidden xl:table-cell">{t('payments.table.sales_member')}</TableHead>
-                  <TableHead className="hidden xl:table-cell">{t('payments.table.notes')}</TableHead>
-                  <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">{t('payments.table.actions')}</TableHead>
+                  <TableHead className="hidden sm:table-cell">{t('payments.table.method')} & {t('payments.table.branch')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('payments.table.sales_member')}</TableHead>
+                  <TableHead className="text-right pr-4 w-[108px]">{t('payments.table.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2705,15 +2755,14 @@ export default function Payments() {
                   paginatedPayments.map(payment => {
                     const client = resolvePaymentClient(payment);
                     const isGuestPayment = (payment as any).isGuest || payment.clientId === 'WALK-IN-GUEST' || !!(payment.guestName || (payment as any).guest_name);
-                    const clientDisplayName = 
-                      client?.name || 
-                      payment.clientName || 
-                      payment.client_name || 
-                      payment.guestName || 
-                      (payment as any).guest_name || 
+                    const clientDisplayName =
+                      client?.name ||
+                      payment.clientName ||
+                      payment.client_name ||
+                      payment.guestName ||
+                      (payment as any).guest_name ||
                       (t('payments.table.unknown_client') || 'Walk-in Guest');
                     const recordedByUser = users.find(u => u.id === payment.recordedBy);
-                    // Fallback: use stored name, then resolved user display, then sales_rep user, then default
                     const salesRepUser = !recordedByUser ? users.find(u => u.id === payment.sales_rep_id) : null;
                     const recordedByLabel = recordedByUser?.name
                       || (payment as any).recordedByName
@@ -2721,32 +2770,48 @@ export default function Payments() {
                       || salesRepUser?.name
                       || (payment as any).sales_rep_name
                       || '—';
+                    const editEligibility = isPaymentEditableByStaff(payment, currentUser, can('payments.edit'));
+                    const isPaymentRepLocked = isInzan && Boolean(client?.assignedTo || client?.salesRep || payment.sales_rep_id || payment.salesName);
+                    const resolvedBranchLabel = resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : t('leads.tabs.unassigned');
+
                     return (
                       <TableRow key={payment.id} className="group hover:bg-muted/40 transition-colors">
-                        <TableCell className="text-xs sm:text-sm">
-                          {payment.date ? (() => {
-                            const egyptDate = getEgyptDate(payment.date);
-                            const paymentYear = egyptDate.getFullYear();
-                            return (
-                              <>
-                                <div className="font-medium">
-                                  {safeFormatDate(egyptDate, 'MMM d')}
-                                  {paymentYear !== new Date().getFullYear() && (
-                                    <span className="text-[10px] text-amber-600 font-semibold ml-1">
-                                      {paymentYear}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[10px] text-muted-foreground">{payment.created_at ? safeFormatDate(getEgyptDate(payment.created_at), 'h:mm a') : safeFormatDate(egyptDate, 'h:mm a')}</div>
-                              </>
-                            );
-                          })() : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
+                        {/* Column 1: Date, Time & Receipt # */}
+                        <TableCell className="pl-4 py-3 text-xs sm:text-sm whitespace-nowrap align-top">
+                          <div className="flex flex-col gap-0.5">
+                            {payment.date ? (() => {
+                              const egyptDate = getEgyptDate(payment.date);
+                              const paymentYear = egyptDate.getFullYear();
+                              return (
+                                <>
+                                  <div className="font-semibold text-foreground">
+                                    {safeFormatDate(egyptDate, 'MMM d')}
+                                    {paymentYear !== new Date().getFullYear() && (
+                                      <span className="text-[10px] text-amber-600 font-semibold ml-1">
+                                        {paymentYear}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground">
+                                    {payment.created_at ? safeFormatDate(getEgyptDate(payment.created_at), 'h:mm a') : safeFormatDate(egyptDate, 'h:mm a')}
+                                  </div>
+                                </>
+                              );
+                            })() : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                            {payment.receiptSerial && (
+                              <span className="font-mono text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded w-fit mt-0.5">
+                                #{payment.receiptSerial}
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
-                        <TableCell className="font-medium text-xs sm:text-sm">
+
+                        {/* Column 2: Client Name + Package + Coach */}
+                        <TableCell className="py-3 font-medium text-xs sm:text-sm align-top">
                           <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               {client ? (
                                 <button
                                   type="button"
@@ -2754,13 +2819,13 @@ export default function Payments() {
                                     setActiveTab('clients');
                                     setActiveClientId(client.id);
                                   }}
-                                  className="text-primary hover:underline font-semibold text-xs sm:text-sm text-left"
+                                  className="text-primary hover:underline font-bold text-xs sm:text-sm text-left"
                                 >
                                   {client.name}
                                 </button>
                               ) : (
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-semibold text-xs sm:text-sm text-foreground">{clientDisplayName}</span>
+                                  <span className="font-bold text-xs sm:text-sm text-foreground">{clientDisplayName}</span>
                                   {isGuestPayment && (
                                     <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-border/60 font-medium">
                                       {t('payments.table.walk_in_tag') || 'Guest'}
@@ -2769,26 +2834,49 @@ export default function Payments() {
                                 </div>
                               )}
                               {payment.isOnHold && (
-                                <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px]" title={payment.holdReason || t('payments.hold')}>
+                                <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px] px-1.5 py-0" title={payment.holdReason || t('payments.hold')}>
                                   {t('payments.hold')}
                                 </Badge>
                               )}
                             </div>
+
+                            {/* Package & Coach stacked cleanly right under Client Name */}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="outline" className="text-[10px] font-semibold bg-muted/30 max-w-[200px] truncate">
+                                {payment.packageType || '—'}
+                              </Badge>
+                              {payment.linkedEntitlementId && (
+                                <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 text-[9px] px-1 h-4 shadow-none" title="Linked to Entitlement">
+                                  Entitled
+                                </Badge>
+                              )}
+                              {payment.coachName && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  • {t('payments.coach')}: <strong className="text-foreground/80">{payment.coachName}</strong>
+                                </span>
+                              )}
+                            </div>
+
                             {payment.isOnHold && payment.holdReason && (
                               <span className="text-[10px] text-amber-600 dark:text-amber-400">{payment.holdReason}</span>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="text-xs sm:text-sm">
-                          <div className="flex flex-col">
+
+                        {/* Column 3: Amount + Status + Discount/Debt */}
+                        <TableCell className="py-3 text-xs sm:text-sm whitespace-nowrap align-top">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-green-600 dark:text-green-400 text-xs sm:text-sm">
+                                {payment.amount.toLocaleString()} {t('payments.currency_le')}
+                              </span>
+                              {renderStatusBadge(payment.status)}
+                            </div>
                             {payment.originalAmount && payment.originalAmount > payment.amount ? (
-                              <span className="text-[11px] text-muted-foreground line-through font-mono">
+                              <span className="text-[10px] text-muted-foreground line-through font-mono">
                                 {payment.originalAmount.toLocaleString()} {t('payments.currency_le')}
                               </span>
                             ) : null}
-                            <span className="font-bold text-green-600">
-                              {payment.amount.toLocaleString()} {t('payments.currency_le')}
-                            </span>
                             {(() => {
                               const val = Number(payment.discountValue) || 0;
                               const orig = Number(payment.originalAmount) || 0;
@@ -2824,108 +2912,81 @@ export default function Payments() {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {renderStatusBadge(payment.status)}
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          <Badge variant="secondary" className="text-[10px]">
-                            {resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : t('leads.tabs.unassigned')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          <div className="flex items-center">
-                            {getMethodIcon(payment.method)}
-                            <div className="space-y-0.5">
-                              <div className="text-xs sm:text-sm flex items-center gap-1.5">
-                                <span>
-                                  {payment.method === 'Cash' ? t('dashboard.cash') : payment.method === 'Credit Card' ? t('dashboard.visa') : payment.method === 'Bank Transfer' ? t('common.bank_transfer') : payment.method === 'Instapay' ? t('dashboard.instapay') : payment.method === 'Other' ? t('common.other') : payment.method}
-                                </span>
-                                {(payment.method === 'Instapay' || payment.secondaryMethod === 'Instapay') && (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      const nextVerified = !payment.instapayVerified;
-                                      await updatePayment(payment.id, {
-                                        instapayVerified: nextVerified,
-                                        instapayVerifiedBy: nextVerified ? (currentUser?.name || 'Admin') : '',
-                                        instapayVerifiedAt: nextVerified ? new Date().toISOString() : '',
-                                      } as any);
-                                    }}
-                                    title={
-                                      payment.instapayVerified
-                                        ? `Verified by ${payment.instapayVerifiedBy || 'Admin'} — click to unverify`
-                                        : 'Click to verify InstaPay transfer in bank statement'
-                                    }
-                                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
-                                      payment.instapayVerified
-                                        ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
-                                        : 'bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500/25'
-                                    }`}
-                                  >
-                                    {payment.instapayVerified ? '✓ IPN Verified' : '⏳ Verify IPN'}
-                                  </button>
-                                )}
-                              </div>
+
+                        {/* Column 4: Method + IPN + Branch */}
+                        <TableCell className="hidden sm:table-cell py-3 align-top">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="inline-flex items-center text-xs font-medium">
+                                {getMethodIcon(payment.method)}
+                                {payment.method === 'Cash' ? t('dashboard.cash') : payment.method === 'Credit Card' ? t('dashboard.visa') : payment.method === 'Bank Transfer' ? t('common.bank_transfer') : payment.method === 'Instapay' ? t('dashboard.instapay') : payment.method === 'Other' ? t('common.other') : payment.method}
+                              </span>
+                              {(payment.method === 'Instapay' || payment.secondaryMethod === 'Instapay') && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const nextVerified = !payment.instapayVerified;
+                                    await updatePayment(payment.id, {
+                                      instapayVerified: nextVerified,
+                                      instapayVerifiedBy: nextVerified ? (currentUser?.name || 'Admin') : '',
+                                      instapayVerifiedAt: nextVerified ? new Date().toISOString() : '',
+                                    } as any);
+                                  }}
+                                  title={
+                                    payment.instapayVerified
+                                      ? `Verified by ${payment.instapayVerifiedBy || 'Admin'} — click to unverify`
+                                      : 'Click to verify InstaPay transfer in bank statement'
+                                  }
+                                  className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors ${
+                                    payment.instapayVerified
+                                      ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                                      : 'bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500/25'
+                                  }`}
+                                >
+                                  {payment.instapayVerified ? '✓ IPN' : '⏳ Verify'}
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                                {resolvedBranchLabel}
+                              </Badge>
                               {payment.instapayRef && (
-                                <div className="text-[10px] text-muted-foreground font-mono">
-                                  {t('payments.ref')}: {payment.instapayRef}
-                                </div>
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  #{payment.instapayRef}
+                                </span>
                               )}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell className="hidden md:table-cell">
-                          <div className="flex flex-col gap-1 items-start">
-                            <div className="flex items-center gap-1">
-                              <Badge variant="outline" className="text-[10px] sm:text-xs">{payment.packageType}</Badge>
-                              {payment.linkedEntitlementId && (
-                                <Badge variant="secondary" className="bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 text-[9px] px-1 h-4 shadow-none" title="Linked to Entitlement">
-                                  Entitled
-                                </Badge>
-                              )}
-                            </div>
-                            {payment.coachName && (
-                              <span className="text-[10px] text-muted-foreground flex items-center">
-                                <span className="font-medium">{t('payments.coach')}:</span> <span className="ml-1">{payment.coachName}</span>
+
+                        {/* Column 5: Sales Rep + Recorded By + Notes */}
+                        <TableCell className="hidden md:table-cell py-3 align-top">
+                          <div className="flex flex-col gap-1 max-w-[190px]">
+                            {payment.salesName ? (
+                              <Badge variant="outline" className="flex items-center gap-1 w-fit text-[10px] bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200 px-2 py-0">
+                                <User className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate max-w-[140px]">{resolveUserDisplay(payment.salesName, users, payment.salesName || '')}</span>
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                            {isInzan && recordedByLabel && recordedByLabel !== '—' && (
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                By: <strong className="font-medium text-foreground/80">{recordedByLabel}</strong>
+                              </span>
+                            )}
+                            {payment.notes && (
+                              <span className="text-[10px] text-muted-foreground truncate" title={payment.notes}>
+                                {payment.notes}
                               </span>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {payment.receiptSerial || '—'}
-                          </span>
-                        </TableCell>
-                        {isInzan && (
-                          <>
-                        <TableCell className="text-muted-foreground text-xs hidden lg:table-cell whitespace-nowrap">
-                          {payment.created_at ? (
-                            <div>
-                              <div className="font-medium text-foreground">{safeFormatDate(getEgyptDate(payment.created_at), 'MMM d, yyyy')}</div>
-                              <div className="text-[10px] text-muted-foreground">{safeFormatDate(getEgyptDate(payment.created_at), 'h:mm a')}</div>
-                            </div>
-                          ) : payment.date ? (
-                            <div className="font-medium text-foreground">{safeFormatDate(getEgyptDate(payment.date), 'MMM d, yyyy')}</div>
-                          ) : (
-                            '—'
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-xs sm:text-sm hidden lg:table-cell">
-                          <span className="font-medium text-foreground">{recordedByLabel}</span>
-                        </TableCell>
-                          </>
-                        )}
-                        <TableCell className="hidden xl:table-cell">
-                          {payment.salesName ? (
-                            <Badge variant="outline" className="flex items-center gap-1 w-fit bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200">
-                              <User className="h-3 w-3" />
-                              {resolveUserDisplay(payment.salesName, users, payment.salesName || '')}
-                            </Badge>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-xs hidden xl:table-cell">{payment.notes || '-'}</TableCell>
-                        <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors">
-                          <div className="flex items-center justify-end gap-1">
+
+                        {/* Column 6: Compact Actions (WhatsApp + Thermal Receipt + ⋯ More Menu) */}
+                        <TableCell className="text-right pr-4 py-3 align-top whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-0.5">
                             {(() => {
                               const waUrl = buildWhatsAppPaymentReceiptUrl({
                                 payment,
@@ -2946,32 +3007,120 @@ export default function Payments() {
                             })()}
                             <Button
                               variant="ghost"
-                              size="sm"
+                              size="icon"
                               onClick={() => printThermal80mmReceipt(payment, client)}
                               title="Print 80mm Thermal POS Receipt"
-                              className="text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                              className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
                             >
                               <Receipt className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => printInvoice(payment, client)} title={t('payments.print_invoice')}>
-                              <Printer className="h-4 w-4" />
-                            </Button>
+
+                            {/* Compact ⋯ Actions Menu */}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                    title="More Payment Actions"
+                                  />
+                                }
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => printInvoice(payment, client)}>
+                                  <Printer className="h-4 w-4 text-muted-foreground" />
+                                  <span>{t('payments.print_invoice') || 'Print A4 Invoice'}</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    setUpgradePaymentId(payment.id);
+                                    setIsUpgradeDialogOpen(true);
+                                    setUpgradePackageType('');
+                                    setUpgradeMethod(payment.method || 'Cash');
+                                    setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd'));
+                                  }}
+                                >
+                                  <TrendingUp className="h-4 w-4 text-blue-600" />
+                                  <span>{t('payments.upgrade_package') || 'Upgrade Package'}</span>
+                                </DropdownMenuItem>
+                                {editEligibility.canEdit && (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setEditingPaymentId(payment.id);
+                                      setEditAmount(payment.amount.toString());
+                                      setEditNotes(payment.notes || '');
+                                      setEditBranch(resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : '');
+                                      setEditMethod(payment.method);
+                                      setEditSalesName(payment.salesName || '');
+                                      setEditCoachName(payment.coachName || '');
+                                      setEditClientName(client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '');
+                                      setEditClientPhone(client?.phone || (client?.memberId ? String(client.memberId) : ''));
+                                      setEditPaymentDate(payment.date ? payment.date.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'));
+                                    }}
+                                  >
+                                    <DollarSign className="h-4 w-4 text-emerald-600" />
+                                    <span>{t('payments.edit_payment') || 'Edit Payment'}</span>
+                                  </DropdownMenuItem>
+                                )}
+                                {!payment.isOnHold ? (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setHoldPaymentId(payment.id);
+                                      setIsHoldDialogOpen(true);
+                                      setHoldReason('');
+                                    }}
+                                  >
+                                    <Pause className="h-4 w-4 text-amber-600" />
+                                    <span>{t('payments.hold_payment') || 'Put Payment On Hold'}</span>
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem onClick={() => handleReleasePayment(payment.id)}>
+                                    <Play className="h-4 w-4 text-emerald-600" />
+                                    <span>{t('payments.release_payment') || 'Release from Hold'}</span>
+                                  </DropdownMenuItem>
+                                )}
+                                {(!payment.status || payment.status === 'paid') && (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setRefundPaymentId(payment.id);
+                                      setRefundAmount(payment.amount.toString());
+                                      setRefundMethod('Original Method');
+                                      setRefundReason('');
+                                      setIsRefundDialogOpen(true);
+                                    }}
+                                  >
+                                    <RotateCcw className="h-4 w-4 text-purple-600" />
+                                    <span>Request Refund</span>
+                                  </DropdownMenuItem>
+                                )}
+                                {canDeletePayment && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      disabled={payment.isOnHold}
+                                      onClick={() => {
+                                        if (!payment.isOnHold) handleDeletePayment(payment.id);
+                                      }}
+                                      className="text-destructive focus:text-destructive"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      <span>{payment.isOnHold ? t('payments.cannot_delete_held') : (t('payments.delete_payment') || 'Delete Payment')}</span>
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            {/* Controlled Dialogs for Upgrade, Edit, Hold, and Refund */}
                             <Dialog open={isUpgradeDialogOpen && upgradePaymentId === payment.id} onOpenChange={(open) => {
-                              if (open) {
-                                setUpgradePaymentId(payment.id);
-                                setIsUpgradeDialogOpen(true);
-                                setUpgradePackageType('');
-                                setUpgradeMethod(payment.method || 'Cash');
-                                setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd'));
-                              } else {
+                              if (!open) {
                                 setIsUpgradeDialogOpen(false);
                                 setUpgradePaymentId(null);
                               }
                             }}>
-                              <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.upgrade_package') || 'Upgrade Package'} className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 gap-1" />}>
-                                <TrendingUp className="h-4 w-4" />
-                                <span className="hidden xl:inline text-xs font-semibold">Upgrade</span>
-                              </DialogTrigger>
                               <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
                                 <DialogHeader>
                                   <DialogTitle className="text-xl font-bold">{t('payments.upgrade.title')}</DialogTitle>
@@ -3048,356 +3197,293 @@ export default function Payments() {
                                 </div>
                               </DialogContent>
                             </Dialog>
-                            {(() => {
-                              const editEligibility = isPaymentEditableByStaff(payment, currentUser, can('payments.edit'));
-                              if (!editEligibility.canEdit) return null;
-                              const isPaymentRepLocked = isInzan && Boolean(client?.assignedTo || client?.salesRep || payment.sales_rep_id || payment.salesName);
-                              return (
-                                <Dialog open={editingPaymentId === payment.id} onOpenChange={(open) => {
-                                  if (open) {
-                                    setEditingPaymentId(payment.id);
-                                    setEditAmount(payment.amount.toString());
-                                    setEditNotes(payment.notes || '');
-                                    setEditBranch(resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : '');
-                                    setEditMethod(payment.method);
-                                    setEditSalesName(payment.salesName || '');
-                                    setEditCoachName(payment.coachName || '');
-                                    setEditClientName(client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '');
-                                    setEditClientPhone(client?.phone || (client?.memberId ? String(client.memberId) : ''));
-                                    setEditPaymentDate(payment.date ? payment.date.substring(0, 10) : format(new Date(), 'yyyy-MM-dd'));
-                                  } else {
-                                    setEditingPaymentId(null);
-                                  }
-                                }}>
-                                  <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.edit_payment')} />}>
-                                    <DollarSign className="h-4 w-4" />
-                                  </DialogTrigger>
-                                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                                    <DialogHeader>
-                                      <DialogTitle>{t('payments.edit.title')} - {client?.name || clientDisplayName}</DialogTitle>
-                                    </DialogHeader>
-                                    <div className="grid grid-cols-2 gap-4">
-                                      <div>
-                                        <Label className="text-xs font-semibold">{t('payments.edit.payment_date')}</Label>
-                                        <Input
-                                          type="date"
-                                          value={editPaymentDate}
-                                          onChange={(e) => setEditPaymentDate(e.target.value)}
-                                          max={format(new Date(), 'yyyy-MM-dd')}
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-xs font-semibold">{t('payments.edit.customer_name')}</Label>
-                                        <Input
-                                          value={editClientName}
-                                          onChange={(e) => setEditClientName(e.target.value)}
-                                          placeholder={t('payments.edit.customer_name')}
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-xs font-semibold">{t('payments.edit.customer_phone')}</Label>
-                                        <Input
-                                          value={editClientPhone}
-                                          onChange={(e) => setEditClientPhone(e.target.value)}
-                                          placeholder={t('payments.edit.customer_phone')}
-                                        />
-                                      </div>
-                                      <div>
-                                        <Label className="text-xs font-semibold">{t('payments.edit.branch')}</Label>
-                                        <Select value={editBranch} onValueChange={(val) => setEditBranch(val || '')}>
-                                          <SelectTrigger className="h-9">
-                                            <SelectValue placeholder={t('payments.edit.select_branch')} />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {branches.map(b => (
-                                              <SelectItem key={b} value={b}>{b}</SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      <div>
-                                        <Label className="text-xs font-semibold">{t('payments.edit.method')}</Label>
-                                        <Select value={editMethod} onValueChange={(val) => setEditMethod(val as Payment['method'])}>
-                                          <SelectTrigger className="h-9">
-                                            <SelectValue placeholder={t('payments.edit.select_method')} />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="Cash">{t('dashboard.cash')}</SelectItem>
-                                            <SelectItem value="Credit Card">{t('dashboard.visa')}</SelectItem>
-                                            <SelectItem value="Bank Transfer">{t('common.bank_transfer')}</SelectItem>
-                                            <SelectItem value="Instapay">{t('dashboard.instapay')}</SelectItem>
-                                            <SelectItem value="Other">{t('common.other')}</SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-1">
-                                          <Label className="text-xs font-semibold">{t('payments.edit.sales_name')}</Label>
-                                          {(isInzan && isPaymentRepLocked && !isSalesManager) ? (
-                                            <span className="text-[10px] text-amber-500 font-bold">🔒 Locked</span>
-                                          ) : isInzan && isSalesManager && isPaymentRepLocked ? (
-                                            <span className="text-[10px] text-emerald-500 font-bold">Manager Authority</span>
-                                          ) : null}
-                                        </div>
-                                        <Select
-                                          value={editSalesName}
-                                          disabled={isInzan && isPaymentRepLocked && !isSalesManager}
-                                          onValueChange={(val) => {
-                                            if (!val) return;
-                                            if (isInzan && isSalesManager && editSalesName && editSalesName !== val) {
-                                              setPendingSalesName(val);
-                                              setReassignPaymentTarget({ isEdit: true, oldName: editSalesName, newName: val, paymentId: payment.id });
-                                              setSalesReassignConfirmOpen(true);
-                                            } else {
-                                              setEditSalesName(val);
-                                            }
-                                          }}
-                                        >
-                                          <SelectTrigger className="h-9 disabled:opacity-60 disabled:cursor-not-allowed">
-                                            <SelectValue placeholder={t('payments.edit.select_sales_rep')} />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {uniqueSalesNames.map((name: string) => (
-                                              <SelectItem key={name} value={name}>
-                                                {name}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                      {(payment.package_category_type === 'PT' || (payment.package_category_type as string) === 'Private Training' || payment.coachName) && (
-                                        <div>
-                                          <Label className="text-xs font-semibold">Coach Name</Label>
-                                          <Select value={editCoachName} onValueChange={(val) => setEditCoachName(val || '')}>
-                                            <SelectTrigger className="h-9">
-                                              <SelectValue placeholder="Select Coach" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                              <SelectItem value="unassigned">Unassigned</SelectItem>
-                                              {coaches.map(c => (
-                                                <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
-                                              ))}
-                                            </SelectContent>
-                                          </Select>
-                                        </div>
-                                      )}
-                                      <div>
-                                        <Label className="text-xs font-semibold">{t('payments.edit.amount')}</Label>
-                                        <Input
-                                          type="number"
-                                          value={editAmount}
-                                          onChange={(e) => setEditAmount(e.target.value)}
-                                          step="0.01"
-                                        />
-                                      </div>
-                                      <div className="col-span-2">
-                                        <Label className="text-xs font-semibold">{t('payments.edit.notes')}</Label>
-                                        <Input
-                                          value={editNotes}
-                                          onChange={(e) => setEditNotes(e.target.value)}
-                                          placeholder={t('payments.edit.notes_placeholder')}
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="flex gap-2 mt-6">
-                                      <Button
-                                        variant="outline"
-                                        onClick={() => setEditingPaymentId(null)}
-                                      >
-                                        {t('common.cancel')}
-                                      </Button>
-                                      <Button
-                                        onClick={async () => {
-                                          const salesRepUser = users.find(u => 
-                                            u.id === editSalesName || 
-                                            (toCanonical(u.name || u.email || '').toLowerCase() === toCanonical(editSalesName || '').toLowerCase())
-                                          );
-                                          const rawRepId = salesRepUser ? salesRepUser.id : undefined;
 
-                                          const repId = (isPaymentRepLocked && !isSalesManager)
-                                            ? (payment.sales_rep_id || client?.assignedTo || client?.salesRep)
-                                            : rawRepId;
-                                          const repName = (isPaymentRepLocked && !isSalesManager)
-                                            ? (payment.salesName || resolveUserDisplay(repId, users, ''))
-                                            : editSalesName;
-
-                                          await updatePayment(payment.id, {
-                                            amount: parseFloat(editAmount),
-                                            notes: editNotes || undefined,
-                                            branch: editBranch || undefined,
-                                            branchId: toCanonicalBranchId(editBranch) || undefined,
-                                            clientBranch: editBranch || undefined,
-                                            method: editMethod,
-                                            salesName: repName || undefined,
-                                            sales_rep_id: repId || undefined,
-                                            coachName: (editCoachName && editCoachName !== 'unassigned') ? editCoachName : undefined,
-                                            date: editPaymentDate ? safeIsoDate(editPaymentDate) : payment.date,
-                                          });
-                                          setEditingPaymentId(null);
-                                        }}
-                                      >
-                                        {t('payments.edit.save_changes')}
-                                      </Button>
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
-                              );
-                            })()}
-                            {!payment.isOnHold ? (
-                              <Dialog open={isHoldDialogOpen && holdPaymentId === payment.id} onOpenChange={(open) => {
-                                if (open) {
-                                  setHoldPaymentId(payment.id);
-                                  setIsHoldDialogOpen(true);
-                                  setHoldReason('');
-                                } else {
-                                  setIsHoldDialogOpen(false);
-                                  setHoldPaymentId(null);
-                                  setHoldReason('');
-                                }
+                            {editEligibility.canEdit && (
+                              <Dialog open={editingPaymentId === payment.id} onOpenChange={(open) => {
+                                if (!open) setEditingPaymentId(null);
                               }}>
-                                <DialogTrigger render={<Button variant="ghost" size="sm" title={t('payments.hold_payment')} className="text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20" />}>
-                                  <Pause className="h-4 w-4" />
-                                </DialogTrigger>
-                                <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl rounded-2xl p-6">
+                                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                                   <DialogHeader>
-                                    <DialogTitle>{t('payments.hold_dialog.title')}</DialogTitle>
+                                    <DialogTitle>{t('payments.edit.title')} - {client?.name || clientDisplayName}</DialogTitle>
                                   </DialogHeader>
-                                  <div className="space-y-4">
-                                    <p className="text-sm text-muted-foreground">
-                                      {t('payments.hold_dialog.hint').split(/(\{name\})/g).map((part, i) => {
-                                        if (part === '{name}') return <strong key={i}>{client?.name}</strong>;
-                                        return part;
-                                      })}
-                                    </p>
-                                    <div className="space-y-2">
-                                      <Label htmlFor="holdReason" className="text-sm font-semibold">{t('payments.hold_dialog.reason')}</Label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.payment_date')}</Label>
                                       <Input
-                                        id="holdReason"
-                                        placeholder={t('payments.hold_dialog.reason_placeholder')}
-                                        value={holdReason}
-                                        onChange={(e) => setHoldReason(e.target.value)}
-                                        className="rounded-lg"
+                                        type="date"
+                                        value={editPaymentDate}
+                                        onChange={(e) => setEditPaymentDate(e.target.value)}
+                                        max={format(new Date(), 'yyyy-MM-dd')}
                                       />
                                     </div>
-                                    <div className="flex gap-2 justify-end pt-4">
-                                      <Button variant="outline" onClick={() => setIsHoldDialogOpen(false)}>
-                                        {t('common.cancel')}
-                                      </Button>
-                                      <Button onClick={handleHoldPayment} className="bg-amber-600 hover:bg-amber-700">
-                                        {t('payments.hold_dialog.confirm_hold')}
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </DialogContent>
-                              </Dialog>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20"
-                                onClick={() => handleReleasePayment(payment.id)}
-                                title={t('payments.release_payment')}
-                              >
-                                <Play className="h-4 w-4" />
-                              </Button>
-                            )}
-
-                            {/* Refund Request Button for paid payments */}
-                            {(!payment.status || payment.status === 'paid') && (
-                              <Dialog open={isRefundDialogOpen && refundPaymentId === payment.id} onOpenChange={(open) => {
-                                if (open) {
-                                  setRefundPaymentId(payment.id);
-                                  setRefundAmount(payment.amount.toString());
-                                  setRefundMethod('Original Method');
-                                  setRefundReason('');
-                                  setIsRefundDialogOpen(true);
-                                } else {
-                                  setIsRefundDialogOpen(false);
-                                  setRefundPaymentId(null);
-                                }
-                              }}>
-                                <DialogTrigger render={<Button variant="ghost" size="sm" title="Request Refund" className="text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20" />}>
-                                  <RotateCcw className="h-4 w-4" />
-                                </DialogTrigger>
-                                <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl rounded-2xl p-6">
-                                  <DialogHeader>
-                                    <DialogTitle className="flex items-center gap-2">
-                                      <RotateCcw className="h-5 w-5 text-purple-600" />
-                                      Request Refund
-                                    </DialogTitle>
-                                  </DialogHeader>
-                                  <div className="space-y-4 pt-2">
-                                    <p className="text-sm text-muted-foreground">
-                                      Submit a maker-checker refund request for <strong>{clientDisplayName}</strong>.
-                                    </p>
-
-                                    <div className="space-y-2">
-                                      <Label className="text-sm font-semibold">Refund Amount (LE)</Label>
+                                    <div>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.customer_name')}</Label>
                                       <Input
-                                        type="number"
-                                        min="1"
-                                        max={payment.amount}
-                                        placeholder="Refund Amount"
-                                        value={refundAmount}
-                                        onChange={(e) => setRefundAmount(e.target.value)}
-                                        className="rounded-lg"
+                                        value={editClientName}
+                                        onChange={(e) => setEditClientName(e.target.value)}
+                                        placeholder={t('payments.edit.customer_name')}
                                       />
-                                      <span className="text-xs text-muted-foreground">Original Payment: {payment.amount.toLocaleString()} LE</span>
                                     </div>
-
-                                    <div className="space-y-2">
-                                      <Label className="text-sm font-semibold">Refund Method</Label>
-                                      <Select value={refundMethod} onValueChange={(val) => setRefundMethod(val as any || 'Original Method')}>
+                                    <div>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.customer_phone')}</Label>
+                                      <Input
+                                        value={editClientPhone}
+                                        onChange={(e) => setEditClientPhone(e.target.value)}
+                                        placeholder={t('payments.edit.customer_phone')}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.branch')}</Label>
+                                      <Select value={editBranch} onValueChange={(val) => setEditBranch(val || '')}>
                                         <SelectTrigger className="h-9">
-                                          <SelectValue placeholder="Select Method" />
+                                          <SelectValue placeholder={t('payments.edit.select_branch')} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                          <SelectItem value="Original Method">Original Method ({payment.method})</SelectItem>
-                                          <SelectItem value="Cash">Cash</SelectItem>
-                                          <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                                          {branches.map(b => (
+                                            <SelectItem key={b} value={b}>{b}</SelectItem>
+                                          ))}
                                         </SelectContent>
                                       </Select>
                                     </div>
-
-                                    <div className="space-y-2">
-                                      <Label className="text-sm font-semibold">Reason for Refund</Label>
+                                    <div>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.method')}</Label>
+                                      <Select value={editMethod} onValueChange={(val) => setEditMethod(val as Payment['method'])}>
+                                        <SelectTrigger className="h-9">
+                                          <SelectValue placeholder={t('payments.edit.select_method')} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Cash">{t('dashboard.cash')}</SelectItem>
+                                          <SelectItem value="Credit Card">{t('dashboard.visa')}</SelectItem>
+                                          <SelectItem value="Bank Transfer">{t('common.bank_transfer')}</SelectItem>
+                                          <SelectItem value="Instapay">{t('dashboard.instapay')}</SelectItem>
+                                          <SelectItem value="Other">{t('common.other')}</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center justify-between mb-1">
+                                        <Label className="text-xs font-semibold">{t('payments.edit.sales_name')}</Label>
+                                        {(isInzan && isPaymentRepLocked && !isSalesManager) ? (
+                                          <span className="text-[10px] text-amber-500 font-bold">🔒 Locked</span>
+                                        ) : isInzan && isSalesManager && isPaymentRepLocked ? (
+                                          <span className="text-[10px] text-emerald-500 font-bold">Manager Authority</span>
+                                        ) : null}
+                                      </div>
+                                      <Select
+                                        value={editSalesName}
+                                        disabled={isInzan && isPaymentRepLocked && !isSalesManager}
+                                        onValueChange={(val) => {
+                                          if (!val) return;
+                                          if (isInzan && isSalesManager && editSalesName && editSalesName !== val) {
+                                            setPendingSalesName(val);
+                                            setReassignPaymentTarget({ isEdit: true, oldName: editSalesName, newName: val, paymentId: payment.id });
+                                            setSalesReassignConfirmOpen(true);
+                                          } else {
+                                            setEditSalesName(val);
+                                          }
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-9 disabled:opacity-60 disabled:cursor-not-allowed">
+                                          <SelectValue placeholder={t('payments.edit.select_sales_rep')} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {uniqueSalesNames.map((name: string) => (
+                                            <SelectItem key={name} value={name}>
+                                              {name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    {(payment.package_category_type === 'PT' || (payment.package_category_type as string) === 'Private Training' || payment.coachName) && (
+                                      <div>
+                                        <Label className="text-xs font-semibold">Coach Name</Label>
+                                        <Select value={editCoachName} onValueChange={(val) => setEditCoachName(val || '')}>
+                                          <SelectTrigger className="h-9">
+                                            <SelectValue placeholder="Select Coach" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                                            {coaches.map(c => (
+                                              <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    )}
+                                    <div>
+                                      <Label className="text-xs font-semibold">{t('payments.edit.amount')}</Label>
                                       <Input
-                                        placeholder="Explain why this refund is requested..."
-                                        value={refundReason}
-                                        onChange={(e) => setRefundReason(e.target.value)}
-                                        className="rounded-lg"
+                                        type="number"
+                                        value={editAmount}
+                                        onChange={(e) => setEditAmount(e.target.value)}
+                                        step="0.01"
                                       />
                                     </div>
-
-                                    <div className="flex gap-2 justify-end pt-4">
-                                      <Button variant="outline" onClick={() => setIsRefundDialogOpen(false)}>
-                                        Cancel
-                                      </Button>
-                                      <Button 
-                                        onClick={handleRequestRefund} 
-                                        disabled={!refundReason.trim() || !refundAmount || Number(refundAmount) <= 0 || Number(refundAmount) > payment.amount} 
-                                        className="bg-purple-600 hover:bg-purple-700 text-white"
-                                      >
-                                        Submit Request
-                                      </Button>
+                                    <div className="sm:col-span-2">
+                                      <Label className="text-xs font-semibold">{t('payments.edit.notes')}</Label>
+                                      <Input
+                                        value={editNotes}
+                                        onChange={(e) => setEditNotes(e.target.value)}
+                                        placeholder={t('payments.edit.notes_placeholder')}
+                                      />
                                     </div>
+                                  </div>
+                                  <div className="flex gap-2 mt-6">
+                                    <Button
+                                      variant="outline"
+                                      onClick={() => setEditingPaymentId(null)}
+                                    >
+                                      {t('common.cancel')}
+                                    </Button>
+                                    <Button
+                                      onClick={async () => {
+                                        const salesRepUser = users.find(u =>
+                                          u.id === editSalesName ||
+                                          (toCanonical(u.name || u.email || '').toLowerCase() === toCanonical(editSalesName || '').toLowerCase())
+                                        );
+                                        const rawRepId = salesRepUser ? salesRepUser.id : undefined;
+
+                                        const repId = (isPaymentRepLocked && !isSalesManager)
+                                          ? (payment.sales_rep_id || client?.assignedTo || client?.salesRep)
+                                          : rawRepId;
+                                        const repName = (isPaymentRepLocked && !isSalesManager)
+                                          ? (payment.salesName || resolveUserDisplay(repId, users, ''))
+                                          : editSalesName;
+
+                                        await updatePayment(payment.id, {
+                                          amount: parseFloat(editAmount),
+                                          notes: editNotes || undefined,
+                                          branch: editBranch || undefined,
+                                          branchId: toCanonicalBranchId(editBranch) || undefined,
+                                          clientBranch: editBranch || undefined,
+                                          method: editMethod,
+                                          salesName: repName || undefined,
+                                          sales_rep_id: repId || undefined,
+                                          coachName: (editCoachName && editCoachName !== 'unassigned') ? editCoachName : undefined,
+                                          date: editPaymentDate ? safeIsoDate(editPaymentDate) : payment.date,
+                                        });
+                                        setEditingPaymentId(null);
+                                      }}
+                                    >
+                                      {t('payments.edit.save_changes')}
+                                    </Button>
                                   </div>
                                 </DialogContent>
                               </Dialog>
                             )}
 
-                            {canDeletePayment && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className={`${payment.isOnHold ? 'opacity-50 cursor-not-allowed' : 'text-destructive hover:bg-destructive/10'}`}
-                                onClick={() => handleDeletePayment(payment.id)}
-                                title={payment.isOnHold ? t('payments.cannot_delete_held') : t('payments.delete_payment')}
-                                disabled={payment.isOnHold}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
+                            <Dialog open={isHoldDialogOpen && holdPaymentId === payment.id} onOpenChange={(open) => {
+                              if (!open) {
+                                setIsHoldDialogOpen(false);
+                                setHoldPaymentId(null);
+                                setHoldReason('');
+                              }
+                            }}>
+                              <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl rounded-2xl p-6">
+                                <DialogHeader>
+                                  <DialogTitle>{t('payments.hold_dialog.title')}</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                  <p className="text-sm text-muted-foreground">
+                                    {t('payments.hold_dialog.hint').split(/(\{name\})/g).map((part, i) => {
+                                      if (part === '{name}') return <strong key={i}>{client?.name}</strong>;
+                                      return part;
+                                    })}
+                                  </p>
+                                  <div className="space-y-2">
+                                    <Label htmlFor="holdReason" className="text-sm font-semibold">{t('payments.hold_dialog.reason')}</Label>
+                                    <Input
+                                      id="holdReason"
+                                      placeholder={t('payments.hold_dialog.reason_placeholder')}
+                                      value={holdReason}
+                                      onChange={(e) => setHoldReason(e.target.value)}
+                                      className="rounded-lg"
+                                    />
+                                  </div>
+                                  <div className="flex gap-2 justify-end pt-4">
+                                    <Button variant="outline" onClick={() => setIsHoldDialogOpen(false)}>
+                                      {t('common.cancel')}
+                                    </Button>
+                                    <Button onClick={handleHoldPayment} className="bg-amber-600 hover:bg-amber-700">
+                                      {t('payments.hold_dialog.confirm_hold')}
+                                    </Button>
+                                  </div>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+
+                            <Dialog open={isRefundDialogOpen && refundPaymentId === payment.id} onOpenChange={(open) => {
+                              if (!open) {
+                                setIsRefundDialogOpen(false);
+                                setRefundPaymentId(null);
+                              }
+                            }}>
+                              <DialogContent className="w-[95vw] sm:max-w-lg md:max-w-xl rounded-2xl p-6">
+                                <DialogHeader>
+                                  <DialogTitle className="flex items-center gap-2">
+                                    <RotateCcw className="h-5 w-5 text-purple-600" />
+                                    Request Refund
+                                  </DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 pt-2">
+                                  <p className="text-sm text-muted-foreground">
+                                    Submit a maker-checker refund request for <strong>{clientDisplayName}</strong>.
+                                  </p>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-sm font-semibold">Refund Amount (LE)</Label>
+                                    <Input
+                                      type="number"
+                                      min="1"
+                                      max={payment.amount}
+                                      placeholder="Refund Amount"
+                                      value={refundAmount}
+                                      onChange={(e) => setRefundAmount(e.target.value)}
+                                      className="rounded-lg"
+                                    />
+                                    <span className="text-xs text-muted-foreground">Original Payment: {payment.amount.toLocaleString()} LE</span>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-sm font-semibold">Refund Method</Label>
+                                    <Select value={refundMethod} onValueChange={(val) => setRefundMethod(val as any || 'Original Method')}>
+                                      <SelectTrigger className="h-9">
+                                        <SelectValue placeholder="Select Method" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Original Method">Original Method ({payment.method})</SelectItem>
+                                        <SelectItem value="Cash">Cash</SelectItem>
+                                        <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-sm font-semibold">Reason for Refund</Label>
+                                    <Input
+                                      placeholder="Explain why this refund is requested..."
+                                      value={refundReason}
+                                      onChange={(e) => setRefundReason(e.target.value)}
+                                      className="rounded-lg"
+                                    />
+                                  </div>
+
+                                  <div className="flex gap-2 justify-end pt-4">
+                                    <Button variant="outline" onClick={() => setIsRefundDialogOpen(false)}>
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      onClick={handleRequestRefund}
+                                      disabled={!refundReason.trim() || !refundAmount || Number(refundAmount) <= 0 || Number(refundAmount) > payment.amount}
+                                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                                    >
+                                      Submit Request
+                                    </Button>
+                                  </div>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -3405,7 +3491,7 @@ export default function Payments() {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       {t('payments.no_payments')}
                     </TableCell>
                   </TableRow>

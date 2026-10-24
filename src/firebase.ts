@@ -27,6 +27,32 @@ const getActiveConfig = () => {
       tenantId: getStandaloneTenantId(),
     };
   }
+
+  // Explicit query parameter override (e.g. ?tenant=inzan on localhost)
+  try {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      let t = (params.get('tenant') || '').toLowerCase();
+      const host = window.location.hostname.toLowerCase();
+      if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')) {
+        if (t) {
+          try { sessionStorage.setItem('__dev_tenant__', t); } catch {}
+        } else {
+          try { t = (sessionStorage.getItem('__dev_tenant__') || '').toLowerCase(); } catch {}
+        }
+      }
+      if (t === 'inzan' || t === 'inzanathletics') {
+        return inzanFirebaseConfig;
+      }
+      if (t === 'strike' || t === 'strikeboxing') {
+        return {
+          ...(dynamicConfig || firebaseConfig),
+          tenantId: 'strike'
+        };
+      }
+    }
+  } catch {}
+
   if (dynamicConfig && dynamicConfig.tenantId) {
     if (dynamicConfig.tenantId === inzanFirebaseConfig.tenantId) {
       return inzanFirebaseConfig;
@@ -38,8 +64,15 @@ const getActiveConfig = () => {
   try {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const t = (params.get('tenant') || '').toLowerCase();
+      let t = (params.get('tenant') || '').toLowerCase();
       const host = window.location.hostname.toLowerCase();
+      if (host === 'localhost' || host === '127.0.0.1') {
+        if (t) {
+          try { sessionStorage.setItem('__dev_tenant__', t); } catch {}
+        } else {
+          try { t = (sessionStorage.getItem('__dev_tenant__') || '').toLowerCase(); } catch {}
+        }
+      }
 
       // Check if accessing via dedicated Strike domain or project hosting
       if (

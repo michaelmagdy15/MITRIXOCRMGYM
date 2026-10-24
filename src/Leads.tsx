@@ -279,7 +279,8 @@ export default function Leads() {
       const term = deferredSearchTerm.toLowerCase();
       filtered = filtered.filter(l => 
         l.name.toLowerCase().includes(term) || 
-        l.phone.includes(term)
+        l.phone.includes(term) ||
+        String(l.leadId || l.redgitsId || '').toLowerCase().includes(term)
       );
     }
 
@@ -787,6 +788,9 @@ export default function Leads() {
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-[10px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                    Lead #{lead.leadId || lead.redgitsId || '---'}
+                  </span>
                   <span className="font-semibold text-sm truncate">{lead.name}</span>
                   <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{lead.stage || 'New'}</Badge>
                   {score >= 20 ? <Badge className="bg-green-500 text-[10px] h-4 px-1.5">{score}</Badge>
@@ -851,32 +855,22 @@ export default function Leads() {
         })}
       </div>
 
-      {/* ── Desktop table (≥ md) ── */}
+      {/* ── Tablet (iPad 10") & Desktop Smart Composite Table (≥ md) ── */}
       <div className="hidden md:block overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[50px]">
-              <Checkbox 
+            <TableHead className="w-[42px] pl-3">
+              <Checkbox
                 checked={selectedLeadIds.length === leadsData.length && leadsData.length > 0}
                 onCheckedChange={(checked) => handleSelectAll(!!checked)}
               />
             </TableHead>
-            <TableHead>{t('leads.table.id')}</TableHead>
-            <TableHead>{t('leads.table.name')}</TableHead>
-            <TableHead>{t('leads.table.score')}</TableHead>
-            <TableHead>{t('leads.table.phone')}</TableHead>
-            <TableHead className="hidden md:table-cell">{t('leads.branch')}</TableHead>
-            <TableHead className="hidden md:table-cell">{t('leads.table.source')}</TableHead>
-            <TableHead>{t('leads.stage')}</TableHead>
-            <TableHead>{t('leads.table.paid_status')}</TableHead>
-            <TableHead className="hidden lg:table-cell">{t('leads.interest')}</TableHead>
-            <TableHead className="hidden lg:table-cell">{t('leads.table.category')}</TableHead>
-            <TableHead className="hidden xl:table-cell">{t('leads.table.trial_date')}</TableHead>
-            <TableHead className="hidden md:table-cell">{t('leads.table.last_contact')}</TableHead>
-            <TableHead>{t('leads.table.next_reminder')}</TableHead>
-            {canAssignLeads && <TableHead className="hidden lg:table-cell">{t('leads.assigned_to')}</TableHead>}
-            <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">{t('leads.table.actions')}</TableHead>
+            <TableHead>{t('leads.table.name')} & {t('leads.table.phone')}</TableHead>
+            <TableHead>{t('leads.stage')} & {t('leads.table.paid_status')}</TableHead>
+            <TableHead className="hidden lg:table-cell">{t('leads.interest')} & {t('leads.table.category')}</TableHead>
+            <TableHead>{t('leads.table.next_reminder')}{canAssignLeads ? ` & ${t('leads.assigned_to')}` : ''}</TableHead>
+            <TableHead className="text-right pr-4">{t('leads.table.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -885,106 +879,116 @@ export default function Leads() {
               const d = toValidDate(lead.nextReminderDate);
               return d && isBefore(d, new Date()) ? 'bg-red-50/50 dark:bg-red-900/10' : 'bg-amber-50/50 dark:bg-amber-900/10';
             })() : ''}>
-              <TableCell>
-                <Checkbox 
+              <TableCell className="pl-3 py-3 align-top">
+                <Checkbox
                   checked={selectedLeadIds.includes(lead.id)}
                   onCheckedChange={(checked) => handleSelectLead(lead.id, !!checked)}
                 />
               </TableCell>
-              <TableCell>
-                <div className="font-mono text-xs text-muted-foreground">
-                  #{lead.memberId || '---'}
-                </div>
-              </TableCell>
-              <TableCell className="font-medium">
-                {lead.name}
-              </TableCell>
-              <TableCell>
-                {getScoreBadge(calculateLeadScore(lead))}
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center">
-                  <Phone className="h-3 w-3 mr-2 text-muted-foreground" />
-                  {currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id ? '**********' : lead.phone}
-                </div>
-              </TableCell>
-              <TableCell className="hidden md:table-cell">
-                <Badge variant="secondary">{lead.branch || 'Unassigned'}</Badge>
-              </TableCell>
-              <TableCell className="hidden md:table-cell">
-                <Badge variant="outline">{lead.source || 'Unknown'}</Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">{lead.stage || 'New'}</Badge>
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2">
-                  <Checkbox 
-                    checked={lead.paid || false} 
-                    onCheckedChange={(checked) => updateClient(lead.id, { paid: !!checked })}
-                  />
-                  <span className="text-xs">{lead.paid ? 'Paid' : 'Not Paid'}</span>
-                </div>
-              </TableCell>
-              <TableCell className="hidden lg:table-cell">{getInterestBadge(lead.interest)}</TableCell>
-              <TableCell className="hidden lg:table-cell">
-                <Badge variant="outline">{lead.category || 'None'}</Badge>
-              </TableCell>
-              <TableCell className="hidden xl:table-cell">
-                {lead.trialDate || lead.expectedVisitDate ? (
-                  <div className="flex items-center">
-                    <Calendar className="h-3 w-3 mr-2 text-blue-500" />
-                    {safeFormatDate(lead.trialDate || lead.expectedVisitDate, 'MMM d, yyyy')}
-                  </div>
-                ) : (
-                  <span className="text-muted-foreground text-sm">Not set</span>
-                )}
-              </TableCell>
-              <TableCell className="hidden md:table-cell">
-                {safeFormatDate(lead.lastContactDate, 'MMM d', 'Never')}
-              </TableCell>
-               <TableCell>
-                {lead.nextReminderDate ? (
-                  <div className="flex flex-col space-y-1">
-                    <span className="text-sm">
-                      {safeFormatDate(lead.nextReminderDate, 'MMM d, yyyy')}
+
+              {/* Column 2: ID + Name + Score + Phone + Branch + Source */}
+              <TableCell className="py-3 align-top">
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                      Lead #{lead.leadId || lead.redgitsId || '---'}
                     </span>
-                    {(() => {
-                      const d = toValidDate(lead.nextReminderDate);
-                      if (!d) return null;
-                      if (isBefore(d, new Date())) return <Badge variant="destructive" className="w-fit text-[10px] h-4 px-1">OVERDUE</Badge>;
-                      if (isBefore(d, addDays(new Date(), 3))) return <Badge className="bg-amber-500 hover:bg-amber-600 w-fit text-[10px] h-4 px-1">DUE SOON</Badge>;
-                      return null;
-                    })()}
+                    <span className="font-bold text-sm text-foreground">{lead.name}</span>
+                    {getScoreBadge(calculateLeadScore(lead))}
                   </div>
-                ) : (
-                  <span className="text-muted-foreground text-sm">Not set</span>
-                )}
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center">
+                      <Phone className="h-3 w-3 mr-1 text-muted-foreground/80" />
+                      {currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id ? '**********' : lead.phone}
+                    </span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{lead.branch || 'Unassigned'}</Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{lead.source || 'Unknown'}</Badge>
+                  </div>
+                </div>
               </TableCell>
-              {canAssignLeads && (
-                <TableCell className="hidden lg:table-cell">
-                  <Select 
-                    defaultValue={lead.assignedTo || 'unassigned'}
-                    onValueChange={(v) => updateClient(lead.id, { assignedTo: v === 'unassigned' ? '' : (v || undefined) })}
-                  >
-                    <SelectTrigger className="w-[130px] h-8 text-xs">
-                      <SelectValue placeholder="Assign rep">
-                        {lead.assignedTo && lead.assignedTo !== 'unassigned'
-                          ? resolveUserDisplay(lead.assignedTo, users, 'Unknown User')
-                          : undefined}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
-                      {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === lead.assignedTo)).map(rep => (
-                        <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </TableCell>
-              )}
-              <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-end gap-1.5">
+
+              {/* Column 3: Stage + Paid Status */}
+              <TableCell className="py-3 align-top">
+                <div className="flex flex-col gap-1.5 items-start">
+                  <Badge variant="secondary" className="text-xs font-semibold">{lead.stage || 'New'}</Badge>
+                  <div className="flex items-center gap-1.5">
+                    <Checkbox
+                      checked={lead.paid || false}
+                      onCheckedChange={(checked) => updateClient(lead.id, { paid: !!checked })}
+                    />
+                    <span className="text-[11px] text-muted-foreground font-medium">{lead.paid ? 'Paid' : 'Not Paid'}</span>
+                  </div>
+                </div>
+              </TableCell>
+
+              {/* Column 4: Interest + Category + Trial Date (lg+) */}
+              <TableCell className="hidden lg:table-cell py-3 align-top">
+                <div className="flex flex-col gap-1 items-start">
+                  <div className="flex flex-wrap items-center gap-1">
+                    {getInterestBadge(lead.interest)}
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{lead.category || 'None'}</Badge>
+                  </div>
+                  {(lead.trialDate || lead.expectedVisitDate) && (
+                    <div className="flex items-center text-[11px] text-blue-600 dark:text-blue-400">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      Trial: {safeFormatDate(lead.trialDate || lead.expectedVisitDate, 'MMM d, yyyy')}
+                    </div>
+                  )}
+                </div>
+              </TableCell>
+
+              {/* Column 5: Next Reminder + Last Contact + Assigned Rep */}
+              <TableCell className="py-3 align-top">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {lead.nextReminderDate ? (
+                      <>
+                        <span className="text-xs font-semibold">
+                          {safeFormatDate(lead.nextReminderDate, 'MMM d, yyyy')}
+                        </span>
+                        {(() => {
+                          const d = toValidDate(lead.nextReminderDate);
+                          if (!d) return null;
+                          if (isBefore(d, new Date())) return <Badge variant="destructive" className="w-fit text-[9px] h-4 px-1">OVERDUE</Badge>;
+                          if (isBefore(d, addDays(new Date(), 3))) return <Badge className="bg-amber-500 hover:bg-amber-600 w-fit text-[9px] h-4 px-1">DUE SOON</Badge>;
+                          return null;
+                        })()}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">No reminder</span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground">
+                      • Last: {safeFormatDate(lead.lastContactDate, 'MMM d', 'Never')}
+                    </span>
+                  </div>
+                  {canAssignLeads && (
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <Select
+                        defaultValue={lead.assignedTo || 'unassigned'}
+                        onValueChange={(v) => updateClient(lead.id, { assignedTo: v === 'unassigned' ? '' : (v || undefined) })}
+                      >
+                        <SelectTrigger className="w-[130px] h-7 text-[11px]">
+                          <SelectValue placeholder="Assign rep">
+                            {lead.assignedTo && lead.assignedTo !== 'unassigned'
+                              ? resolveUserDisplay(lead.assignedTo, users, 'Unknown User')
+                              : undefined}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
+                          {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === lead.assignedTo)).map(rep => (
+                            <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              </TableCell>
+
+              {/* Column 6: Actions */}
+              <TableCell className="text-right pr-4 py-3 align-top whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-end gap-1">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -998,19 +1002,19 @@ export default function Leads() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 gap-1.5 text-xs font-semibold"
+                      className="h-8 px-2 gap-1 text-xs font-semibold"
                       onClick={() => { setActiveClientId(lead.id); setNavTab('clients'); }}
                       title="View Account"
                     >
                       <User className="h-3.5 w-3.5" />
-                      <span className="hidden lg:inline">View Account</span>
+                      <span className="hidden xl:inline">Account</span>
                     </Button>
                   )}
                   {lead.stage !== 'Won' && lead.stage !== 'Converted' && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-600 hover:text-white font-semibold text-xs shadow-xs"
+                      className="h-8 px-2 gap-1 border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-600 hover:text-white font-semibold text-xs shadow-xs"
                       onClick={() => openConvertDialog(lead)}
                       title="Convert Lead to Member with Package"
                     >
@@ -1030,7 +1034,7 @@ export default function Leads() {
                           <DialogTitle className="text-3xl font-extrabold tracking-tight">Lead Profile: <span className="text-primary">{lead.name}</span></DialogTitle>
                           <div className="flex items-center gap-2 mt-2">
                             <div className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest border border-primary/20">
-                              #{lead.memberId || 'PENDING ID'}
+                              Lead #{lead.leadId || lead.redgitsId || 'PENDING ID'}
                             </div>
                             <Badge variant="outline" className="rounded-full px-3 py-0.5 border-muted-foreground/30 font-bold text-[10px]">
                               {lead.status}
@@ -1466,20 +1470,20 @@ export default function Leads() {
                              </div>
                              
                              <div className="p-8 bg-white rounded-3xl shadow-2xl mb-8 transform transition-transform hover:scale-105" id={`qr-code-${lead.id}`}>
-                               <QRCodeSVG value={lead.memberId || lead.id} size={250} level="H" includeMargin={true} data-qr-id={lead.memberId || lead.id} />
-                               <div className="text-center mt-4 text-black font-extrabold pb-2">#{lead.memberId || 'PENDING ID'}</div>
+                               <QRCodeSVG value={lead.leadId || lead.redgitsId || lead.id} size={250} level="H" includeMargin={true} data-qr-id={lead.leadId || lead.redgitsId || lead.id} />
+                               <div className="text-center mt-4 text-black font-extrabold pb-2">Lead #{lead.leadId || lead.redgitsId || 'PENDING ID'}</div>
                              </div>
                              
                              <div className="flex flex-wrap justify-center gap-4">
                                <Button 
-                                 onClick={() => downloadQRCode(lead.memberId || lead.id, lead.name)}
+                                 onClick={() => downloadQRCode(lead.leadId || lead.redgitsId || lead.id, lead.name)}
                                  className="font-black uppercase tracking-widest px-8 py-6 rounded-2xl shadow-lg border-2 border-primary/20 hover:bg-primary"
                                >
                                  <Download className="mr-3 h-5 w-5" />
                                  Download
                                </Button>
                                <Button 
-                                 onClick={() => copyQRCodeToClipboard(lead.memberId || lead.id)}
+                                 onClick={() => copyQRCodeToClipboard(lead.leadId || lead.redgitsId || lead.id)}
                                  variant="outline"
                                  className="font-black uppercase tracking-widest px-8 py-6 rounded-2xl shadow-lg border-2 border-primary/30 hover:bg-primary/5 hover:text-primary"
                                >
@@ -1948,7 +1952,7 @@ export default function Leads() {
                 <div>
                   <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wider">Prospect</span>
                   <span className="font-bold text-sm text-foreground">{leadToConvert.name}</span>
-                  {leadToConvert.memberId && <span className="ml-1 text-muted-foreground">#{leadToConvert.memberId}</span>}
+                  {(leadToConvert.leadId || leadToConvert.redgitsId) && <span className="ml-1 text-muted-foreground">Lead #{leadToConvert.leadId || leadToConvert.redgitsId}</span>}
                 </div>
                 <div>
                   <span className="text-muted-foreground block text-[10px] uppercase font-bold tracking-wider">Phone</span>
@@ -2249,7 +2253,7 @@ export default function Leads() {
               <div>
                 <DialogTitle className="text-xl font-extrabold tracking-tight">Lead: <span className="text-primary">{selectedLead.name}</span></DialogTitle>
                 <div className="flex items-center gap-2 mt-1">
-                  <div className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-black uppercase border border-primary/20">#{selectedLead.memberId || 'PENDING'}</div>
+                  <div className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-black uppercase border border-primary/20">Lead #{selectedLead.leadId || selectedLead.redgitsId || 'PENDING'}</div>
                   <Badge variant="outline" className="rounded-full text-[10px]">{selectedLead.status}</Badge>
                 </div>
               </div>

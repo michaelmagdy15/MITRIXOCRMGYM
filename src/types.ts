@@ -453,7 +453,10 @@ export interface Client {
   homeBranch?: string;
   home_branch_id?: string;
   has_multi_branch_access?: boolean;
-  memberId?: string; // Sequential ID for members
+  memberId?: string; // Sequential ID strictly for converted/active/expired members
+  leadId?: string; // Sequential ID strictly for leads (separate from memberId sequence)
+  isNearlyExpired?: boolean;
+  redgitsId?: string; // Legacy RedGITS internal row ID
   portalUserId?: string; // Link to the user portal record
   linkedClientIds?: string[]; // Array of linked client record IDs (family members)
   importBatchId?: string; // ID of the import batch this client was created in

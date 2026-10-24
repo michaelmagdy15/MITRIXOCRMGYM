@@ -723,20 +723,114 @@ export default function Packages() {
         })}
       </div>
 
-      <Card>
+      {/* Mobile & Compact Card View (< md) */}
+      <div className="md:hidden space-y-2.5">
+        {filteredPackages.map(pkg => {
+          const archived = isArchived(pkg);
+          const onHold = isOnHold(pkg);
+          const pkgCat = pkg.category || (pkg.type === 'Private' ? 'Personal Training (PT)' : 'Gym Memberships');
+          const hierarchy = pkg.hierarchy || 'Primary';
+          const targetTeam = pkg.targetTeam || 'Sales';
+          return (
+            <Card key={pkg.id} className={`overflow-hidden ${archived ? 'opacity-60 bg-muted/30' : onHold ? 'bg-amber-500/5 border-amber-500/30' : ''}`}>
+              <CardContent className="p-3.5 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-sm text-foreground">{pkg.name}</span>
+                      {archived ? (
+                        <span className="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-600">Archived</span>
+                      ) : onHold ? (
+                        <span className="inline-flex items-center rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-600">On Hold</span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">Active</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      Branch: {pkg.branch} {isInzan ? `• Target: ${targetTeam}` : ''}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                      {pkg.price.toLocaleString()} LE
+                    </div>
+                    <div className="text-[11px] text-muted-foreground font-medium">
+                      {pkg.sessions === 0 ? '∞ Unlimited' : `${pkg.sessions} sessions`} • {pkg.expiryDays}d
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getCategoryBadgeClass(pkgCat)}`}>
+                      <Tag className="h-2.5 w-2.5" />
+                      {pkgCat}
+                    </span>
+                    {isInzan && (
+                      <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                        hierarchy === 'Primary'
+                          ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                          : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+                      }`}>
+                        {hierarchy}
+                      </span>
+                    )}
+                    {isInzan && renderBenefitsBadges(pkg)}
+                  </div>
+                  <div className="flex items-center gap-1 ml-auto">
+                    {!archived && (
+                      <>
+                        {isInzan && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 ${onHold ? 'text-emerald-600' : 'text-amber-600'}`}
+                            onClick={() => handleToggleHold(pkg)}
+                            title={onHold ? 'Activate package' : 'Put package On Hold'}
+                            disabled={isSubmitting}
+                          >
+                            {onHold ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(pkg)} title="Edit package" disabled={isSubmitting}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                    {archived ? (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRestore(pkg.id)} title="Restore package" disabled={isSubmitting}>
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(pkg.id)} title="Archive package" disabled={isSubmitting}>
+                        <Archive className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+        {filteredPackages.length === 0 && (
+          <Card>
+            <CardContent className="text-center text-muted-foreground py-8 text-sm">
+              No packages found in this category.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Tablet (iPad 10") & Desktop Smart Composite Table (>= md) */}
+      <Card className="hidden md:block overflow-hidden">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>{isInzan ? 'Category & Hierarchy' : 'Category'}</TableHead>
+                <TableHead className="pl-4">Package & Details</TableHead>
+                <TableHead>Price & Validity</TableHead>
+                <TableHead>{isInzan ? 'Category & Tier' : 'Category'}</TableHead>
                 {isInzan && <TableHead>Benefits & Access</TableHead>}
-                {isInzan && <TableHead>Target</TableHead>}
-                <TableHead>Sessions / Expiry</TableHead>
-                <TableHead>Price</TableHead>
-                {isInzan && <TableHead>Status</TableHead>}
-                {isInzan && <TableHead>Created</TableHead>}
-                <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">Actions</TableHead>
+                <TableHead className="text-right pr-4 w-[110px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -747,22 +841,78 @@ export default function Packages() {
                 const hierarchy = pkg.hierarchy || 'Primary';
                 const targetTeam = pkg.targetTeam || 'Sales';
                 return (
-                  <TableRow key={pkg.id} className={`${archived ? 'opacity-60 bg-muted/30' : onHold ? 'bg-amber-500/5' : ''} group hover:bg-muted/40 transition-colors`}>
-                    <TableCell className="font-medium">
-                      <div className="flex flex-col">
-                        <span>{pkg.name}</span>
-                        <span className="text-xs text-muted-foreground">Branch: {pkg.branch}</span>
+                  <TableRow
+                    key={pkg.id}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button, a, input, select, [role="button"]')) return;
+                      if (!archived) openEdit(pkg);
+                    }}
+                    className={`${archived ? 'opacity-60 bg-muted/30' : onHold ? 'bg-amber-500/5' : 'cursor-pointer'} group hover:bg-muted/40 transition-colors`}
+                  >
+                    <TableCell className="pl-4 py-3 font-medium">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-foreground">{pkg.name}</span>
+                          {isInzan && (
+                            archived ? (
+                              <span className="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-600">
+                                Archived
+                              </span>
+                            ) : onHold ? (
+                              <span className="inline-flex items-center rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-semibold text-amber-600">
+                                On Hold
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
+                                Active
+                              </span>
+                            )
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
+                          <span>Branch: <strong className="font-medium text-foreground/80">{pkg.branch}</strong></span>
+                          {isInzan && (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                              <Target className="h-2.5 w-2.5" />
+                              Target: {targetTeam}
+                              {pkg.targetAmount !== undefined && pkg.targetAmount > 0 && pkg.targetAmount !== pkg.price ? ` (${Number(pkg.targetAmount).toLocaleString()} LE)` : ''}
+                            </span>
+                          )}
+                          {isInzan && pkg.createdAt && (
+                            <span className="hidden xl:inline-flex items-center gap-1 text-[11px] text-muted-foreground/80">
+                              <Calendar className="h-2.5 w-2.5" />
+                              {new Date(pkg.createdAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-3 whitespace-nowrap">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-extrabold text-sm sm:text-base text-emerald-600 dark:text-emerald-400">
+                          {pkg.price.toLocaleString()} LE
+                        </span>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          {pkg.sessions === 0 ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">∞ Unlimited</span>
+                          ) : (
+                            <span className="font-medium text-foreground/80">{pkg.sessions} sessions</span>
+                          )}
+                          <span>•</span>
+                          <span>{pkg.expiryDays} days</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
                       <div className="flex flex-col items-start gap-1">
                         <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${getCategoryBadgeClass(pkgCat)}`}>
-                          <Tag className="h-3 w-3" />
-                          {pkgCat}
+                          <Tag className="h-3 w-3 shrink-0" />
+                          <span className="truncate max-w-[160px]">{pkgCat}</span>
                         </span>
                         {isInzan && (
                           <span
-                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold ${
                               hierarchy === 'Primary'
                                 ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
                                 : 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
@@ -774,71 +924,12 @@ export default function Packages() {
                       </div>
                     </TableCell>
                     {isInzan && (
-                      <TableCell>
+                      <TableCell className="py-3">
                         {renderBenefitsBadges(pkg)}
                       </TableCell>
                     )}
-                    {isInzan && (
-                      <TableCell>
-                        <div className="flex flex-col items-start gap-0.5">
-                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                            <Target className="h-3 w-3" />
-                            Target: {targetTeam}
-                          </span>
-                          {pkg.targetAmount !== undefined && pkg.targetAmount > 0 && (
-                            <span className="text-[11px] text-muted-foreground">
-                              Credit: {Number(pkg.targetAmount).toLocaleString()} LE
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span>
-                          {pkg.sessions === 0
-                            ? <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">∞ Unlimited</span>
-                            : `${pkg.sessions} sessions`}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{pkg.expiryDays} days</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-semibold">{pkg.price.toLocaleString()} LE</TableCell>
-                    {isInzan && (
-                      <TableCell>
-                        {archived ? (
-                          <span className="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2.5 py-0.5 text-xs font-medium text-rose-600">
-                            Archived
-                          </span>
-                        ) : onHold ? (
-                          <span className="inline-flex items-center rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-xs font-medium text-amber-600">
-                            On Hold
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-600">
-                            Active
-                          </span>
-                        )}
-                      </TableCell>
-                    )}
-                    {isInzan && (
-                      <TableCell>
-                        <div className="flex flex-col text-xs text-muted-foreground">
-                          <span className="inline-flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {pkg.createdAt ? new Date(pkg.createdAt).toLocaleDateString() : '—'}
-                          </span>
-                          {pkg.createdByName && (
-                            <span className="inline-flex items-center gap-1 text-[11px]">
-                              <UserIcon className="h-3 w-3" />
-                              {pkg.createdByName}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                    )}
-                    <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors">
-                      <div className="flex items-center justify-end gap-1">
+                    <TableCell className="text-right pr-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center justify-end gap-0.5">
                         {!archived && (
                           <>
                             {isInzan && (
@@ -848,22 +939,22 @@ export default function Packages() {
                                 onClick={() => handleToggleHold(pkg)}
                                 title={onHold ? 'Activate package' : 'Put package On Hold'}
                                 disabled={isSubmitting}
-                                className={onHold ? 'text-emerald-600' : 'text-amber-600'}
+                                className={`h-8 w-8 ${onHold ? 'text-emerald-600' : 'text-amber-600'}`}
                               >
                                 {onHold ? <PlayCircle className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(pkg)} title="Edit package" disabled={isSubmitting}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(pkg)} title="Edit package" disabled={isSubmitting}>
                               <Edit className="h-4 w-4" />
                             </Button>
                           </>
                         )}
                         {archived ? (
-                          <Button variant="ghost" size="icon" onClick={() => handleRestore(pkg.id)} title="Restore package" disabled={isSubmitting}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleRestore(pkg.id)} title="Restore package" disabled={isSubmitting}>
                             <RotateCcw className="h-4 w-4" />
                           </Button>
                         ) : (
-                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(pkg.id)} title="Archive package" disabled={isSubmitting}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(pkg.id)} title="Archive package" disabled={isSubmitting}>
                             <Archive className="h-4 w-4" />
                           </Button>
                         )}
@@ -874,7 +965,7 @@ export default function Packages() {
               })}
               {filteredPackages.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={isInzan ? 9 : 5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={isInzan ? 5 : 4} className="text-center text-muted-foreground py-8">
                     No packages found in this category.
                   </TableCell>
                 </TableRow>

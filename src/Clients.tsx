@@ -1769,106 +1769,128 @@ export default function Clients() {
         })}
       </div>
 
-      {/* ── Desktop table (≥ md) ── */}
+      {/* ── Tablet (iPad 10") & Desktop Smart Composite Table (≥ md) ── */}
       <div className="hidden md:block overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[50px]">
-              <Checkbox 
+            <TableHead className="w-[42px] pl-3">
+              <Checkbox
                 checked={selectedClientIds.length === clientList.length && clientList.length > 0}
                 onCheckedChange={(checked) => handleSelectAll(!!checked)}
               />
             </TableHead>
-            <TableHead>{t('leads.table.id')}</TableHead>
-            <TableHead>{t('leads.table.name')}</TableHead>
-            <TableHead>{t('leads.table.phone')}</TableHead>
-            <TableHead className="hidden md:table-cell">{t('leads.branch')}</TableHead>
-            <TableHead className="hidden md:table-cell">{t('members.table.package')}</TableHead>
-            <TableHead className="hidden md:table-cell">Category</TableHead>
-            <TableHead>{t('members.table.sessions')}</TableHead>
-            <TableHead>{t('members.table.status')}</TableHead>
-            <TableHead className="hidden sm:table-cell">{t('members.table.expiry_date')}</TableHead>
-            {canViewGlobalDashboard && <TableHead className="hidden lg:table-cell">{t('members.table.total_paid')}</TableHead>}
-            {canViewGlobalDashboard && <TableHead className="hidden xl:table-cell">{t('leads.assigned_to')}</TableHead>}
-            <TableHead className="text-right sticky right-0 bg-background/95 backdrop-blur z-20 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4">{t('leads.table.actions')}</TableHead>
+            <TableHead>{t('leads.table.name')} & {t('leads.table.phone')}</TableHead>
+            <TableHead>{t('members.table.package')} & {t('leads.branch')}</TableHead>
+            <TableHead>{t('members.table.status')} & {t('members.table.sessions')}</TableHead>
+            <TableHead>{t('members.table.expiry_date')}{canViewGlobalDashboard ? ` & ${t('members.table.total_paid')}` : ''}</TableHead>
+            {canViewGlobalDashboard && <TableHead className="hidden lg:table-cell">{t('leads.assigned_to')}</TableHead>}
+            <TableHead className="text-right pr-4">{t('leads.table.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {clientList.map(client => {
             const totalPaid = totalPaidByClientId.get(client.id) || 0;
-            
+
             return (
             <TableRow key={client.id} className="cursor-pointer hover:bg-muted/40 transition-colors group" onClick={() => setActiveClientId(client.id)}>
-              <TableCell onClick={(e) => e.stopPropagation()}>
-                <Checkbox 
+              <TableCell className="pl-3 py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                <Checkbox
                   checked={selectedClientIds.includes(client.id)}
                   onCheckedChange={(checked) => handleSelectClient(client.id, !!checked)}
                 />
               </TableCell>
-              <TableCell className="font-medium text-muted-foreground">
-                {client.memberId ? `#${client.memberId}` : '-'}
-              </TableCell>
-              <TableCell className="font-medium">
-                {client.name}
-                {birthdayClientIds.has(client.id) && (
-                  <Gift className="inline-block ml-2 h-4 w-4 text-pink-500" />
-                )}
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center">
-                  <Phone className="h-3 w-3 mr-2 text-muted-foreground" />
-                  {currentUser?.role === 'rep' && client.assignedTo !== currentUser.id ? '**********' : client.phone}
+
+              {/* Column 2: ID + Name + Phone */}
+              <TableCell className="py-3 align-top">
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {client.memberId ? (
+                      <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                        #{client.memberId}
+                      </span>
+                    ) : (client.leadId || client.redgitsId) ? (
+                      <span className="font-mono text-[10px] font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                        Lead #{client.leadId || client.redgitsId}
+                      </span>
+                    ) : null}
+                    <span className="font-bold text-sm text-foreground">{client.name}</span>
+                    {birthdayClientIds.has(client.id) && (
+                      <Gift className="inline-block h-3.5 w-3.5 text-pink-500 shrink-0" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                    <span className="inline-flex items-center">
+                      <Phone className="h-3 w-3 mr-1 text-muted-foreground/80" />
+                      {currentUser?.role === 'rep' && client.assignedTo !== currentUser.id ? '**********' : client.phone}
+                    </span>
+                  </div>
                 </div>
               </TableCell>
-              <TableCell className="hidden md:table-cell">
-                <Badge variant="secondary">{client.branch || t('leads.tabs.unassigned')}</Badge>
-              </TableCell>
-              <TableCell className="hidden md:table-cell">
-                <Badge variant="outline">{client.packageType || t('leads.tabs.other')}</Badge>
-              </TableCell>
-              <TableCell className="hidden md:table-cell">
-                <Badge variant="outline" className="font-bold text-[10px] uppercase bg-indigo-500/10 text-indigo-400 border-indigo-500/20">
-                  {getMemberCategory(client)}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                {typeof client.sessionsRemaining === 'number' ? (
-                  <Badge variant={client.sessionsRemaining < 0 ? 'destructive' : 'secondary'}>
-                    {client.sessionsRemaining} {t('common.left')}
+
+              {/* Column 3: Package + Category + Branch */}
+              <TableCell className="py-3 align-top">
+                <div className="flex flex-col gap-1 items-start">
+                  <Badge variant="outline" className="text-xs font-semibold max-w-[190px] truncate bg-muted/20">
+                    {client.packageType || t('leads.tabs.other')}
                   </Badge>
-                ) : client.sessionsRemaining === 'unlimited' ? (
-                  <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-200 border">∞ Unlimited</Badge>
-                ) : client.sessionsRemaining === 'no attend' ? (
-                  <Badge variant="outline" className="text-amber-600 border-amber-600">No Attend</Badge>
-                ) : (
-                  <span className="text-muted-foreground text-sm">-</span>
-                )}
-              </TableCell>
-              <TableCell>{getStatusBadge(client.status)}</TableCell>
-              <TableCell className="hidden sm:table-cell">
-                {client.membershipExpiry ? (
-                  <div className="flex items-center">
-                    <Calendar className="h-3 w-3 mr-2 text-muted-foreground" />
-                    {safeFormatDate(client.membershipExpiry, 'MMM d, yyyy')}
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
+                      {client.branch || t('leads.tabs.unassigned')}
+                    </Badge>
+                    <Badge variant="outline" className="font-bold text-[9px] uppercase bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border-indigo-500/20 px-1.5 py-0 h-4">
+                      {getMemberCategory(client)}
+                    </Badge>
                   </div>
-                ) : (
-                  <span className="text-muted-foreground text-sm">{t('leads.tabs.unassigned')}</span>
-                )}
+                </div>
               </TableCell>
+
+              {/* Column 4: Status + Sessions Remaining */}
+              <TableCell className="py-3 align-top">
+                <div className="flex flex-col gap-1 items-start">
+                  {getStatusBadge(client.status)}
+                  <div>
+                    {typeof client.sessionsRemaining === 'number' ? (
+                      <Badge variant={client.sessionsRemaining < 0 ? 'destructive' : 'secondary'} className="text-[10px] px-1.5 py-0 h-4">
+                        {client.sessionsRemaining} {t('common.left')}
+                      </Badge>
+                    ) : client.sessionsRemaining === 'unlimited' ? (
+                      <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-200 border text-[10px] px-1.5 py-0 h-4">∞ Unlimited</Badge>
+                    ) : client.sessionsRemaining === 'no attend' ? (
+                      <Badge variant="outline" className="text-amber-600 border-amber-600 text-[10px] px-1.5 py-0 h-4">No Attend</Badge>
+                    ) : null}
+                  </div>
+                </div>
+              </TableCell>
+
+              {/* Column 5: Expiry Date + Total Paid */}
+              <TableCell className="py-3 align-top whitespace-nowrap">
+                <div className="flex flex-col gap-0.5">
+                  {client.membershipExpiry ? (
+                    <div className="flex items-center text-xs font-medium text-foreground">
+                      <Calendar className="h-3 w-3 mr-1.5 text-muted-foreground shrink-0" />
+                      {safeFormatDate(client.membershipExpiry, 'MMM d, yyyy')}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-xs">{t('leads.tabs.unassigned')}</span>
+                  )}
+                  {canViewGlobalDashboard && (
+                    <span className="text-xs font-extrabold text-green-600 dark:text-green-400">
+                      {totalPaid.toLocaleString()} LE
+                    </span>
+                  )}
+                </div>
+              </TableCell>
+
+              {/* Column 6: Sales Rep (lg+) */}
               {canViewGlobalDashboard && (
-                <TableCell className="font-medium text-green-600 hidden lg:table-cell">
-                  {totalPaid.toLocaleString()} LE
-                </TableCell>
-              )}
-              {canViewGlobalDashboard && (
-                <TableCell className="hidden xl:table-cell" onClick={(e) => e.stopPropagation()}>
+                <TableCell className="hidden lg:table-cell py-3 align-top" onClick={(e) => e.stopPropagation()}>
                   {(() => {
                     const isAssigned = isInzanTenant && Boolean(client.assignedTo && client.assignedTo !== 'unassigned');
                     const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
                     return (
-                      <select 
-                        className="flex h-8 w-[130px] items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-xs ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+                      <select
+                        className="flex h-8 w-[125px] items-center justify-between rounded-md border border-input bg-background px-2.5 py-1 text-xs ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                         value={client.assignedTo || 'unassigned'}
                         disabled={isAssigned && !canReassign}
                         title={isAssigned && !canReassign ? 'Locked: Only the Sales Manager can change an assigned sales rep.' : undefined}
@@ -1883,8 +1905,10 @@ export default function Clients() {
                   })()}
                 </TableCell>
               )}
-              <TableCell className="text-right sticky right-0 bg-background/95 backdrop-blur z-10 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.3)] pr-4 group-hover:bg-muted/95 transition-colors" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-end gap-1.5">
+
+              {/* Column 7: Actions */}
+              <TableCell className="text-right pr-4 py-3 align-top whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-end gap-1">
                   <Button
                     variant="ghost"
                     size="icon"
@@ -1896,7 +1920,7 @@ export default function Clients() {
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700" title="Generate Contract" onClick={() => {
                     const clientPayments = payments.filter(p => p.clientId === client.id && !p.deleted_at && (!p.status || p.status === 'paid'));
-                    const latestPayment = clientPayments.length > 0 
+                    const latestPayment = clientPayments.length > 0
                       ? clientPayments.sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))[0]
                       : null;
                     void generateClientContract(client, { payment: latestPayment || undefined, printedBy: currentUser?.name });
@@ -1906,17 +1930,16 @@ export default function Clients() {
                   <Button
                     variant="outline"
                     size="sm"
+                    className="h-8 px-2.5 text-xs font-semibold"
                     onClick={() => setActiveClientId(client.id)}
                   >
                     {t('common.manage')}
                   </Button>
-
-
-                {canDeleteRecords && (
-                  <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteClient(client.id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
+                  {canDeleteRecords && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteClient(client.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </TableCell>
             </TableRow>
@@ -2694,24 +2717,39 @@ export default function Clients() {
                     </div>
                   </div>
 
-                  {/* CENTER: Large Member ID */}
-                  <div className="flex items-center justify-center my-1 sm:my-0">
+                  {/* CENTER: Large Member ID / Lead ID */}
+                  <div className="flex items-center justify-center gap-2 my-1 sm:my-0 flex-wrap">
                     <div 
                       onClick={() => {
-                        const idToCopy = activeClient.memberId ? String(activeClient.memberId).replace(/^#/, '') : activeClient.id;
+                        const rawId = activeClient.status === 'Lead' || !activeClient.memberId
+                          ? (activeClient.leadId || activeClient.redgitsId || activeClient.id)
+                          : activeClient.memberId;
+                        const idToCopy = String(rawId || '').replace(/^#/, '');
                         if (idToCopy) {
                           navigator.clipboard.writeText(idToCopy);
-                          toast.success(`Member ID copied: ${idToCopy}`);
+                          toast.success(`${activeClient.status === 'Lead' || !activeClient.memberId ? 'Lead ID' : 'Member ID'} copied: ${idToCopy}`);
                         }
                       }}
-                      title="Click to copy Member ID"
+                      title="Click to copy ID"
                       className="px-5 py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border/80 rounded-xl flex flex-col items-center sm:items-start justify-center shadow-sm"
                     >
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Member ID</span>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                        {activeClient.status === 'Lead' || !activeClient.memberId ? 'Lead ID' : 'Member ID'}
+                      </span>
                       <span className="text-xl sm:text-2xl font-black font-mono tracking-wider text-foreground">
-                        {activeClient.memberId ? (String(activeClient.memberId).startsWith('#') ? activeClient.memberId : `#${activeClient.memberId}`) : (activeClient.id || '—')}
+                        {activeClient.status !== 'Lead' && activeClient.memberId
+                          ? (String(activeClient.memberId).startsWith('#') ? activeClient.memberId : `#${activeClient.memberId}`)
+                          : `Lead #${activeClient.leadId || activeClient.redgitsId || activeClient.id || '—'}`}
                       </span>
                     </div>
+                    {activeClient.status !== 'Lead' && activeClient.memberId && (activeClient.leadId || activeClient.redgitsId) && String(activeClient.leadId || activeClient.redgitsId) !== String(activeClient.memberId) && (
+                      <div className="px-3 py-1.5 bg-muted/30 border border-border/50 rounded-xl flex flex-col items-center sm:items-start justify-center">
+                        <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block">Origin Lead ID</span>
+                        <span className="text-xs font-mono font-bold text-muted-foreground">
+                          #{activeClient.leadId || activeClient.redgitsId}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
@@ -2733,9 +2771,9 @@ export default function Clients() {
               </div>
 
             <Tabs value={memberProfileTab} onValueChange={setMemberProfileTab} className="flex-1 flex flex-col overflow-hidden min-h-0">
-              {/* Modern scrollable horizontal tab pills */}
-              <div className="px-6 py-2 border-b flex-shrink-0 bg-muted/10 overflow-x-auto no-scrollbar">
-                <TabsList className="bg-transparent p-0 h-auto gap-1 rounded-none border-none shadow-none flex flex-row whitespace-nowrap min-w-max">
+              {/* Responsive wrapping tab pills — all tabs visible without horizontal cutoff */}
+              <div className="px-4 sm:px-6 py-2.5 border-b flex-shrink-0 bg-muted/10">
+                <TabsList className="bg-transparent p-0 h-auto gap-1.5 rounded-none border-none shadow-none flex flex-wrap justify-start w-full">
                   {[
                     { value: 'overview', label: isInzanTenant ? 'Overview (User Details)' : 'Overview', icon: <User className="h-3.5 w-3.5" /> },
                     ...(isInzanTenant ? [{ value: 'packages', label: `Packages & Invites (${(activeClient.packages || []).length || 1})`, icon: <Gift className="h-3.5 w-3.5" /> }] : []),
@@ -2753,7 +2791,7 @@ export default function Clients() {
                     <TabsTrigger
                       key={tab.value}
                       value={tab.value}
-                      className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5"
+                      className="rounded-lg data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-2.5 py-1.5 text-xs font-bold transition-all flex items-center gap-1.5 border border-transparent data-[state=inactive]:border-border/50 data-[state=inactive]:bg-background/60 hover:bg-muted"
                     >
                       {tab.icon}
                       {tab.label}
@@ -2765,7 +2803,7 @@ export default function Clients() {
               <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                 {/* ── OVERVIEW TAB ── */}
                 <TabsContent value="overview" className="mt-0 outline-none p-5 space-y-5">
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
                     {/* Left: Editable fields */}
                     <div className="space-y-4 p-4 rounded-xl border bg-muted/20 text-left">
                       <div className="flex items-center justify-between border-b pb-2 mb-2">
@@ -3271,7 +3309,7 @@ export default function Clients() {
                                   </Button>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div className="grid grid-cols-1 2xl:grid-cols-2 gap-2.5">
                                   <div className="p-3 rounded-lg border bg-background space-y-1">
                                     <div className="flex items-center justify-between gap-1">
                                       <Badge className="bg-emerald-600 text-white text-[9px] font-bold uppercase">Primary Package</Badge>

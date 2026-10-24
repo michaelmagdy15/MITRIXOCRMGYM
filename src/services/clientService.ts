@@ -35,11 +35,36 @@ export const generateMemberId = async (): Promise<string> => {
   }
 };
 
+export const generateLeadId = async (): Promise<string> => {
+  const counterRef = doc(db, 'counters', 'leads');
+  try {
+    const newId = await runTransaction(db, async (transaction) => {
+      const counterDoc = await transaction.get(counterRef);
+      let nextId = 1001;
+      if (counterDoc.exists()) {
+        const data = counterDoc.data();
+        nextId = (data?.['lastId'] || 1000) + 1;
+      }
+      transaction.set(counterRef, { lastId: nextId }, { merge: true });
+      return nextId;
+    });
+    return newId.toString();
+  } catch (error) {
+    console.error("Error generating lead ID:", error);
+    return Math.floor(10000 + Math.random() * 90000).toString();
+  }
+};
+
 export const addClient = async (client: Client): Promise<ClientId> => {
   const { id: _, comments: __, ...clientData } = client;
   
-  if (clientData.status !== 'Lead' && !('memberId' in clientData)) {
-    // This is a safety check for when we are converting a lead to a member
+  if (clientData.status === 'Lead') {
+    // Leads never reserve a memberId; they get a separate sequential leadId
+    delete (clientData as any).memberId;
+    if (!clientData.leadId) {
+      (clientData as any).leadId = await generateLeadId();
+    }
+  } else if (!clientData.memberId) {
     (clientData as any).memberId = await generateMemberId();
   }
 
