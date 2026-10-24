@@ -471,6 +471,9 @@ export interface Client {
   sessionsRemaining?: number | string; // e.g., 6, 0, -3, or "no attend"
   ptSessionsRemaining?: number | string;
   guestInvitesRemaining?: number; // Package benefit: guest invitations left
+  invitationsRemaining?: number; // Inzan / Redgits guest invitations remaining
+  invitationsUsed?: number; // Inzan / Redgits guest invitations used
+  invitationsTotal?: number; // Inzan / Redgits total guest invitations quota
   freeClassTrialsRemaining?: number; // Package benefit: free trials of paid classes left
   startDate?: string; // ISO string
   membershipExpiry?: string; // ISO string (End Date)

@@ -24,6 +24,7 @@
     "test:class-guardrail": "vite-node src/utils/classDeletionGuardrail.test.ts",
     "test:profile-locking": "vite-node src/utils/memberProfileLocking.test.ts",
     "test:inzan-requirements": "vite-node src/utils/inzanFeatureRequirements.test.ts",
+    "test:qa": "vite-node src/utils/inzanQAAutomation.test.ts",
     "test:sales-rules": "vite-node src/utils/salesAndPaymentRules.test.ts",
     "test:guest-storefront": "tsx src/utils/storefrontGuestAccess.test.ts",
     "audit:frontend": "node scripts/lighthouse-audit.js",

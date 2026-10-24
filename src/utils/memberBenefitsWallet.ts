@@ -108,14 +108,24 @@ export function computeMemberBenefitsSummary(
   for (const cp of activeClientPackages) {
     usedFreezeDays += Number(cp.freezeDaysUsed || 0);
     const catPkg = findCataloguePkg(cp.packageName);
+    const cpBenefits = (cp as any).benefits || {};
     if (catPkg && !matchedCatalogueSet.has(catPkg.id)) {
       matchedCatalogueSet.add(catPkg.id);
-      totalFreePt += Number(catPkg.benefits?.freePtSessions ?? catPkg.freePtSessions ?? 0);
-      totalClassTrials += Number(catPkg.benefits?.freeClassTrials ?? catPkg.freeClassTrials ?? 0);
-      totalGuestInvites += Number(catPkg.benefits?.guestInvitations ?? catPkg.guestInvitations ?? 0);
-      totalFreezeAllowance += Number(catPkg.benefits?.freezeAllowanceDays ?? catPkg.freezeAllowanceDays ?? 0);
-      const pkgMin = Number(catPkg.benefits?.minFreezeDays ?? catPkg.minFreezeDays ?? 0);
-      const pkgMax = Number(catPkg.benefits?.maxFreezeDays ?? catPkg.maxFreezeDays ?? 0);
+      totalFreePt += Number(catPkg.benefits?.freePtSessions ?? catPkg.freePtSessions ?? cpBenefits.freePtSessions ?? (cp as any).freePtSessions ?? 0);
+      totalClassTrials += Number(catPkg.benefits?.freeClassTrials ?? catPkg.freeClassTrials ?? cpBenefits.freeClassTrials ?? cpBenefits.classTrials ?? (cp as any).freeClassTrials ?? (cp as any).classTrials ?? 0);
+      totalGuestInvites += Number(catPkg.benefits?.guestInvitations ?? catPkg.guestInvitations ?? cpBenefits.guestInvitations ?? (cp as any).guestInvitations ?? 0);
+      totalFreezeAllowance += Number(catPkg.benefits?.freezeAllowanceDays ?? catPkg.freezeAllowanceDays ?? cpBenefits.freezeAllowanceDays ?? (cp as any).freezeAllowanceDays ?? 0);
+      const pkgMin = Number(catPkg.benefits?.minFreezeDays ?? catPkg.minFreezeDays ?? cpBenefits.minFreezeDays ?? 0);
+      const pkgMax = Number(catPkg.benefits?.maxFreezeDays ?? catPkg.maxFreezeDays ?? cpBenefits.maxFreezeDays ?? 0);
+      if (pkgMin > 0 && (minFreezeDays === 0 || pkgMin < minFreezeDays)) minFreezeDays = pkgMin;
+      if (pkgMax > maxFreezeDays) maxFreezeDays = pkgMax;
+    } else if (!catPkg) {
+      totalFreePt += Number(cpBenefits.freePtSessions ?? (cp as any).freePtSessions ?? 0);
+      totalClassTrials += Number(cpBenefits.freeClassTrials ?? cpBenefits.classTrials ?? (cp as any).freeClassTrials ?? (cp as any).classTrials ?? 0);
+      totalGuestInvites += Number(cpBenefits.guestInvitations ?? (cp as any).guestInvitations ?? 0);
+      totalFreezeAllowance += Number(cpBenefits.freezeAllowanceDays ?? (cp as any).freezeAllowanceDays ?? 0);
+      const pkgMin = Number(cpBenefits.minFreezeDays ?? (cp as any).minFreezeDays ?? 0);
+      const pkgMax = Number(cpBenefits.maxFreezeDays ?? (cp as any).maxFreezeDays ?? 0);
       if (pkgMin > 0 && (minFreezeDays === 0 || pkgMin < minFreezeDays)) minFreezeDays = pkgMin;
       if (pkgMax > maxFreezeDays) maxFreezeDays = pkgMax;
     }

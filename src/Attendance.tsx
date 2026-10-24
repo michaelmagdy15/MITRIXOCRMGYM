@@ -1628,9 +1628,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                     // Redgits / DB zero-benefit fallback:
                     if (isInzan && rawFreezeTot === 0 && rawInvTot === 0 && rawFreePtTot === 0) {
                       const pkgStr = String(m.primaryPackageName || selectedPackageName || m.packageType || '').toLowerCase();
-                      if (pkgStr.includes('12') || pkgStr.includes('year') || pkgStr.includes('annual') || pkgStr.includes('365')) {
+                      if (pkgStr.includes('365') || pkgStr.includes('12') || pkgStr.includes('annual') || (pkgStr.includes('year') && !pkgStr.includes('half'))) {
                         rawFreezeTot = 30; rawInvTot = 10; rawFreePtTot = 2;
-                      } else if (pkgStr.includes('6') || pkgStr.includes('half') || pkgStr.includes('180')) {
+                      } else if (pkgStr.includes('180') || pkgStr.includes('half') || pkgStr.includes('6') || pkgStr.includes('semester')) {
                         rawFreezeTot = 15; rawInvTot = 5; rawFreePtTot = 1;
                       } else if (pkgStr.includes('3') || pkgStr.includes('quarter') || pkgStr.includes('90')) {
                         rawFreezeTot = 7; rawInvTot = 2; rawFreePtTot = 1;
