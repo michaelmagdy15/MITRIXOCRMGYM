@@ -91,6 +91,7 @@ module.exports = ({ config }) => {
     ...baseConfig.expo,
     ...(tenantKey === 'inzanathletics' ? { userInterfaceStyle: 'dark', backgroundColor: '#000000', androidStatusBar: { barStyle: 'light-content', backgroundColor: '#000000' }, androidNavigationBar: { barStyle: 'light-content', backgroundColor: '#000000' } } : {}),
     name: appName,
+    version: tenantKey === 'inzanathletics' ? '1.0.0' : baseConfig.expo.version,
     slug: appSlug,
     scheme: appScheme,
     icon: resolvedIcon,

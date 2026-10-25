@@ -67,7 +67,13 @@
       "extends": "production"
     },
     "production-inzanathletics": {
-      "extends": "production"
+      "ios": {
+        "ascAppId": "6826942319"
+      },
+      "android": {
+        "track": "production",
+        "releaseStatus": "completed"
+      }
     }
   }
 }
