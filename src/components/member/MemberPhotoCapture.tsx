@@ -29,16 +29,33 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
   const [capturedDataUrl, setCapturedDataUrl] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [imgLoadFailed, setImgLoadFailed] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const currentPhoto =
+  const rawPhotoCandidate = String(
     client.photoURL ||
-    (client as any).photoUrl ||
-    (client as any).avatar ||
-    '';
+      (client as any).photoUrl ||
+      (client as any).avatar ||
+      ''
+  ).trim();
+
+  // Filter out broken RedGITS directory-only placeholder URLs ("https://inzan.redgits.com/uploads/")
+  // and fall back to the RedGITS member webcam path when redgitsId is available.
+  const isBrokenUploadsRoot = /\/uploads\/?$/i.test(rawPhotoCandidate);
+  const fallbackRedgitsId =
+    (client as any).redgitsId ||
+    (client.id && String(client.id).startsWith('redgits-') ? String(client.id).replace(/^redgits-/, '') : '');
+  const resolvedPhotoUrl =
+    rawPhotoCandidate && !isBrokenUploadsRoot
+      ? rawPhotoCandidate
+      : fallbackRedgitsId && /^\d+$/.test(String(fallbackRedgitsId))
+      ? `https://inzan.redgits.com/uploads/members/${fallbackRedgitsId}-cam.jpg`
+      : '';
+
+  const currentPhoto = imgLoadFailed ? '' : resolvedPhotoUrl;
 
   const stopWebcam = useCallback(() => {
     if (streamRef.current) {
@@ -59,7 +76,8 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
     setIsWebcamOpen(false);
     setCapturedDataUrl(null);
     setCameraError(null);
-  }, [client.id, stopWebcam]);
+    setImgLoadFailed(false);
+  }, [client.id, resolvedPhotoUrl, stopWebcam]);
 
   const startWebcam = async () => {
     setCameraError(null);
@@ -212,6 +230,7 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
               src={currentPhoto}
               alt={client.name}
               className="h-full w-full object-cover"
+              onError={() => setImgLoadFailed(true)}
             />
           ) : (
             <User className="h-7 w-7 text-amber-500/80" />

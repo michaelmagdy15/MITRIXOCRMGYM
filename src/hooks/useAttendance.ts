@@ -7,6 +7,17 @@ import { validatePackageTimeWindow } from '../utils/membershipRules';
 import { isTenantInzan } from '../utils/inzanOrg';
 import { useAuth } from '../contexts/AuthContext';
 
+const CAIRO_DATE_FORMATTER = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' });
+
+function toCairoDateStr(dateInput: string | number | Date): string {
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    return dateInput;
+  }
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  return CAIRO_DATE_FORMATTER.format(d);
+}
+
 export const useAttendance = (currentUser: User | null, clients: Client[]) => {
   const { effectiveRole } = useAuth();
   const [attendances, setAttendances] = useState<Attendance[]>([]);
@@ -23,14 +34,26 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       return;
     }
     
-    const unsub = onSnapshot(collection(db, 'attendance'), (snapshot) => {
-      const list = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Attendance));
-      list.sort((a, b) => {
-        const tsB = new Date((b as any).date || (b as any).checkedInAt || 0).getTime() || 0;
-        const tsA = new Date((a as any).date || (a as any).checkedInAt || 0).getTime() || 0;
-        return tsB - tsA;
+    // Scope live listener to the last 30 days to save 95%+ of Firestore read quota
+    // and avoid loading 10,000+ historical attendance docs into memory on every session.
+    const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const recentAttendanceQuery = query(
+      collection(db, 'attendance'),
+      where('date', '>=', thirtyDaysAgoIso)
+    );
+
+    const unsub = onSnapshot(recentAttendanceQuery, (snapshot) => {
+      const withTs = snapshot.docs.map(d => {
+        const data = d.data();
+        const rawDate = data.date || data.checkedInAt || '';
+        const ts = rawDate ? (Date.parse(String(rawDate)) || 0) : 0;
+        return { doc: { ...data, id: d.id } as Attendance, ts, timeStr: String(data.checkInTime || '') };
       });
-      setAttendances(list);
+      withTs.sort((a, b) => {
+        if (b.ts !== a.ts) return b.ts - a.ts;
+        return b.timeStr.localeCompare(a.timeStr);
+      });
+      setAttendances(withTs.map(x => x.doc));
       setLoading(false);
     }, (error) => {
       console.error('[Attendance] Failed to fetch attendances:', error);
@@ -69,22 +92,29 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
         }
       }
 
-      const cairoDateStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+      const cairoDateStr = toCairoDateStr(new Date());
       
-      // Check attendance
-      const attendanceQ = query(collection(db, 'attendance'), where('clientId', '==', clientId));
-      const attendanceSnap = await getDocs(attendanceQ);
-      let todayCheckins: any[] = [];
-      attendanceSnap.docs.forEach(d => {
-        const a = d.data();
-        if (!a.date) return;
-        try {
-          if (new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoDateStr) {
-            todayCheckins.push(a);
+      // Check today's attendance using the live in-memory recent attendances first (0 Firestore reads),
+      // falling back to a Firestore query only when in-memory attendances are not loaded (e.g. client/coach role).
+      let checkinCount = 0;
+      if (attendances.length > 0) {
+        for (const a of attendances) {
+          if (a.clientId !== clientId || !a.date) continue;
+          if ((a as any).sessionDate === cairoDateStr || toCairoDateStr(a.date) === cairoDateStr) {
+            checkinCount++;
           }
-        } catch {}
-      });
-      const checkinCount = todayCheckins.length;
+        }
+      } else {
+        const attendanceQ = query(collection(db, 'attendance'), where('clientId', '==', clientId));
+        const attendanceSnap = await getDocs(attendanceQ);
+        attendanceSnap.docs.forEach(d => {
+          const a = d.data();
+          if (!a.date) return;
+          if (a.sessionDate === cairoDateStr || toCairoDateStr(a.date) === cairoDateStr) {
+            checkinCount++;
+          }
+        });
+      }
 
       // Fetch sessions today
       const sessionsQ = query(collection(db, 'sessions'), where('clientId', '==', clientId), where('date', '==', cairoDateStr));

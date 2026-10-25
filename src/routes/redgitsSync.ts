@@ -27,6 +27,7 @@ interface SyncStats {
     staff: number;
     salesReps: number;
     invitations: number;
+    checkIns?: number;
     unmaskedPhonesFetched: number;
   };
 }
@@ -558,6 +559,103 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     const guestReportFromDate = mode === 'full' ? '2025-01-01' : new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
     const guestReportByRedgitsId = await fetchGuestReportMap(guestReportFromDate, '2026-12-31');
     const expiredRows = mode === 'full' ? await fetchDataTableJson('expiredmember', 10000) : [];
+
+    // Fetch live Check-ins from /admin/check/getactivitesday (last 10 days in fast mode, last 45 days in full mode)
+    const checkInDaysBack = mode === 'full' ? 45 : 10;
+    const checkInFromDate = new Date(Date.now() - checkInDaysBack * 86400000).toISOString().slice(0, 10);
+    const checkInToDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const liveCheckInRecords: Array<{
+      redgitsId: string;
+      clientDocId: string;
+      memberName: string;
+      cardMemberId: string;
+      dateStr: string;
+      dayName: string;
+      checkInTime: string;
+      checkOutTime: string;
+      checkedInIso: string;
+      packagePrimary: string;
+      packageCategory: string;
+      packageName: string;
+      locker: string;
+      noteCheckIn: string;
+      createdBy: string;
+      notes: string;
+    }> = [];
+
+    try {
+      const actUrl = `${REDGITS_ORIGIN}/admin/check/getactivitesday?fromdate=${encodeURIComponent(
+        `${checkInFromDate} 00:00:00`
+      )}&todate=${encodeURIComponent(`${checkInToDate} 23:59:59`)}&gender=&all=&note=`;
+      const actRes = await fetch(actUrl, {
+        headers: {
+          Cookie: getCookieHeader(),
+          'User-Agent': USER_AGENT,
+          Referer: `${REDGITS_ORIGIN}/admin/check/memberactivities`,
+        },
+      });
+      saveCookies(actRes);
+      if (actRes.ok) {
+        const actHtml = await actRes.text();
+        const tblStart = actHtml.indexOf('sample16c');
+        const tbStart = tblStart > -1 ? actHtml.indexOf('<tbody>', tblStart) : -1;
+        const tbEnd = tbStart > -1 ? actHtml.indexOf('</tbody>', tbStart) : -1;
+        const tbHtml = tbStart > -1 && tbEnd > -1 ? actHtml.slice(tbStart, tbEnd) : '';
+        if (tbHtml) {
+          const cleanActCell = (h: string) =>
+            String(h || '')
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<br\s*\/?>/gi, ' ')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/&nbsp;/gi, ' ')
+              .replace(/&amp;/gi, '&')
+              .replace(/&#039;/gi, "'")
+              .replace(/&quot;/gi, '"')
+              .replace(/\s+/g, ' ')
+              .trim();
+          const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+          let trM: RegExpExecArray | null;
+          while ((trM = trRe.exec(tbHtml)) !== null) {
+            const tds: string[] = [];
+            const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+            let tdM: RegExpExecArray | null;
+            while ((tdM = tdRe.exec(trM[1] || '')) !== null) {
+              tds.push(tdM[1] || '');
+            }
+            if (tds.length < 13) continue;
+            const idM = `${tds[0]} ${tds[1]} ${tds[2]}`.match(/\/admin\/members\/view\/(\d+)/i);
+            const rId = idM?.[1]?.trim() || '';
+            const dayAndDate = cleanActCell(tds[3] || '');
+            const dateM = dayAndDate.match(/(\d{4}-\d{2}-\d{2})/);
+            const dStr = dateM?.[1] || '';
+            if (!rId || !dStr) continue;
+            const tRaw = cleanActCell(tds[4] || '');
+            const validT = /^\d{2}:\d{2}(:\d{2})?$/.test(tRaw) ? (tRaw.length === 5 ? `${tRaw}:00` : tRaw) : '12:00:00';
+            liveCheckInRecords.push({
+              redgitsId: rId,
+              clientDocId: `redgits-${rId}`,
+              memberName: cleanActCell(tds[1] || ''),
+              cardMemberId: cleanActCell(tds[2] || ''),
+              dateStr: dStr,
+              dayName: dayAndDate.replace(/\d{4}-\d{2}-\d{2}/, '').trim(),
+              checkInTime: validT,
+              checkOutTime: cleanActCell(tds[5] || ''),
+              checkedInIso: `${dStr}T${validT}`,
+              packagePrimary: cleanActCell(tds[6] || '') || 'Primary Package',
+              packageCategory: cleanActCell(tds[7] || '') || 'Membership',
+              packageName: cleanActCell(tds[8] || '') || 'Basic Membership',
+              locker: cleanActCell(tds[10] || ''),
+              noteCheckIn: cleanActCell(tds[11] || ''),
+              createdBy: cleanActCell(tds[12] || '') || 'Front Desk',
+              notes: cleanActCell(tds[14] || ''),
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[RedGITS Sync] Warning fetching getactivitesday check-ins:', e);
+    }
 
     if (activeRows.length === 0 && pkgCatalogRows.length === 0) {
       res.status(502).json({
@@ -1242,6 +1340,14 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       const resolvedLastContactDate =
         resolvedLastCall?.date || existingClient.lastContactDate || guestReportEntry?.date || undefined;
 
+      const existingPhotoUrl = String(existingClient.photoURL || existingClient.photoUrl || '').trim();
+      const resolvedPhotoUrl =
+        existingPhotoUrl && !/\/uploads\/?$/i.test(existingPhotoUrl)
+          ? existingPhotoUrl
+          : status !== 'Lead' && /^\d+$/.test(rId)
+          ? `${REDGITS_ORIGIN}/uploads/members/${rId}-cam.jpg`
+          : undefined;
+
       const clientData: Record<string, any> = {
         id: clientDocId,
         redgitsId: rId,
@@ -1250,6 +1356,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         memberId: resolvedMemberId ? resolvedMemberId : FieldValue.delete(),
         name,
         phone,
+        photoURL: resolvedPhotoUrl,
         nationalId: nationalId || existingClient.nationalId || undefined,
         dateOfBirth: dateOfBirth || existingClient.dateOfBirth || undefined,
         gender: /fem|انث|أنث/i.test(genderRaw) ? 'Female' : 'Male',
@@ -1375,6 +1482,74 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     const packageDocs = Array.from(packageDocsMap.values());
     const paymentDocs = Array.from(paymentDocsMap.values());
 
+    // Build top-level `attendance` docs and `clients/{id}/attendance_history` writes from liveCheckInRecords
+    const attendanceDocsMap = new Map<string, { id: string; data: Record<string, any> }>();
+    const subColAttWrites: Array<{ ref: FirebaseFirestore.DocumentReference; data: Record<string, any> }> = [];
+    for (const cRec of liveCheckInRecords) {
+      const timeClean = cRec.checkInTime.replace(/:/g, '');
+      const attDocId = `redgits-checkin-${cRec.redgitsId}-${cRec.dateStr}_${timeClean}`;
+      const combinedNotes = [
+        cRec.locker ? `Locker: ${cRec.locker}` : '',
+        cRec.checkOutTime ? `Out: ${cRec.checkOutTime}` : '',
+        cRec.noteCheckIn ? `Check-in Note: ${cRec.noteCheckIn}` : '',
+        cRec.notes || '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
+      attendanceDocsMap.set(attDocId, {
+        id: attDocId,
+        data: {
+          id: attDocId,
+          clientId: cRec.clientDocId,
+          memberId: cRec.cardMemberId || cRec.redgitsId,
+          redgitsId: cRec.redgitsId,
+          memberName: cRec.memberName || 'Member',
+          branch: 'Garden 8',
+          date: cRec.checkedInIso,
+          sessionDate: cRec.dateStr,
+          checkInTime: cRec.checkInTime,
+          checkOutTime: cRec.checkOutTime || undefined,
+          packageName: cRec.packageName,
+          packageCategory: cRec.packageCategory,
+          packagePrimary: cRec.packagePrimary,
+          locker: cRec.locker || undefined,
+          recordedBy: cRec.createdBy,
+          recordedByName: cRec.createdBy,
+          notes: combinedNotes || undefined,
+          status: 'ATTENDED',
+          sourceSystem: 'RedGITS_v17.12',
+          updatedAt: nowIso,
+        },
+      });
+
+      subColAttWrites.push({
+        ref: inzanDb.collection('clients').doc(cRec.clientDocId).collection('attendance_history').doc(attDocId),
+        data: {
+          id: attDocId,
+          memberId: cRec.clientDocId,
+          cardMemberId: cRec.cardMemberId || undefined,
+          memberName: cRec.memberName || undefined,
+          sessionTitle: cRec.packageName,
+          packageCategory: cRec.packageCategory,
+          packagePrimary: cRec.packagePrimary,
+          branchName: 'Garden 8',
+          sessionDate: cRec.dateStr,
+          dayName: cRec.dayName || undefined,
+          checkInTime: cRec.checkInTime,
+          checkOutTime: cRec.checkOutTime || undefined,
+          locker: cRec.locker || undefined,
+          checkedInAt: cRec.checkedInIso,
+          checkedInBy: cRec.createdBy,
+          status: 'ATTENDED',
+          notes: combinedNotes || undefined,
+          remainingCreditsAfter: 30,
+          sourceSystem: 'RedGITS_v17.12',
+        },
+      });
+    }
+    const attendanceDocs = Array.from(attendanceDocsMap.values());
+
     // 11. Commit all batches to `db-inzanathletics`
     await commitDocsInBatches(inzanDb, 'users', userDocs);
     await commitDocsInBatches(inzanDb, 'packages', packageDocs);
@@ -1382,6 +1557,19 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     await commitDocsInBatches(inzanDb, 'clients', clientDocs);
     await commitDocsInBatches(inzanDb, 'payments', paymentDocs);
     await commitDocsInBatches(inzanDb, 'guestInvites', inviteDocs);
+    await commitDocsInBatches(inzanDb, 'attendance', attendanceDocs);
+
+    if (subColAttWrites.length > 0) {
+      const SUB_BATCH = 450;
+      for (let i = 0; i < subColAttWrites.length; i += SUB_BATCH) {
+        const chunk = subColAttWrites.slice(i, i + SUB_BATCH);
+        const b = inzanDb.batch();
+        for (const item of chunk) {
+          b.set(item.ref, stripUndefinedDeep(item.data), { merge: true });
+        }
+        await b.commit();
+      }
+    }
 
     // 12. Sync sequential counters (`counters/clients` for real Member IDs, `counters/leads` for Lead IDs)
     if (maxRealMemberIdNum > 0) {
@@ -1419,6 +1607,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         staff: coachDocs.length,
         salesReps: userDocs.length,
         invitations: inviteDocs.length,
+        checkIns: attendanceDocs.length,
         unmaskedPhonesFetched,
       },
     };

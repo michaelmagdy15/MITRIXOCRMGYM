@@ -170,6 +170,17 @@ export function evaluateCheckinGatekeeper(
   };
 }
 
+const CAIRO_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo' });
+
+export function getCairoDateString(dateInput: string | number | Date): string {
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+    return dateInput;
+  }
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  return CAIRO_DAY_FORMATTER.format(d);
+}
+
 /**
  * Computes live floor occupancy breakdown (`Active Member now is X | Male: Y | Female: Z`)
  * for today's check-ins within the active floor window (default last 3 hours or since today's start).
@@ -180,7 +191,7 @@ export function computeLiveFloorOccupancy(
   selectedBranch?: string,
   checkedOutClientIds?: Set<string>
 ): { totalActive: number; male: number; female: number; activeClientIds: string[] } {
-  const cairoToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+  const cairoToday = getCairoDateString(new Date());
   const clientMap = new Map<string, Client>();
   for (const c of clients) {
     clientMap.set(c.id, c);
@@ -192,13 +203,13 @@ export function computeLiveFloorOccupancy(
     if (selectedBranch && selectedBranch !== 'ALL' && att.branch && att.branch !== selectedBranch) {
       continue;
     }
-    try {
-      const attDate = new Date(att.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-      if (attDate === cairoToday && !checkedOutClientIds?.has(att.clientId)) {
-        activeSet.add(att.clientId);
-      }
-    } catch {
-      // ignore malformed date
+    const attAny = att as any;
+    const hasCheckedOut = Boolean(attAny.checkOutTime) || Boolean(checkedOutClientIds?.has(att.clientId));
+    if (hasCheckedOut) continue;
+
+    const attDate = attAny.sessionDate || getCairoDateString(att.date);
+    if (attDate === cairoToday) {
+      activeSet.add(att.clientId);
     }
   }
 

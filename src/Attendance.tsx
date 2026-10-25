@@ -69,6 +69,7 @@ import {
   parseUniversalQrCode,
   evaluateCheckinGatekeeper,
   computeLiveFloorOccupancy,
+  getCairoDateString,
   CheckinLookupMode,
   CheckinGatekeeperEvaluation,
   WrongEntryLogRecord,
@@ -151,18 +152,52 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   }, []);
 
   // ─── DAILY ATTENDANCE & HISTORICAL RECONCILIATION STATE ───
-  const cairoTodayStr = useMemo(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }), []);
-  const [rosterDate, setRosterDate] = useState<string>(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }));
+  const cairoTodayStr = useMemo(() => getCairoDateString(new Date()), []);
+  const [rosterDate, setRosterDate] = useState<string>(() => getCairoDateString(new Date()));
   const [selectedSessionFilter, setSelectedSessionFilter] = useState<string>('all');
   const [rosterSearch, setRosterSearch] = useState<string>('');
   const [searchScope, setSearchScope] = useState<'day' | 'all'>('day');
   const [showLowCreditsOnly, setShowLowCreditsOnly] = useState<boolean>(false);
+  const [rosterVisibleLimit, setRosterVisibleLimit] = useState<number>(80);
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
   const [quickAddSessionId, setQuickAddSessionId] = useState('');
   const [quickAddMemberId, setQuickAddMemberId] = useState('');
   const [quickAddSearch, setQuickAddSearch] = useState('');
   const [actionLoadingAttendeeId, setActionLoadingAttendeeId] = useState<string | null>(null);
   const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false);
+
+  // O(1) lookup maps for clients and users to eliminate O(N*M) linear .find() scans during render
+  const clientLookupMap = useMemo(() => {
+    const map = new Map<string, typeof clients[0]>();
+    for (const c of clients) {
+      if (c.id) map.set(c.id, c);
+      if (c.memberId) map.set(String(c.memberId), c);
+    }
+    return map;
+  }, [clients]);
+
+  const userLookupMap = useMemo(() => {
+    const map = new Map<string, typeof users[0]>();
+    for (const u of users) {
+      if (u.id) map.set(u.id, u);
+    }
+    return map;
+  }, [users]);
+
+  const todaysAttendances = useMemo(() => {
+    const filtered = attendances.filter((a) => {
+      if (!a.date) return false;
+      const aAny = a as any;
+      if (aAny.sessionDate) return aAny.sessionDate === cairoTodayStr;
+      return getCairoDateString(a.date) === cairoTodayStr;
+    });
+    return filtered.sort((a, b) => {
+      const timeB = Date.parse(String(b.date || '')) || 0;
+      const timeA = Date.parse(String(a.date || '')) || 0;
+      if (timeB !== timeA) return timeB - timeA;
+      return String((b as any).checkInTime || '').localeCompare(String((a as any).checkInTime || ''));
+    });
+  }, [attendances, cairoTodayStr]);
 
   const handlePrevDay = () => {
     try {
@@ -203,16 +238,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const dailyRoster = useMemo(() => {
     const isGlobal = searchScope === 'all';
 
-    // 1. Get check-ins for the active scope
+    // 1. Get check-ins for the active scope using fast Cairo date helper
     const scopedCheckins = attendances.filter(a => {
       if (!a.date) return false;
       if (isGlobal) return true;
-      try {
-        const checkinCairoDate = new Date(a.date).toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
-        return checkinCairoDate === rosterDate;
-      } catch {
-        return false;
-      }
+      const aAny = a as any;
+      if (aAny.sessionDate) return aAny.sessionDate === rosterDate;
+      return getCairoDateString(a.date) === rosterDate;
     });
 
     // Map by clientId to see if they checked in
@@ -223,6 +255,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       if (c.sessionId && c.clientId) checkinMap.set(`${c.sessionId}_${c.clientId}`, c);
     });
 
+    const scheduledClientKeys = new Set<string>();
+
     // 2. Sourced from classes
     const classAttendees: any[] = [];
     classes.forEach(cls => {
@@ -231,7 +265,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
       const attendees = cls.attendees || [];
       attendees.forEach((clientId: string) => {
-        const client = clients.find(c => c.id === clientId || c.memberId === clientId);
+        const client = clientLookupMap.get(clientId);
         const matchedIds = [clientId, client?.id, client?.memberId, client?.portalUserId].filter(Boolean) as string[];
         const isCheckedIn = (cls.checkedIn || []).some((id: string) => matchedIds.includes(String(id))) ||
                             matchedIds.some(id => checkinMap.has(id));
@@ -240,6 +274,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
         const sessionsRemaining = client?.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft;
         const packageType = client?.packageType || client?.memberCategory || (client?.packages?.[0]?.packageName) || '';
+
+        scheduledClientKeys.add(isGlobal ? `${clientId}_${cls.date}` : clientId);
+        if (client?.id) scheduledClientKeys.add(isGlobal ? `${client.id}_${cls.date}` : client.id);
 
         classAttendees.push({
           clientId,
@@ -270,7 +307,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       if (session.status === 'Cancelled') return;
       if (selectedSessionFilter !== 'all' && selectedSessionFilter !== 'pt') return;
 
-      const client = clients.find(c => c.id === session.clientId || c.memberId === session.clientId);
+      const client = clientLookupMap.get(session.clientId);
       if (client) {
         const matchedIds = [session.clientId, client.id, client.memberId].filter(Boolean) as string[];
         const isSessionAttended = session.status === 'Attended';
@@ -279,6 +316,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
         const sessionsRemaining = client.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft;
         const packageType = client.packageType || client.memberCategory || 'Personal Training';
+
+        scheduledClientKeys.add(isGlobal ? `${session.clientId}_${session.date}` : session.clientId);
+        if (client.id) scheduledClientKeys.add(isGlobal ? `${client.id}_${session.date}` : client.id);
 
         ptAttendees.push({
           clientId: session.clientId,
@@ -306,13 +346,12 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     const walkins: any[] = [];
     if (selectedSessionFilter === 'all') {
       scopedCheckins.forEach(checkin => {
-        const alreadyIncluded = classAttendees.some(x => x.clientId === checkin.clientId && (!isGlobal || x.sessionDate === checkin.date)) || 
-                                ptAttendees.some(x => x.clientId === checkin.clientId && (!isGlobal || x.sessionDate === checkin.date));
-        if (!alreadyIncluded) {
-          const client = clients.find(c => c.id === checkin.clientId || c.memberId === checkin.clientId);
+        const lookupKey = isGlobal ? `${checkin.clientId}_${checkin.date}` : checkin.clientId;
+        if (!scheduledClientKeys.has(lookupKey)) {
+          const client = clientLookupMap.get(checkin.clientId);
           const fallbackName = client?.name || (checkin as any).memberName;
           if (client || fallbackName) {
-            const checkinDateOnly = checkin.date ? checkin.date.substring(0, 10) : rosterDate;
+            const checkinDateOnly = (checkin as any).sessionDate || (checkin.date ? checkin.date.substring(0, 10) : rosterDate);
             const sessionsRemaining = client ? (client.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft) : undefined;
             const packageType = checkin.packageName || client?.packageType || client?.memberCategory || 'Walk-in Member';
 
@@ -376,22 +415,23 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       result = result.filter(item => item.sessionsRemaining !== undefined && item.sessionsRemaining !== null && item.sessionsRemaining !== '—' && Number(item.sessionsRemaining) <= 2);
     }
 
+    // Precompute sort timestamp once per item for fast O(N log N) sorting
+    for (const item of result) {
+      item._sortTs =
+        (item.checkinTime ? Date.parse(String(item.checkinTime)) : 0) ||
+        (item.sessionDate && item.sessionTime ? Date.parse(`${item.sessionDate}T${item.sessionTime}`) : 0) ||
+        (item.sessionDate ? Date.parse(String(item.sessionDate)) : 0) ||
+        0;
+    }
+
     // Sort order: latest check-in time first (most recent on top)
     result.sort((a, b) => {
-      const timeB =
-        toValidDate(b.checkinTime)?.getTime() ||
-        toValidDate(b.sessionDate && b.sessionTime ? `${b.sessionDate}T${b.sessionTime}` : b.sessionDate)?.getTime() ||
-        0;
-      const timeA =
-        toValidDate(a.checkinTime)?.getTime() ||
-        toValidDate(a.sessionDate && a.sessionTime ? `${a.sessionDate}T${a.sessionTime}` : a.sessionDate)?.getTime() ||
-        0;
-      if (timeB !== timeA) return timeB - timeA;
+      if (b._sortTs !== a._sortTs) return b._sortTs - a._sortTs;
       return String(b.sessionTime || '').localeCompare(String(a.sessionTime || ''));
     });
 
     return result;
-  }, [attendances, classes, ptPackageRecords, clients, rosterDate, selectedSessionFilter, rosterSearch, searchScope, showLowCreditsOnly]);
+  }, [attendances, classes, ptPackageRecords, clientLookupMap, rosterDate, selectedSessionFilter, rosterSearch, searchScope, showLowCreditsOnly]);
 
   // ─── RETROACTIVE & LIVE CHECK-IN HANDLERS ───
   const handleCheckInRosterItem = async (item: any) => {
@@ -2634,27 +2674,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="max-h-[250px] overflow-y-auto">
-                  {attendances
-                    .filter((a) => {
-                      const aAny = a as any;
-                      if (aAny.sessionDate === cairoTodayStr) return true;
-                      const d = toValidDate(a.date);
-                      if (!d) return false;
-                      try {
-                        return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoTodayStr;
-                      } catch {
-                        return d.toDateString() === new Date().toDateString();
-                      }
-                    })
-                    .sort((a, b) => {
-                      const timeB = toValidDate(b.date)?.getTime() || 0;
-                      const timeA = toValidDate(a.date)?.getTime() || 0;
-                      if (timeB !== timeA) return timeB - timeA;
-                      return String((b as any).checkInTime || '').localeCompare(String((a as any).checkInTime || ''));
-                    })
-                    .map(a => {
-                      const client = clients.find(c => c.id === a.clientId);
-                      const recorder = users.find(u => u.id === a.recordedBy);
+                  {todaysAttendances.map(a => {
+                      const client = clientLookupMap.get(a.clientId);
+                      const recorder = a.recordedBy ? userLookupMap.get(a.recordedBy) : undefined;
                       const aAny = a as any;
                       const displayMemberName = client?.name || aAny.memberName || aAny.clientName;
                       const displayRecorderName =
@@ -2703,7 +2725,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                         </div>
                       );
                     })}
-                  {attendances.filter(a => toValidDate(a.date)?.toDateString() === new Date().toDateString()).length === 0 && (
+                  {todaysAttendances.length === 0 && (
                     <div className="p-8 text-center text-muted-foreground text-xs italic">
                       {t('attendance.no_records')}
                     </div>
@@ -3044,7 +3066,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y text-xs">
-                  {dailyRoster.map((item) => {
+                  {dailyRoster.slice(0, rosterVisibleLimit).map((item) => {
                     const isBusy = actionLoadingAttendeeId === item.clientId;
                     return (
                       <tr key={`${item.sessionId || 'nosess'}_${item.sessionDate || 'nodate'}_${item.clientId}_${item.checkinTime || ''}`} className="hover:bg-muted/30 transition-colors">
@@ -3172,6 +3194,21 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       </tr>
                     );
                   })}
+                  {dailyRoster.length > rosterVisibleLimit && (
+                    <tr>
+                      <td colSpan={5} className="p-3 text-center bg-muted/20">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setRosterVisibleLimit((prev) => prev + 150)}
+                          className="h-8 text-xs font-bold"
+                        >
+                          Show More ({dailyRoster.length - rosterVisibleLimit} more records)
+                        </Button>
+                      </td>
+                    </tr>
+                  )}
                   {dailyRoster.length === 0 && (
                     <tr>
                       <td colSpan={5} className="p-10 text-center text-muted-foreground italic">
