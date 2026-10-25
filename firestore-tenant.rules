@@ -676,6 +676,20 @@ service cloud.firestore {
       allow write: if isTenantStaff();
     }
 
+    match /workoutTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
+    }
+
+    match /assignedWorkouts/{workoutId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow create, delete: if isTenantStaff();
+      allow update: if isTenantStaff() || (
+        isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt'])
+      );
+    }
+
     match /subscriptionRequests/{requestId} {
       allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
       allow create: if isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId);
