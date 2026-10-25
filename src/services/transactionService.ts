@@ -289,6 +289,8 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
   const effectiveBranchId = params.branchId || toCanonicalBranchId(effectiveBranch) || undefined;
   const effectiveCategory = params.packageCategory || resolvePaymentCategory(params.packageType);
   const lockRef = params.operationId ? doc(db, 'operationLocks', params.operationId) : null;
+  const resolvedCoachInfo = await resolveCoachAssignmentInfo(params.coachName, params.coachId);
+  let resolvedClientMemberId = '';
 
   if (isGuestClient) {
     const paymentRef = doc(collection(db, 'payments'));
@@ -312,7 +314,8 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       instapayRef: params.instapayRef,
       packageType: params.packageType,
       package_category_type: effectiveCategory,
-      coachName: params.coachName,
+      coachName: resolvedCoachInfo?.coachName || (params.coachName && params.coachName !== 'unassigned' ? params.coachName : undefined),
+      coachId: resolvedCoachInfo?.effectiveCoachId || (params.coachId && params.coachId !== 'unassigned' ? params.coachId : undefined),
       notes: params.notes,
       receiptSerial: params.receiptSerial || undefined,
       recordedBy: params.recordedBy,
@@ -502,7 +505,8 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       instapayRef: params.instapayRef,
       packageType: params.packageType,
       package_category_type: effectiveCategory,
-      coachName: params.coachName,
+      coachName: resolvedCoachInfo?.coachName || (params.coachName && params.coachName !== 'unassigned' ? params.coachName : undefined),
+      coachId: resolvedCoachInfo?.effectiveCoachId || (params.coachId && params.coachId !== 'unassigned' ? params.coachId : undefined),
       notes: params.notes,
       receiptSerial: params.receiptSerial || undefined,
       recordedBy: params.recordedBy,
@@ -596,7 +600,9 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
         isComplimentary: params.isComplimentary || (params.amount === 0 && actualAmountPaid === 0),
         subscriptionType: params.isRenewal ? 'renew' : params.isUpgradePayment ? 'upgrade' : 'new',
         salesRepName: params.salesName || undefined,
-        trainerName: params.coachName || undefined,
+        trainerName: resolvedCoachInfo?.coachName || (params.coachName && params.coachName !== 'unassigned' ? params.coachName : undefined),
+        coachName: resolvedCoachInfo?.coachName || (params.coachName && params.coachName !== 'unassigned' ? params.coachName : undefined),
+        coachId: resolvedCoachInfo?.effectiveCoachId || (params.coachId && params.coachId !== 'unassigned' ? params.coachId : undefined),
         createdAt: nowIso,
         createdBy: auditCreatedBy,
         createdByName: auditCreatedByName,
@@ -725,6 +731,19 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       if (params.salesName) {
         clientUpdate.salesName = params.salesName;
       }
+      if (resolvedCoachInfo) {
+        clientUpdate.assignedCoachId = resolvedCoachInfo.effectiveCoachId;
+        clientUpdate.assignedCoachName = resolvedCoachInfo.coachName;
+        clientUpdate.trainerName = resolvedCoachInfo.coachName;
+        clientUpdate.coach = resolvedCoachInfo.coachName;
+        clientUpdate.staffAssignments = {
+          ...(clientData.staffAssignments || {}),
+          coach: {
+            staffId: resolvedCoachInfo.effectiveCoachId,
+            staffName: resolvedCoachInfo.coachName,
+          },
+        };
+      }
       if (clientData.status === 'Lead') {
         clientUpdate.stage = 'Converted';
       }
@@ -733,9 +752,12 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
         const nextMemberId = lastId + 1;
         transaction.set(memberCounterRef, { lastId: nextMemberId }, { merge: true });
         clientUpdate.memberId = String(nextMemberId);
+        resolvedClientMemberId = String(nextMemberId);
         if (existingLeadId && !clientData.leadId) {
           clientUpdate.leadId = existingLeadId;
         }
+      } else {
+        resolvedClientMemberId = existingMemberId;
       }
 
       // Award points on actual money collected (1 Point per 100 LE/EGP spent)
@@ -814,12 +836,32 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     if (remainingBalance > 0 && !isPendingOrFailed) {
       commentMsg += ` (Partial payment: ${actualAmountPaid.toLocaleString()} LE paid, ${remainingBalance.toLocaleString()} LE remaining balance).`;
     }
+    if (resolvedCoachInfo && !isPendingOrFailed) {
+      commentMsg += ` Assigned Coach: ${resolvedCoachInfo.coachName}.`;
+    }
     transaction.set(commentRef, {
       text: commentMsg,
       date: new Date().toISOString(),
       author: params.recordedByName || 'System'
     });
   });
+
+  if (resolvedCoachInfo && params.paymentStatus !== 'pending' && params.paymentStatus !== 'failed') {
+    await notifyCoachClientAssigned({
+      coachId: resolvedCoachInfo.effectiveCoachId,
+      coachUserId: resolvedCoachInfo.coachUserId,
+      coachDocId: resolvedCoachInfo.coachDocId,
+      coachCustomId: resolvedCoachInfo.coachCustomId,
+      coachName: resolvedCoachInfo.coachName,
+      clientId: params.clientId,
+      clientName: params.clientName,
+      memberId: resolvedClientMemberId || undefined,
+      packageName: params.packageType,
+      sessionsTotal: params.systemPackage?.sessions,
+      branch: effectiveBranch || undefined,
+      assignedBy: params.recordedByName || params.salesName || 'Staff',
+    });
+  }
 
   // Log audit entry for payment creation/upgrade/renewal
   const logAction = params.isRenewal ? 'UPDATE' : params.isUpgradePayment ? 'UPDATE' : 'CREATE';
