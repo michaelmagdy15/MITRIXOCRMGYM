@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button';
 import { AlertTriangle, Bell, Calendar, Check, Gift, Info, Megaphone, Sparkles, X } from 'lucide-react';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { toValidDate } from '../utils/dateUtils';
+import {
+  initGlobalAudioUnlock,
+  showBrowserNotificationWithPing,
+} from '../services/browserNotificationService';
 
 type MemberNotificationType =
   | 'announcement'
@@ -58,8 +62,15 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
   const [announcementNotifications, setAnnouncementNotifications] = useState<MemberNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const hasSeenInitialClientSnap = useRef(false);
+  const hasSeenInitialTopSnap = useRef(false);
+  const hasSeenInitialAnnSnap = useRef(false);
 
   const uid = currentUser?.id;
+
+  useEffect(() => {
+    initGlobalAudioUnlock();
+  }, []);
 
   useEffect(() => {
     if (!clientId) {
@@ -67,6 +78,7 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
       return;
     }
 
+    hasSeenInitialClientSnap.current = false;
     setLoading(true);
     const q = query(
       collection(db, 'clients', clientId, 'notifications'),
@@ -75,6 +87,7 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
     );
 
     const unsubscribe = onSnapshot(q, (snap) => {
+      const added = snap.docChanges().filter((c) => c.type === 'added');
       setClientNotifications(snap.docs.map((d) => {
         const data = d.data();
         return {
@@ -89,6 +102,17 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
         } as MemberNotification;
       }));
       setLoading(false);
+
+      if (hasSeenInitialClientSnap.current && added.length > 0) {
+        const newest = added[0]?.doc;
+        const d = newest?.data() || {};
+        void showBrowserNotificationWithPing({
+          id: `client_notif_${newest?.id || Date.now()}`,
+          title: d.title || 'Member Update',
+          body: d.body || '',
+        });
+      }
+      hasSeenInitialClientSnap.current = true;
     }, (err) => {
       console.error('[Member Notifications] Error loading client notifications:', err);
       setLoading(false);
@@ -103,36 +127,54 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
       return;
     }
 
-    const loadTopLevel = async () => {
-      try {
-        const q = query(collection(db, 'notifications'), where('recipientUid', '==', uid));
-        const snap = await getDocs(q);
-        setTopLevelNotifications(snap.docs.map((d) => {
-          const data = d.data();
-          return {
-            id: d.id,
-            type: data.type || 'system',
-            title: data.title || 'Notification',
-            body: data.body || '',
-            read: data.read || false,
-            createdAt: data.createdAt || new Date().toISOString(),
-            data: data.data,
-            source: 'top-level',
-          } as MemberNotification;
-        }));
-      } catch (err) {
+    hasSeenInitialTopSnap.current = false;
+    const q = query(collection(db, 'notifications'), where('recipientUid', '==', uid), limit(50));
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
+        const added = snap.docChanges().filter((c) => c.type === 'added');
+        setTopLevelNotifications(
+          snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              type: data.type || 'system',
+              title: data.title || 'Notification',
+              body: data.body || '',
+              read: data.read || false,
+              createdAt: data.createdAt || new Date().toISOString(),
+              data: data.data,
+              source: 'top-level',
+            } as MemberNotification;
+          })
+        );
+
+        if (hasSeenInitialTopSnap.current && added.length > 0) {
+          const newest = added[0]?.doc;
+          const d = newest?.data() || {};
+          void showBrowserNotificationWithPing({
+            id: `top_notif_${newest?.id || Date.now()}`,
+            title: d.title || 'Notification',
+            body: d.body || d.description || '',
+          });
+        }
+        hasSeenInitialTopSnap.current = true;
+      },
+      (err) => {
         console.warn('[Member Notifications] Could not load legacy notifications:', err);
       }
-    };
+    );
 
-    loadTopLevel();
+    return () => unsubscribe();
   }, [uid]);
 
   useEffect(() => {
-    const loadAnnouncements = async () => {
-      try {
+    hasSeenInitialAnnSnap.current = false;
+    const unsubscribe = onSnapshot(
+      collection(db, 'announcements'),
+      (announcementsSnap) => {
         const now = new Date();
-        const announcementsSnap = await getDocs(collection(db, 'announcements'));
+        const added = announcementsSnap.docChanges().filter((c) => c.type === 'added');
         const rows: MemberNotification[] = [];
         announcementsSnap.docs.forEach((d) => {
           const data = d.data();
@@ -157,12 +199,26 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
           }
         });
         setAnnouncementNotifications(rows);
-      } catch (err) {
+
+        if (hasSeenInitialAnnSnap.current && added.length > 0) {
+          const newest = added[0]?.doc;
+          const d = newest?.data() || {};
+          if (d.isActive !== false) {
+            void showBrowserNotificationWithPing({
+              id: `ann_${newest?.id || Date.now()}`,
+              title: d.title || 'New Club Announcement',
+              body: d.body || '',
+            });
+          }
+        }
+        hasSeenInitialAnnSnap.current = true;
+      },
+      (err) => {
         console.warn('[Member Notifications] Could not load announcements:', err);
       }
-    };
+    );
 
-    loadAnnouncements();
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {

@@ -70,6 +70,7 @@ import Complaints from './Complaints';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
 import { ClickToCallModal } from './components/ClickToCallModal';
+import { NotificationEnforcementGate } from './components/NotificationEnforcementGate';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com', 'simary@inzan.com'];
 const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
@@ -1567,6 +1568,7 @@ export default function App() {
                   <CartProvider>
                     <TenantInitWrapper>
                       <OfflineBanner />
+                      <NotificationEnforcementGate />
                       <NotificationsProvider>
                         <AppContent />
                       </NotificationsProvider>

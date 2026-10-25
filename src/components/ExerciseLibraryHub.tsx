@@ -5,6 +5,11 @@ import {
   ExerciseCategory,
   ExerciseEquipment,
 } from '../data/exerciseLibraryData';
+import {
+  POPULAR_WORKOUT_TEMPLATES,
+  PROGRAM_CATEGORIES,
+  ProgramCategory,
+} from '../data/workoutTemplatesData';
 import { db } from '../firebase';
 import {
   collection,
@@ -88,54 +93,16 @@ interface WorkoutTemplateDoc {
   id: string;
   name: string;
   description: string;
+  category?: string;
+  programCategory?: string;
+  programSource?: string;
+  difficulty?: string;
   createdById?: string;
   createdByName?: string;
   createdAt?: string;
   isSystem?: boolean;
   items: TemplateExerciseItem[];
 }
-
-const BUILTIN_TEMPLATES: WorkoutTemplateDoc[] = [
-  {
-    id: 'builtin_calisthenics_foundation',
-    name: 'Calisthenics Skill & Strength',
-    description: 'Planche leans, muscle-up progressions, front lever core & strict bodyweight strength.',
-    isSystem: true,
-    items: [
-      { name: 'Lean Planche', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 15, targetWeightKg: 0, notes: '15s hold per set with protracted scapulae' },
-      { name: 'Muscle Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 5, targetWeightKg: 0, notes: 'Explosive pull to hip' },
-      { name: 'Front Lever', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 15, targetWeightKg: 0, notes: 'Depress scapulae, locked elbows' },
-      { name: 'Handstand Push-Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 8, targetWeightKg: 0 },
-      { name: 'L-Sit On Floor', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 20, targetWeightKg: 0, notes: '20s hold' },
-    ],
-  },
-  {
-    id: 'builtin_upper_hypertrophy',
-    name: 'Upper Body Push / Pull Hypertrophy',
-    description: 'Compound chest, back, shoulder & arm hypertrophy builder.',
-    isSystem: true,
-    items: [
-      { name: 'Barbell Bench Press', category: 'Chest', equipment: 'Barbell', targetSets: 4, targetReps: 8, targetWeightKg: 60 },
-      { name: 'Pull-Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 10, targetWeightKg: 0 },
-      { name: 'Dumbbell Incline Bench Press', category: 'Chest', equipment: 'Dumbbell', targetSets: 3, targetReps: 10, targetWeightKg: 24 },
-      { name: 'Cable Seated Row', category: 'Back', equipment: 'Cable', targetSets: 3, targetReps: 12, targetWeightKg: 55 },
-      { name: 'Dumbbell Lateral Raise', category: 'Shoulders', equipment: 'Dumbbell', targetSets: 4, targetReps: 15, targetWeightKg: 10 },
-    ],
-  },
-  {
-    id: 'builtin_lower_athletic',
-    name: 'Lower Body Power & Athletic Legs',
-    description: 'Squats, posterior chain, single-leg calisthenics & core stability.',
-    isSystem: true,
-    items: [
-      { name: 'Barbell Full Squat', category: 'Legs', equipment: 'Barbell', targetSets: 4, targetReps: 6, targetWeightKg: 80 },
-      { name: 'Barbell Romanian Deadlift', category: 'Legs', equipment: 'Barbell', targetSets: 4, targetReps: 8, targetWeightKg: 70 },
-      { name: 'Single Leg Squat (Pistol) Male', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 6, targetWeightKg: 0, notes: 'Each leg' },
-      { name: 'Suspended Split Squat', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 8, targetWeightKg: 0 },
-      { name: 'Vertical Leg Raise (On Parallel Bars)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 12, targetWeightKg: 0 },
-    ],
-  },
-];
 
 const CATALOG_BY_NAME = new Map<string, ExerciseCatalogItem>();
 for (const ex of FULL_EXERCISE_CATALOG) {
@@ -161,6 +128,10 @@ export default function ExerciseLibraryHub({
   const [selectedCategory, setSelectedCategory] = useState<'All' | ExerciseCategory>('All');
   const [selectedEquipment, setSelectedEquipment] = useState<'All' | ExerciseEquipment>('All');
   const [visibleCount, setVisibleCount] = useState(36);
+
+  // Template filtering & search state (declared before all useEffects to prevent TDZ)
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [selectedProgramCategory, setSelectedProgramCategory] = useState<ProgramCategory>('All');
 
   // Selected exercise for full detail modal
   const [detailExercise, setDetailExercise] = useState<ExerciseCatalogItem | null>(null);
@@ -256,19 +227,73 @@ export default function ExerciseLibraryHub({
   );
 
   const allTemplates = useMemo(() => {
-    const hydratedBuiltins = BUILTIN_TEMPLATES.map((tpl) => ({
-      ...tpl,
-      items: tpl.items.map((item) => {
-        const meta = CATALOG_BY_NAME.get(item.name.toLowerCase());
-        return {
-          ...item,
-          gifUrl: item.gifUrl || meta?.gifUrl,
-          instructions: item.instructions || meta?.instructions,
-        };
-      }),
-    }));
-    return [...customTemplates, ...hydratedBuiltins];
+    const byId = new Map<string, WorkoutTemplateDoc>();
+    for (const tpl of POPULAR_WORKOUT_TEMPLATES) {
+      byId.set(tpl.id, {
+        ...tpl,
+        isSystem: true,
+        items: (tpl.items || []).map((item) => {
+          const meta = CATALOG_BY_NAME.get(item.name.toLowerCase());
+          return {
+            ...item,
+            gifUrl: item.gifUrl || meta?.gifUrl,
+            instructions: item.instructions || meta?.instructions,
+          };
+        }),
+      });
+    }
+    for (const custom of customTemplates) {
+      const rawItems: TemplateExerciseItem[] = Array.isArray(custom.items)
+        ? custom.items
+        : Array.isArray((custom as any).exercises)
+          ? (custom as any).exercises
+          : [];
+      if (rawItems.length === 0) continue;
+      byId.set(custom.id, {
+        ...custom,
+        items: rawItems.map((item) => {
+          const meta = CATALOG_BY_NAME.get((item.name || '').toLowerCase());
+          return {
+            ...item,
+            targetSets: Number(item.targetSets ?? (item as any).sets ?? 3),
+            targetReps: Number(item.targetReps ?? parseInt(String((item as any).reps || '10'), 10) ?? 10),
+            targetWeightKg: Number(item.targetWeightKg ?? 0),
+            gifUrl: item.gifUrl || meta?.gifUrl,
+            instructions: item.instructions || meta?.instructions,
+          };
+        }),
+      });
+    }
+    return Array.from(byId.values());
   }, [customTemplates]);
+
+  const programCategoryCounts = useMemo(() => {
+    const counts: Record<string, number> = { All: allTemplates.length };
+    for (const cat of PROGRAM_CATEGORIES) {
+      if (cat !== 'All') counts[cat] = 0;
+    }
+    for (const tpl of allTemplates) {
+      const cat = tpl.programCategory || tpl.category || 'Trending Splits';
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+    return counts;
+  }, [allTemplates]);
+
+  const filteredTemplates = useMemo(() => {
+    const q = templateSearch.trim().toLowerCase();
+    return allTemplates.filter((tpl) => {
+      const cat = tpl.programCategory || tpl.category || 'Trending Splits';
+      if (selectedProgramCategory !== 'All' && cat !== selectedProgramCategory) return false;
+      if (!q) return true;
+      return (
+        tpl.name.toLowerCase().includes(q) ||
+        (tpl.description || '').toLowerCase().includes(q) ||
+        (tpl.programSource || '').toLowerCase().includes(q) ||
+        cat.toLowerCase().includes(q) ||
+        tpl.items.some((i) => i.name.toLowerCase().includes(q))
+      );
+    });
+  }, [allTemplates, selectedProgramCategory, templateSearch]);
 
   const filteredClients = useMemo(() => {
     const active = (clients || []).filter((c) => c.status !== 'Lead');
@@ -486,20 +511,18 @@ export default function ExerciseLibraryHub({
                 <BookOpen className="h-3.5 w-3.5" />
                 <span>GIF Library ({FULL_EXERCISE_CATALOG.length})</span>
               </button>
-              {mode === 'staff' && (
-                <button
-                  type="button"
-                  onClick={() => setActiveSubView('templates')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                    activeSubView === 'templates'
-                      ? 'bg-background text-foreground shadow-xs'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Layers className="h-3.5 w-3.5" />
-                  <span>Templates ({allTemplates.length})</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setActiveSubView('templates')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeSubView === 'templates'
+                    ? 'bg-background text-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>Trending Templates ({allTemplates.length})</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setActiveSubView('assigned')}
@@ -783,91 +806,215 @@ export default function ExerciseLibraryHub({
       )}
 
       {/* SUBVIEW 2: WORKOUT TEMPLATES */}
-      {activeSubView === 'templates' && mode === 'staff' && (
+      {activeSubView === 'templates' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-base font-bold text-foreground">Coach & System Workout Templates</h3>
+              <h3 className="text-base font-bold text-foreground">
+                Popular & Trending Open-Source Workout Templates ({allTemplates.length})
+              </h3>
               <p className="text-xs text-muted-foreground">
-                Create reusable workout templates and assign them to any client in one click.
+                Curated from r/Fitness (Reddit PPL, GZCLP, nSuns, 5/3/1), r/bodyweightfitness (RR, Planche, Front Lever, Rings), PHUL, PHAT, Arnold Split, HYROX, CrossFit WODs & Strong Curves.
               </p>
             </div>
-            <Button onClick={openNewTemplateModal} size="sm" className="rounded-xl font-bold gap-1.5">
-              <Plus className="h-4 w-4" /> Create Template
-            </Button>
+            {mode === 'staff' && (
+              <Button onClick={openNewTemplateModal} size="sm" className="rounded-xl font-bold gap-1.5 shrink-0">
+                <Plus className="h-4 w-4" /> Create Custom Template
+              </Button>
+            )}
+          </div>
+
+          {/* Template Search + Program Category Filter Pills */}
+          <div className="rounded-2xl border bg-card p-3.5 sm:p-4 space-y-3 shadow-xs">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={templateSearch}
+                onChange={(e) => setTemplateSearch(e.target.value)}
+                placeholder="Search 78+ templates: Reddit PPL, GZCLP, nSuns, Arnold, PHUL, PHAT, Calisthenics RR, Planche, HYROX, Murph, Strong Curves..."
+                className="pl-9 pr-9 h-10 rounded-xl text-sm"
+              />
+              {templateSearch && (
+                <button
+                  type="button"
+                  onClick={() => setTemplateSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+              {PROGRAM_CATEGORIES.map((cat) => {
+                const active = selectedProgramCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedProgramCategory(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all flex items-center gap-1.5 border ${
+                      active
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                        : 'bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border/70'
+                    }`}
+                  >
+                    <span>{cat}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                        active ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {programCategoryCounts[cat] || 0}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between px-1">
+            <p className="text-xs font-semibold text-muted-foreground">
+              Showing <span className="text-foreground font-bold">{filteredTemplates.length}</span> of{' '}
+              <span className="text-foreground font-bold">{allTemplates.length}</span> workout templates
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {allTemplates.map((tpl) => (
-              <Card key={tpl.id} className="rounded-2xl flex flex-col justify-between">
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <CardTitle className="text-base font-bold">{tpl.name}</CardTitle>
-                      <CardDescription className="text-xs mt-0.5">{tpl.description}</CardDescription>
+            {filteredTemplates.map((tpl) => {
+              const catLabel = tpl.programCategory || tpl.category || 'Trending Splits';
+              return (
+                <Card key={tpl.id} className="rounded-2xl flex flex-col justify-between border-border/80 hover:shadow-md transition-all">
+                  <CardHeader className="pb-2">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                      <Badge className="bg-primary/10 text-primary hover:bg-primary/15 border-0 text-[10px] font-extrabold">
+                        {catLabel}
+                      </Badge>
+                      {tpl.difficulty && (
+                        <Badge variant="outline" className="text-[10px] font-semibold">
+                          {tpl.difficulty}
+                        </Badge>
+                      )}
+                      {tpl.programSource && (
+                        <span className="text-[10px] font-medium text-muted-foreground truncate">
+                          • {tpl.programSource}
+                        </span>
+                      )}
                     </div>
-                    <Badge variant={tpl.isSystem ? 'secondary' : 'default'} className="text-[10px] shrink-0">
-                      {tpl.isSystem ? 'Built-in' : tpl.createdByName || 'Custom'}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                    {tpl.items.map((item, idx) => {
-                      const meta = CATALOG_BY_NAME.get(item.name.toLowerCase());
-                      const gif = item.gifUrl || meta?.gifUrl;
-                      return (
-                        <div
-                          key={`${item.name}_${idx}`}
-                          className="flex items-center justify-between gap-2 p-2 rounded-xl bg-muted/50 text-xs"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            {gif && (
-                              <img
-                                src={gif}
-                                alt={item.name}
-                                className="h-8 w-8 rounded-lg object-contain bg-white border shrink-0"
-                              />
-                            )}
-                            <span className="font-semibold truncate">{item.name}</span>
+                    <CardTitle className="text-base font-bold leading-snug">{tpl.name}</CardTitle>
+                    <CardDescription className="text-xs mt-1 line-clamp-3">{tpl.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                      {tpl.items.map((item, idx) => {
+                        const meta = CATALOG_BY_NAME.get(item.name.toLowerCase());
+                        const gif = item.gifUrl || meta?.gifUrl;
+                        return (
+                          <div
+                            key={`${item.name}_${idx}`}
+                            onClick={() => {
+                              if (meta) setDetailExercise(meta);
+                            }}
+                            className="flex items-center justify-between gap-2 p-2 rounded-xl bg-muted/50 hover:bg-muted text-xs cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {gif && (
+                                <img
+                                  src={gif}
+                                  alt={item.name}
+                                  loading="lazy"
+                                  className="h-9 w-9 rounded-lg object-contain bg-white border shrink-0"
+                                />
+                              )}
+                              <div className="min-w-0">
+                                <p className="font-semibold truncate text-foreground">{item.name}</p>
+                                {item.notes && (
+                                  <p className="text-[10px] text-muted-foreground truncate">{item.notes}</p>
+                                )}
+                              </div>
+                            </div>
+                            <span className="font-mono text-[11px] font-bold text-primary shrink-0">
+                              {item.targetSets}×{(item as any).reps || item.targetReps}
+                            </span>
                           </div>
-                          <span className="font-mono text-[11px] text-muted-foreground shrink-0">
-                            {item.targetSets}×{item.targetReps}
-                            {item.targetWeightKg ? ` @ ${item.targetWeightKg}kg` : ''}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex items-center gap-2 pt-2">
-                    <Button
-                      size="sm"
-                      onClick={() => openAssignFromTemplate(tpl)}
-                      className="flex-1 h-9 rounded-xl text-xs font-bold gap-1.5"
-                    >
-                      <Send className="h-3.5 w-3.5" /> Assign to Client
-                    </Button>
-                    {!tpl.isSystem && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={async () => {
-                          try {
-                            await deleteDoc(doc(db, 'workoutTemplates', tpl.id));
-                            toast.success('Template deleted');
-                          } catch {
-                            toast.error('Failed to delete template');
-                          }
-                        }}
-                        className="h-9 w-9 rounded-xl text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-2 pt-2">
+                      {mode === 'staff' ? (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => openAssignFromTemplate(tpl)}
+                            className="flex-1 h-9 rounded-xl text-xs font-bold gap-1.5"
+                          >
+                            <Send className="h-3.5 w-3.5" /> Assign to Client
+                          </Button>
+                          {!tpl.isSystem && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={async () => {
+                                try {
+                                  await deleteDoc(doc(db, 'workoutTemplates', tpl.id));
+                                  toast.success('Template deleted');
+                                } catch {
+                                  toast.error('Failed to delete template');
+                                }
+                              }}
+                              className="h-9 w-9 rounded-xl text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            if (!memberClient?.id) {
+                              toast.error('Unable to find your member profile');
+                              return;
+                            }
+                            try {
+                              await addDoc(collection(db, 'assignedWorkouts'), {
+                                title: tpl.name,
+                                description: tpl.description || '',
+                                clientId: memberClient.id,
+                                clientName: memberClient.name || 'Member',
+                                scheduledDate: new Date().toISOString().slice(0, 10),
+                                status: 'Assigned',
+                                assignedById: memberClient.id,
+                                assignedByName: tpl.programSource || 'Self-Selected Template',
+                                createdAt: new Date().toISOString(),
+                                exercises: tpl.items.map((i) => ({
+                                  name: i.name,
+                                  category: i.category,
+                                  equipment: i.equipment || 'Bodyweight',
+                                  targetSets: Number(i.targetSets) || 3,
+                                  targetReps: Number(i.targetReps) || 10,
+                                  targetWeightKg: Number(i.targetWeightKg) || 0,
+                                  notes: i.notes || '',
+                                  gifUrl: i.gifUrl || '',
+                                  completed: false,
+                                })),
+                              });
+                              toast.success(`Added "${tpl.name}" to My Workouts!`);
+                              setActiveSubView('assigned');
+                            } catch {
+                              toast.error('Failed to add workout');
+                            }
+                          }}
+                          className="flex-1 h-9 rounded-xl text-xs font-bold gap-1.5"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add to My Workouts
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}

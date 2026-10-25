@@ -33,6 +33,11 @@ import {
   triggerLocalDeviceDialer,
   updateCallRequestStatus,
 } from '../services/clickToCallService';
+import {
+  initGlobalAudioUnlock,
+  playBrowserNotificationPing,
+  showBrowserNotificationWithPing,
+} from '../services/browserNotificationService';
 
 export type NotificationType =
   | 'lead_stale'
@@ -181,46 +186,45 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
   const hasSeenInitialSystemSnapshot = useRef(false);
   const hasSeenInitialUserSnapshot = useRef(false);
+  const hasSeenInitialBookingSnapshot = useRef(false);
   const soundEnabledRef = useRef(true);
+
+  useEffect(() => {
+    initGlobalAudioUnlock();
+  }, []);
 
   const playAlertSound = () => {
     if (!soundEnabledRef.current) return;
-    try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.55);
-      gain.connect(ctx.destination);
-
-      [880, 1174].forEach((freq, index) => {
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + index * 0.12);
-        osc.connect(gain);
-        osc.start(ctx.currentTime + index * 0.12);
-        osc.stop(ctx.currentTime + index * 0.12 + 0.18);
-      });
-      setTimeout(() => ctx.close().catch(() => {}), 900);
-    } catch (err) {
-      console.warn('[Notifications] Could not play alert sound:', err);
-    }
+    playBrowserNotificationPing('default');
   };
 
   // Subscribe to booking requests (both Pending for active notifications and recent processed ones for history reconstruction)
   useEffect(() => {
     if (!currentUser?.id || currentUser.role === 'client') return;
+    hasSeenInitialBookingSnapshot.current = false;
     const q = query(collection(db, 'bookingRequests'), limit(150));
     const unsub = onSnapshot(
       q,
       (snapshot) => {
+        const addedPending = snapshot.docChanges().filter((change) => {
+          const data = change.doc.data();
+          return change.type === 'added' && data.status === 'Pending';
+        });
         const list = snapshot.docs.map((d) => ({
           id: d.id,
           ...d.data(),
         }));
         setAllBookings(list);
+
+        if (hasSeenInitialBookingSnapshot.current && addedPending.length > 0) {
+          const first = addedPending[0]?.doc.data();
+          void showBrowserNotificationWithPing({
+            id: `booking_req_${addedPending[0]?.doc.id}`,
+            title: 'New Booking Request',
+            body: `${first?.clientName || 'A member'} requested ${first?.packageName || 'a session'}.`,
+          });
+        }
+        hasSeenInitialBookingSnapshot.current = true;
       },
       (err) => {
         console.error('Error loading booking requests for notifications:', err);
@@ -246,12 +250,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const addedBookingAlerts = snapshot.docChanges().filter((change) => {
-          const data = change.doc.data();
-          return (
-            change.type === 'added' &&
-            (data.type === 'class_booking_created' || data.type === 'class_waitlist_joined')
-          );
+        const addedSystemAlerts = snapshot.docChanges().filter((change) => {
+          return change.type === 'added';
         });
 
         const rows = snapshot.docs.map((d) => {
@@ -271,8 +271,14 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         });
         setSystemNotifications(rows);
 
-        if (hasSeenInitialSystemSnapshot.current && addedBookingAlerts.length > 0) {
-          playAlertSound();
+        if (hasSeenInitialSystemSnapshot.current && addedSystemAlerts.length > 0) {
+          const newest = addedSystemAlerts[0]?.doc;
+          const newestData = newest?.data();
+          void showBrowserNotificationWithPing({
+            id: `sys_${newest?.id || Date.now()}`,
+            title: newestData?.title || 'Club Notification',
+            body: newestData?.body || newestData?.description || 'New update received.',
+          });
         }
         hasSeenInitialSystemSnapshot.current = true;
       },
@@ -336,7 +342,21 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         setUserNotifications(rows);
 
         if (hasSeenInitialUserSnapshot.current && addedUserNotifs.length > 0) {
-          playAlertSound();
+          const newest = addedUserNotifs[0]?.doc;
+          const newestData = newest?.data() || {};
+          const isClickToCall = newestData.type === 'click_to_call';
+          void showBrowserNotificationWithPing({
+            id: `usr_${newest?.id || Date.now()}`,
+            title:
+              newestData.title ||
+              (isClickToCall ? `📞 Click to Call: ${newestData.leadName || 'Member'}` : 'Notification'),
+            body:
+              newestData.description ||
+              newestData.body ||
+              newestData.message ||
+              (isClickToCall ? `Tap to dial ${newestData.phoneNumber || ''}` : ''),
+            urgent: isClickToCall,
+          });
         }
         hasSeenInitialUserSnapshot.current = true;
       },

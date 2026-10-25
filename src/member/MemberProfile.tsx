@@ -15,6 +15,10 @@ import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle,
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays } from 'date-fns';
+import {
+  playBrowserNotificationPing,
+  requestAndPersistBrowserNotifications,
+} from '../services/browserNotificationService';
 
 const MAX_PX = 400;
 const TARGET_KB = 150;
@@ -146,6 +150,14 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
     if (!currentUser?.id) return;
     setIsSavingNotifications(true);
     try {
+      if (key === 'pushNotifications' && checked) {
+        await requestAndPersistBrowserNotifications({
+          userId: currentUser.id,
+          clientRecordId: client?.id,
+        });
+      } else if (checked) {
+        playBrowserNotificationPing('default');
+      }
       const userDocRef = doc(db, 'users', currentUser.id);
       await updateDoc(userDocRef, {
         notificationPreferences: updated,
