@@ -150,6 +150,9 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
   } | null>(null);
   const [history, setHistory] = useState<BroadcastHistoryItem[]>([]);
   const [replies, setReplies] = useState<IncomingWhatsappReply[]>([]);
+  const [replyingToId, setReplyingToId] = useState<string | null>(null);
+  const [replyDraft, setReplyDraft] = useState<string>('');
+  const [isSendingReply, setIsSendingReply] = useState<boolean>(false);
 
   const getAuthHeaders = useCallback(async () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -297,6 +300,41 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
       setTestResult({ type: 'error', text: err.message || 'Network error' });
     } finally {
       setIsSendingTest(false);
+    }
+  };
+
+  const handleSendDirectReply = async (rep: IncomingWhatsappReply) => {
+    if (!replyDraft.trim()) {
+      toast.error('Please type a reply message first.');
+      return;
+    }
+    setIsSendingReply(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/messaging/test', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          to: rep.fromPhone,
+          title: '',
+          message: replyDraft.trim(),
+          channel: 'whatsapp',
+          brandName: brandName.trim() || defaultBrand,
+          useTemplate: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.error || 'Failed to send WhatsApp reply');
+      } else {
+        toast.success(`Reply sent to ${rep.memberName} (${rep.fromPhone})!`);
+        setReplyingToId(null);
+        setReplyDraft('');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Network error sending reply');
+    } finally {
+      setIsSendingReply(false);
     }
   };
 
@@ -1023,9 +1061,50 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
                       {rep.body}
                     </p>
                     <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
-                      <span>Status: {rep.memberStatus}</span>
-                      <span>{new Date(rep.createdAt).toLocaleString()}</span>
+                      <span>
+                        Status: {rep.memberStatus} • {new Date(rep.createdAt).toLocaleString()}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (replyingToId === rep.id) {
+                            setReplyingToId(null);
+                            setReplyDraft('');
+                          } else {
+                            setReplyingToId(rep.id);
+                            setReplyDraft(
+                              `Hi ${rep.memberName.split(' ')[0] || 'there'}, thank you for confirming! We look forward to seeing you at INZAN Athletics.`
+                            );
+                          }
+                        }}
+                        className="text-emerald-500 hover:underline font-bold cursor-pointer"
+                      >
+                        {replyingToId === rep.id ? 'Cancel' : '↩ Reply on WhatsApp'}
+                      </button>
                     </div>
+                    {replyingToId === rep.id && (
+                      <div className="pt-2 space-y-1.5 border-t border-emerald-500/20 mt-1">
+                        <Textarea
+                          value={replyDraft}
+                          onChange={(e) => setReplyDraft(e.target.value)}
+                          rows={2}
+                          placeholder={`Reply to ${rep.memberName}...`}
+                          className="text-xs bg-background"
+                        />
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={isSendingReply || !replyDraft.trim()}
+                            onClick={() => handleSendDirectReply(rep)}
+                            className="h-7 px-3 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1 cursor-pointer"
+                          >
+                            <Send className="h-3 w-3" />
+                            {isSendingReply ? 'Sending...' : 'Send WhatsApp Reply'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
