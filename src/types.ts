@@ -46,9 +46,38 @@ export interface PackageBenefits {
   freeClassTrials?: number;
 }
 
+export interface PackageVersion {
+  version: number;
+  packageId: string;
+  name: string;
+  benefitSubtitle?: string;
+  price: number;
+  sessions: number;
+  expiryDays: number;
+  hierarchy?: PackageHierarchy;
+  benefits: PackageBenefits;
+  freePtSessions?: number;
+  freezeAllowanceDays?: number;
+  minFreezeDays?: number;
+  maxFreezeDays?: number;
+  guestInvitations?: number;
+  freeClassTrials?: number;
+  isTimeRestricted?: boolean;
+  allowedStartTime?: string;
+  allowedEndTime?: string;
+  effectiveFrom: string;
+  effectiveUntil?: string;
+  createdBy?: string;
+  createdByName?: string;
+  changeNotes?: string;
+}
+
 export interface Package {
   id: string;
   name: string;
+  benefitSubtitle?: string;
+  version?: number;
+  versionHistory?: PackageVersion[];
   price: number;
   sessions: number; // Keep field name for now but logic uses as packages
   expiryDays: number;
@@ -82,6 +111,7 @@ export interface Package {
   targetTeam?: PackageTargetTeam;
   targetAmount?: number;
   createdAt?: string;
+  updatedAt?: string;
   createdBy?: string;
   createdByName?: string;
 }
@@ -264,7 +294,9 @@ export interface User {
   permissionTemplateId?: string; // ID of assigned PermissionTemplate
   customPermissions?: Record<string, boolean>; // Explicit user-level overrides (key -> boolean)
   lastSeen?: string;
-  isPending?: boolean; // true = invited but hasn't logged in yet
+  isPending?: boolean; // true = invited or transferred from RedGITS but hasn't logged in / been activated yet
+  authActivated?: boolean; // true = Firebase Auth account has been provisioned
+  sourceSystem?: string;
   coachId?: string;    // e.g. 'COACH-001', only for role='coach'
   clientRecordId?: string; // links to clients collection for role='client'
   clientDocId?: string;    // Firestore client document ID for role='client'
@@ -272,6 +304,8 @@ export interface User {
   mustChangePassword?: boolean; // true = forced change on next login
   photoURL?: string;           // avatar image URL
   dismissedNotifications?: string[];
+  dismissedNotificationHistory?: DismissedNotificationRecord[];
+  readNotifications?: string[];
   status?: 'working' | 'nonworking';
   isFitnessManager?: boolean;
   // INZAN Athletics Org Fields
@@ -286,6 +320,19 @@ export interface NotificationPreferences {
   pushNotifications: boolean;
   classReminders: boolean;
   sessionUpdates: boolean;
+}
+
+export interface DismissedNotificationRecord {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  date: string;
+  dismissedAt: string;
+  recordName: string;
+  recordId: string;
+  source?: 'generated' | 'system';
+  data?: Record<string, any>;
 }
 
 export interface PTPackageRecord {
@@ -443,12 +490,29 @@ export type Gender = 'Male' | 'Female' | 'Other' | 'Prefer not to say';
 export type ActivityLevel = 'Sedentary' | 'Lightly Active' | 'Moderately Active' | 'Very Active' | 'Extra Active';
 export type FitnessTarget = 'Weight Loss' | 'Gain Muscle' | 'Improve Lifestyle' | 'Maintenance';
 
+export interface LeadAssignmentHistoryEntry {
+  fromRep?: string;
+  fromRepName?: string;
+  toRep: string;
+  toRepName?: string;
+  assignedBy?: string;
+  assignedByName?: string;
+  timestamp: string;
+  reason?: string;
+}
+
 export interface Client {
   id: string;
   name: string;
   phone: string;
   status: ClientStatus;
   assignedTo?: string; // userId
+  assignedAt?: string; // ISO timestamp when lead was assigned to current rep
+  transferredAt?: string; // ISO timestamp when lead was most recently transferred/assigned
+  assignedBy?: string; // Staff name or userId who performed the assignment/transfer
+  previousAssignedTo?: string; // Previous rep userId or name before transfer
+  transferCount?: number; // Number of times lead was transferred
+  assignmentHistory?: LeadAssignmentHistoryEntry[]; // Audit trail of rep assignments/transfers
   branch?: Branch;
   branchId?: string;
   branch_id?: string;
@@ -564,6 +628,10 @@ export interface Client {
   isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
+  updatedAt?: string;
+  memberFeedback?: string;
+  primaryPackageName?: string;
+  daysRemaining?: number;
 }
 
 export interface ClientDocument {
@@ -575,23 +643,44 @@ export interface ClientDocument {
 
 export interface ClientPackage {
   id: string;
+  packageId?: string;
   packageName: string;
+  packageVersion?: number;
+  benefitSubtitle?: string;
   startDate?: string;
   endDate?: string;
-  sessionsTotal?: number;
-  sessionsRemaining?: number;
-  status: 'Active' | 'Expired' | 'Cancelled' | 'Pending' | 'Hold';
+  sessionsTotal?: number | 'unlimited';
+  totalSessions?: number | 'unlimited';
+  sessionsRemaining?: number | 'unlimited';
+  status: 'Active' | 'Expired' | 'Cancelled' | 'Pending' | 'Hold' | 'Frozen';
   isOnHold?: boolean; // True if package is temporarily paused
   holdReason?: string; // Reason for holding the package
   holdDate?: string; // ISO string - when the hold was placed
   freezeDaysUsed?: number; // Cumulative days frozen against the package's freeze allowance
-  subscriptionType?: 'new' | 'renew' | 'upgrade' | 'wrongentry';
+  subscriptionType?: 'new' | 'renew' | 'renewal' | 'upgrade' | 'wrongentry';
   isPendingConfirmation?: boolean;
   salesRepName?: string;
   trainerName?: string;
   createdBy?: string;
   createdByName?: string;
   createdAt?: string;
+  // Immutable point-in-time benefit & rule snapshot at purchase time
+  hierarchy?: PackageHierarchy;
+  hierarchyType?: PackageHierarchy | string;
+  packageHierarchy?: PackageHierarchy | string;
+  packageCategory?: string;
+  category?: string;
+  benefits?: PackageBenefits & { freePtSessionsUsed?: number; freezeDaysUsed?: number };
+  freePtSessions?: number;
+  freezeAllowanceDays?: number;
+  minFreezeDays?: number;
+  maxFreezeDays?: number;
+  guestInvitations?: number;
+  freeClassTrials?: number;
+  isTimeRestricted?: boolean;
+  allowedStartTime?: string;
+  allowedEndTime?: string;
+  snapshotAt?: string;
 }
 
 export interface Attendance {

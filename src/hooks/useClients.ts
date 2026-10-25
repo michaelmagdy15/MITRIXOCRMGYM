@@ -197,7 +197,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         where('status', 'in', ['Expired', 'expired'])
       );
       const isInzan = getTenantId() === 'inzanathletics';
-      const cacheKey = 'inzan_expired_sync_ts';
+      const cacheKey = 'inzan_expired_sync_ts_v2';
       const lastSync = Number(localStorage.getItem(cacheKey) || '0');
       const twelveHoursMs = 12 * 60 * 60 * 1000;
       if (isInzan && Date.now() - lastSync < twelveHoursMs) {
@@ -536,10 +536,17 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       const siblingIds = siblings.map(s => s.id);
       const linkedClientIds = Array.from(new Set([...(clientData.linkedClientIds || []), ...siblingIds]));
 
+      const nowIso = new Date().toISOString();
+      if (clientData.assignedTo && clientData.assignedTo !== 'unassigned') {
+        clientData.assignedAt = clientData.assignedAt || nowIso;
+        clientData.transferredAt = clientData.transferredAt || nowIso;
+        clientData.assignedBy = clientData.assignedBy || currentUser?.name || currentUser?.id || 'System';
+      }
+
       const finalData = {
         ...cleanData(clientData),
         id: docRef.id,
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso,
         linkedClientIds,
       };
 
@@ -855,6 +862,35 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
       }
 
+      // Track lead assignment / transfer timestamp & audit history when assignedTo changes
+      if (updateData.assignedTo !== undefined) {
+        const nextRep = String(updateData.assignedTo || '').trim();
+        const prevRep = String(existing?.assignedTo || '').trim();
+        if (nextRep && nextRep !== 'unassigned' && nextRep !== prevRep) {
+          const transferTs = updateData.transferredAt || updateData.assignedAt || new Date().toISOString();
+          updateData.assignedAt = transferTs;
+          updateData.transferredAt = transferTs;
+          updateData.assignedBy = updateData.assignedBy || currentUser?.name || currentUser?.id || 'System';
+          if (prevRep || existing?.salesName) {
+            updateData.previousAssignedTo = prevRep || existing?.salesName;
+          }
+          updateData.transferCount = (Number(existing?.transferCount) || 0) + 1;
+          const prevHistory = Array.isArray(existing?.assignmentHistory) ? existing.assignmentHistory : [];
+          updateData.assignmentHistory = [
+            ...prevHistory,
+            {
+              fromRep: prevRep || undefined,
+              fromRepName: existing?.salesName || existing?.salesRep || undefined,
+              toRep: nextRep,
+              toRepName: updateData.salesName || updateData.salesRep || nextRep,
+              assignedBy: currentUser?.id,
+              assignedByName: currentUser?.name || currentUser?.email || 'System',
+              timestamp: transferTs,
+            },
+          ];
+        }
+      }
+
       applyOptimisticUpdate();
 
         const batch = writeBatch(db);
@@ -977,6 +1013,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       };
       setLeadsList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
       setMembersList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
+      setExpiredMembersList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
+      setSearchResults(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
 
       await addDoc(collection(db, 'clients', clientId, 'comments'), commentData);
       await updateDoc(doc(db, 'clients', clientId), docUpdates);
@@ -1018,6 +1056,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
       setLeadsList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
       setMembersList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
+      setExpiredMembersList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
+      setSearchResults(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
 
       await addDoc(collection(db, 'clients', clientId, 'interactions'), {
         ...interaction,

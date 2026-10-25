@@ -15,11 +15,6 @@ export const useCoaches = () => {
 
 
   useEffect(() => {
-    // Members/coaches logged in don't manage coaches — skip the CRM management listener
-    if (currentUser && (effectiveRole === 'client' || effectiveRole === 'coach')) {
-      setLoading(false);
-      return;
-    }
     const unsub = onSnapshot(collection(db, 'coaches'), (snapshot) => {
       setCoaches(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Coach)));
       setLoading(false);

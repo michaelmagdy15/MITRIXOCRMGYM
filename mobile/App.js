@@ -12,6 +12,7 @@ import {
   Image,
   ImageBackground,
   Animated,
+  Linking,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import NetInfo from '@react-native-community/netinfo';
@@ -122,6 +123,29 @@ Notifications.setNotificationCategoryAsync('task_assignment', [
   },
 ]);
 
+Notifications.setNotificationCategoryAsync('click_to_call', [
+  {
+    identifier: 'dial_now',
+    buttonTitle: 'Call Now',
+    options: { opensAppToForeground: true },
+  },
+]);
+
+/**
+ * Safely opens the native OS phone dialer for a validated phone number.
+ */
+function openNativePhoneDialer(rawPhone) {
+  if (!rawPhone || typeof rawPhone !== 'string') return;
+  const cleaned = rawPhone.replace(/[^\d+]/g, '');
+  if (!/^\+?\d{7,15}$/.test(cleaned)) {
+    console.warn('[Dialer] Blocked invalid phone number:', rawPhone);
+    return;
+  }
+  Linking.openURL(`tel:${cleaned}`).catch((err) => {
+    console.warn('[Dialer] Failed to open native dialer:', err);
+  });
+}
+
 // ─── Error Boundary ────────────────────────────────────────────
 // Catches render errors and provides a recovery UI instead of white-screen
 class ErrorBoundary extends React.Component {
@@ -176,6 +200,7 @@ function MainApp() {
   const [hasLoadedSuccessfully, setHasLoadedSuccessfully] = useState(false);
   const [hasFailedToLoad, setHasFailedToLoad] = useState(false);
   const [isNativeScanning, setIsNativeScanning] = useState(false);
+  const [savedAuthSession, setSavedAuthSession] = useState(null);
 
   // 1. Push Notification Registration (camera is requested on-demand via bridge)
   useEffect(() => {
@@ -188,7 +213,12 @@ function MainApp() {
     // Listener for when a notification is received while app is running
     const notificationListener = Notifications.addNotificationReceivedListener(
       (notification) => {
-        console.log('[Notification] Received:', notification.request.content.title);
+        const content = notification.request.content;
+        console.log('[Notification] Received:', content.title);
+        const data = content.data;
+        if (data?.type === 'CLICK_TO_CALL' && data?.phoneNumber) {
+          openNativePhoneDialer(String(data.phoneNumber));
+        }
       }
     );
 
@@ -198,6 +228,11 @@ function MainApp() {
         const actionId = response.actionIdentifier;
         const data = response.notification.request.content.data;
         console.log('[Notification] Tapped/Action:', actionId, data);
+
+        if ((data?.type === 'CLICK_TO_CALL' || actionId === 'dial_now') && data?.phoneNumber) {
+          openNativePhoneDialer(String(data.phoneNumber));
+          return;
+        }
 
         let targetUrl = data?.url ? String(data.url) : null;
 
@@ -328,6 +363,12 @@ function MainApp() {
           setIsNativeScanning(false);
           break;
 
+        case 'DIAL_PHONE':
+          if (message.payload?.phoneNumber) {
+            openNativePhoneDialer(String(message.payload.phoneNumber));
+          }
+          break;
+
         case 'NAVIGATE':
           // Navigate WebView to a specific URL (only same-origin https allowed)
           if (message.payload?.url && isSafeWebUrl(String(message.payload.url))) {
@@ -342,6 +383,16 @@ function MainApp() {
         case 'REFRESH':
           // Force full WebView reload (e.g., after major CRM data changes)
           setKey((prev) => prev + 1);
+          break;
+
+        case 'SAVE_AUTH_SESSION':
+          if (message.payload && typeof message.payload === 'object') {
+            setSavedAuthSession(message.payload);
+          }
+          break;
+
+        case 'CLEAR_AUTH_SESSION':
+          setSavedAuthSession(null);
           break;
 
         case 'HAPTIC':
@@ -361,9 +412,10 @@ function MainApp() {
     }
   };
 
-  // Script injected before first paint — makes push token globally accessible and locks mobile zoom
+  // Script injected before first paint — makes push token and saved auth session globally accessible and locks mobile zoom
   const runBeforeFirstPaint = `
     window.expoPushToken = ${JSON.stringify(expoPushToken)};
+    ${savedAuthSession ? `window.__nativeSavedAuth = ${JSON.stringify(savedAuthSession)}; try { localStorage.setItem('mitrixo_mobile_saved_auth_v1', ${JSON.stringify(JSON.stringify(savedAuthSession))}); } catch(e) {}` : ''}
     (function() {
       var meta = document.querySelector('meta[name="viewport"]');
       if (!meta) {
@@ -463,9 +515,12 @@ function MainApp() {
           setBuiltInZoomControls={false}
           setDisplayZoomControls={false}
 
-          // Technical WebView configurations
+          // Technical WebView configurations (including persistent cookie & DOM storage on iOS/Android)
           javaScriptEnabled={true}
           domStorageEnabled={true}
+          sharedCookiesEnabled={true}
+          thirdPartyCookiesEnabled={true}
+          incognito={false}
           allowsInlineMediaPlayback={true}
           mediaPlaybackRequiresUserAction={false}
 
@@ -477,6 +532,10 @@ function MainApp() {
           // for anything that isn't a safe http(s) same-origin navigation, which closes
           // javascript:/data:/file: navigations (incl. push deep-link attempts).
           onShouldStartLoadWithRequest={(request) => {
+            if (request?.url && /^tel:/i.test(request.url)) {
+              openNativePhoneDialer(request.url.replace(/^tel:/i, ''));
+              return false;
+            }
             // Allow only http(s) same-origin URLs. Main-frame and iframe loads alike.
             return isSafeWebUrl(request.url);
           }}

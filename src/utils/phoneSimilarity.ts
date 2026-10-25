@@ -42,7 +42,9 @@ export function extractConsecutiveDigitWindows(phone?: string | null, windowLeng
   if (clean.length < windowLength) return [];
   const windows = new Set<string>();
   for (let i = 0; i <= clean.length - windowLength; i++) {
-    windows.add(clean.slice(i, i + windowLength));
+    const win = clean.slice(i, i + windowLength);
+    if (/^(\d)\1{6,}$/.test(win)) continue;
+    windows.add(win);
   }
   return Array.from(windows);
 }

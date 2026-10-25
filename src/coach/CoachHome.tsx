@@ -12,6 +12,7 @@ import { db } from '../firebase';
 import { collection, query, where, getDocs, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { format, parseISO, isToday, startOfWeek, endOfWeek, isWithinInterval, differenceInDays, isAfter, startOfDay } from 'date-fns';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
+import { openWhatsAppChat } from '../utils/whatsappTemplates';
 import { ClassSchedule } from '../types/class';
 import { Session, Assessment, Client } from '../types';
 
@@ -547,7 +548,7 @@ export default function CoachHome({
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
+                            onClick={() => openWhatsAppChat({ phone: cleanPhone })}
                             className="h-7 px-2 text-[10px] font-bold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
                           >
                             WhatsApp Follow-up
@@ -616,7 +617,7 @@ export default function CoachHome({
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
+                            onClick={() => openWhatsAppChat({ phone: cleanPhone })}
                             className="h-7 px-2 text-[10px] font-bold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
                           >
                             WhatsApp

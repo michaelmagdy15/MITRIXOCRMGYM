@@ -3,6 +3,7 @@ import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { format, parseISO } from 'date-fns';
 import { safeFormatDate } from './utils/dateUtils';
+import { matchesFuzzyNameSearch } from './utils/fuzzyNameSearch';
 import { Client, ClientPackage } from './types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -125,12 +126,12 @@ export default function UnconfirmedMemberships() {
     return allPendingItems.filter(item => {
       const q = searchTerm.toLowerCase();
 
-      const memberName = (item.client.name || '').toLowerCase();
+      const rawMemberName = item.client.name || '';
       const memberId = (item.client.memberId || '').toLowerCase();
       const packageName = (item.pkg.packageName || '').toLowerCase();
 
       const matchesSearch = !searchTerm ||
-        memberName.includes(q) ||
+        matchesFuzzyNameSearch(rawMemberName, q) ||
         memberId.includes(q) ||
         packageName.includes(q);
 

@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dumbbell, CheckCircle, XCircle, Clock, Ban, ClipboardList } from 'lucide-react';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { updatePTSessionStatus } from '../services/ptSessionService';
+import { openWhatsAppChat } from '../utils/whatsappTemplates';
 
 type StatusFilter = 'all' | SessionStatus;
 
@@ -416,8 +417,11 @@ export default function CoachSessions() {
                             <span className="font-semibold text-muted-foreground">WhatsApp:</span>
                             <a
                               href={`https://wa.me/${cleanPhone}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              target="whatsapp_crm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                openWhatsAppChat({ phone: cleanPhone });
+                              }}
                               className="font-bold text-foreground hover:underline inline-flex items-center gap-1"
                             >
                               {assessment.phone} ↗
@@ -471,7 +475,7 @@ export default function CoachSessions() {
                               size="sm"
                               variant="outline"
                               className="text-xs h-8 text-foreground border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                              onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
+                              onClick={() => openWhatsAppChat({ phone: cleanPhone })}
                             >
                               Open WhatsApp Chat
                             </Button>
@@ -554,7 +558,7 @@ export default function CoachSessions() {
                                   size="sm"
                                   variant="outline"
                                   className="text-xs h-8 text-foreground border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                                  onClick={() => window.open(`https://wa.me/${cleanPhone}`, '_blank')}
+                                  onClick={() => openWhatsAppChat({ phone: cleanPhone })}
                                 >
                                   Open WhatsApp Chat
                                 </Button>

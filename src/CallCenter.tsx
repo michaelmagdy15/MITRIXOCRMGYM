@@ -12,12 +12,14 @@ import { db, auth, getTenantId } from './firebase';
 import { collection, query, onSnapshot, orderBy, getDocs, setDoc, doc } from 'firebase/firestore';
 import { Client, CallCenterLog } from './types';
 import { downloadFile } from './utils/download';
+import { openClickToCallModal } from './services/clickToCallService';
 import { addDays, format, parseISO } from 'date-fns';
 import {
   Phone, Search, Download, Star, User, MessageSquare,
   PhoneCall, PhoneOff, PhoneMissed, ThumbsUp, ThumbsDown, Users, X, Loader2, CalendarDays
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { computeMemberGlobalStatus } from './utils/memberLifecycle';
 
 /* ─────────────────────── Constants ─────────────────────── */
 
@@ -238,9 +240,9 @@ export default function CallCenter() {
 
     return clients.filter((client) => {
       if (getCooldownUntil(client) > Date.now()) return false;
-      const status = String(client.status || '').toLowerCase();
-      if (targetSegment === 'Active' && status !== 'active' && status !== 'nearly expired') return false;
-      if (targetSegment === 'Expired' && status !== 'expired' && !(client.membershipExpiry && client.membershipExpiry.slice(0, 10) < today)) return false;
+      const lifecycle = computeMemberGlobalStatus(client); const status = String(client.status || '').toLowerCase();
+      if (targetSegment === 'Active' && lifecycle.globalStatus !== 'ACTIVE' && lifecycle.globalStatus !== 'EXPIRING_SOON') return false;
+      if (targetSegment === 'Expired' && (lifecycle.globalStatus !== 'EXPIRED' || lifecycle.hasActiveOrUpcomingPackage)) return false;
       if (targetSegment === 'Leads' && status !== 'lead') return false;
 
       if (targetSegment === 'Last Seen') {
@@ -251,7 +253,7 @@ export default function CallCenter() {
 
       const targetDate = targetSegment === 'Leads'
         ? String(client.createdAt || '').slice(0, 10)
-        : String(client.membershipExpiry || '').slice(0, 10);
+        : String(lifecycle.latestPackageEndDate || client.membershipExpiry || '').slice(0, 10);
       if (targetDateFrom && (!targetDate || targetDate < targetDateFrom)) return false;
       if (targetDateTo && (!targetDate || targetDate > targetDateTo)) return false;
       return true;
@@ -708,18 +710,97 @@ export default function CallCenter() {
                 <User className="h-5 w-5 text-amber-500" />
                 Member Details
               </CardTitle>
-              <Button variant="ghost" size="sm" onClick={clearSelection}>
-                <X className="h-4 w-4 mr-1" />
-                Clear
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold gap-1.5"
+                  disabled={isInzan && getCooldownUntil(selectedClient) > Date.now()}
+                  onClick={() =>
+                    openClickToCallModal({
+                      clientId: selectedClient.id,
+                      memberId: selectedClient.memberId,
+                      name: selectedClient.name,
+                      phone: selectedClient.phone,
+                      backupPhone: selectedClient.backupPhone,
+                      status: selectedClient.status,
+                      branch: selectedClient.branch,
+                      packageType: selectedClient.packageType,
+                      source: selectedClient.source,
+                    })
+                  }
+                >
+                  <PhoneCall className="h-4 w-4" />
+                  Call Now
+                </Button>
+                <Button variant="ghost" size="sm" onClick={clearSelection}>
+                  <X className="h-4 w-4 mr-1" />
+                  Clear
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Info Grid */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <InfoCell label="Name" value={selectedClient.name} />
-              <InfoCell label="Phone" value={selectedClient.phone} />
-              <InfoCell label="Backup Phone" value={selectedClient.backupPhone || '—'} />
+              <InfoCell
+                label="Phone"
+                value={
+                  selectedClient.phone ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openClickToCallModal({
+                          clientId: selectedClient.id,
+                          memberId: selectedClient.memberId,
+                          name: selectedClient.name,
+                          phone: selectedClient.phone,
+                          backupPhone: selectedClient.backupPhone,
+                          status: selectedClient.status,
+                          branch: selectedClient.branch,
+                          packageType: selectedClient.packageType,
+                          source: selectedClient.source,
+                        })
+                      }
+                      className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                    >
+                      <Phone className="h-3.5 w-3.5" />
+                      {selectedClient.phone}
+                    </button>
+                  ) : (
+                    '—'
+                  )
+                }
+              />
+              <InfoCell
+                label="Backup Phone"
+                value={
+                  selectedClient.backupPhone ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openClickToCallModal({
+                          clientId: selectedClient.id,
+                          memberId: selectedClient.memberId,
+                          name: selectedClient.name,
+                          phone: selectedClient.backupPhone!,
+                          backupPhone: selectedClient.phone,
+                          status: selectedClient.status,
+                          branch: selectedClient.branch,
+                          packageType: selectedClient.packageType,
+                          source: selectedClient.source,
+                        })
+                      }
+                      className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                    >
+                      <Phone className="h-3.5 w-3.5" />
+                      {selectedClient.backupPhone}
+                    </button>
+                  ) : (
+                    '—'
+                  )
+                }
+              />
               <InfoCell
                 label="Status"
                 value={

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNutrition } from './hooks/useNutrition';
+import { matchesFuzzyNameSearch } from './utils/fuzzyNameSearch';
 import { useAuth } from './contexts/AuthContext';
 import { useAppContext } from './context';
 import {
@@ -445,8 +446,8 @@ export default function NutritionModule() {
       const term = searchTerm.toLowerCase();
       const matchSearch =
         !searchTerm ||
-        app.clientName.toLowerCase().includes(term) ||
-        app.nutritionistName.toLowerCase().includes(term) ||
+        matchesFuzzyNameSearch(app.clientName, term) ||
+        matchesFuzzyNameSearch(app.nutritionistName, term) ||
         (app.clientPhone && app.clientPhone.includes(term));
 
       // Status

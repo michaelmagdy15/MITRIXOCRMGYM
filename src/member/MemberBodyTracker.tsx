@@ -30,6 +30,7 @@ import {
   computeInBodyTransformation,
   buildWhatsAppInBodyReportUrl,
 } from '../utils/inbodyParser';
+import { openWhatsAppUrl } from '../utils/whatsappTemplates';
 
 export default function MemberBodyTracker({
   client,
@@ -191,8 +192,11 @@ export default function MemberBodyTracker({
               {whatsappReportUrl && (
                 <a
                   href={whatsappReportUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  target="whatsapp_crm"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openWhatsAppUrl(whatsappReportUrl);
+                  }}
                   className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
                   title="Send InBody Transformation Report via WhatsApp"
                 >

@@ -410,6 +410,11 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
     return tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
   }, [branding?.companyName]);
 
+  const isInzan = useMemo(() => {
+    const tenantId = getTenantId();
+    return tenantId.toLowerCase().includes('inzan') || (branding?.companyName || '').toLowerCase().includes('inzan');
+  }, [branding?.companyName]);
+
   const formatOptionalDate = (dateStr?: string) => {
     if (!dateStr) return 'N/A';
     try { return format(parseISO(dateStr), 'dd MMM yyyy'); } catch { return 'N/A'; }
@@ -474,6 +479,12 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
         action: () => onNavigate?.('booking'),
       },
       { 
+        icon: <Lock className="h-5 w-5 text-foreground" />, 
+        label: 'Locker', 
+        action: () => onNavigate?.('locker'),
+        lockerRequired: true
+      },
+      { 
         icon: <Coins className="h-5 w-5 text-foreground" />, 
         label: 'Wallet', 
         action: () => onNavigate?.('wallet'),
@@ -492,11 +503,12 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
       },
     ];
     return list.filter(item => {
+      if ((item as any).lockerRequired && features.locker === false && !isInzan) return false;
       if (item.walletRequired && features.wallet === false) return false;
       if (item.pointsRequired && features.pointsSystem === false) return false;
       return true;
     });
-  }, [features, onNavigate, onSwitchToStore, isStrike]);
+  }, [features, onNavigate, onSwitchToStore, isStrike, isInzan]);
 
   if (!client) {
     return (
@@ -873,9 +885,35 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
         </div>
       )}
 
+      {/* ─── Inzan Smart Locker Phone Key Quick Card ─── */}
+      {isInzan && (
+        <div
+          onClick={() => onNavigate?.('locker')}
+          className="cursor-pointer rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-card p-3.5 shadow-xs hover:border-amber-500/50 active:scale-[0.99] transition-all flex items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-500 flex items-center justify-center shrink-0">
+              <Lock className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-extrabold uppercase tracking-tight text-foreground">Smart Locker Phone Key</span>
+                <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 border-amber-500/40 text-amber-500 bg-amber-500/10">
+                  Live
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                Slide to unlock your locker, claim a Men&apos;s/Women&apos;s locker, or enter your PIN
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="h-4 w-4 text-amber-500 shrink-0" />
+        </div>
+      )}
+
       {/* ─── Quick Shortcuts ─── */}
       <div className="bg-card border border-border/60 rounded-2xl p-3 shadow-xs">
-        <div className="grid grid-cols-4 gap-2">
+        <div className={`grid ${shortcuts.length >= 5 ? 'grid-cols-5' : 'grid-cols-4'} gap-2`}>
           {shortcuts.map((s, idx) => (
             <button
               key={idx}

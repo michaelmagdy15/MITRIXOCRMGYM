@@ -16,7 +16,16 @@ import { addAuditLog } from './auditService';
 
 export const updateUser = async (id: UserId, updates: Partial<User>, currentName?: string) => {
   await updateDoc(doc(db, 'users', id), cleanData(updates));
-  await addAuditLog('UPDATE', 'CLIENT', id as any, `Updated user permissions: ${currentName || id}`);
+  const keys = Object.keys(updates);
+  const isNotificationOnlyUpdate = keys.length > 0 && keys.every(k =>
+    k === 'dismissedNotifications' ||
+    k === 'dismissedNotificationHistory' ||
+    k === 'readNotifications' ||
+    k === 'notificationPreferences'
+  );
+  if (!isNotificationOnlyUpdate) {
+    await addAuditLog('UPDATE', 'CLIENT', id as any, `Updated user permissions: ${currentName || id}`);
+  }
 };
 
 export const deleteUser = async (id: UserId, userName?: string) => {

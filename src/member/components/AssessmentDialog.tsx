@@ -7,10 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { db, getTenantId, auth } from '../../firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { Client, User, AssessmentTimePeriod, AssessmentAgeGroup, AssessmentMembershipType, AssessmentReferralSource } from '../../types';
-import { Clock, ShieldAlert, Sparkles, CheckCircle2, User as UserIcon, Phone, AlertCircle, Calendar, MessageSquare, Award } from 'lucide-react';
+import { Clock, ShieldAlert, Sparkles, CheckCircle2, User as UserIcon, Phone, Mail, AlertCircle, Calendar, MessageSquare, Award } from 'lucide-react';
 
 interface AssessmentDialogProps {
   open: boolean;
@@ -51,6 +51,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
   // Form states
   const [fullName, setFullName] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
   const [membershipId, setMembershipId] = useState<string>('Guest');
   const [timePeriod, setTimePeriod] = useState<AssessmentTimePeriod>('Morning [8AM - 4PM]');
   const [preferredHour, setPreferredHour] = useState<string>('10:00 AM');
@@ -61,6 +62,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
   const [coachName, setCoachName] = useState<string>('');
   const [preferredCoachId, setPreferredCoachId] = useState<string>('any');
   const [referralSource, setReferralSource] = useState<AssessmentReferralSource>('Floor Service');
+  const [fallbackCoaches, setFallbackCoaches] = useState<User[]>([]);
   
   // Non-inzan legacy states
   const [preferredDate, setPreferredDate] = useState<string>('');
@@ -71,11 +73,29 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const effectiveCoaches = React.useMemo(() => {
+    const source = (coaches && coaches.length > 0) ? coaches : fallbackCoaches;
+    return source.filter((c: any) => c.active !== false && c.status !== 'Inactive' && c.status !== 'inactive');
+  }, [coaches, fallbackCoaches]);
+
+  useEffect(() => {
+    if (!open || (coaches && coaches.length > 0)) return;
+    getDocs(collection(db, 'coaches'))
+      .then((snap) => {
+        const list = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as any))
+          .filter((c) => c.active !== false && c.status !== 'Inactive' && c.status !== 'inactive');
+        setFallbackCoaches(list);
+      })
+      .catch((err) => console.warn('[AssessmentDialog] Could not load coaches fallback:', err));
+  }, [open, coaches]);
+
   // Pre-fill initial client data when dialog opens
   useEffect(() => {
     if (open && client) {
       setFullName(client.name || '');
       setPhone(client.phone || '');
+      setEmail((client as any).email || '');
       const rawId = (client as any).memberId || (client as any).clientRecordId || (client as any).customId || '';
       setMembershipId(rawId ? String(rawId) : 'Guest');
       setErrorMessage(null);
@@ -95,6 +115,12 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
       }
       if (!phone.trim()) {
         const msg = 'Phone Number (with WhatsApp) is required.';
+        setErrorMessage(msg);
+        toast.error(msg);
+        return;
+      }
+      if (!email.trim()) {
+        const msg = 'Email Address is required.';
         setErrorMessage(msg);
         toast.error(msg);
         return;
@@ -127,11 +153,11 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
       if (hasCoachPreference === 'Yes' || preferredCoachId !== 'any') {
         if (preferredCoachId !== 'any') {
           resolvedCoachId = preferredCoachId;
-          const found = coaches.find(c => c.id === preferredCoachId);
+          const found = effectiveCoaches.find(c => c.id === preferredCoachId);
           if (found) resolvedCoachName = found.name;
         } else if (coachName.trim()) {
           resolvedCoachName = coachName.trim();
-          const match = coaches.find(c => c.name.toLowerCase() === coachName.trim().toLowerCase());
+          const match = effectiveCoaches.find(c => c.name.toLowerCase() === coachName.trim().toLowerCase());
           if (match) resolvedCoachId = match.id;
         }
       }
@@ -169,6 +195,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
             clientId: client.id || 'guest',
             fullName: fullName.trim() || client.name,
             phone: phone.trim() || client.phone,
+            email: email.trim() || (client as any).email || '',
             membershipId: membershipId.trim() || 'Guest',
             timePeriod: isInzan ? timePeriod : (preferredTime || 'Any'),
             preferredHour: isInzan ? preferredHour.trim() : (preferredTime || ''),
@@ -180,6 +207,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
             preferredCoachId: resolvedCoachId,
             preferredCoachName: resolvedCoachName,
             referralSource: hasCoachPreference === 'Yes' ? referralSource : undefined,
+            source: 'member_app',
           }),
         });
 
@@ -199,6 +227,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
           clientId: client.id || 'guest',
           clientName: fullName.trim() || client.name || 'Anonymous',
           phone: phone.trim() || client.phone || '',
+          email: email.trim() || (client as any).email || '',
           membershipId: membershipId.trim() || 'Guest',
           timePeriod: isInzan ? timePeriod : (preferredTime || 'Any'),
           preferredHour: isInzan ? preferredHour.trim() : (preferredTime || ''),
@@ -226,6 +255,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
           preferredDate: isInzan ? timePeriod : (preferredDate || ''),
           preferredTime: isInzan ? preferredHour : (preferredTime || ''),
           status: 'Pending',
+          source: 'member_app',
           tenantId: getTenantId(),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
@@ -325,7 +355,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
                   <UserIcon className="h-3.5 w-3.5 text-primary" /> Member Information
                 </h4>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="full-name" className="text-xs font-medium">
                       Full Name <span className="text-destructive">*</span>
@@ -343,13 +373,28 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
                   <div className="space-y-1.5">
                     <Label htmlFor="phone-number" className="text-xs font-medium flex items-center justify-between">
                       <span>Phone Number <span className="text-destructive">*</span></span>
-                      <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.2 rounded">Must have WhatsApp</span>
+                      <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-1.5 py-0.2 rounded">WhatsApp</span>
                     </Label>
                     <Input
                       id="phone-number"
                       placeholder="e.g. +20 100 000 0000"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
+                      className="h-9 text-sm"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email-address" className="text-xs font-medium">
+                      Email Address <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="email-address"
+                      type="email"
+                      placeholder="e.g. athlete@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       className="h-9 text-sm"
                       required
                     />
@@ -508,7 +553,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
                               const v = val || 'any';
                               setPreferredCoachId(v);
                               if (v !== 'any') {
-                                const found = coaches.find(c => c.id === v);
+                                const found = effectiveCoaches.find(c => c.id === v);
                                 if (found) setCoachName(found.name);
                               }
                             }}
@@ -518,7 +563,7 @@ export function AssessmentDialog({ open, onOpenChange, client, coaches }: Assess
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="any">Select from staff list</SelectItem>
-                              {coaches.map((c) => (
+                              {effectiveCoaches.map((c) => (
                                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                               ))}
                             </SelectContent>

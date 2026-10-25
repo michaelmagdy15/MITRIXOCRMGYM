@@ -4,6 +4,7 @@ import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
 import { addAuditLog } from './auditService';
 import { buildEntitlementPayload, inferEntitlementType } from './entitlementService';
+import { buildPackageSnapshotForClient } from '../utils/packageVersioning';
 import { PaymentCategory, resolvePaymentCategory } from '../utils/paymentCategories';
 import { toCanonicalBranchId } from '../utils/memberCategories';
 import { normalizeBranchName } from '../utils/branchUtils';
@@ -481,6 +482,9 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       const nextPackages = [...updatedPkgs, newClientPackage];
 
       if (params.systemPackage) {
+        const pkgSnapshot = buildPackageSnapshotForClient(params.systemPackage, nowIso);
+        Object.assign(newClientPackage, pkgSnapshot);
+
         const isUnlimited = params.systemPackage.sessions === 0;
         const sessions = params.systemPackage.sessions;
         newClientPackage.sessionsTotal = isUnlimited ? 'unlimited' : sessions;

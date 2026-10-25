@@ -123,7 +123,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       }
       if (item.tab === 'locker') {
         if (isStrike && isMobile) return false;
-        if (features.locker === false) return false;
+        if (features.locker === false && !isInzan) return false;
       }
       if (item.tab === 'wallet' && features.wallet === false) return false;
       if (item.tab === 'invites' && features.operations === false) return false;
@@ -259,7 +259,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     } else if (target === 'wallet') {
       if (features.wallet !== false) setActiveTab('wallet');
     } else if (target === 'locker') {
-      if (features.locker !== false) setActiveTab('locker');
+      if (features.locker !== false || isInzan) setActiveTab('locker');
     } else if (target === 'invites') {
       if (features.operations !== false) setActiveTab('invites');
     } else if (target === 'nutrition') {

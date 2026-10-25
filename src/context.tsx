@@ -59,6 +59,7 @@ export interface AppContextType {
   users: User[];
   logout: () => Promise<void>;
   clients: Client[];
+  allClients: Client[];
   loadingClients: boolean;
   loadingExpired: boolean;
   expiredLoaded: boolean;
@@ -400,6 +401,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return false;
   }, [clientByIdMap, getCanonicalName]);
 
+  const roleScopedClients = useMemo(() => {
+    if (!currentUser) return [];
+    let filtered = clients;
+    const isRestrictedRep = (currentUser.role === 'rep' || effectiveRole === 'rep') &&
+      !can('members.view_all_branches') &&
+      !can('dashboard.view_global') &&
+      currentUser.role !== 'admin' &&
+      currentUser.role !== 'manager' &&
+      currentUser.role !== 'super_admin' &&
+      currentUser.role !== 'crm_admin';
+
+    if (isRestrictedRep) {
+      filtered = clients.filter(c => isClientAssignedToRep(c, currentUser.id, currentUser.name || ''));
+    }
+    return filtered;
+  }, [clients, currentUser, effectiveRole, can, isClientAssignedToRep]);
+
   const visibleClients = useMemo(() => {
     if (!currentUser) return [];
     if (searchQuery) {
@@ -541,6 +559,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     users,
     logout,
     clients: visibleClients,
+    allClients: roleScopedClients,
     loadingClients,
     loadingExpired,
     expiredLoaded,
@@ -631,7 +650,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     canAll,
     userPermissions
   }), [
-    currentUser, effectiveRole, users, visibleClients, loadingClients,
+    currentUser, effectiveRole, users, visibleClients, roleScopedClients, loadingClients,
     loadingExpired, expiredLoaded, fetchExpiredMembers,
     salesStats, visiblePayments, loadingPayments, ptPackageRecords,
     visibleTasks, allTasks, packages, loadingPackages,

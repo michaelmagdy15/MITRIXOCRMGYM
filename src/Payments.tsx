@@ -28,6 +28,7 @@ import { canReassignMemberSalesRep, isPaymentEditableByStaff } from './utils/per
 import { validateMembershipEligibility } from './utils/membershipRules';
 import { resolvePaymentBranch, normalizeBranchName } from './utils/branchUtils';
 import { matchesPhoneSearch } from './utils/phoneUtils';
+import { matchesFuzzyNameSearch, scoreNameMatch } from './utils/fuzzyNameSearch';
 import { toCanonicalBranchId } from './utils/memberCategories';
 import { isTenantInzan, isValidNationalIdOrPassport, isValidEgyptianMobile } from './utils/inzanOrg';
 import { getTenantId, storage } from './firebase';
@@ -36,7 +37,7 @@ import { addAuditLog } from './services/auditService';
 import { useOperationId } from './hooks/useOperationId';
 import { ShieldAlert, Paperclip, MessageCircle, CheckCircle, Clock, Download } from 'lucide-react';
 import { calculateSplitTenderRemaining, splitInstallmentsEvenly } from './utils/installmentSplitter';
-import { buildWhatsAppPaymentReceiptUrl } from './utils/whatsappTemplates';
+import { buildWhatsAppPaymentReceiptUrl, openWhatsAppUrl } from './utils/whatsappTemplates';
 import {
   validateOrExtractInstapayRef,
   calculateBnplSchedule,
@@ -1368,12 +1369,20 @@ export default function Payments() {
       const client = resolvePaymentClient(payment);
 
       // Sales reps only see payments attributed to them.
-      // If sales_rep_id is set it is authoritative; otherwise fall back to client-based visibility
-      // (payment belongs to a client assigned to this rep) for legacy unattributed records.
+      // Matches by sales_rep_id, canonical salesName, recordedBy, or assigned client.
       if (isRep && currentUser) {
-        const ownPayment = payment.sales_rep_id
-          ? payment.sales_rep_id === currentUser.id
-          : (client ? (client.assignedTo === currentUser.name || client.salesName === currentUser.name) : clientById.has(payment.clientId));
+        const repCanonical = currentUser.name ? toCanonical(currentUser.name).toLowerCase() : '';
+        const paySalesCanonical = payment.salesName ? toCanonical(payment.salesName).toLowerCase() : '';
+        const clientSalesCanonical = client?.salesName ? toCanonical(client.salesName).toLowerCase() : '';
+        const ownPayment =
+          (payment.sales_rep_id && payment.sales_rep_id === currentUser.id) ||
+          (repCanonical && paySalesCanonical && paySalesCanonical === repCanonical) ||
+          (payment.recordedBy && payment.recordedBy === currentUser.id) ||
+          (!payment.sales_rep_id && !payment.salesName && client && (
+            client.assignedTo === currentUser.id ||
+            client.salesRep === currentUser.id ||
+            (repCanonical && clientSalesCanonical === repCanonical)
+          ));
         if (!ownPayment) return false;
       }
 
@@ -1381,7 +1390,7 @@ export default function Payments() {
       if (deferredSearchTerm) {
         const term = deferredSearchTerm.toLowerCase();
         const clientName = client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '';
-        const matchesName = clientName.toLowerCase().includes(term);
+        const matchesName = matchesFuzzyNameSearch(clientName, term);
         const matchesId = client?.memberId?.toString().includes(term) || ((payment as any).memberId?.toString().includes(term));
         const matchesPhone = client?.phone?.includes(term);
         const matchesAmount = payment.amount.toString().includes(term);
@@ -1702,20 +1711,27 @@ export default function Payments() {
                               {(() => {
                                 const term = clientSearch.toLowerCase().trim();
                                 const cleanId = term.replace(/^#/, '');
-                                const matched: Client[] = [];
+                                const scored: { client: Client; score: number }[] = [];
                                 for (const c of clients) {
                                   if (!term) {
-                                    matched.push(c);
-                                  } else if (
-                                    c.name?.toLowerCase().includes(term) ||
-                                    matchesPhoneSearch(c.phone, term) ||
-                                    matchesPhoneSearch((c as any).parentPhone, term) ||
-                                    (c.memberId && c.memberId.toString().includes(cleanId))
-                                  ) {
-                                    matched.push(c);
+                                    scored.push({ client: c, score: 100 });
+                                    if (scored.length >= 50) break;
+                                  } else {
+                                    const nameRes = scoreNameMatch(c.name, term);
+                                    if (nameRes.matched) {
+                                      scored.push({ client: c, score: nameRes.score });
+                                    } else if (
+                                      matchesPhoneSearch(c.phone, term) ||
+                                      matchesPhoneSearch((c as any).parentPhone, term) ||
+                                      (c.memberId && c.memberId.toString().includes(cleanId))
+                                    ) {
+                                      scored.push({ client: c, score: 100 });
+                                    }
                                   }
-                                  if (matched.length >= 50) break;
                                 }
+                                const matched = term
+                                  ? scored.sort((a, b) => b.score - a.score).slice(0, 50).map(s => s.client)
+                                  : scored.map(s => s.client);
                                 if (matched.length === 0) {
                                   return (
                                     <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('members.no_members')}</div>
@@ -2135,8 +2151,11 @@ export default function Payments() {
                         return waLink ? (
                           <a
                             href={waLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            target="whatsapp_crm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              openWhatsAppUrl(waLink);
+                            }}
                             className="text-[11px] font-bold text-emerald-600 hover:underline flex items-center gap-1"
                           >
                             <MessageCircle className="h-3.5 w-3.5" />
@@ -2208,8 +2227,11 @@ export default function Payments() {
                           {waBnplUrl && (
                             <a
                               href={waBnplUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              target="whatsapp_crm"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                openWhatsAppUrl(waBnplUrl);
+                              }}
                               className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline pt-1"
                             >
                               <MessageCircle className="h-3.5 w-3.5" />
@@ -2996,8 +3018,11 @@ export default function Payments() {
                               return waUrl ? (
                                 <a
                                   href={waUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                  target="whatsapp_crm"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    openWhatsAppUrl(waUrl);
+                                  }}
                                   title="Send Digital Receipt via WhatsApp"
                                   className="inline-flex items-center justify-center h-8 w-8 rounded-md text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                                 >

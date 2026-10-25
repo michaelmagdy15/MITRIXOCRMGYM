@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import type { Client, Package } from '../../types';
 import { computeMemberBenefitsSummary } from '../../utils/memberBenefitsWallet';
-import { buildWhatsAppRenewalReminderUrl } from '../../utils/whatsappTemplates';
+import { buildWhatsAppRenewalReminderUrl, openWhatsAppUrl } from '../../utils/whatsappTemplates';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -105,8 +105,11 @@ export const MemberBenefitsWallet: React.FC<MemberBenefitsWalletProps> = ({
         {isAdminView && renewalWhatsAppUrl && (isExpiringSoon || client.status === 'Expired' || client.status === 'Nearly Expired') && (
           <a
             href={renewalWhatsAppUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            target="whatsapp_crm"
+            onClick={(e) => {
+              e.preventDefault();
+              openWhatsAppUrl(renewalWhatsAppUrl);
+            }}
             className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
             title="Send 1-Tap WhatsApp Renewal Reminder"
           >

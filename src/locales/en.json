@@ -1,6 +1,7 @@
 {
   "nav": {
     "dashboard": "Dashboard",
+    "notifications": "Notifications",
     "leads": "Leads",
     "clients": "Members",
     "calendar": "Calendar",
@@ -110,7 +111,7 @@
     "active_leads": "Active Leads",
     "needs_follow_up": "Needs follow-up",
     "expiring_soon": "Expiring Soon",
-    "ending_30d": "Packages ending in < 30 days",
+    "ending_30d": "Packages ending in 14 days or less",
     "total_expired": "Total Expired",
     "expired_memberships": "Expired memberships",
     "upcoming_birthdays": "Upcoming Birthdays",

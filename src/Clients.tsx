@@ -36,12 +36,14 @@ import { generateClientContract } from './utils/pdfGenerator';
 import { downloadFile } from './utils/download';
 import { resolvePaymentCategory } from './utils/paymentCategories';
 import { matchesPhoneSearch } from './utils/phoneUtils';
+import { scoreNameMatch } from './utils/fuzzyNameSearch';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { calculatePricing, DiscountType, DiscountReason, formatCurrencyAmount } from './utils/pricing';
 import PricingDiscountControls, { PricingControlsState, DEFAULT_PRICING_STATE } from './components/PricingDiscountControls';
 import { InzanMemberShow } from './components/InzanMemberShow';
 import { AdjustPackageDatesDialog, canOverridePackageDates } from './components/AdjustPackageDatesDialog';
 import { addAuditLog } from './services/auditService';
+import { openClickToCallModal } from './services/clickToCallService';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
 import { canReassignMemberSalesRep } from './utils/permissions';
 import { validateMembershipEligibility, validateFreezeDurationLimits } from './utils/membershipRules';
@@ -54,9 +56,14 @@ import { MemberDocumentUploader } from './components/member/MemberDocumentUpload
 import { MemberBenefitsWallet } from './components/member/MemberBenefitsWallet';
 import { MemberPhotoCapture } from './components/member/MemberPhotoCapture';
 import MemberBodyTracker from './member/MemberBodyTracker';
-import { buildWhatsAppPaymentReceiptUrl, buildWhatsAppRenewalReminderUrl } from './utils/whatsappTemplates';
+import {
+  buildWhatsAppPaymentReceiptUrl,
+  buildWhatsAppRenewalReminderUrl,
+  openWhatsAppUrl,
+} from './utils/whatsappTemplates';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { safeFormatDate as utilsSafeFormatDate, toValidDate, safeIsoDate, safeAddDays } from './utils/dateUtils';
+import { computeMemberGlobalStatus, resolveLatestMemberNote } from './utils/memberLifecycle';
 import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
 
 const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => utilsSafeFormatDate(dateStr, formatStr, fallback);
@@ -96,7 +103,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can } = useAppContext();
+  const { currentUser, users, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can } = useAppContext();
   const { packages } = usePackages();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => {
@@ -104,7 +111,7 @@ export default function Clients() {
       return active && (features?.ptPackages !== false || p.type !== 'Private');
     });
   }, [packages, features]);
-  const activeClient = activeClientId ? clients.find(c => c.id === activeClientId) : null;
+  const activeClient = activeClientId ? ((allClients || clients).find(c => c.id === activeClientId) || clients.find(c => c.id === activeClientId) || null) : null;
 
   // Sales reps and managers may download member contracts.
   const canDownloadContract = ['rep', 'manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser?.role || '');
@@ -999,11 +1006,12 @@ export default function Clients() {
       const pb = (pkg as any).benefits || {};
       const cb = rawC.benefits || {};
       let allowanceDays = Number(
-        systemPkg?.freezeAllowanceDays ??
-          systemPkg?.benefits?.freezeAllowanceDays ??
-          pb.freezeAllowanceDays ??
+        pb.freezeAllowanceDays ??
+          (pkg as any).freezeAllowanceDays ??
           cb.freezeAllowanceDays ??
           rawC.freezeAllowanceDays ??
+          systemPkg?.freezeAllowanceDays ??
+          systemPkg?.benefits?.freezeAllowanceDays ??
           0
       );
       if (allowanceDays === 0) {
@@ -1503,18 +1511,19 @@ export default function Clients() {
 
     for (const c of clients) {
       const s = (c.status || '').toLowerCase().trim();
-      const isLead = s === 'lead';
-      if (isLead) {
+      const lifecycle = computeMemberGlobalStatus(c);
+      const isLead = lifecycle.globalStatus === 'GUEST' || s === 'lead';
+      if (isLead && !lifecycle.hasActiveOrUpcomingPackage && lifecycle.globalStatus !== 'EXPIRED') {
         if (isInzanTenant) {
           leadsArr.push(c);
           membersArr.push(c);
         }
       } else {
         membersArr.push(c);
-        if (s === 'active') activeArr.push(c);
-        else if (s === 'nearly expired' || s === 'nearly_expired') nearlyExpArr.push(c);
-        else if (s === 'expired') expiredArr.push(c);
-        else if (s === 'hold' || s === 'frozen' || s === 'freeze' || s === 'suspended') onHoldArr.push(c);
+        if (lifecycle.globalStatus === 'HOLD') onHoldArr.push(c);
+        else if (lifecycle.globalStatus === 'EXPIRING_SOON' || s === 'nearly expired' || s === 'nearly_expired') nearlyExpArr.push(c);
+        else if (lifecycle.globalStatus === 'ACTIVE') activeArr.push(c);
+        else if (lifecycle.globalStatus === 'EXPIRED' && !lifecycle.hasActiveOrUpcomingPackage) expiredArr.push(c);
       }
 
       if (isInzanTenant || !isLead) {
@@ -1580,7 +1589,8 @@ export default function Clients() {
 
     let filtered = base;
 
-    // Search (supports member name, member ID, phone, and parent phone across family members)
+    // Search (supports fuzzy/phonetic member name, member ID, phone, and parent phone across family members)
+    const searchScoreMap = new Map<string, number>();
     if (deferredSearchTerm) {
       const term = deferredSearchTerm.toLowerCase().trim();
       if (searchMode === 'id') {
@@ -1589,10 +1599,19 @@ export default function Clients() {
       } else {
         const cleanId = term.replace(/^#/, '');
         filtered = filtered.filter(m => {
-          if (m.name.toLowerCase().includes(term)) return true;
-          if (m.memberId && m.memberId.toString().toLowerCase().includes(cleanId)) return true;
-          if (matchesPhoneSearch(m.phone, term)) return true;
-          if (matchesPhoneSearch((m as any).parentPhone, term)) return true;
+          const nameRes = scoreNameMatch(m.name, term);
+          if (nameRes.matched) {
+            searchScoreMap.set(m.id, nameRes.score);
+            return true;
+          }
+          if (m.memberId && m.memberId.toString().toLowerCase().includes(cleanId)) {
+            searchScoreMap.set(m.id, 100);
+            return true;
+          }
+          if (matchesPhoneSearch(m.phone, term) || matchesPhoneSearch((m as any).parentPhone, term)) {
+            searchScoreMap.set(m.id, 100);
+            return true;
+          }
           return false;
         });
       }
@@ -1623,7 +1642,7 @@ export default function Clients() {
         const repCanonical = repUser?.name ? toCanonical(repUser.name).toLowerCase() : '';
         filtered = repUser
           ? filtered.filter(m => {
-              if (m.assignedTo === deferredFilterRep) return true;
+              if (m.assignedTo === deferredFilterRep || m.salesRep === deferredFilterRep) return true;
               if (m.salesName && repCanonical && toCanonical(m.salesName).toLowerCase() === repCanonical) return true;
               return false;
             })
@@ -1658,8 +1677,12 @@ export default function Clients() {
         : [];
     }
 
-    // Sort
+    // Sort (when searching by name, prioritize exact > prefix > phonetic > fuzzy match score first)
     filtered = [...filtered].sort((a, b) => {
+      if (searchScoreMap.size > 0) {
+        const scoreDiff = (searchScoreMap.get(b.id) || 0) - (searchScoreMap.get(a.id) || 0);
+        if (scoreDiff !== 0) return scoreDiff;
+      }
       if (deferredSortBy === 'id-asc') return (Number(a.memberId) || 0) - (Number(b.memberId) || 0);
       if (deferredSortBy === 'id-desc') return (Number(b.memberId) || 0) - (Number(a.memberId) || 0);
       if (deferredSortBy === 'newest') {
@@ -1891,6 +1914,7 @@ export default function Clients() {
             const u = users.find(u => u.id === client.assignedTo);
             return u ? (u.name || u.email) : client.salesName || client.assignedTo;
           })();
+          const latestNote = resolveLatestMemberNote(client);
           return (
             <div key={client.id} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setActiveClientId(client.id)}>
               <div onClick={(e) => e.stopPropagation()}>
@@ -1928,6 +1952,17 @@ export default function Clients() {
                     <span className="text-[10px] text-muted-foreground">{assignedName}</span>
                   )}
                 </div>
+                {latestNote.text && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
+                    <MessageSquare className="h-3 w-3 text-primary shrink-0" />
+                    {latestNote.outcome && (
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 shrink-0">
+                        {latestNote.outcome}
+                      </Badge>
+                    )}
+                    <span className="truncate font-medium text-foreground/90">{latestNote.text}</span>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                 <Button
@@ -1974,6 +2009,7 @@ export default function Clients() {
             <TableHead>{t('members.table.package')} & {t('leads.branch')}</TableHead>
             <TableHead>{t('members.table.status')} & {t('members.table.sessions')}</TableHead>
             <TableHead>{t('members.table.expiry_date')}{canViewGlobalDashboard ? ` & ${t('members.table.total_paid')}` : ''}</TableHead>
+            <TableHead>Last Comment &amp; Follow-Up Status</TableHead>
             {canViewGlobalDashboard && <TableHead className="hidden lg:table-cell">{t('leads.assigned_to')}</TableHead>}
             <TableHead className="text-right pr-4">{t('leads.table.actions')}</TableHead>
           </TableRow>
@@ -1981,6 +2017,10 @@ export default function Clients() {
         <TableBody>
           {clientList.map(client => {
             const totalPaid = totalPaidByClientId.get(client.id) || 0;
+            const lifecycle = computeMemberGlobalStatus(client);
+            const latestNote = lifecycle.lastNote;
+            const effectiveExpiry = lifecycle.latestPackageEndDate || client.membershipExpiry;
+            const effectivePkgName = lifecycle.effectivePrimaryPackage?.packageName || client.packageType;
 
             return (
             <TableRow key={client.id} className="cursor-pointer hover:bg-muted/40 transition-colors group" onClick={() => setActiveClientId(client.id)}>
@@ -2010,10 +2050,29 @@ export default function Clients() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                    <span className="inline-flex items-center">
-                      <Phone className="h-3 w-3 mr-1 text-muted-foreground/80" />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (currentUser?.role === 'rep' && client.assignedTo !== currentUser.id) return;
+                        openClickToCallModal({
+                          clientId: client.id,
+                          memberId: client.memberId,
+                          name: client.name,
+                          phone: client.phone,
+                          backupPhone: client.backupPhone,
+                          status: client.status,
+                          branch: client.branch,
+                          packageType: client.packageType,
+                          source: client.source,
+                        });
+                      }}
+                      className="inline-flex items-center text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer"
+                      title="Click to Call"
+                    >
+                      <Phone className="h-3 w-3 mr-1" />
                       {currentUser?.role === 'rep' && client.assignedTo !== currentUser.id ? '**********' : client.phone}
-                    </span>
+                    </button>
                   </div>
                 </div>
               </TableCell>
@@ -2022,7 +2081,7 @@ export default function Clients() {
               <TableCell className="py-3 align-top">
                 <div className="flex flex-col gap-1 items-start">
                   <Badge variant="outline" className="text-xs font-semibold max-w-[190px] truncate bg-muted/20">
-                    {client.packageType || t('leads.tabs.other')}
+                    {effectivePkgName || t('leads.tabs.other')}
                   </Badge>
                   <div className="flex flex-wrap items-center gap-1">
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-medium">
@@ -2038,7 +2097,13 @@ export default function Clients() {
               {/* Column 4: Status + Sessions Remaining */}
               <TableCell className="py-3 align-top">
                 <div className="flex flex-col gap-1 items-start">
-                  {getStatusBadge(client.status)}
+                  {lifecycle.globalStatus === 'EXPIRING_SOON'
+                    ? getStatusBadge('nearly expired')
+                    : lifecycle.globalStatus === 'HOLD'
+                    ? getStatusBadge('Hold')
+                    : lifecycle.globalStatus === 'ACTIVE'
+                    ? getStatusBadge('Active')
+                    : getStatusBadge(client.status)}
                   <div>
                     {typeof client.sessionsRemaining === 'number' ? (
                       <Badge variant={client.sessionsRemaining < 0 ? 'destructive' : 'secondary'} className="text-[10px] px-1.5 py-0 h-4">
@@ -2056,10 +2121,10 @@ export default function Clients() {
               {/* Column 5: Expiry Date + Total Paid */}
               <TableCell className="py-3 align-top whitespace-nowrap">
                 <div className="flex flex-col gap-0.5">
-                  {client.membershipExpiry ? (
+                  {effectiveExpiry ? (
                     <div className="flex items-center text-xs font-medium text-foreground">
                       <Calendar className="h-3 w-3 mr-1.5 text-muted-foreground shrink-0" />
-                      {safeFormatDate(client.membershipExpiry, 'MMM d, yyyy')}
+                      {safeFormatDate(effectiveExpiry, 'MMM d, yyyy')}
                     </div>
                   ) : (
                     <span className="text-muted-foreground text-xs">{t('leads.tabs.unassigned')}</span>
@@ -2070,6 +2135,48 @@ export default function Clients() {
                     </span>
                   )}
                 </div>
+              </TableCell>
+
+              {/* Column 6: Last Comment / Call Note & Follow-Up Status */}
+              <TableCell className="py-3 align-top max-w-[240px]">
+                {latestNote.text ? (
+                  <div className="flex flex-col gap-0.5" title={latestNote.text}>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 h-4 font-semibold ${
+                          (latestNote.outcome || '').toLowerCase().includes('not interested')
+                            ? 'bg-red-500/10 text-red-600 border-red-500/30'
+                            : (latestNote.outcome || '').toLowerCase().includes('interested')
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                            : 'bg-primary/10 text-primary border-primary/25'
+                        }`}
+                      >
+                        {latestNote.outcome || (latestNote.source === 'comment' ? 'Comment' : 'Note')}
+                      </Badge>
+                      {latestNote.date && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {safeFormatDate(latestNote.date, 'MMM d', '')}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs font-medium text-foreground line-clamp-2 break-words">
+                      {latestNote.text}
+                    </span>
+                    {(latestNote.author || latestNote.nextFollowUp) && (
+                      <span className="text-[10px] text-muted-foreground truncate">
+                        {[
+                          latestNote.author ? `by ${latestNote.author}` : '',
+                          latestNote.nextFollowUp ? `Next: ${safeFormatDate(latestNote.nextFollowUp, 'MMM d', '')}` : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' • ')}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic">No comment logged</span>
+                )}
               </TableCell>
 
               {/* Column 6: Sales Rep (lg+) */}
@@ -2963,7 +3070,7 @@ export default function Clients() {
             <Tabs value={memberProfileTab} onValueChange={setMemberProfileTab} className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Responsive wrapping tab pills — all tabs visible without horizontal cutoff */}
               <div className="px-4 sm:px-6 py-2.5 border-b flex-shrink-0 bg-muted/10">
-                <TabsList className="bg-transparent p-0 h-auto gap-1.5 rounded-none border-none shadow-none flex flex-wrap justify-start w-full">
+                <TabsList className="bg-transparent p-0 h-auto gap-1.5 rounded-none border-none shadow-none flex flex-nowrap overflow-x-auto custom-scrollbar justify-start w-full py-1">
                   {[
                     { value: 'overview', label: isInzanTenant ? 'Overview (User Details)' : 'Overview', icon: <User className="h-3.5 w-3.5" /> },
                     ...(isInzanTenant ? [{ value: 'packages', label: `Packages & Invites (${(activeClient.packages || []).length || 1})`, icon: <Gift className="h-3.5 w-3.5" /> }] : []),
@@ -4961,8 +5068,11 @@ export default function Clients() {
                                               {waRenewUrl && (
                                                 <a
                                                   href={waRenewUrl}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
+                                                  target="whatsapp_crm"
+                                                  onClick={(e) => {
+                                                    e.preventDefault();
+                                                    openWhatsAppUrl(waRenewUrl);
+                                                  }}
                                                   title="Send 1-Tap WhatsApp Renewal Reminder"
                                                   className="inline-flex items-center justify-center h-7 w-7 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 transition-colors"
                                                 >
@@ -5074,8 +5184,11 @@ export default function Clients() {
                                           {waReceiptUrl ? (
                                             <a
                                               href={waReceiptUrl}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
+                                              target="whatsapp_crm"
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                openWhatsAppUrl(waReceiptUrl);
+                                              }}
                                               title="Send 1-Tap WhatsApp Receipt"
                                               className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 text-[10px] font-bold transition-colors"
                                             >

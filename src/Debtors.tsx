@@ -3,6 +3,7 @@ import { downloadFile } from './utils/download';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
+import { matchesFuzzyNameSearch } from './utils/fuzzyNameSearch';
 import { format, parseISO } from 'date-fns';
 import { Payment } from './types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -160,13 +161,13 @@ export default function Debtors() {
       const q = searchTerm.toLowerCase();
 
       // Search filters
-      const clientName = (client?.name || d.client_name || '').toLowerCase();
+      const rawClientName = client?.name || d.client_name || '';
       const clientPhone = (client?.phone || '').toLowerCase();
       const clientMemberId = (client?.memberId || '').toLowerCase();
       const packageName = (d.packageType || '').toLowerCase();
       
       const matchesSearch = !searchTerm || 
-        clientName.includes(q) || 
+        matchesFuzzyNameSearch(rawClientName, q) || 
         clientPhone.includes(q) || 
         clientMemberId.includes(q) || 
         packageName.includes(q);

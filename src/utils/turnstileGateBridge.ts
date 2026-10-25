@@ -1,6 +1,7 @@
 import type { Client, Package, Payment } from '../types';
 import { evaluateCheckinGatekeeper } from './universalQr';
 import { validatePackageTimeWindow, isPrimaryMembershipPackage } from './membershipRules';
+import { resolveEffectivePackageRules } from './packageVersioning';
 
 export interface TurnstileHardwareConfig {
   enabled: boolean;
@@ -83,7 +84,8 @@ export function evaluateTurnstileGateAccess(params: {
     };
   }
 
-  // Find active catalogue package to check time-restriction window (e.g., Morning Package 06:00–14:00)
+  // Resolve effective package rules using Snapshot-First / Version-History precedence
+  // so future edits to a package's time window do not retroactively block legacy members.
   const activeClientPkg = gate.activePackages[0];
   const matchedCatPkg = cataloguePackages.find(
     (p) =>
@@ -93,8 +95,17 @@ export function evaluateTurnstileGateAccess(params: {
         .toLowerCase()
   );
 
-  if (matchedCatPkg) {
-    const timeCheck = validatePackageTimeWindow(matchedCatPkg, now);
+  const resolvedRules = resolveEffectivePackageRules(activeClientPkg as any, member, matchedCatPkg);
+  if (resolvedRules.isTimeRestricted) {
+    const timeCheck = validatePackageTimeWindow(
+      {
+        name: resolvedRules.packageName,
+        isTimeRestricted: resolvedRules.isTimeRestricted,
+        allowedStartTime: resolvedRules.allowedStartTime,
+        allowedEndTime: resolvedRules.allowedEndTime,
+      },
+      now
+    );
     if (!timeCheck.allowed) {
       return {
         allowRelayOpen: false,
@@ -102,7 +113,7 @@ export function evaluateTurnstileGateAccess(params: {
         statusColor: 'red',
         reasonCode: 'OUTSIDE_TIME_WINDOW',
         messageEn: timeCheck.reason || 'Outside allowed package check-in hours.',
-        messageAr: `باقة صباحية — مسموح بالدخول فقط من ${matchedCatPkg.allowedStartTime || '06:00'} إلى ${matchedCatPkg.allowedEndTime || '14:00'}`,
+        messageAr: `باقة صباحية — مسموح بالدخول فقط من ${resolvedRules.allowedStartTime || '06:00'} إلى ${resolvedRules.allowedEndTime || '14:00'}`,
       };
     }
   }

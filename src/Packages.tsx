@@ -64,6 +64,7 @@ export default function Packages() {
   const [editingPackage, setEditingPackage] = useState<Package | null>(null);
 
   const [name, setName] = useState('');
+  const [benefitSubtitle, setBenefitSubtitle] = useState('');
   const [sessions, setSessions] = useState<number | ''>('');
   const [unlimitedSessions, setUnlimitedSessions] = useState(false);
   const [price, setPrice] = useState<number | ''>('');
@@ -167,6 +168,7 @@ export default function Packages() {
         const numericPrice = Number(price);
         await addPackage({
           name,
+          benefitSubtitle: benefitSubtitle.trim() || undefined,
           sessions: unlimitedSessions ? 0 : Number(sessions),
           price: numericPrice,
           expiryDays: Number(expiryDays),
@@ -193,6 +195,7 @@ export default function Packages() {
         const numericPrice = Number(price);
         await updatePackage(editingPackage.id, {
           name,
+          benefitSubtitle: benefitSubtitle.trim() || undefined,
           sessions: unlimitedSessions ? 0 : Number(sessions),
           price: numericPrice,
           expiryDays: Number(expiryDays),
@@ -274,6 +277,7 @@ export default function Packages() {
   const openEdit = (pkg: Package) => {
     setEditingPackage(pkg);
     setName(pkg.name);
+    setBenefitSubtitle(pkg.benefitSubtitle || '');
     const isUnlimited = pkg.sessions === 0;
     setUnlimitedSessions(isUnlimited);
     setSessions(isUnlimited ? '' : pkg.sessions);
@@ -313,6 +317,7 @@ export default function Packages() {
 
   const resetForm = () => {
     setName('');
+    setBenefitSubtitle('');
     setSessions('');
     setUnlimitedSessions(false);
     setPrice('');
@@ -492,8 +497,8 @@ export default function Packages() {
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Package Name</Label>
-                    <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. 12 Sessions PT or 1 Month Gym" />
+                    <Label>Package Name (Standard Display Name)</Label>
+                    <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Basic or Basic Annual Membership" />
                   </div>
                   <div className="space-y-2">
                     <Label>Category</Label>
@@ -508,6 +513,14 @@ export default function Packages() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Benefits Subtitle / Wave Details (Optional)</Label>
+                  <Input
+                    value={benefitSubtitle}
+                    onChange={e => setBenefitSubtitle(e.target.value)}
+                    placeholder="e.g. Includes 2 Free PT, 30d Freeze & 3 Guest Invites (changeable per wave without renaming package)"
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -855,6 +868,12 @@ export default function Packages() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-sm text-foreground">{pkg.name}</span>
+                          <span
+                            className="inline-flex items-center rounded-md bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 text-[10px] font-bold text-violet-600 dark:text-violet-400"
+                            title="Package Version — existing members retain the snapshot version from their purchase date"
+                          >
+                            v{pkg.version || 1}
+                          </span>
                           {isInzan && (
                             archived ? (
                               <span className="inline-flex items-center rounded-full bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[10px] font-semibold text-rose-600">
@@ -871,6 +890,11 @@ export default function Packages() {
                             )
                           )}
                         </div>
+                        {pkg.benefitSubtitle && (
+                          <div className="text-xs text-muted-foreground font-medium">
+                            {pkg.benefitSubtitle}
+                          </div>
+                        )}
                         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
                           <span>Branch: <strong className="font-medium text-foreground/80">{pkg.branch}</strong></span>
                           {isInzan && (
@@ -987,9 +1011,22 @@ export default function Packages() {
             <DialogTitle className="text-xl md:text-2xl font-bold">Edit Package</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3.5 py-2.5 text-xs text-violet-700 dark:text-violet-300 space-y-1">
+              <div className="font-bold flex items-center justify-between">
+                <span>🛡️ Legacy Protection &amp; Package Versioning Active (Current: v{editingPackage?.version || 1})</span>
+                {editingPackage?.versionHistory && editingPackage.versionHistory.length > 1 && (
+                  <span className="text-[10px] font-mono bg-violet-500/20 px-2 py-0.5 rounded">
+                    {editingPackage.versionHistory.length} recorded versions
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] opacity-90">
+                Keep the standard package name unchanged (e.g., <strong>&quot;{editingPackage?.name || name}&quot;</strong>). Modifying benefits, sessions, or rules below automatically publishes <strong>v{(editingPackage?.version || 1) + 1}</strong> for future buyers while existing members strictly retain their original contract benefits snapshot.
+              </p>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Package Name</Label>
+                <Label>Package Name (Standard Display Name)</Label>
                 <Input value={name} onChange={e => setName(e.target.value)} />
               </div>
               <div className="space-y-2">
@@ -1005,6 +1042,14 @@ export default function Packages() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Benefits Subtitle / Wave Details (Optional)</Label>
+              <Input
+                value={benefitSubtitle}
+                onChange={e => setBenefitSubtitle(e.target.value)}
+                placeholder="e.g. Includes 2 Free PT, 30d Freeze & 3 Guest Invites"
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

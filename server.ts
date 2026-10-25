@@ -31,6 +31,7 @@ import {
 } from './src/utils/bookingCutoff.js';
 import { desktopSyncRouter } from './src/routes/desktopSync.js';
 import { redgitsSyncRouter } from './src/routes/redgitsSync.js';
+import { inzanLockerRouter } from './src/routes/inzanLockerRouter.js';
 import { createMessagingBroadcastRouter } from './src/routes/messagingBroadcast.js';
 import { generateSlotBucketKeys, validateNutritionSlotRules } from './src/utils/nutritionBooking.js';
 import { parseSessionStartMs } from './src/utils/ptAttendance.js';
@@ -489,6 +490,7 @@ async function startServer() {
 
   // Live RedGITS -> Inzan Athletics DB sync router
   app.use('/api/inzan/redgits-sync', redgitsSyncRouter);
+  app.use('/api/inzan/lockers', inzanLockerRouter);
   app.use('/api/messaging', createMessagingBroadcastRouter(requireAuth));
 
   // Dedicated Cloud Run health check probe
@@ -905,14 +907,85 @@ async function startServer() {
         return res.status(400).json({ error: "You cannot force-reset your own password." });
       }
 
-      // Reset the password in Firebase Auth using Admin SDK
-      await admin.auth().updateUser(targetUserId, { password: DEFAULT_PASSWORD });
+      const targetDoc = await db.collection("users").doc(targetUserId).get();
+      const targetData = targetDoc.exists ? targetDoc.data() : null;
+      const targetEmail = String(targetData?.email || "").trim().toLowerCase();
+      const targetName = String(targetData?.name || "").trim() || targetEmail.split("@")[0] || "Staff User";
 
-      // Update Firestore user document to flag mustChangePassword
-      await db.collection("users").doc(targetUserId).update({ mustChangePassword: true });
+      let effectiveUid = targetUserId;
 
-      console.log(`[Server] Force reset password executed.`);
-      return res.json({ success: true, message: 'Password has been reset to "12345678".' });
+      try {
+        // Reset the password in Firebase Auth using Admin SDK (and keep email/displayName synced if present)
+        await admin.auth().updateUser(targetUserId, {
+          password: DEFAULT_PASSWORD,
+          ...(targetEmail ? { email: targetEmail } : {}),
+          ...(targetName ? { displayName: targetName } : {}),
+        });
+      } catch (authErr: any) {
+        const isNotFound =
+          authErr?.code === "auth/user-not-found" ||
+          String(authErr?.message || "").includes("There is no user record corresponding to the provided identifier");
+        if (!isNotFound) {
+          throw authErr;
+        }
+
+        // User was transferred (e.g. from RedGITS) or is pending and has no Firebase Auth record under targetUserId yet
+        if (!targetEmail) {
+          return res.status(400).json({ error: "Cannot activate or reset password: user has no email address configured." });
+        }
+
+        try {
+          const existingByEmail = await admin.auth().getUserByEmail(targetEmail);
+          effectiveUid = existingByEmail.uid;
+          await admin.auth().updateUser(effectiveUid, {
+            password: DEFAULT_PASSWORD,
+            displayName: targetName,
+          });
+        } catch (emailErr: any) {
+          if (emailErr?.code === "auth/user-not-found") {
+            const createdRecord = await admin.auth().createUser({
+              uid: targetUserId,
+              email: targetEmail,
+              password: DEFAULT_PASSWORD,
+              displayName: targetName,
+            });
+            effectiveUid = createdRecord.uid;
+          } else {
+            throw emailErr;
+          }
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      if (effectiveUid !== targetUserId && targetData) {
+        await db.collection("users").doc(effectiveUid).set(
+          {
+            ...targetData,
+            id: effectiveUid,
+            mustChangePassword: true,
+            isPending: false,
+            authActivated: true,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        );
+        await db.collection("users").doc(targetUserId).delete();
+      } else {
+        // Update Firestore user document to flag mustChangePassword and mark activated
+        await db.collection("users").doc(targetUserId).set(
+          {
+            id: targetUserId,
+            mustChangePassword: true,
+            isPending: false,
+            authActivated: true,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        );
+      }
+
+      console.log(`[Server] Force reset password / activation executed for ${targetUserId} -> ${effectiveUid}.`);
+      return res.json({ success: true, uid: effectiveUid, message: 'Password has been reset to "12345678".' });
     } catch (error) {
       console.error("[Server] Tenant password reset error:", error);
       return res.status(500).json({ error: (error as Error).message });
@@ -2132,35 +2205,64 @@ async function startServer() {
         return res.status(403).json({ error: "Forbidden: Only admins can activate users." });
       }
 
-      // Check if user already exists in Firebase Auth
+      const pendingDoc = await db.collection("users").doc(pendingDocId).get();
+      const existingData = pendingDoc.exists ? pendingDoc.data() || {} : {};
+      const cleanEmail = String(email).trim().toLowerCase();
+
+      // Check if user already exists in Firebase Auth (by UID first, then by email)
       let uid = "";
       try {
-        const userRecord = await admin.auth().getUserByEmail(email);
-        uid = userRecord.uid;
-      } catch (authErr: any) {
-        if (authErr?.code === 'auth/user-not-found') {
-          // Create new user in Firebase Auth
-          const userRecord = await admin.auth().createUser({
-            email,
-            password: DEFAULT_PASSWORD,
-            displayName: name
-          });
+        const byUid = await admin.auth().getUser(pendingDocId);
+        uid = byUid.uid;
+        await admin.auth().updateUser(uid, {
+          email: cleanEmail,
+          password: DEFAULT_PASSWORD,
+          displayName: name,
+        });
+      } catch (uidErr: any) {
+        try {
+          const userRecord = await admin.auth().getUserByEmail(cleanEmail);
           uid = userRecord.uid;
-        } else {
-          throw authErr;
+          await admin.auth().updateUser(uid, {
+            password: DEFAULT_PASSWORD,
+            displayName: name,
+          });
+        } catch (authErr: any) {
+          if (authErr?.code === 'auth/user-not-found') {
+            // Create new user in Firebase Auth preserving pendingDocId as UID so linked clients/payments remain intact
+            const userRecord = await admin.auth().createUser({
+              uid: pendingDocId,
+              email: cleanEmail,
+              password: DEFAULT_PASSWORD,
+              displayName: name
+            });
+            uid = userRecord.uid;
+          } else {
+            throw authErr;
+          }
         }
       }
 
-      // Write/update user in Firestore
-      const newUser = { id: uid, name, email, role };
-      await db.collection("users").doc(uid).set(newUser);
+      // Write/update user in Firestore preserving all existing profile/permission fields
+      const newUser = {
+        ...existingData,
+        id: uid,
+        name,
+        email: cleanEmail,
+        role,
+        isPending: false,
+        authActivated: true,
+        mustChangePassword: true,
+        updatedAt: new Date().toISOString(),
+      };
+      await db.collection("users").doc(uid).set(newUser, { merge: true });
 
       // Clean up pending doc in Firestore if it has a different ID
       if (pendingDocId !== uid) {
         await db.collection("users").doc(pendingDocId).delete();
       }
 
-      console.log(`[Server] User account activated.`);
+      console.log(`[Server] User account activated: ${pendingDocId} -> ${uid}.`);
       return res.json({ success: true, uid });
     } catch (error) {
       console.error("[Server] Tenant activate user error:", error);
@@ -3057,6 +3159,99 @@ async function startServer() {
 app.post('/api/auth/sync-claims', requireAuth, (req, res) => {
   res.json({ ok: true, refreshed: Boolean((req as any).claimsUpdated) });
 });
+
+  // Mobile Persistent Session Endpoints: issues a long-lived tenant-scoped device session token
+  // and exchanges it for a fresh Firebase Custom Token if WebView IndexedDB/cookies are evicted.
+  app.post('/api/auth/mobile-token', requireAuth, async (req, res) => {
+    try {
+      const db = await getDbForRequest(req);
+      const tenantId = await getTenantIdForRequest(req);
+      const uid = String((req as any).user?.uid || '');
+      if (!uid) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      const crypto = await import('crypto');
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString(); // 180 days
+
+      await db.collection('mobile_auth_sessions').doc(tokenHash).set({
+        uid,
+        tenantId,
+        email: (req as any).user?.email || '',
+        createdAt: now.toISOString(),
+        lastUsedAt: now.toISOString(),
+        expiresAt,
+      });
+
+      return res.json({ ok: true, mobileToken: rawToken, expiresAt });
+    } catch (error: any) {
+      console.error('[API] Failed to issue mobile session token:', error);
+      return res.status(500).json({ error: 'Failed to create mobile session token.' });
+    }
+  });
+
+  app.post('/api/auth/mobile-restore', async (req, res) => {
+    try {
+      const { mobileToken } = req.body || {};
+      if (!mobileToken || typeof mobileToken !== 'string' || mobileToken.length < 32) {
+        return res.status(400).json({ error: 'Invalid mobile session token.' });
+      }
+
+      const db = await getDbForRequest(req);
+      const tenantId = await getTenantIdForRequest(req);
+      const crypto = await import('crypto');
+      const tokenHash = crypto.createHash('sha256').update(mobileToken.trim()).digest('hex');
+
+      const sessionDoc = await db.collection('mobile_auth_sessions').doc(tokenHash).get();
+      if (!sessionDoc.exists) {
+        return res.status(401).json({ error: 'Mobile session expired or not found.' });
+      }
+
+      const sessionData = sessionDoc.data() || {};
+      if (sessionData.tenantId && sessionData.tenantId !== tenantId) {
+        return res.status(403).json({ error: 'Cross-tenant session restore denied.' });
+      }
+
+      if (sessionData.expiresAt && Date.parse(sessionData.expiresAt) < Date.now()) {
+        await sessionDoc.ref.delete().catch(() => {});
+        return res.status(401).json({ error: 'Mobile session token has expired.' });
+      }
+
+      const uid = String(sessionData.uid || '');
+      if (!uid) {
+        return res.status(401).json({ error: 'Invalid session user.' });
+      }
+
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (userDoc.exists && userDoc.data()?.status === 'nonworking') {
+        await sessionDoc.ref.delete().catch(() => {});
+        return res.status(403).json({ error: 'Account has been deactivated.' });
+      }
+
+      const role = String(userDoc.data()?.role || 'client');
+      const customToken = await admin.auth().createCustomToken(uid, {
+        role,
+        tenantId,
+      });
+
+      await sessionDoc.ref.set(
+        { lastUsedAt: new Date().toISOString() },
+        { merge: true }
+      ).catch(() => {});
+
+      return res.json({
+        ok: true,
+        customToken,
+        uid,
+        email: sessionData.email || userDoc.data()?.email || '',
+      });
+    } catch (error: any) {
+      console.error('[API] Failed to restore mobile session:', error);
+      return res.status(500).json({ error: 'Failed to restore mobile session.' });
+    }
+  });
 
 app.get('/api/call-center/logs', requireAuth, async (req, res) => {
     try {

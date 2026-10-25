@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AlertCircle, CheckCircle2, Clock, ClipboardList, UserCheck, Phone, Calendar } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, ClipboardList, UserCheck, Phone, Mail, Globe, Calendar } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { addAuditLog } from '../services/auditService';
 
@@ -141,18 +141,40 @@ export function FitnessAssessmentQueue({ currentUser, coaches }: FitnessAssessme
                 filtered.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">
-                      <div>
-                        <p className="font-semibold text-sm">{item.clientName}</p>
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-semibold text-sm">{item.clientName}</p>
+                          {(item as any).source === 'website' && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-blue-500/10 text-blue-600 border-blue-500/30 gap-0.5">
+                              <Globe className="w-2.5 h-2.5" /> Website
+                            </Badge>
+                          )}
+                          {item.membershipId && (
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-mono">
+                              ID: {item.membershipId}
+                            </Badge>
+                          )}
+                        </div>
                         {item.phone && (
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
                             <Phone className="w-3 h-3" /> {item.phone}
+                          </span>
+                        )}
+                        {(item as any).email && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Mail className="w-3 h-3" /> {(item as any).email}
                           </span>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">
                       <div className="flex flex-col gap-0.5">
-                        <span>{item.timePeriod || item.preferredTime || 'Any Time'}</span>
+                        <span>{item.timePeriod || item.preferredTime || 'Any Time'}{item.preferredHour ? ` • ${item.preferredHour}` : ''}</span>
+                        {item.hasCoachPreference && (item.preferredCoachName || item.coachName) && (
+                          <span className="text-[11px] text-primary font-semibold">
+                            Prefers: {item.preferredCoachName || item.coachName}
+                          </span>
+                        )}
                         {item.createdAt && (
                           <span className="text-[11px] text-muted-foreground">
                             {format(new Date(item.createdAt), 'MMM dd, yyyy')}

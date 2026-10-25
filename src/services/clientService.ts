@@ -12,6 +12,7 @@ import { db } from '../firebase';
 import { Client, ClientId, SessionId } from '../types';
 import { cleanData } from '../utils';
 import { normalizeEgyptPhone } from '../utils/phoneUtils';
+import { buildFirestoreSearchIndexTokens } from '../utils/fuzzyNameSearch';
 import { addAuditLog } from './auditService';
 import { updatePTSessionStatus } from './ptSessionService';
 
@@ -71,6 +72,18 @@ export const addClient = async (client: Client): Promise<ClientId> => {
   if (clientData.phone) {
     (clientData as any).normalized_phone = normalizeEgyptPhone(clientData.phone);
   }
+  if (clientData.name) {
+    (clientData as any)._searchIndex = buildFirestoreSearchIndexTokens(clientData.name);
+  }
+
+  const nowIso = new Date().toISOString();
+  if (!clientData.createdAt) {
+    clientData.createdAt = nowIso;
+  }
+  if (clientData.assignedTo && clientData.assignedTo !== 'unassigned') {
+    clientData.assignedAt = clientData.assignedAt || nowIso;
+    clientData.transferredAt = clientData.transferredAt || nowIso;
+  }
 
   const docRef = doc(collection(db, 'clients'));
   const clientId = docRef.id as ClientId;
@@ -92,6 +105,15 @@ export const updateClient = async (id: ClientId, updates: Partial<Client>, curre
 
   if (updateData.phone) {
     (updateData as any).normalized_phone = normalizeEgyptPhone(updateData.phone);
+  }
+  if (updateData.name) {
+    (updateData as any)._searchIndex = buildFirestoreSearchIndexTokens(updateData.name);
+  }
+
+  if (updateData.assignedTo !== undefined && updateData.assignedTo !== '' && updateData.assignedTo !== 'unassigned') {
+    const nowIso = new Date().toISOString();
+    updateData.assignedAt = updateData.assignedAt || nowIso;
+    updateData.transferredAt = updateData.transferredAt || nowIso;
   }
   
   await updateDoc(doc(db, 'clients', id), cleanData(updateData));
@@ -160,6 +182,9 @@ export const bulkAddClients = async (newClients: Client[]) => {
 
       if (clientData.phone) {
         (clientData as any).normalized_phone = normalizeEgyptPhone(clientData.phone);
+      }
+      if (clientData.name) {
+        (clientData as any)._searchIndex = buildFirestoreSearchIndexTokens(clientData.name);
       }
       
       const docRef = doc(collection(db, 'clients'));

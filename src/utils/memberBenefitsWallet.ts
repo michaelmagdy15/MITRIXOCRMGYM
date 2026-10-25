@@ -1,5 +1,6 @@
 import type { Client, Package, ClientPackage } from '../types';
 import { isPrimaryMembershipPackage } from './membershipRules';
+import { resolveEffectivePackageRules } from './packageVersioning';
 
 export interface MemberBenefitsSummary {
   activePrimaryPackage: {
@@ -95,7 +96,7 @@ export function computeMemberBenefitsSummary(
     }
   }
 
-  // Aggregate benefits across all active catalogue packages (or primary package)
+  // Aggregate benefits across all active member packages using Snapshot-First / Version-History resolution
   let totalFreePt = 0;
   let totalClassTrials = 0;
   let totalGuestInvites = 0;
@@ -108,38 +109,29 @@ export function computeMemberBenefitsSummary(
   for (const cp of activeClientPackages) {
     usedFreezeDays += Number(cp.freezeDaysUsed || 0);
     const catPkg = findCataloguePkg(cp.packageName);
-    const cpBenefits = (cp as any).benefits || {};
-    if (catPkg && !matchedCatalogueSet.has(catPkg.id)) {
-      matchedCatalogueSet.add(catPkg.id);
-      totalFreePt += Number(catPkg.benefits?.freePtSessions ?? catPkg.freePtSessions ?? cpBenefits.freePtSessions ?? (cp as any).freePtSessions ?? 0);
-      totalClassTrials += Number(catPkg.benefits?.freeClassTrials ?? catPkg.freeClassTrials ?? cpBenefits.freeClassTrials ?? cpBenefits.classTrials ?? (cp as any).freeClassTrials ?? (cp as any).classTrials ?? 0);
-      totalGuestInvites += Number(catPkg.benefits?.guestInvitations ?? catPkg.guestInvitations ?? cpBenefits.guestInvitations ?? (cp as any).guestInvitations ?? 0);
-      totalFreezeAllowance += Number(catPkg.benefits?.freezeAllowanceDays ?? catPkg.freezeAllowanceDays ?? cpBenefits.freezeAllowanceDays ?? (cp as any).freezeAllowanceDays ?? 0);
-      const pkgMin = Number(catPkg.benefits?.minFreezeDays ?? catPkg.minFreezeDays ?? cpBenefits.minFreezeDays ?? 0);
-      const pkgMax = Number(catPkg.benefits?.maxFreezeDays ?? catPkg.maxFreezeDays ?? cpBenefits.maxFreezeDays ?? 0);
-      if (pkgMin > 0 && (minFreezeDays === 0 || pkgMin < minFreezeDays)) minFreezeDays = pkgMin;
-      if (pkgMax > maxFreezeDays) maxFreezeDays = pkgMax;
-    } else if (!catPkg) {
-      totalFreePt += Number(cpBenefits.freePtSessions ?? (cp as any).freePtSessions ?? 0);
-      totalClassTrials += Number(cpBenefits.freeClassTrials ?? cpBenefits.classTrials ?? (cp as any).freeClassTrials ?? (cp as any).classTrials ?? 0);
-      totalGuestInvites += Number(cpBenefits.guestInvitations ?? (cp as any).guestInvitations ?? 0);
-      totalFreezeAllowance += Number(cpBenefits.freezeAllowanceDays ?? (cp as any).freezeAllowanceDays ?? 0);
-      const pkgMin = Number(cpBenefits.minFreezeDays ?? (cp as any).minFreezeDays ?? 0);
-      const pkgMax = Number(cpBenefits.maxFreezeDays ?? (cp as any).maxFreezeDays ?? 0);
+    const dedupKey = cp.id || catPkg?.id || cp.packageName;
+    if (dedupKey && !matchedCatalogueSet.has(dedupKey)) {
+      matchedCatalogueSet.add(dedupKey);
+      const resolved = resolveEffectivePackageRules(cp, client, catPkg);
+      totalFreePt += resolved.freePtSessions;
+      totalClassTrials += resolved.freeClassTrials;
+      totalGuestInvites += resolved.guestInvitations;
+      totalFreezeAllowance += resolved.freezeAllowanceDays;
+      const pkgMin = resolved.minFreezeDays;
+      const pkgMax = resolved.maxFreezeDays;
       if (pkgMin > 0 && (minFreezeDays === 0 || pkgMin < minFreezeDays)) minFreezeDays = pkgMin;
       if (pkgMax > maxFreezeDays) maxFreezeDays = pkgMax;
     }
   }
 
-  if (matchedCatalogueSet.size === 0 && primaryCataloguePkg) {
-    totalFreePt = Number(primaryCataloguePkg.benefits?.freePtSessions ?? primaryCataloguePkg.freePtSessions ?? 0);
-    totalClassTrials = Number(primaryCataloguePkg.benefits?.freeClassTrials ?? primaryCataloguePkg.freeClassTrials ?? 0);
-    totalGuestInvites = Number(primaryCataloguePkg.benefits?.guestInvitations ?? primaryCataloguePkg.guestInvitations ?? 0);
-    totalFreezeAllowance = Number(
-      primaryCataloguePkg.benefits?.freezeAllowanceDays ?? primaryCataloguePkg.freezeAllowanceDays ?? 0
-    );
-    minFreezeDays = Number(primaryCataloguePkg.benefits?.minFreezeDays ?? primaryCataloguePkg.minFreezeDays ?? 0);
-    maxFreezeDays = Number(primaryCataloguePkg.benefits?.maxFreezeDays ?? primaryCataloguePkg.maxFreezeDays ?? 0);
+  if (matchedCatalogueSet.size === 0 && (primaryClientPkg || primaryCataloguePkg)) {
+    const resolved = resolveEffectivePackageRules(primaryClientPkg, client, primaryCataloguePkg);
+    totalFreePt = resolved.freePtSessions;
+    totalClassTrials = resolved.freeClassTrials;
+    totalGuestInvites = resolved.guestInvitations;
+    totalFreezeAllowance = resolved.freezeAllowanceDays;
+    minFreezeDays = resolved.minFreezeDays;
+    maxFreezeDays = resolved.maxFreezeDays;
   }
 
   // Remaining balances on client record (fallback to catalogue total if not explicitly decremented yet)
@@ -168,10 +160,8 @@ export function computeMemberBenefitsSummary(
 
   const freezeRemaining = Math.max(0, totalFreezeAllowance - usedFreezeDays);
 
-  const isTimeRestricted = Boolean(
-    primaryCataloguePkg?.isTimeRestricted ||
-      (primaryCataloguePkg?.allowedStartTime && primaryCataloguePkg?.allowedEndTime)
-  );
+  const primaryResolved = resolveEffectivePackageRules(primaryClientPkg, client, primaryCataloguePkg);
+  const isTimeRestricted = primaryResolved.isTimeRestricted;
 
   const hasAnyBenefits =
     Boolean(primaryClientPkg) ||
@@ -188,8 +178,8 @@ export function computeMemberBenefitsSummary(
           endDate: endDateStr,
           daysRemaining,
           isTimeRestricted,
-          allowedStartTime: primaryCataloguePkg?.allowedStartTime || (isTimeRestricted ? '06:00' : undefined),
-          allowedEndTime: primaryCataloguePkg?.allowedEndTime || (isTimeRestricted ? '14:00' : undefined),
+          allowedStartTime: primaryResolved.allowedStartTime,
+          allowedEndTime: primaryResolved.allowedEndTime,
         }
       : null,
     activeSecondaryCount,

@@ -48,6 +48,7 @@
     "node_modules",
     "dist",
     "dist-server",
-    "scratch"
+    "scratch",
+    "**/*.test.ts"
   ]
 }

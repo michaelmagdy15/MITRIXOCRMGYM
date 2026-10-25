@@ -10,6 +10,7 @@ interface SyncCounts {
   payments: number;
   staff: number;
   invitations: number;
+  checkIns?: number;
   unmaskedPhonesFetched: number;
 }
 
@@ -30,6 +31,8 @@ interface RedgitsLiveSyncDialogProps {
 async function clearInzanExpiredClientsIdbCache(): Promise<void> {
   try {
     localStorage.removeItem('inzan_expired_clients_v1_meta');
+    localStorage.removeItem('inzan_expired_sync_ts');
+    localStorage.removeItem('inzan_expired_sync_ts_v2');
     await new Promise<void>((resolve) => {
       const req = indexedDB.open('inzan_crm_cache', 1);
       req.onsuccess = () => {
@@ -88,7 +91,7 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
       if (res.ok) {
         const data = await res.json();
         if (data?.ok) {
-          setStatusRecord(data);
+          setStatusRecord(data.status || data);
         }
       }
     } catch {
@@ -329,7 +332,7 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
                         type="text"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Default (trasnfer)"
+                        placeholder="Default (mi5a / trasnfer)"
                         className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-white focus:outline-none focus:border-emerald-500"
                       />
                     </div>
@@ -430,16 +433,12 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
                     </div>
 
                     <div className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-zinc-400 shrink-0" />
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                       <div>
                         <div className="font-bold text-white">
-                          {lastResult.counts.expiredMembers > 0
-                            ? lastResult.counts.expiredMembers.toLocaleString()
-                            : `${lastResult.counts.invitations} Invites`}
+                          {(lastResult.counts.checkIns ?? 0).toLocaleString()}
                         </div>
-                        <div className="text-[10px] text-zinc-400">
-                          {lastResult.counts.expiredMembers > 0 ? 'Expired Members' : 'Guest Invitations'}
-                        </div>
+                        <div className="text-[10px] text-zinc-400">Live Check-ins</div>
                       </div>
                     </div>
                   </div>

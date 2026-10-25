@@ -13,8 +13,11 @@ import {
   AlertCircle,
   FileCheck,
   Camera,
-  Loader2
+  Loader2,
+  Phone
 } from 'lucide-react';
+import { openClickToCallModal } from '../services/clickToCallService';
+import { openWhatsAppChat } from '../utils/whatsappTemplates';
 import { format } from 'date-fns';
 import { safeFormatDate, safeGetAge, toValidDate } from '../utils/dateUtils';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,11 +33,23 @@ import { AdjustPackageDatesDialog, canOverridePackageDates, buildPackageUpdates 
 import { ConfirmDialog } from './ConfirmDialog';
 import { addAuditLog } from '../services/auditService';
 import { canReassignMemberSalesRep } from '../utils/permissions';
-import { Trash2, CalendarClock, TrendingUp } from 'lucide-react';
+import { Trash2, CalendarClock, TrendingUp, Key } from 'lucide-react';
 import { MemberGuestInvitationsTab } from './member/MemberGuestInvitationsTab';
 import { createMemberReferralWithProfile } from '../services/guestReferralService';
 import { MemberDocumentUploader } from './member/MemberDocumentUploader';
 import { isFieldLockedForUser, sanitizeMemberProfileUpdates } from '../utils/memberProfileLocking';
+import {
+  fetchMemberLockerStatus,
+  memberClaimLocker,
+  memberOpenLocker,
+  memberExtendLocker,
+  memberReleaseLocker,
+  reissueInzanLockerPin,
+  sendInzanLockerCommand,
+  formatLockerTimeRemaining,
+  isHardwareLockerOnline,
+  InzanMemberLockerStatus,
+} from '../utils/inzanLockerClient';
 
 interface InzanMemberShowProps {
   client: Client;
@@ -186,6 +201,142 @@ export function InzanMemberShow({
   );
   const [newFeedbackEntry, setNewFeedbackEntry] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+
+  // Smart Locker Hardware Control state
+  const [lockerStatus, setLockerStatus] = useState<InzanMemberLockerStatus | null>(null);
+  const [isLoadingLocker, setIsLoadingLocker] = useState<boolean>(false);
+  const [isOperatingLocker, setIsOperatingLocker] = useState<boolean>(false);
+  const [issuedPinOverride, setIssuedPinOverride] = useState<string | null>(null);
+  const [lockerError, setLockerError] = useState<string | null>(null);
+
+  const loadMemberLockerStatus = React.useCallback(async (silent = false) => {
+    if (!client?.id) return;
+    if (!silent) setIsLoadingLocker(true);
+    setLockerError(null);
+    try {
+      const res = await fetchMemberLockerStatus(client.id);
+      setLockerStatus(res);
+      if (res.pin) {
+        setIssuedPinOverride(res.pin);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch member locker status:', err);
+      setLockerError(err?.message || 'Unable to reach Smart Locker server.');
+    } finally {
+      if (!silent) setIsLoadingLocker(false);
+    }
+  }, [client.id]);
+
+  React.useEffect(() => {
+    setIssuedPinOverride(null);
+    loadMemberLockerStatus();
+  }, [client.id, loadMemberLockerStatus]);
+
+  const handleFrontDeskOpenLocker = async () => {
+    const assigned = lockerStatus?.assignedLocker;
+    if (!assigned) return;
+    setIsOperatingLocker(true);
+    try {
+      try {
+        await memberOpenLocker({ clientId: client.id, lockerId: assigned.id });
+      } catch {
+        await sendInzanLockerCommand(assigned.id, 'openlock');
+      }
+      toast.success(`Pulse relay sent — Locker ${assigned.name} opened!`);
+    } catch (err: any) {
+      console.error('Failed to open locker:', err);
+      toast.error(err?.message || `Failed to open Locker ${assigned.name}.`);
+    } finally {
+      setIsOperatingLocker(false);
+    }
+  };
+
+  const handleFrontDeskReissuePin = async () => {
+    const assigned = lockerStatus?.assignedLocker;
+    if (!assigned) return;
+    setIsOperatingLocker(true);
+    try {
+      const res = await reissueInzanLockerPin(assigned.id);
+      if (res.pin) {
+        setIssuedPinOverride(res.pin);
+        toast.success(`New 6-digit PIN issued for Locker ${assigned.name}: ${res.pin}`);
+      } else {
+        toast.success(`PIN re-issued for Locker ${assigned.name}.`);
+      }
+      await loadMemberLockerStatus(true);
+    } catch (err: any) {
+      console.error('Failed to reissue PIN:', err);
+      toast.error(err?.message || 'Failed to reissue locker PIN.');
+    } finally {
+      setIsOperatingLocker(false);
+    }
+  };
+
+  const handleFrontDeskExtendLocker = async () => {
+    const assigned = lockerStatus?.assignedLocker;
+    if (!assigned) return;
+    setIsOperatingLocker(true);
+    try {
+      const res = await memberExtendLocker({
+        clientId: client.id,
+        lockerId: assigned.id,
+        userId: lockerStatus?.occupant?.id,
+      });
+      toast.success(`Locker ${assigned.name} extended (+3h)! New expiry: ${safeFormatDate(res.expires_at, 'HH:mm')}`);
+      await loadMemberLockerStatus(true);
+    } catch (err: any) {
+      console.error('Failed to extend locker:', err);
+      toast.error(err?.message || 'Failed to extend locker session.');
+    } finally {
+      setIsOperatingLocker(false);
+    }
+  };
+
+  const handleFrontDeskReleaseLocker = async () => {
+    const assigned = lockerStatus?.assignedLocker;
+    if (!assigned) return;
+    setIsOperatingLocker(true);
+    try {
+      await memberReleaseLocker({
+        clientId: client.id,
+        lockerId: assigned.id,
+      });
+      setIssuedPinOverride(null);
+      toast.success(`Locker ${assigned.name} released and unassigned from ${client.name}.`);
+      await loadMemberLockerStatus(true);
+    } catch (err: any) {
+      console.error('Failed to release locker:', err);
+      toast.error(err?.message || 'Failed to release locker.');
+    } finally {
+      setIsOperatingLocker(false);
+    }
+  };
+
+  const handleFrontDeskClaimLocker = async (groupId?: number, genderHint?: string) => {
+    setIsOperatingLocker(true);
+    try {
+      const res = await memberClaimLocker({
+        clientId: client.id,
+        clientName: client.name,
+        gender: genderHint || client.gender,
+        groupId,
+        phone: client.phone,
+        email: client.email,
+      });
+      if (res.pin) {
+        setIssuedPinOverride(res.pin);
+      }
+      toast.success(
+        `Assigned Locker ${res.locker.name} to ${client.name}${res.pin ? ` (PIN: ${res.pin})` : ''}!`
+      );
+      await loadMemberLockerStatus(true);
+    } catch (err: any) {
+      console.error('Failed to assign smart locker:', err);
+      toast.error(err?.message || 'Failed to assign smart locker.');
+    } finally {
+      setIsOperatingLocker(false);
+    }
+  };
 
   React.useEffect(() => {
     setQuickFeedbackText((client as any).frontDeskNote || client.legacyNotes || '');
@@ -637,6 +788,30 @@ export function InzanMemberShow({
   const [isSavingComment, setIsSavingComment] = useState(false);
   const [salesTransfers, setSalesTransfers] = useState<SalesTransferLog[]>([]);
   const [trainerTransfers, setTrainerTransfers] = useState<TrainerTransferLog[]>([]);
+  const [subcolAttendances, setSubcolAttendances] = useState<any[]>([]);
+
+  // Fetch attendance_history subcollection (includes all 84,000+ RedGITS historical & live check-ins)
+  React.useEffect(() => {
+    if (!client?.id) return;
+    const qAtt = query(collection(db, 'clients', client.id, 'attendance_history'));
+    const unsubAtt = onSnapshot(qAtt, snap => {
+      setSubcolAttendances(snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          clientId: client.id,
+          date: data.checkedInAt || data.date || '',
+          checkOutTime: data.checkOutTime || '',
+          packageName: data.packageName || data.sessionType || 'Gym Floor Access',
+          branch: data.branch || 'Garden 8',
+          recordedByName: data.recordedByName || data.recordedBy || '',
+          locker: data.locker || '',
+          status: data.status || 'Checked In',
+        };
+      }));
+    }, () => setSubcolAttendances([]));
+    return unsubAtt;
+  }, [client.id]);
 
   // Fetch sales transfer logs
   React.useEffect(() => {
@@ -743,7 +918,18 @@ export function InzanMemberShow({
 
   // Get mapped data
   const clientPayments = payments.filter(p => p.clientId === client.id);
-  const clientAttendances = attendances.filter(a => a.clientId === client.id);
+  const clientAttendances = React.useMemo(() => {
+    const topLevel = attendances.filter(a => a.clientId === client.id);
+    const seenDates = new Set<string>();
+    const merged: any[] = [];
+    for (const item of [...topLevel, ...subcolAttendances]) {
+      const dateKey = (item.date || '').slice(0, 19);
+      if (dateKey && seenDates.has(dateKey)) continue;
+      if (dateKey) seenDates.add(dateKey);
+      merged.push(item);
+    }
+    return merged;
+  }, [attendances, subcolAttendances, client.id]);
 
   // Helper for displaying fields
   const renderField = (
@@ -798,10 +984,35 @@ export function InzanMemberShow({
       );
     }
 
+    const isPhoneField = fieldKey === 'phone' || fieldKey === 'backupPhone';
     return (
       <div className="text-left border-b border-border pb-1.5">
         <span className="text-[10px] text-muted-foreground font-medium block uppercase tracking-wider">{label}</span>
-        <span className="text-xs font-semibold text-foreground">{value || '—'}</span>
+        {isPhoneField && value ? (
+          <button
+            type="button"
+            onClick={() =>
+              openClickToCallModal({
+                clientId: client.id,
+                memberId: client.memberId,
+                name: client.name,
+                phone: String(value),
+                backupPhone: client.backupPhone,
+                status: client.status,
+                branch: client.branch,
+                packageType: client.packageType,
+                source: client.source,
+              })
+            }
+            className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+            title="Click to Call"
+          >
+            <Phone className="h-3 w-3" />
+            {value}
+          </button>
+        ) : (
+          <span className="text-xs font-semibold text-foreground">{value || '—'}</span>
+        )}
       </div>
     );
   };
@@ -910,7 +1121,28 @@ export function InzanMemberShow({
                 )}
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {client.phone} · {client.branch || 'No branch'} ·{' '}
+                <button
+                  type="button"
+                  onClick={() =>
+                    openClickToCallModal({
+                      clientId: client.id,
+                      memberId: client.memberId,
+                      name: client.name,
+                      phone: client.phone,
+                      backupPhone: client.backupPhone,
+                      status: client.status,
+                      branch: client.branch,
+                      packageType: client.packageType,
+                      source: client.source,
+                    })
+                  }
+                  className="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  title="Click to Call"
+                >
+                  <Phone className="h-3 w-3" />
+                  {client.phone}
+                </button>{' '}
+                · {client.branch || 'No branch'} ·{' '}
                 {isLeadAccount ? (
                   <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/10 border border-amber-500/30 uppercase">
                     Lead / Prospect
@@ -999,11 +1231,30 @@ export function InzanMemberShow({
             <Button
               variant="outline"
               size="sm"
+              className="h-8 bg-blue-600 hover:bg-blue-700 border-blue-500 text-white font-bold text-xs gap-1.5"
+              onClick={() =>
+                openClickToCallModal({
+                  clientId: client.id,
+                  memberId: client.memberId,
+                  name: client.name,
+                  phone: client.phone,
+                  backupPhone: client.backupPhone,
+                  status: client.status,
+                  branch: client.branch,
+                  packageType: client.packageType,
+                  source: client.source,
+                })
+              }
+            >
+              <Phone className="h-3.5 w-3.5" />
+              Call Now
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
               className="h-8 bg-indigo-600 hover:bg-indigo-700 border-indigo-500 text-white font-bold text-xs"
-              onClick={() => {
-                const cleanNum = client.phone.replace(/\D/g, '');
-                window.open(`https://wa.me/${cleanNum.startsWith('0') ? '20' + cleanNum.substring(1) : cleanNum}`, '_blank');
-              }}
+              onClick={() => openWhatsAppChat({ phone: client.phone })}
             >
               Staff Whatsapp
             </Button>
@@ -1061,7 +1312,27 @@ export function InzanMemberShow({
                   />
 
                   <h3 className="font-bold text-sm text-foreground">{client.name}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">{client.phone}</p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openClickToCallModal({
+                        clientId: client.id,
+                        memberId: client.memberId,
+                        name: client.name,
+                        phone: client.phone,
+                        backupPhone: client.backupPhone,
+                        status: client.status,
+                        branch: client.branch,
+                        packageType: client.packageType,
+                        source: client.source,
+                      })
+                    }
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline mt-0.5 cursor-pointer"
+                    title="Click to Call"
+                  >
+                    <Phone className="h-3 w-3" />
+                    {client.phone}
+                  </button>
                   <Badge className="mt-2 bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30">
                     {client.status}
                   </Badge>
@@ -1335,10 +1606,7 @@ export function InzanMemberShow({
                                   size="sm"
                                   variant="ghost"
                                   className="h-5 text-[10px] text-emerald-600 hover:bg-emerald-500/10 px-1 font-bold"
-                                  onClick={() => {
-                                    const cleanNum = String(r.phone || '').replace(/\D/g, '');
-                                    window.open(`https://wa.me/${cleanNum.startsWith('0') ? '20' + cleanNum.substring(1) : cleanNum}`, '_blank');
-                                  }}
+                                  onClick={() => openWhatsAppChat({ phone: String(r.phone || '') })}
                                 >
                                   WhatsApp
                                 </Button>
@@ -1352,6 +1620,226 @@ export function InzanMemberShow({
                 )}
               </div>
             </div>
+
+            {/* Smart Locker Hardware Control Card (Front Desk & Operations) */}
+            {(() => {
+              const assignedLocker = lockerStatus?.assignedLocker || null;
+              const isOnline = assignedLocker ? isHardwareLockerOnline(assignedLocker) : false;
+              const expiryTarget = lockerStatus?.expiresAt || lockerStatus?.occupant?.valid_until || null;
+              const timeRem = formatLockerTimeRemaining(expiryTarget);
+              const activePin = issuedPinOverride || lockerStatus?.pin || assignedLocker?.crmPin || null;
+              const groups = lockerStatus?.groups || [];
+              const menGroup = groups.find(g => /men|male|gent/i.test(`${g.name} ${g.slug || ''}`) && !/women|female|lad/i.test(`${g.name} ${g.slug || ''}`));
+              const womenGroup = groups.find(g => /women|female|lad/i.test(`${g.name} ${g.slug || ''}`));
+              const clientGenderNorm = String(client.gender || '').toLowerCase();
+              const isFemaleClient = clientGenderNorm.startsWith('f') || clientGenderNorm === 'women';
+              const isMaleClient = clientGenderNorm.startsWith('m') || clientGenderNorm === 'men';
+              const assignedGroupLabel =
+                assignedLocker?.group?.name ||
+                (assignedLocker?.gender === 'women' ? 'Women' : assignedLocker?.gender === 'men' ? 'Men' : assignedLocker?.location || 'Locker Zone');
+
+              return (
+                <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-3 shadow-xs text-left">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-amber-950 dark:text-amber-100">
+                        Smart Locker Hardware Control
+                      </h4>
+                      {assignedLocker ? (
+                        <Badge className="bg-emerald-600 text-white font-bold text-[10px]">
+                          ASSIGNED: {assignedLocker.name}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] font-semibold border-amber-500/30 text-amber-700 dark:text-amber-300">
+                          NO ACTIVE LOCKER
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {lockerError && (
+                        <span className="text-[11px] text-rose-500 font-medium">{lockerError}</span>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isLoadingLocker || isOperatingLocker}
+                        onClick={() => loadMemberLockerStatus(false)}
+                        className="h-7 px-2.5 text-xs gap-1.5 border-amber-500/30 hover:bg-amber-500/10"
+                      >
+                        <RefreshCw className={`h-3 w-3 ${isLoadingLocker ? 'animate-spin' : ''}`} />
+                        Refresh
+                      </Button>
+                    </div>
+                  </div>
+
+                  {isLoadingLocker && !lockerStatus ? (
+                    <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
+                      <span>Checking live Smart Locker assignment for {client.name}...</span>
+                    </div>
+                  ) : assignedLocker ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-lg border border-amber-500/20 bg-background/80">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                            Assigned Locker
+                          </span>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-2xl font-black tracking-tight text-foreground">
+                              {assignedLocker.name}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-bold ${
+                                isOnline
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                              }`}
+                            >
+                              {isOnline ? '● ONLINE' : '○ OFFLINE'}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                            Locker Zone / Group
+                          </span>
+                          <span className="text-sm font-bold text-foreground block mt-1">
+                            {assignedGroupLabel}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                            Session Countdown
+                          </span>
+                          <span
+                            className={`text-sm font-bold block mt-1 ${
+                              timeRem?.expired
+                                ? 'text-rose-600'
+                                : timeRem?.approaching
+                                ? 'text-amber-600'
+                                : 'text-emerald-600 dark:text-emerald-400'
+                            }`}
+                          >
+                            {timeRem ? timeRem.text : 'Active Session'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                            Phone-Unlock PIN
+                          </span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <Key className="h-3.5 w-3.5 text-amber-500" />
+                            <span className="text-base font-mono font-black tracking-widest text-amber-600 dark:text-amber-400">
+                              {activePin || '••••••'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          disabled={isOperatingLocker}
+                          onClick={handleFrontDeskOpenLocker}
+                          className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                        >
+                          <Unlock className="h-3.5 w-3.5" />
+                          Open Locker (Pulse Relay)
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isOperatingLocker}
+                          onClick={handleFrontDeskReissuePin}
+                          className="h-8 text-xs font-bold border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 gap-1.5"
+                        >
+                          <Key className="h-3.5 w-3.5" />
+                          Re-issue PIN
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isOperatingLocker}
+                          onClick={handleFrontDeskExtendLocker}
+                          className="h-8 text-xs font-bold border-sky-500/40 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10 gap-1.5"
+                        >
+                          <Clock className="h-3.5 w-3.5" />
+                          Extend +3h
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isOperatingLocker}
+                          onClick={handleFrontDeskReleaseLocker}
+                          className="h-8 text-xs font-bold border-rose-500/40 text-rose-600 hover:bg-rose-500/10 gap-1.5 ml-auto"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Release / Unassign
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                      <div className="flex flex-wrap items-center gap-3 text-xs">
+                        <div className="px-3 py-1.5 rounded-lg border border-sky-500/20 bg-sky-500/5 flex items-center gap-2">
+                          <span className="font-bold text-sky-700 dark:text-sky-300">Men's Lockers:</span>
+                          <span className="font-mono font-black text-foreground">
+                            {menGroup ? `${menGroup.availableOnline} / ${menGroup.total} Online` : 'Ready'}
+                          </span>
+                        </div>
+                        <div className="px-3 py-1.5 rounded-lg border border-pink-500/20 bg-pink-500/5 flex items-center gap-2">
+                          <span className="font-bold text-pink-700 dark:text-pink-300">Women's Lockers:</span>
+                          <span className="font-mono font-black text-foreground">
+                            {womenGroup ? `${womenGroup.availableOnline} / ${womenGroup.total} Online` : 'Ready'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          size="sm"
+                          disabled={isOperatingLocker || (menGroup ? menGroup.availableOnline <= 0 : false)}
+                          onClick={() => handleFrontDeskClaimLocker(menGroup?.id, 'Male')}
+                          variant={isFemaleClient ? 'outline' : 'default'}
+                          className={
+                            isFemaleClient
+                              ? 'h-8 text-xs font-bold border-sky-500/40 text-sky-700 dark:text-sky-300 hover:bg-sky-500/10 gap-1.5'
+                              : 'h-8 text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white gap-1.5'
+                          }
+                        >
+                          <Lock className="h-3.5 w-3.5" />
+                          Assign Men&apos;s Locker {isMaleClient ? '★' : ''}
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          disabled={isOperatingLocker || (womenGroup ? womenGroup.availableOnline <= 0 : false)}
+                          onClick={() => handleFrontDeskClaimLocker(womenGroup?.id, 'Female')}
+                          variant={isMaleClient ? 'outline' : 'default'}
+                          className={
+                            isMaleClient
+                              ? 'h-8 text-xs font-bold border-pink-500/40 text-pink-700 dark:text-pink-300 hover:bg-pink-500/10 gap-1.5'
+                              : 'h-8 text-xs font-bold bg-pink-600 hover:bg-pink-700 text-white gap-1.5'
+                          }
+                        >
+                          <Lock className="h-3.5 w-3.5" />
+                          Assign Women&apos;s Locker {isFemaleClient ? '★' : ''}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Member Feedback & Staff Notes Section (Editable by Any Staff Member) */}
             <div className="border border-border p-5 rounded-xl bg-muted/10 text-left space-y-3">
@@ -2365,8 +2853,11 @@ export function InzanMemberShow({
               <Table>
                 <TableHeader className="bg-muted/20 border-b border-border">
                   <TableRow>
-                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Timestamp</TableHead>
-                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Activity / Class</TableHead>
+                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Check-In Date & Time</TableHead>
+                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Check-Out</TableHead>
+                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Package / Activity</TableHead>
+                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Locker</TableHead>
+                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Checked In By</TableHead>
                     <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4 text-center">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -2376,18 +2867,21 @@ export function InzanMemberShow({
                       .sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))
                       .map(a => (
                         <TableRow key={a.id} className="hover:bg-muted/50 border-b border-border/50 transition-colors">
-                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(a.date, 'dd MMM yyyy HH:mm:ss')}</TableCell>
+                          <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">{safeFormatDate(a.date, 'dd MMM yyyy HH:mm:ss')}</TableCell>
+                          <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">{a.checkOutTime || '—'}</TableCell>
                           <TableCell className="py-3 px-4 text-xs font-semibold text-foreground">{a.packageName || 'Attendance Check-in'}</TableCell>
+                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{a.locker && !a.locker.endsWith(' 0') ? a.locker : '—'}</TableCell>
+                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{a.recordedByName || 'Front Desk'}</TableCell>
                           <TableCell className="py-3 px-4 text-center">
                             <Badge className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px]">
-                              Success
+                              {a.status || 'Checked In'}
                             </Badge>
                           </TableCell>
                         </TableRow>
                       ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={3} className="py-6 text-center text-xs text-muted-foreground">
+                      <TableCell colSpan={6} className="py-6 text-center text-xs text-muted-foreground">
                         No activity records found.
                       </TableCell>
                     </TableRow>

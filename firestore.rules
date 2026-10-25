@@ -325,6 +325,15 @@ service cloud.firestore {
       allow write: if isStaff();
     }
 
+    // CALL CENTER LOGS & CROSS-DEVICE CLICK-TO-CALL REQUESTS
+    match /callCenterLog/{logId} {
+      allow read, write: if isStaff();
+    }
+
+    match /callRequests/{requestId} {
+      allow read, write: if isStaff();
+    }
+
     // Default deny for anything else
     match /{document=**} {
       allow read, write: if false;

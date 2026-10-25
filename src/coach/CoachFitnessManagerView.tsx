@@ -17,11 +17,14 @@ import {
   Clock,
   AlertCircle,
   Phone,
+  Mail,
+  Globe,
   Award,
   Users,
   Dumbbell,
 } from 'lucide-react';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
+import { openWhatsAppChat } from '../utils/whatsappTemplates';
 
 export default function CoachFitnessManagerView() {
   const { currentUser } = useAuth();
@@ -363,6 +366,11 @@ export default function CoachFitnessManagerView() {
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-extrabold text-base">{assessment.clientName}</span>
+                        {assessment.source === 'website' && (
+                          <Badge variant="outline" className="text-[11px] bg-blue-500/10 text-blue-600 border-blue-500/30 gap-1">
+                            <Globe className="h-3 w-3" /> Website
+                          </Badge>
+                        )}
                         {assessment.membershipId && (
                           <Badge variant="outline" className="font-mono text-[11px]">
                             ID: {assessment.membershipId}
@@ -386,13 +394,22 @@ export default function CoachFitnessManagerView() {
                             {cleanPhone && (
                               <a
                                 href={`https://wa.me/${cleanPhone}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                target="whatsapp_crm"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  openWhatsAppChat({ phone: cleanPhone });
+                                }}
                                 className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline ml-1"
                               >
                                 WhatsApp ↗
                               </a>
                             )}
+                          </span>
+                        )}
+                        {assessment.email && (
+                          <span className="flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            {assessment.email}
                           </span>
                         )}
                         <span>

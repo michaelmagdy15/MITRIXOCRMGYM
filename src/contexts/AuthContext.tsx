@@ -1,7 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { User, UserId, UserRole, isSuperAdmin, isAdmin, BrandingSettings, PendingAccount, PasswordResetRequest, Client, Coach } from '../types';
-import { auth, db, signInWithEmail, logOut, createFirebaseUser, sendPasswordReset, getMemberEmail, getTenantId } from '../firebase';
+import { auth, db, signInWithEmail, signInWithCustomAuthToken, logOut, createFirebaseUser, sendPasswordReset, getMemberEmail, getTenantId } from '../firebase';
 import { onAuthStateChanged, updatePassword as fbUpdatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import {
+  isMobileDevice,
+  saveMobileAuthSession,
+  getSavedMobileAuthSession,
+  clearMobileAuthSession,
+} from '../utils/nativeBridge';
 import {
   doc,
   getDoc,
@@ -92,6 +98,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [previewRole, setPreviewRole] = useState<UserRole | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const mobileRestoreAttemptedRef = useRef(false);
+
+  const issueMobileDeviceToken = async (fbUser: { getIdToken: () => Promise<string>; email: string | null }) => {
+    try {
+      const existing = getSavedMobileAuthSession();
+      if (existing?.token && existing.email === (fbUser.email || existing.email)) {
+        return;
+      }
+      const idToken = await fbUser.getIdToken();
+      const res = await fetch('/api/auth/mobile-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.mobileToken) {
+          saveMobileAuthSession({
+            token: data.mobileToken,
+            email: fbUser.email || existing?.email,
+            tenantId: getTenantId(),
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[Auth] Mobile session token issue skipped:', err);
+    }
+  };
 
   const effectiveRole = useMemo<UserRole | undefined>(() => {
     if (currentUser && isAdmin(currentUser.role) && previewRole) {
@@ -269,6 +305,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             let clientRecordId: string | undefined = undefined;
             let clientDocId: string | undefined = undefined;
             let coachId: string | undefined = undefined;
+            let matchedExistingData: Record<string, any> = {};
 
             if (firebaseUser.email === "michaelmitry13@gmail.com") {
               role = 'crm_admin';
@@ -282,6 +319,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const querySnapshot = await getDocs(q);
                 if (!querySnapshot.empty) {
                   const foundData = querySnapshot.docs[0]!.data();
+                  matchedExistingData = { ...foundData };
                   role = foundData['role'] as UserRole;
                   if (foundData['name']) initialName = foundData['name'];
                   if (foundData['coachId']) coachId = foundData['coachId'];
@@ -295,6 +333,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     const match = allUsersSnap.docs.find(d => (d.data().email || '').toLowerCase() === emailLower);
                     if (match) {
                       const foundData = match.data();
+                      matchedExistingData = { ...foundData };
                       role = foundData['role'] as UserRole;
                       if (foundData['name']) initialName = foundData['name'];
                       if (foundData['coachId']) coachId = foundData['coachId'];
@@ -323,6 +362,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
                 if (phoneMatch) {
                   const pData = phoneMatch.data();
+                  matchedExistingData = { ...matchedExistingData, ...pData };
                   role = (pData.role as UserRole) || role;
                   if (pData.name) initialName = pData.name;
                   if (pData.coachId) coachId = pData.coachId;
@@ -379,20 +419,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             const newUser: User = {
+              ...(matchedExistingData as Partial<User>),
               id: userId,
               name: initialName,
-              email: firebaseUser.email || '',
-              phone: firebaseUser.phoneNumber || '',
+              email: firebaseUser.email || matchedExistingData.email || '',
+              phone: firebaseUser.phoneNumber || matchedExistingData.phone || '',
               role: role,
+              isPending: false,
+              authActivated: true,
             };
             if (clientRecordId) newUser.clientRecordId = clientRecordId;
             if (clientDocId) newUser.clientDocId = clientDocId;
             if (coachId) newUser.coachId = coachId;
 
-            await setDoc(userDocRef, newUser);
+            await setDoc(userDocRef, newUser, { merge: true });
             setCurrentUser(newUser);
             setAuthError(null);
           }
+
+          // Ensure a persistent device session token is stored so mobile devices never lose their login
+          issueMobileDeviceToken(firebaseUser);
         } catch (error: any) {
           console.error("Error fetching user doc:", error);
           setAuthError(`[Firestore Auth Error] ${error.code || 'UNKNOWN'}: ${error.message || String(error)}`);
@@ -400,6 +446,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCurrentUser(null);
         }
       } else {
+        // If Firebase Auth storage was cleared on a mobile WebView/PWA, automatically restore from saved device session
+        if (!mobileRestoreAttemptedRef.current) {
+          mobileRestoreAttemptedRef.current = true;
+          const savedSession = getSavedMobileAuthSession();
+          if (savedSession) {
+            try {
+              // 1. Try server-issued mobile session token exchange first
+              if (savedSession.token) {
+                const res = await fetch('/api/auth/mobile-restore', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-tenant-id': getTenantId(),
+                  },
+                  body: JSON.stringify({ mobileToken: savedSession.token }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data?.customToken) {
+                    await signInWithCustomAuthToken(data.customToken);
+                    return; // onAuthStateChanged will immediately fire with the restored user
+                  }
+                }
+              }
+
+              // 2. Fallback: re-authenticate silently if email & password were saved in native device storage
+              if (savedSession.email && savedSession.password) {
+                await signInWithEmail(savedSession.email, savedSession.password);
+                return; // onAuthStateChanged will immediately fire with the restored user
+              }
+            } catch (restoreErr) {
+              console.warn('[Auth] Silent mobile session restore failed:', restoreErr);
+            }
+          }
+        }
         setCurrentUser(null);
         setAuthError(null);
       }
@@ -437,16 +518,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const usersRef = collection(db, 'users');
     const unsubscribe = onSnapshot(usersRef, (snapshot) => {
-      const allFetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      const allFetched = snapshot.docs.map(docSnap => {
+        const raw = docSnap.data();
+        const hasStoredId = 'id' in raw && raw.id !== undefined && raw.id !== null && raw.id !== '';
+        const isRedgitsUnactivated =
+          (docSnap.id.startsWith('redgits-') || raw.sourceSystem === 'RedGITS_v17.12') &&
+          !raw.authActivated &&
+          !raw.lastSeen &&
+          raw.isPending !== false;
+        const isPending = raw.isPending === true || !hasStoredId || isRedgitsUnactivated;
+        return {
+          ...(raw as User),
+          id: (raw.id || docSnap.id) as UserId,
+          isPending,
+          _hasStoredId: hasStoredId && !isRedgitsUnactivated,
+        };
+      });
       const staffUsers = allFetched.filter(u => 
-        ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role)
+        ['crm_admin', 'super_admin', 'admin', 'manager', 'fitness_manager', 'rep'].includes(u.role)
       );
 
       const allUsersData = staffUsers.map(d => {
-        const hasStoredId = 'id' in d && d.id !== undefined && d.id !== null && d.id !== '';
-        const user = { ...d } as User;
-        user.isPending = !hasStoredId;
-        return { user, hasStoredId };
+        const { _hasStoredId, ...user } = d;
+        return { user: user as User, hasStoredId: Boolean(_hasStoredId) };
       });
       const emailMap = new Map<string, { user: User; hasStoredId: boolean }>();
       allUsersData.forEach(({ user, hasStoredId }) => {
@@ -499,7 +593,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { unsubPending(); unsubResets(); };
   }, [currentUser?.id, currentUser?.role]);
 
-  const logout = async () => { await logOut(); };
+  const logout = async () => {
+    clearMobileAuthSession();
+    await logOut();
+  };
   const refreshUserData = async () => {
     const user = auth.currentUser;
     if (!user) return;
@@ -519,6 +616,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loginWithEmailFn = async (email: string, password: string) => {
     await signInWithEmail(email, password);
+    if (isMobileDevice()) {
+      saveMobileAuthSession({
+        email: email.trim().toLowerCase(),
+        password,
+        tenantId: getTenantId(),
+      });
+    }
   };
 
   const loginWithCoachId = async (coachIdOrName: string, password: string) => {
@@ -529,6 +633,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (term.includes('@')) {
       try {
         await signInWithEmail(term.toLowerCase(), password);
+        if (isMobileDevice()) {
+          saveMobileAuthSession({
+            email: term.toLowerCase(),
+            coachId: term,
+            password,
+            tenantId,
+          });
+        }
         return;
       } catch (err: any) {
         if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
@@ -553,6 +665,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const data = await res.json();
     try {
       await signInWithEmail(data.email, password);
+      if (isMobileDevice()) {
+        saveMobileAuthSession({
+          email: data.email,
+          coachId: term,
+          password,
+          tenantId,
+        });
+      }
     } catch (authErr: any) {
       if (authErr?.code === 'auth/wrong-password' || authErr?.code === 'auth/invalid-credential') {
         throw new Error('Incorrect password. Please check and try again.');
@@ -584,6 +704,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       for (const email of uniqueCandidates) {
         try {
           await signInWithEmail(email, password);
+          if (isMobileDevice()) {
+            saveMobileAuthSession({
+              email,
+              memberId: term,
+              password,
+              tenantId,
+            });
+          }
           return { success: true };
         } catch (err: any) {
           if (err?.code === 'auth/wrong-password') {
@@ -619,6 +747,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (data.email) {
           try {
             await signInWithEmail(data.email, password);
+            if (isMobileDevice()) {
+              saveMobileAuthSession({
+                email: data.email,
+                memberId: selectedMemberId || term,
+                password,
+                tenantId,
+              });
+            }
             return { success: true };
           } catch (serverAuthErr: any) {
             if (serverAuthErr?.code === 'auth/wrong-password' || serverAuthErr?.code === 'auth/invalid-credential') {
@@ -822,6 +958,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const credential = EmailAuthProvider.credential(user.email, currentPassword);
     await reauthenticateWithCredential(user, credential);
     await fbUpdatePassword(user, newPassword);
+    if (isMobileDevice()) {
+      saveMobileAuthSession({
+        email: user.email,
+        password: newPassword,
+        tenantId: getTenantId(),
+      });
+    }
   };
 
   /** Called from the ForcePasswordChangeDialog — tries reauth with default pwd then updates */
@@ -836,6 +979,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // User may have already signed in via a reset link — current session is fresh enough
     }
     await fbUpdatePassword(user, newPassword);
+    if (isMobileDevice()) {
+      saveMobileAuthSession({
+        email: user.email,
+        password: newPassword,
+        tenantId: getTenantId(),
+      });
+    }
     // Force token refresh so Firestore gets the new token before we write
     await user.getIdToken(true);
     try {

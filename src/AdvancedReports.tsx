@@ -15,9 +15,10 @@ import { useAuth } from './contexts/AuthContext';
 import { useLanguage } from './contexts/LanguageContext';
 import { useSettings } from './contexts/SettingsContext';
 import { format, parseISO, isAfter, isBefore, differenceInDays, subDays } from 'date-fns';
-import { Download, Star, Users, DollarSign, TrendingUp, UserPlus, Activity, Award, Globe, Briefcase, BarChart3, ShieldAlert, Camera, Search, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
+import { Download, Star, Users, DollarSign, TrendingUp, UserPlus, Activity, Award, Globe, Briefcase, BarChart3, ShieldAlert, Camera, Search, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, MessageSquarePlus, CheckCircle2, Clock, AlertCircle, PauseCircle, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { findSimilarPhoneClusters } from './utils/phoneSimilarity';
+import { computeMemberGlobalStatus, GlobalMemberLifecycleStatus } from './utils/memberLifecycle';
 
 function inferPackageClassification(
   name: string,
@@ -71,7 +72,23 @@ interface ReportTab {
 }
 
 export default function AdvancedReports() {
-  const { clients, payments, ptPackageRecords, attendances, users, coaches, branches, packages, fetchExpiredMembers, expiredLoaded, loadingExpired, setActiveTab: setNavTab, setActiveClientId } = useAppContext();
+  const {
+    clients,
+    payments,
+    ptPackageRecords,
+    attendances,
+    users,
+    coaches,
+    branches,
+    packages,
+    fetchExpiredMembers,
+    expiredLoaded,
+    loadingExpired,
+    setActiveTab: setNavTab,
+    setActiveClientId,
+    addComment,
+    addInteraction,
+  } = useAppContext();
   const { currentUser } = useAuth();
   const { branding } = useSettings();
 
@@ -84,7 +101,8 @@ export default function AdvancedReports() {
   const [packageFilter, setPackageFilter] = useState('all');
   const [hierarchyFilter, setHierarchyFilter] = useState<'all' | 'primary' | 'secondary'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Expired' | 'Active' | 'Hold'>('Expired');
-  const [renewalFilter, setRenewalFilter] = useState<'all' | 'OFF' | 'ON'>('all');
+  const [renewalFilter, setRenewalFilter] = useState<'all' | 'OFF' | 'ON'>('OFF');
+  const [activeSubSegment, setActiveSubSegment] = useState<'all-active' | 'expiring-7d' | 'expiring-30d' | 'hold'>('all-active');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [genderFilter, setGenderFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,6 +119,11 @@ export default function AdvancedReports() {
   >('expiry-desc');
   const [rowLimit, setRowLimit] = useState<number>(250);
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
+  const [quickNoteClient, setQuickNoteClient] = useState<{ id: string; name: string } | null>(null);
+  const [quickNoteText, setQuickNoteText] = useState('');
+  const [quickNoteOutcome, setQuickNoteOutcome] = useState<string>('Comment');
+  const [quickNoteFollowUpDate, setQuickNoteFollowUpDate] = useState('');
+  const [quickNoteSaving, setQuickNoteSaving] = useState(false);
 
   // Ensure all expired members are loaded when opening Premium Reports
   useEffect(() => {
@@ -280,51 +303,74 @@ export default function AdvancedReports() {
     return map;
   }, [clients]);
 
-  // --- Helper: extract package, category, hierarchy, trainer, renewal, and lastCall from client ---
+  // --- Helper: extract deterministic global status, effective primary package, renewal state, and latest comment/call note ---
   const getClientReportDetails = (c: any) => {
+    const lifecycle = computeMemberGlobalStatus(c);
     const pkgs = Array.isArray(c.packages) ? c.packages : [];
-    const primaryPkg = pkgs.find((p: any) => p.packageHierarchy === 'primary') || pkgs[0] || null;
-    const pkgName = (c.packageType || primaryPkg?.packageName || '').trim();
+    const primaryPkg = lifecycle.effectivePrimaryPackage;
+    const secondaryPkg = lifecycle.effectiveSecondaryPackage;
+    const pkgName = (primaryPkg?.packageName || c.packageType || c.primaryPackageName || '').trim();
+    const rawHierarchy = String(primaryPkg?.hierarchyType || primaryPkg?.packageHierarchy || c.packageHierarchy || '').toLowerCase();
+    const explicitHierarchy: 'primary' | 'secondary' | undefined =
+      rawHierarchy === 'secondary' ? 'secondary' : rawHierarchy === 'primary' ? 'primary' : undefined;
     const inferred = inferPackageClassification(
       pkgName,
-      primaryPkg?.packageCategory || c.packageCategory,
-      primaryPkg?.packageHierarchy || c.packageHierarchy
+      primaryPkg?.packageCategory || primaryPkg?.category || c.packageCategory,
+      explicitHierarchy
     );
 
     const trainerName =
       primaryPkg?.trainerName ||
+      secondaryPkg?.trainerName ||
       pkgs.find((p: any) => p.trainerName)?.trainerName ||
       c.staffAssignments?.coach?.staffName ||
       (c as any).trainerName ||
       '';
 
-    const salesRepName = c.salesName || c.salesRep || (c.assignedTo ? usersMap[c.assignedTo] || c.assignedTo : '') || '';
-
-    const hasActiveRenewal =
-      c.status === 'Active' ||
-      pkgs.some((p: any) => p.status === 'Active' || p.subscriptionType === 'renewal') ||
-      pkgs.length > 1;
-
-    const lastCallText =
-      c.lastCall?.text ||
-      c.lastCallText ||
-      (Array.isArray(c.interactions) && c.interactions[0]?.notes) ||
-      c.lastComment?.text ||
+    const salesRepName =
+      c.salesName ||
+      c.salesRep ||
+      (c.assignedTo ? usersMap[c.assignedTo] || c.assignedTo : '') ||
+      primaryPkg?.createdBy ||
       '';
-    const lastCallMeta =
-      c.lastCall?.date || c.lastCallDate
-        ? `${(c.lastCall?.date || c.lastCallDate || '').slice(0, 10)}${c.lastCall?.author || c.lastCallBy ? ` • ${c.lastCall?.author || c.lastCallBy}` : ''}`
-        : '';
+
+    const lastNote = lifecycle.lastNote;
+    const lastCallText = lastNote.text;
+    const followUpStatus =
+      lastNote.outcome ||
+      (lastNote.source === 'comment'
+        ? 'Comment'
+        : lastNote.source === 'feedback'
+        ? 'Feedback'
+        : lastNote.source === 'frontDesk'
+        ? 'Front Desk'
+        : '');
+    const lastCallMeta = [
+      lastNote.date ? String(lastNote.date).slice(0, 10) : '',
+      lastNote.author || '',
+      lastNote.nextFollowUp ? `Next: ${String(lastNote.nextFollowUp).slice(0, 10)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' • ');
 
     return {
       pkgName: pkgName || '—',
+      secondaryPkgName: secondaryPkg?.packageName || c.secondaryPackageName || '',
       packageHierarchy: inferred.packageHierarchy,
       packageCategory: inferred.packageCategory,
       trainerName,
       salesRepName,
-      hasActiveRenewal,
+      globalStatus: lifecycle.globalStatus,
+      hasActiveOrUpcomingPackage: lifecycle.hasActiveOrUpcomingPackage,
+      hasActiveRenewal: lifecycle.hasActiveRenewal,
+      isRenewedFromExpired: lifecycle.isRenewedFromExpired,
+      effectiveExpiry: lifecycle.latestPackageEndDate || c.membershipExpiry || '',
+      effectiveStart: lifecycle.effectiveStartDate || c.startDate || '',
+      daysRemaining: lifecycle.daysRemaining,
       lastCallText,
       lastCallMeta,
+      followUpStatus,
+      nextFollowUp: lastNote.nextFollowUp || c.nextReminderDate || '',
     };
   };
 
@@ -371,14 +417,14 @@ export default function AdvancedReports() {
       const pLower = packageFilter.toLowerCase();
       const pkgs = Array.isArray(c.packages) ? c.packages : [];
       const matchesPkgArray = pkgs.some((p: any) => (p.packageName || '').trim().toLowerCase() === pLower);
-      if ((c.packageType || '').trim().toLowerCase() !== pLower && !matchesPkgArray) return false;
+      if (details.pkgName.toLowerCase() !== pLower && (c.packageType || '').trim().toLowerCase() !== pLower && !matchesPkgArray) return false;
     }
 
     // Hierarchy Type filter (Primary Membership vs Secondary Package)
     if (hierarchyFilter !== 'all') {
       const pkgs = Array.isArray(c.packages) ? c.packages : [];
       const matchesPkgHierarchy = pkgs.some((p: any) => {
-        const inf = inferPackageClassification(p.packageName || '', p.packageCategory, p.packageHierarchy);
+        const inf = inferPackageClassification(p.packageName || '', p.packageCategory || p.category, p.packageHierarchy);
         return inf.packageHierarchy === hierarchyFilter;
       });
       if (details.packageHierarchy !== hierarchyFilter && !matchesPkgHierarchy) return false;
@@ -388,7 +434,7 @@ export default function AdvancedReports() {
     if (categoryFilter !== 'all') {
       const pkgs = Array.isArray(c.packages) ? c.packages : [];
       const matchesPkgCat = pkgs.some((p: any) => {
-        const inf = inferPackageClassification(p.packageName || '', p.packageCategory, p.packageHierarchy);
+        const inf = inferPackageClassification(p.packageName || '', p.packageCategory || p.category, p.packageHierarchy);
         return inf.packageCategory.toLowerCase() === categoryFilter.toLowerCase();
       });
       if (details.packageCategory.toLowerCase() !== categoryFilter.toLowerCase() && !matchesPkgCat) return false;
@@ -399,13 +445,13 @@ export default function AdvancedReports() {
       if ((c.gender || '').toLowerCase() !== genderFilter.toLowerCase()) return false;
     }
 
-    // Renewal filter (OFF = did not renew, ON = renewed)
+    // Renewal filter (OFF = did not renew / purged of active renewals, ON = renewed after prior expiry)
     if (renewalFilter !== 'all') {
       if (renewalFilter === 'ON' && !details.hasActiveRenewal) return false;
       if (renewalFilter === 'OFF' && details.hasActiveRenewal) return false;
     }
 
-    // Search query (Name, Member ID, Lead ID, Phone, Package, Sales Rep, Trainer, Last Call)
+    // Search query (Name, Member ID, Lead ID, Phone, Package, Sales Rep, Trainer, Last Call / Note, Status)
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       const hay = [
@@ -418,6 +464,8 @@ export default function AdvancedReports() {
         details.salesRepName,
         details.trainerName,
         details.lastCallText,
+        details.followUpStatus,
+        details.globalStatus,
         c.branch,
       ]
         .filter(Boolean)
@@ -430,12 +478,13 @@ export default function AdvancedReports() {
     if (colFilters.name && !(c.name || '').toLowerCase().includes(colFilters.name.toLowerCase())) return false;
     if (colFilters.memberId && !String(c.memberId || c.leadId || '').toLowerCase().includes(colFilters.memberId.toLowerCase())) return false;
     if (colFilters.phone && !String(c.phone || '').toLowerCase().includes(colFilters.phone.toLowerCase())) return false;
+    if (colFilters.status && !`${details.globalStatus} ${details.followUpStatus}`.toLowerCase().includes(colFilters.status.toLowerCase())) return false;
     if (colFilters.package && !details.pkgName.toLowerCase().includes(colFilters.package.toLowerCase())) return false;
     if (colFilters.type && !`${details.packageHierarchy} ${details.packageCategory}`.toLowerCase().includes(colFilters.type.toLowerCase())) return false;
-    if (colFilters.expiry && !String(c.membershipExpiry || '').toLowerCase().includes(colFilters.expiry.toLowerCase())) return false;
+    if (colFilters.expiry && !String(details.effectiveExpiry || '').toLowerCase().includes(colFilters.expiry.toLowerCase())) return false;
     if (colFilters.sales && !details.salesRepName.toLowerCase().includes(colFilters.sales.toLowerCase())) return false;
     if (colFilters.trainer && !details.trainerName.toLowerCase().includes(colFilters.trainer.toLowerCase())) return false;
-    if (colFilters.lastCall && !details.lastCallText.toLowerCase().includes(colFilters.lastCall.toLowerCase())) return false;
+    if (colFilters.lastCall && !`${details.lastCallText} ${details.followUpStatus}`.toLowerCase().includes(colFilters.lastCall.toLowerCase())) return false;
     if (colFilters.branch && !String(c.branch || '').toLowerCase().includes(colFilters.branch.toLowerCase())) return false;
 
     return true;
@@ -446,14 +495,16 @@ export default function AdvancedReports() {
     const copy = [...rows];
     copy.sort((a: any, b: any) => {
       if (sortBy === 'package-asc' || sortBy === 'package-desc') {
-        const pkgA = (a.packageType || a.packages?.[0]?.packageName || 'zzz').toLowerCase();
-        const pkgB = (b.packageType || b.packages?.[0]?.packageName || 'zzz').toLowerCase();
+        const dA = getClientReportDetails(a);
+        const dB = getClientReportDetails(b);
+        const pkgA = (dA.pkgName || 'zzz').toLowerCase();
+        const pkgB = (dB.pkgName || 'zzz').toLowerCase();
         const cmp = pkgA.localeCompare(pkgB);
         if (cmp !== 0) return sortBy === 'package-asc' ? cmp : -cmp;
       }
       if (sortBy === 'expiry-desc' || sortBy === 'expiry-asc') {
-        const dA = safeParseDate(a.membershipExpiry || a.createdAt)?.getTime() || 0;
-        const dB = safeParseDate(b.membershipExpiry || b.createdAt)?.getTime() || 0;
+        const dA = safeParseDate(getClientReportDetails(a).effectiveExpiry || a.createdAt)?.getTime() || 0;
+        const dB = safeParseDate(getClientReportDetails(b).effectiveExpiry || b.createdAt)?.getTime() || 0;
         if (dA !== dB) return sortBy === 'expiry-desc' ? dB - dA : dA - dB;
       }
       if (sortBy === 'name-asc' || sortBy === 'name-desc') {
@@ -491,21 +542,39 @@ export default function AdvancedReports() {
   };
 
   // ============================================================
-  // 1. Expired Members
+  // 1. Expired Members (Strictly Purged of Active Renewals by Global Status)
   // ============================================================
   const expiredMembersData = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
     const filtered = (clients || []).filter(c => {
-      if (c.status === 'Lead') return false;
-      if (statusFilter !== 'all') {
-        if (statusFilter === 'Hold') {
-          if (c.status !== 'Hold' && !(c as any).isFrozen) return false;
-        } else if (c.status !== statusFilter) {
-          return false;
-        }
-      }
-      if (!isInDateRange(c.membershipExpiry)) return false;
-      if (!matchBranch(c.branch)) return false;
       const details = getClientReportDetails(c);
+      if (details.globalStatus === 'GUEST') return false;
+
+      if (statusFilter === 'Expired') {
+        if (renewalFilter === 'ON') {
+          // Auditing historical expired members who have since renewed
+          if (!details.isRenewedFromExpired && details.globalStatus !== 'EXPIRED') return false;
+        } else {
+          // CRITICAL FIX: Strictly purge any member who holds an active, hold, or upcoming package!
+          if (details.hasActiveOrUpcomingPackage || details.globalStatus !== 'EXPIRED') return false;
+        }
+      } else if (statusFilter === 'Active') {
+        if (details.globalStatus !== 'ACTIVE' && details.globalStatus !== 'EXPIRING_SOON') return false;
+      } else if (statusFilter === 'Hold') {
+        if (details.globalStatus !== 'HOLD') return false;
+      }
+
+      // Evaluate date range against the member's MOST RECENT package expiry (`effectiveExpiry` = MAX(endDate))
+      const expiryStr = details.effectiveExpiry ? String(details.effectiveExpiry).slice(0, 10) : '';
+      if (statusFilter === 'Expired' && renewalFilter !== 'ON' && expiryStr) {
+        const minBound = dateFrom || '2000-01-01';
+        const maxBound = dateTo || todayStr;
+        if (expiryStr < minBound || expiryStr > maxBound) return false;
+      } else if (!isInDateRange(details.effectiveExpiry)) {
+        return false;
+      }
+
+      if (!matchBranch(c.branch)) return false;
       if (!matchStaff(details.salesRepName, c.salesRep)) return false;
       if (!matchesAdvancedClientFilters(c, details)) return false;
       return true;
@@ -533,7 +602,8 @@ export default function AdvancedReports() {
   const expiredByPackageChartData = useMemo(() => {
     const map: Record<string, number> = {};
     expiredMembersData.forEach(c => {
-      const pkg = c.packageType || c.packages?.[0]?.packageName || 'Unknown';
+      const d = getClientReportDetails(c);
+      const pkg = d.pkgName !== '—' ? d.pkgName : 'Unknown';
       map[pkg] = (map[pkg] || 0) + 1;
     });
     return Object.entries(map)
@@ -545,7 +615,7 @@ export default function AdvancedReports() {
   const expiredChartData = useMemo(() => {
     const map: Record<string, number> = {};
     expiredMembersData.forEach(c => {
-      const d = safeParseDate(c.membershipExpiry);
+      const d = safeParseDate(getClientReportDetails(c).effectiveExpiry);
       const key = d ? format(d, 'yyyy-MM') : 'Unknown';
       map[key] = (map[key] || 0) + 1;
     });
@@ -555,13 +625,27 @@ export default function AdvancedReports() {
   }, [expiredMembersData]);
 
   // ============================================================
-  // 2. Package Members
+  // 2. Package / Active Members (Evaluated by Global Status)
   // ============================================================
   const packageMembersData = useMemo(() => {
     const filtered = (clients || []).filter(c => {
-      if (c.status !== 'Active') return false;
-      if (!matchBranch(c.branch)) return false;
       const details = getClientReportDetails(c);
+      const isGlobalActiveOrHold =
+        details.globalStatus === 'ACTIVE' ||
+        details.globalStatus === 'EXPIRING_SOON' ||
+        details.globalStatus === 'HOLD';
+      if (!isGlobalActiveOrHold) return false;
+
+      if (activeSubSegment === 'expiring-7d') {
+        if (details.globalStatus === 'HOLD' || details.daysRemaining < 0 || details.daysRemaining > 7) return false;
+      } else if (activeSubSegment === 'expiring-30d') {
+        if (details.globalStatus === 'HOLD' || details.daysRemaining < 0 || details.daysRemaining > 30) return false;
+      } else if (activeSubSegment === 'hold') {
+        if (details.globalStatus !== 'HOLD') return false;
+      }
+
+      if ((dateFrom || dateTo) && !isInDateRange(details.effectiveExpiry)) return false;
+      if (!matchBranch(c.branch)) return false;
       if (!matchStaff(details.salesRepName, c.salesRep)) return false;
       if (!matchesAdvancedClientFilters(c, details)) return false;
       return true;
@@ -569,6 +653,9 @@ export default function AdvancedReports() {
     return sortClientRows(filtered);
   }, [
     clients,
+    activeSubSegment,
+    dateFrom,
+    dateTo,
     branchFilter,
     staffFilter,
     trainerFilter,
@@ -585,7 +672,8 @@ export default function AdvancedReports() {
   const packageChartData = useMemo(() => {
     const map: Record<string, number> = {};
     packageMembersData.forEach(c => {
-      const pkg = c.packageType || 'Unknown';
+      const d = getClientReportDetails(c);
+      const pkg = d.pkgName !== '—' ? d.pkgName : 'Unknown';
       map[pkg] = (map[pkg] || 0) + 1;
     });
     return Object.entries(map)
@@ -986,13 +1074,132 @@ export default function AdvancedReports() {
     setPackageFilter('all');
     setHierarchyFilter('all');
     setStatusFilter('Expired');
-    setRenewalFilter('all');
+    setRenewalFilter('OFF');
+    setActiveSubSegment('all-active');
     setCategoryFilter('all');
     setGenderFilter('all');
     setSearchQuery('');
     setSortBy('expiry-desc');
     setColFilters({});
   };
+
+  const handleSaveQuickNote = async () => {
+    if (!quickNoteClient || !quickNoteText.trim()) return;
+    setQuickNoteSaving(true);
+    try {
+      const cleanText = quickNoteText.trim();
+      if (quickNoteOutcome === 'Comment') {
+        await addComment(quickNoteClient.id, cleanText, currentUser?.name);
+      } else {
+        await addInteraction(quickNoteClient.id, {
+          type: 'Call',
+          date: new Date().toISOString(),
+          outcome: quickNoteOutcome as any,
+          notes: cleanText,
+          nextFollowUp: quickNoteFollowUpDate || undefined,
+        });
+        await addComment(
+          quickNoteClient.id,
+          `[${quickNoteOutcome}] ${cleanText}${quickNoteFollowUpDate ? ` (Follow-up: ${quickNoteFollowUpDate})` : ''}`,
+          currentUser?.name
+        );
+      }
+      setQuickNoteClient(null);
+      setQuickNoteText('');
+      setQuickNoteOutcome('Comment');
+      setQuickNoteFollowUpDate('');
+    } finally {
+      setQuickNoteSaving(false);
+    }
+  };
+
+  const renderGlobalStatusBadge = (globalStatus: GlobalMemberLifecycleStatus, daysRemaining?: number) => {
+    if (globalStatus === 'EXPIRING_SOON') {
+      return (
+        <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[10px] font-bold gap-1">
+          <Clock className="h-3 w-3" /> Expiring ({daysRemaining ?? 0}d)
+        </Badge>
+      );
+    }
+    if (globalStatus === 'ACTIVE') {
+      return (
+        <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold gap-1">
+          <CheckCircle2 className="h-3 w-3" /> Active{typeof daysRemaining === 'number' && daysRemaining > 0 ? ` (${daysRemaining}d)` : ''}
+        </Badge>
+      );
+    }
+    if (globalStatus === 'HOLD') {
+      return (
+        <Badge className="bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] font-bold gap-1">
+          <PauseCircle className="h-3 w-3" /> On Hold
+        </Badge>
+      );
+    }
+    if (globalStatus === 'EXPIRED') {
+      return (
+        <Badge className="bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 text-[10px] font-bold gap-1">
+          <AlertCircle className="h-3 w-3" /> Expired
+        </Badge>
+      );
+    }
+    return (
+      <Badge variant="secondary" className="text-[10px] font-bold">
+        Guest
+      </Badge>
+    );
+  };
+
+  const renderFollowUpBadge = (followUpStatus?: string) => {
+    if (!followUpStatus) {
+      return <span className="text-[10px] text-muted-foreground">No Note</span>;
+    }
+    const lower = followUpStatus.toLowerCase();
+    const cls = lower.includes('not interested')
+      ? 'bg-red-500/10 text-red-600 border-red-500/25'
+      : lower.includes('interested') || lower.includes('booked') || lower.includes('paid')
+      ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/25'
+      : lower.includes('follow') || lower.includes('later') || lower.includes('answer')
+      ? 'bg-amber-500/10 text-amber-600 border-amber-500/25'
+      : 'bg-primary/10 text-primary border-primary/25';
+    return (
+      <Badge variant="outline" className={`text-[10px] font-semibold ${cls}`}>
+        {followUpStatus}
+      </Badge>
+    );
+  };
+
+  const renderLastNoteCell = (c: any, d: ReturnType<typeof getClientReportDetails>) => (
+    <div className="flex items-start justify-between gap-2 max-w-[260px]">
+      <div className="min-w-0 flex-1">
+        {d.lastCallText ? (
+          <div className="flex flex-col" title={d.lastCallText}>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              {d.followUpStatus && renderFollowUpBadge(d.followUpStatus)}
+            </div>
+            <span className="text-xs font-medium text-foreground truncate block">{d.lastCallText}</span>
+            {d.lastCallMeta && <span className="text-[10px] text-muted-foreground truncate block">{d.lastCallMeta}</span>}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground italic">No comment logged</span>
+        )}
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          setQuickNoteClient({ id: c.id, name: c.name });
+          setQuickNoteText('');
+          setQuickNoteOutcome('Comment');
+          setQuickNoteFollowUpDate(d.nextFollowUp ? String(d.nextFollowUp).slice(0, 10) : '');
+        }}
+        title="Add Comment or Follow-Up Status Note"
+        className="h-6 px-1.5 text-[10px] text-primary hover:bg-primary/10 shrink-0"
+      >
+        <MessageSquarePlus className="h-3.5 w-3.5 mr-0.5" /> Note
+      </Button>
+    </div>
+  );
 
   // --- Filter Row component (SECTION 1 CARD: REPORTS FILTER & SEARCH CRITERIA) ---
   const FilterRow = ({
@@ -1292,6 +1499,11 @@ export default function AdvancedReports() {
             <Badge variant="secondary">
               {expiredMembersData.length} {statusFilter === 'all' ? 'matching members' : `${statusFilter.toLowerCase()} members`}
             </Badge>
+            {statusFilter === 'Expired' && renewalFilter !== 'ON' && (
+              <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                Active Renewals Purged
+              </Badge>
+            )}
             {loadingExpired && (
               <Badge variant="outline" className="text-xs gap-1">
                 <RefreshCw className="h-3 w-3 animate-spin" /> Loading full expired members archive...
@@ -1331,15 +1543,16 @@ export default function AdvancedReports() {
                   MemberId: c.memberId || '',
                   Phone: c.phone || '',
                   Gender: c.gender || '',
+                  GlobalStatus: d.globalStatus,
                   Package: d.pkgName,
                   Category: d.packageCategory,
                   Type: d.packageHierarchy === 'primary' ? 'Primary Membership' : 'Secondary Package',
-                  Status: c.status,
                   Renewal: d.hasActiveRenewal ? 'ON' : 'OFF',
-                  ExpiryDate: formatDate(c.membershipExpiry),
+                  ExpiryDate: formatDate(d.effectiveExpiry),
                   SalesRep: d.salesRepName,
                   Trainer: d.trainerName,
-                  LastCall: d.lastCallText,
+                  FollowUpStatus: d.followUpStatus || '',
+                  LastCommentOrCall: d.lastCallText,
                   Branch: c.branch || '',
                 };
               })}
@@ -1363,18 +1576,19 @@ export default function AdvancedReports() {
                       Member ID <SortIndicator activeAsc={sortBy === 'id-asc'} activeDesc={sortBy === 'id-desc'} />
                     </Th>
                     <Th>Phone</Th>
+                    <Th>Global Status</Th>
                     <Th onClick={() => toggleColumnSort('package')}>
                       Member Package <SortIndicator activeAsc={sortBy === 'package-asc'} activeDesc={sortBy === 'package-desc'} />
                     </Th>
                     <Th>Type / Category</Th>
                     <Th onClick={() => toggleColumnSort('expiry')}>
-                      Expire Date <SortIndicator activeAsc={sortBy === 'expiry-asc'} activeDesc={sortBy === 'expiry-desc'} />
+                      Latest Expire Date <SortIndicator activeAsc={sortBy === 'expiry-asc'} activeDesc={sortBy === 'expiry-desc'} />
                     </Th>
                     <Th onClick={() => toggleColumnSort('sales')}>
                       SalesMan <SortIndicator activeAsc={sortBy === 'sales-asc'} activeDesc={false} />
                     </Th>
                     <Th>Trainer</Th>
-                    <Th>Last Call / Note</Th>
+                    <Th>Last Comment / Call &amp; Status</Th>
                     <Th>Branch</Th>
                   </tr>
                   {/* Per-column inline filter row (RedGITS style) */}
@@ -1400,6 +1614,14 @@ export default function AdvancedReports() {
                         value={colFilters.phone || ''}
                         onChange={e => setColFilters(p => ({ ...p, phone: e.target.value }))}
                         placeholder="Phone"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.status || ''}
+                        onChange={e => setColFilters(p => ({ ...p, status: e.target.value }))}
+                        placeholder="Status"
                         className="h-7 text-[11px] bg-background"
                       />
                     </th>
@@ -1447,7 +1669,7 @@ export default function AdvancedReports() {
                       <Input
                         value={colFilters.lastCall || ''}
                         onChange={e => setColFilters(p => ({ ...p, lastCall: e.target.value }))}
-                        placeholder="Last Call"
+                        placeholder="Comment / Call / Disposition"
                         className="h-7 text-[11px] bg-background"
                       />
                     </th>
@@ -1496,6 +1718,7 @@ export default function AdvancedReports() {
                             {c.phone || '—'}
                           </button>
                         </Td>
+                        <Td>{renderGlobalStatusBadge(d.globalStatus, d.daysRemaining)}</Td>
                         <Td>
                           <Badge variant="outline" className="text-xs font-semibold">
                             {d.pkgName}
@@ -1509,19 +1732,10 @@ export default function AdvancedReports() {
                             <span className="text-xs text-muted-foreground">{d.packageCategory}</span>
                           </div>
                         </Td>
-                        <Td>{formatDate(c.membershipExpiry)}</Td>
+                        <Td>{formatDate(d.effectiveExpiry)}</Td>
                         <Td>{d.salesRepName || '—'}</Td>
                         <Td>{d.trainerName || '—'}</Td>
-                        <Td className="max-w-[220px] truncate" title={d.lastCallText}>
-                          {d.lastCallText ? (
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium truncate">{d.lastCallText}</span>
-                              {d.lastCallMeta && <span className="text-[10px] text-muted-foreground">{d.lastCallMeta}</span>}
-                            </div>
-                          ) : (
-                            '—'
-                          )}
-                        </Td>
+                        <Td>{renderLastNoteCell(c, d)}</Td>
                         <Td>{c.branch || '—'}</Td>
                       </tr>
                     );
@@ -1572,120 +1786,304 @@ export default function AdvancedReports() {
   );
 
   const renderPackageMembers = () => (
-    <>
+    <div className="space-y-6">
       <FilterRow
         showStaff
-        showDateRange={false}
+        showDateRange
         showAdvancedMemberFilters
         showSearchAndSort
       />
-      <div className="flex items-center justify-between mb-3">
-        <Badge variant="secondary">{packageMembersData.length} active members</Badge>
-        <ExportMenu data={
-          packageMembersData.map(c => {
-            const d = getClientReportDetails(c);
-            return {
-              Name: c.name,
-              MemberId: c.memberId,
-              Phone: c.phone,
-              Package: d.pkgName,
-              Category: d.packageCategory,
-              Type: d.packageHierarchy === 'primary' ? 'Primary Membership' : 'Secondary Package',
-              StartDate: formatDate(c.startDate),
-              EndDate: formatDate(c.membershipExpiry),
-              Sessions: c.sessionsRemaining,
-              SalesRep: d.salesRepName,
-              Trainer: d.trainerName,
-              Branch: c.branch,
-            };
-          })} filename="package_members"><Download className="h-4 w-4 mr-1" /> Export</ExportMenu>
+
+      {/* Quick Sub-Segment Bar for Active Members */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(
+          [
+            { id: 'all-active', label: 'All Active & Hold Members' },
+            { id: 'expiring-7d', label: 'Expiring ≤ 7 Days (Urgent Follow-Up)' },
+            { id: 'expiring-30d', label: 'Expiring ≤ 30 Days (Renewal Window)' },
+            { id: 'hold', label: 'On Hold / Frozen' },
+          ] as const
+        ).map(seg => (
+          <Button
+            key={seg.id}
+            type="button"
+            size="sm"
+            variant={activeSubSegment === seg.id ? 'default' : 'outline'}
+            onClick={() => setActiveSubSegment(seg.id)}
+            className="h-8 text-xs font-semibold"
+          >
+            {seg.label}
+          </Button>
+        ))}
       </div>
-      {packageMembersData.length === 0 ? <EmptyState message="No active members found." /> : (
-        <>
-          <TableWrapper>
-            <thead><tr>
-              <Th onClick={() => toggleColumnSort('name')}>
-                Name <SortIndicator activeAsc={sortBy === 'name-asc'} activeDesc={sortBy === 'name-desc'} />
-              </Th>
-              <Th onClick={() => toggleColumnSort('id')}>
-                Member ID <SortIndicator activeAsc={sortBy === 'id-asc'} activeDesc={sortBy === 'id-desc'} />
-              </Th>
-              <Th>Phone</Th>
-              <Th onClick={() => toggleColumnSort('package')}>
-                Package <SortIndicator activeAsc={sortBy === 'package-asc'} activeDesc={sortBy === 'package-desc'} />
-              </Th>
-              <Th>Type / Category</Th>
-              <Th>Start</Th>
-              <Th onClick={() => toggleColumnSort('expiry')}>
-                End <SortIndicator activeAsc={sortBy === 'expiry-asc'} activeDesc={sortBy === 'expiry-desc'} />
-              </Th>
-              <Th>Sessions</Th>
-              <Th onClick={() => toggleColumnSort('sales')}>Sales Rep</Th>
-              <Th>Branch</Th>
-            </tr></thead>
-            <tbody>
-              {packageMembersData.slice(0, rowLimit).map((c, i) => {
+
+      {/* SECTION 2 CARD: ACTIVE / PACKAGE MEMBERS WITH SALES COMMENTS & STATUS */}
+      <div className="rounded-2xl border-2 border-emerald-500/25 bg-card shadow-md overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge className="bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider">
+              Section 2
+            </Badge>
+            <h3 className="text-sm font-black uppercase tracking-wider text-foreground">
+              Reports For Active &amp; Package Members
+            </h3>
+            <Badge variant="secondary">{packageMembersData.length} active members</Badge>
+            {packageFilter !== 'all' && (
+              <Badge variant="outline" className="text-xs border-primary/40 text-primary">
+                Package: {packageFilter}
+              </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={String(rowLimit)} onValueChange={v => setRowLimit(Number(v) || 250)}>
+              <SelectTrigger className="w-32 h-8 text-xs bg-background">
+                <SelectValue placeholder="Rows" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="25">25 records</SelectItem>
+                <SelectItem value="50">50 records</SelectItem>
+                <SelectItem value="100">100 records</SelectItem>
+                <SelectItem value="250">250 records</SelectItem>
+                <SelectItem value="500">500 records</SelectItem>
+                <SelectItem value="1000">1,000 records</SelectItem>
+                <SelectItem value="10000">Show All</SelectItem>
+              </SelectContent>
+            </Select>
+            <ExportMenu
+              data={packageMembersData.map(c => {
                 const d = getClientReportDetails(c);
-                return (
-                  <tr key={c.id || i} className="border-t border-border hover:bg-muted/30 transition-colors">
-                    <Td className="font-medium">
-                      <button
-                        type="button"
-                        onClick={() => openAccountDetails(c.id)}
-                        className="text-left font-semibold text-foreground hover:text-primary hover:underline cursor-pointer"
-                      >
-                        {c.name}
-                      </button>
-                    </Td>
-                    <Td>
-                      <button
-                        type="button"
-                        onClick={() => openAccountDetails(c.id)}
-                        className="font-mono text-xs text-primary hover:underline cursor-pointer"
-                      >
-                        {c.memberId || '—'}
-                      </button>
-                    </Td>
-                    <Td>{c.phone || '—'}</Td>
-                    <Td><Badge variant="outline" className="text-xs">{d.pkgName}</Badge></Td>
-                    <Td>
-                      <div className="flex items-center gap-1">
-                        <Badge variant="secondary" className="text-[10px]">
-                          {d.packageHierarchy === 'primary' ? 'Primary' : 'Secondary'}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">{d.packageCategory}</span>
-                      </div>
-                    </Td>
-                    <Td>{formatDate(c.startDate)}</Td>
-                    <Td>{formatDate(c.membershipExpiry)}</Td>
-                    <Td>{c.sessionsRemaining ?? '—'}</Td>
-                    <Td>{d.salesRepName || '—'}</Td>
-                    <Td>{c.branch || '—'}</Td>
-                  </tr>
-                );
+                return {
+                  Name: c.name,
+                  MemberId: c.memberId,
+                  Phone: c.phone,
+                  GlobalStatus: d.globalStatus,
+                  DaysRemaining: d.daysRemaining,
+                  FollowUpStatus: d.followUpStatus || 'No Note',
+                  LastCommentOrNote: d.lastCallText || '',
+                  Package: d.pkgName,
+                  SecondaryPackage: d.secondaryPkgName || '',
+                  Category: d.packageCategory,
+                  Type: d.packageHierarchy === 'primary' ? 'Primary Membership' : 'Secondary Package',
+                  StartDate: formatDate(d.effectiveStart),
+                  EndDate: formatDate(d.effectiveExpiry),
+                  Sessions: c.sessionsRemaining,
+                  SalesRep: d.salesRepName,
+                  Trainer: d.trainerName,
+                  Branch: c.branch,
+                };
               })}
-            </tbody>
-          </TableWrapper>
-          {packageChartData.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-sm font-semibold mb-2 text-foreground">Members per Package</h3>
-              <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={packageChartData}>
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {packageChartData.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+              filename="active_package_members"
+            >
+              <Download className="h-4 w-4 mr-1" /> Export ({packageMembersData.length})
+            </ExportMenu>
+          </div>
+        </div>
+
+        <div className="p-4">
+          {packageMembersData.length === 0 ? (
+            <EmptyState message="No active members found." />
+          ) : (
+            <>
+              <TableWrapper>
+                <thead>
+                  <tr>
+                    <Th onClick={() => toggleColumnSort('name')}>
+                      Member Name <SortIndicator activeAsc={sortBy === 'name-asc'} activeDesc={sortBy === 'name-desc'} />
+                    </Th>
+                    <Th onClick={() => toggleColumnSort('id')}>
+                      Member ID <SortIndicator activeAsc={sortBy === 'id-asc'} activeDesc={sortBy === 'id-desc'} />
+                    </Th>
+                    <Th>Phone</Th>
+                    <Th>Status</Th>
+                    <Th>Last Comment / Call &amp; Status</Th>
+                    <Th onClick={() => toggleColumnSort('package')}>
+                      Package <SortIndicator activeAsc={sortBy === 'package-asc'} activeDesc={sortBy === 'package-desc'} />
+                    </Th>
+                    <Th>Type / Category</Th>
+                    <Th>Start</Th>
+                    <Th onClick={() => toggleColumnSort('expiry')}>
+                      Expire Date <SortIndicator activeAsc={sortBy === 'expiry-asc'} activeDesc={sortBy === 'expiry-desc'} />
+                    </Th>
+                    <Th>Sessions</Th>
+                    <Th onClick={() => toggleColumnSort('sales')}>
+                      Sales Rep <SortIndicator activeAsc={sortBy === 'sales-asc'} activeDesc={false} />
+                    </Th>
+                    <Th>Trainer</Th>
+                    <Th>Branch</Th>
+                  </tr>
+                  <tr className="bg-muted/30 border-t border-border">
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.name || ''}
+                        onChange={e => setColFilters(p => ({ ...p, name: e.target.value }))}
+                        placeholder="Member Name"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.memberId || ''}
+                        onChange={e => setColFilters(p => ({ ...p, memberId: e.target.value }))}
+                        placeholder="Member ID"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.phone || ''}
+                        onChange={e => setColFilters(p => ({ ...p, phone: e.target.value }))}
+                        placeholder="Phone"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.status || ''}
+                        onChange={e => setColFilters(p => ({ ...p, status: e.target.value }))}
+                        placeholder="Active / Hold / Expiring"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.lastCall || ''}
+                        onChange={e => setColFilters(p => ({ ...p, lastCall: e.target.value }))}
+                        placeholder="Filter by comment / note..."
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.package || ''}
+                        onChange={e => setColFilters(p => ({ ...p, package: e.target.value }))}
+                        placeholder="Package"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.type || ''}
+                        onChange={e => setColFilters(p => ({ ...p, type: e.target.value }))}
+                        placeholder="Type"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5" />
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.expiry || ''}
+                        onChange={e => setColFilters(p => ({ ...p, expiry: e.target.value }))}
+                        placeholder="Expire Date"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5" />
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.sales || ''}
+                        onChange={e => setColFilters(p => ({ ...p, sales: e.target.value }))}
+                        placeholder="Sales Rep"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.trainer || ''}
+                        onChange={e => setColFilters(p => ({ ...p, trainer: e.target.value }))}
+                        placeholder="Trainer"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                    <th className="p-1.5">
+                      <Input
+                        value={colFilters.branch || ''}
+                        onChange={e => setColFilters(p => ({ ...p, branch: e.target.value }))}
+                        placeholder="Branch"
+                        className="h-7 text-[11px] bg-background"
+                      />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packageMembersData.slice(0, rowLimit).map((c, i) => {
+                    const d = getClientReportDetails(c);
+                    return (
+                      <tr key={c.id || i} className="border-t border-border hover:bg-muted/30 transition-colors">
+                        <Td className="font-medium">
+                          <button
+                            type="button"
+                            onClick={() => openAccountDetails(c.id)}
+                            className="text-left font-semibold text-foreground hover:text-primary hover:underline cursor-pointer"
+                          >
+                            {c.name}
+                          </button>
+                          {c.gender && (
+                            <span className="ml-1.5 text-[10px] text-muted-foreground">({c.gender})</span>
+                          )}
+                        </Td>
+                        <Td>
+                          <button
+                            type="button"
+                            onClick={() => openAccountDetails(c.id)}
+                            className="font-mono text-xs text-primary hover:underline cursor-pointer"
+                          >
+                            {c.memberId || '—'}
+                          </button>
+                        </Td>
+                        <Td>{c.phone || '—'}</Td>
+                        <Td>{renderGlobalStatusBadge(d.globalStatus, d.daysRemaining)}</Td>
+                        <Td>{renderLastNoteCell(c, d)}</Td>
+                        <Td>
+                          <div className="flex flex-col gap-0.5">
+                            <Badge variant="outline" className="text-xs w-fit">
+                              {d.pkgName}
+                            </Badge>
+                            {d.secondaryPkgName && (
+                              <span className="text-[10px] text-muted-foreground">+ {d.secondaryPkgName}</span>
+                            )}
+                          </div>
+                        </Td>
+                        <Td>
+                          <div className="flex items-center gap-1">
+                            <Badge variant="secondary" className="text-[10px]">
+                              {d.packageHierarchy === 'primary' ? 'Primary' : 'Secondary'}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">{d.packageCategory}</span>
+                          </div>
+                        </Td>
+                        <Td>{formatDate(d.effectiveStart)}</Td>
+                        <Td>{formatDate(d.effectiveExpiry)}</Td>
+                        <Td>{c.sessionsRemaining ?? '—'}</Td>
+                        <Td>{d.salesRepName || '—'}</Td>
+                        <Td>{d.trainerName || '—'}</Td>
+                        <Td>{c.branch || '—'}</Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </TableWrapper>
+              {packageChartData.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold mb-2 text-foreground">Members per Package</h3>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={packageChartData}>
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                        {packageChartData.map((_, i) => (
+                          <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
-    </>
+        </div>
+      </div>
+    </div>
   );
 
   const renderIncomeByService = () => {
@@ -1890,16 +2288,7 @@ export default function AdvancedReports() {
                   <Td>{c.comeFromType || '—'}</Td>
                   <Td>{c.source || '—'}</Td>
                   <Td>{formatDate(c.createdAt)}</Td>
-                  <Td className="max-w-[260px] truncate" title={d.lastCallText}>
-                    {d.lastCallText ? (
-                      <div className="flex flex-col">
-                        <span className="text-xs font-medium text-foreground truncate">{d.lastCallText}</span>
-                        {d.lastCallMeta && <span className="text-[10px] text-muted-foreground">{d.lastCallMeta}</span>}
-                      </div>
-                    ) : (
-                      '—'
-                    )}
-                  </Td>
+                  <Td>{renderLastNoteCell(c, d)}</Td>
                 </tr>
               );
             })}
@@ -2444,15 +2833,140 @@ export default function AdvancedReports() {
 
   const activeTab = reportTabs.find(t => t.id === activeReport);
 
+  // Compute global lifecycle segment counts for the Unified Member Lifecycle Hub bar
+  const lifecycleCounts = useMemo(() => {
+    let guests = 0;
+    let active = 0;
+    let expiringSoon = 0;
+    let hold = 0;
+    let expiredClean = 0;
+    for (const c of clients || []) {
+      const ev = computeMemberGlobalStatus(c);
+      if (ev.globalStatus === 'GUEST') guests++;
+      else if (ev.globalStatus === 'ACTIVE') active++;
+      else if (ev.globalStatus === 'EXPIRING_SOON') {
+        active++;
+        expiringSoon++;
+      } else if (ev.globalStatus === 'HOLD') {
+        active++;
+        hold++;
+      } else if (ev.globalStatus === 'EXPIRED' && !ev.hasActiveOrUpcomingPackage) {
+        expiredClean++;
+      }
+    }
+    return { guests, active, expiringSoon, hold, expiredClean };
+  }, [clients]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Star className="h-7 w-7 text-amber-500 fill-amber-500" />
-        <div>
-          <h1 className="text-2xl font-black uppercase tracking-tight text-foreground">Premium Reports</h1>
-          <p className="text-sm text-muted-foreground">Advanced analytics and reporting engine</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Star className="h-7 w-7 text-amber-500 fill-amber-500" />
+          <div>
+            <h1 className="text-2xl font-black uppercase tracking-tight text-foreground">Premium Reports</h1>
+            <p className="text-sm text-muted-foreground">
+              Unified Member Lifecycle Hub — Guest, Active &amp; Expired segments with live sales notes
+            </p>
+          </div>
         </div>
+      </div>
+
+      {/* Unified Member Lifecycle Segment Switcher (Consolidates Guest, Active, and Expired into 1-click access) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            setActiveReport('guest-members');
+            setColFilters({});
+          }}
+          className={`flex items-center justify-between p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+            activeReport === 'guest-members'
+              ? 'border-blue-500 bg-blue-500/10 shadow-sm'
+              : 'border-border bg-card hover:border-blue-500/40'
+          }`}
+        >
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+              1. Guest Members (Unpaid)
+            </p>
+            <p className="text-2xl font-black text-foreground mt-0.5">{lifecycleCounts.guests}</p>
+            <p className="text-[11px] text-muted-foreground">Registered leads &amp; walk-ins</p>
+          </div>
+          <UserPlus className="h-6 w-6 text-blue-500 opacity-80" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveReport('package-members');
+            setActiveSubSegment('all-active');
+            setColFilters({});
+          }}
+          className={`flex items-center justify-between p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+            activeReport === 'package-members' && activeSubSegment !== 'expiring-7d'
+              ? 'border-emerald-500 bg-emerald-500/10 shadow-sm'
+              : 'border-border bg-card hover:border-emerald-500/40'
+          }`}
+        >
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              2. Active Members (With Notes)
+            </p>
+            <p className="text-2xl font-black text-foreground mt-0.5">{lifecycleCounts.active}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {lifecycleCounts.hold} on hold • Last comment visible
+            </p>
+          </div>
+          <CheckCircle2 className="h-6 w-6 text-emerald-500 opacity-80" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveReport('package-members');
+            setActiveSubSegment('expiring-7d');
+            setColFilters({});
+          }}
+          className={`flex items-center justify-between p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+            activeReport === 'package-members' && activeSubSegment === 'expiring-7d'
+              ? 'border-amber-500 bg-amber-500/10 shadow-sm'
+              : 'border-border bg-card hover:border-amber-500/40'
+          }`}
+        >
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+              3. Expiring Soon (≤ 7 Days)
+            </p>
+            <p className="text-2xl font-black text-foreground mt-0.5">{lifecycleCounts.expiringSoon}</p>
+            <p className="text-[11px] text-muted-foreground">Proactive renewal call queue</p>
+          </div>
+          <Clock className="h-6 w-6 text-amber-500 opacity-80" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveReport('expired-members');
+            setStatusFilter('Expired');
+            setRenewalFilter('OFF');
+            setColFilters({});
+          }}
+          className={`flex items-center justify-between p-3.5 rounded-xl border-2 text-left transition-all cursor-pointer ${
+            activeReport === 'expired-members'
+              ? 'border-red-500 bg-red-500/10 shadow-sm'
+              : 'border-border bg-card hover:border-red-500/40'
+          }`}
+        >
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">
+              4. Expired Members (Clean)
+            </p>
+            <p className="text-2xl font-black text-foreground mt-0.5">{lifecycleCounts.expiredClean}</p>
+            <p className="text-[11px] text-muted-foreground">Active renewals strictly purged</p>
+          </div>
+          <AlertCircle className="h-6 w-6 text-red-500 opacity-80" />
+        </button>
       </div>
 
       {/* Layout: sidebar + content */}
@@ -2496,6 +3010,88 @@ export default function AdvancedReports() {
           </Card>
         </main>
       </div>
+
+      {/* Quick Inline Comment & Follow-Up Status Modal */}
+      {quickNoteClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-foreground">Log Sales Comment / Follow-Up Status</h3>
+                <p className="text-xs text-muted-foreground">Member: {quickNoteClient.name}</p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setQuickNoteClient(null)}
+                className="h-7 w-7 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Follow-Up Disposition / Status</label>
+                <Select value={quickNoteOutcome} onValueChange={v => setQuickNoteOutcome(v || 'Comment')}>
+                  <SelectTrigger className="w-full h-9 text-xs bg-background">
+                    <SelectValue placeholder="Disposition" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Comment">General Sales Note / Comment</SelectItem>
+                    <SelectItem value="Follow Up">Follow Up Needed</SelectItem>
+                    <SelectItem value="Interested">Interested in Renewal</SelectItem>
+                    <SelectItem value="Not Interested">Not Interested / Traveling (Won&apos;t Renew)</SelectItem>
+                    <SelectItem value="No Answer">No Answer / Left Message</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Comment / Status Note</label>
+                <Input
+                  value={quickNoteText}
+                  onChange={e => setQuickNoteText(e.target.value)}
+                  placeholder="e.g. Member is traveling until next month and won't renew right now..."
+                  className="h-9 text-xs bg-background"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Next Follow-Up Reminder Date (Optional)</label>
+                <Input
+                  type="date"
+                  value={quickNoteFollowUpDate}
+                  onChange={e => setQuickNoteFollowUpDate(e.target.value)}
+                  className="h-9 text-xs bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setQuickNoteClient(null)}
+                disabled={quickNoteSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSaveQuickNote}
+                disabled={quickNoteSaving || !quickNoteText.trim()}
+              >
+                {quickNoteSaving ? 'Saving...' : 'Save Note & Status'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -296,6 +296,8 @@ export default function Dashboard() {
   const [pushTitle, setPushTitle] = useState('');
   const [pushBody, setPushBody] = useState('');
   const [isSendingPush, setIsSendingPush] = useState(false);
+  // Stat-card drill-down: which member list is open in the dialog (null = closed).
+  const [statDrilldown, setStatDrilldown] = useState<null | 'leads' | 'expiring' | 'expired' | 'birthdays' | 'new' | 'returning'>(null);
 
   const handleSendAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -354,11 +356,14 @@ export default function Dashboard() {
   }, [users]);
 
   const isClientAssignedToRep = React.useCallback((client: any, repId: string, repName: string) => {
-    if (!client.assignedTo) return false;
-    if (client.assignedTo === repId) return true;
-    const canonicalAssigned = getCanonicalName(client.assignedTo);
+    const assigned = client.assignedTo || client.salesRep || client.salesName;
+    if (!assigned) return false;
+    if (client.assignedTo === repId || client.salesRep === repId) return true;
     const canonicalRep = getCanonicalName(repName);
-    return canonicalAssigned === canonicalRep && canonicalAssigned !== '';
+    if (!canonicalRep) return false;
+    if (client.assignedTo && getCanonicalName(client.assignedTo) === canonicalRep) return true;
+    if (client.salesName && getCanonicalName(client.salesName) === canonicalRep) return true;
+    return false;
   }, [getCanonicalName]);
 
   const isPaymentAttributedToRep = React.useCallback((payment: any, repId: string, repName: string) => {
@@ -436,7 +441,7 @@ export default function Dashboard() {
 
   // Stats — one memoized pass instead of ~10 full scans of the member list on every render.
   const {
-    totalLeads, activeMembers, nearlyExpiredList, nearlyExpired, expiredList, expired,
+    totalLeads, leadsList, activeMembers, nearlyExpiredList, nearlyExpired, expiredList, expired,
     negativeSessions, noAttendance, upcomingVisits, upcomingBirthdays, attentionLeads,
   } = React.useMemo(() => {
     const today = new Date();
@@ -447,6 +452,7 @@ export default function Dashboard() {
 
     let leadCount = 0;
     let activeCount = 0;
+    const leadsArr: typeof clients = [];
     const nearlyExpiredArr: typeof clients = [];
     const expiredArr: typeof clients = [];
     const negativeArr: typeof clients = [];
@@ -456,7 +462,7 @@ export default function Dashboard() {
     const attentionArr: typeof clients = [];
 
     for (const c of clients) {
-      if (c.status === 'Lead') leadCount++;
+      if (c.status === 'Lead') { leadCount++; leadsArr.push(c); }
       else if (c.status === 'Active') {
         activeCount++;
         if (c.isNearlyExpired) {
@@ -509,6 +515,7 @@ export default function Dashboard() {
 
     return {
       totalLeads: leadCount,
+      leadsList: leadsArr,
       activeMembers: activeCount,
       nearlyExpiredList: nearlyExpiredArr,
       nearlyExpired: nearlyExpiredArr.length,
@@ -863,25 +870,69 @@ export default function Dashboard() {
   };
 
   // New vs Returning members for the selected month
-  const { newMembersCount, returningMembersCount } = React.useMemo(() => {
+  const { newMembersCount, returningMembersCount, newMembersList, returningMembersList } = React.useMemo(() => {
     const monthStart = startOfMonth(selectedMonth);
     const monthEnd = endOfMonth(selectedMonth);
-    const newCount = clients.filter(c => {
+    const newList = clients.filter(c => {
       if (c.status === 'Lead') return false;
       if (!c.startDate) return false;
       const d = safeParseISO(c.startDate);
       if (isNaN(d.getTime())) return false;
       return isWithinInterval(d, { start: monthStart, end: monthEnd });
-    }).length;
-    const returningCount = clients.filter(c => {
+    });
+    const returningList = clients.filter(c => {
       if (!c.startDate) return false;
       if (c.status !== 'Active' && c.status !== 'Nearly Expired') return false;
       const d = safeParseISO(c.startDate);
       if (isNaN(d.getTime())) return false;
       return d < monthStart;
-    }).length;
-    return { newMembersCount: newCount, returningMembersCount: returningCount };
+    });
+    return {
+      newMembersCount: newList.length,
+      returningMembersCount: returningList.length,
+      newMembersList: newList,
+      returningMembersList: returningList,
+    };
   }, [clients, selectedMonth]);
+
+  // Stat-card drill-down: title + member list for the currently opened card.
+  const drilldownConfig = React.useMemo(() => {
+    switch (statDrilldown) {
+      case 'leads': return { title: t('dashboard.active_leads'), items: leadsList };
+      case 'expiring': return { title: t('dashboard.expiring_soon'), items: nearlyExpiredList };
+      case 'expired': return { title: t('dashboard.total_expired'), items: expiredList };
+      case 'birthdays': return { title: t('dashboard.upcoming_birthdays'), items: upcomingBirthdays };
+      case 'new': return { title: `${t('dashboard.new_members')} — ${format(selectedMonth, 'MMM yyyy')}`, items: newMembersList };
+      case 'returning': return { title: t('dashboard.returning_active'), items: returningMembersList };
+      default: return null;
+    }
+  }, [statDrilldown, t, leadsList, nearlyExpiredList, expiredList, upcomingBirthdays, newMembersList, returningMembersList, selectedMonth]);
+
+  const getDrilldownDetail = (client: any): string => {
+    switch (statDrilldown) {
+      case 'expiring':
+      case 'expired':
+        return client.membershipExpiry ? `${t('members.table.expiry_date') || 'Expiry'}: ${safeFormatDate(client.membershipExpiry, 'dd MMM yyyy', 'Unknown')}` : (client.packageType || '');
+      case 'birthdays':
+        return client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'dd MMM', 'Unknown') : '';
+      case 'new':
+      case 'returning':
+        return client.startDate ? `${safeFormatDate(client.startDate, 'dd MMM yyyy', 'Unknown')}${client.packageType ? ` · ${client.packageType}` : ''}` : (client.packageType || '');
+      default:
+        return client.phone || client.packageType || '';
+    }
+  };
+
+  // Keyboard/touch-friendly props for clickable stat cards.
+  const statCardProps = (key: NonNullable<typeof statDrilldown>) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    className: 'cursor-pointer hover:border-primary/50 active:scale-[0.98] transition-all',
+    onClick: () => setStatDrilldown(key),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setStatDrilldown(key); }
+    },
+  });
 
   // Attendance heatmap: check-ins per day-of-week per branch over the last 90 days
   const attendanceHeatmap = React.useMemo(() => {
@@ -1109,7 +1160,7 @@ export default function Dashboard() {
           </Card>
         )}
         
-        <Card>
+        <Card {...statCardProps('leads')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t('dashboard.active_leads')}</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -1122,7 +1173,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card {...statCardProps('expiring')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t('dashboard.expiring_soon')}</CardTitle>
             <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -1135,7 +1186,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card {...statCardProps('expired')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t('dashboard.total_expired')}</CardTitle>
             <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -1148,7 +1199,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         
-        <Card>
+        <Card {...statCardProps('birthdays')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t('dashboard.upcoming_birthdays')}</CardTitle>
             <Gift className="h-4 w-4 text-pink-500" />
@@ -1159,7 +1210,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card {...statCardProps('new')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{t('dashboard.new_members')}</CardTitle>
             <UserPlus className="h-4 w-4 text-emerald-500" />
@@ -1169,10 +1220,15 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground">
               {t('dashboard.joined_in')} {format(selectedMonth, 'MMM yyyy')}
             </p>
-            <div className="mt-3 pt-3 border-t flex justify-between text-xs text-muted-foreground">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setStatDrilldown('returning'); }}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="mt-3 pt-3 border-t w-full flex justify-between text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
               <span>{t('dashboard.returning_active')}</span>
               <span className="font-semibold text-foreground">{returningMembersCount}</span>
-            </div>
+            </button>
           </CardContent>
         </Card>
 
@@ -1207,6 +1263,45 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      <Dialog open={statDrilldown !== null} onOpenChange={(open) => { if (!open) setStatDrilldown(null); }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between gap-2 pr-6">
+              <span>{drilldownConfig?.title}</span>
+              <Badge variant="secondary">{drilldownConfig?.items.length ?? 0}</Badge>
+            </DialogTitle>
+          </DialogHeader>
+          {drilldownConfig && drilldownConfig.items.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">No members in this list.</p>
+          ) : drilldownConfig ? (
+            <PaginatedList
+              key={statDrilldown ?? 'none'}
+              items={drilldownConfig.items}
+              itemsPerPage={10}
+              renderItem={(client) => (
+                <div key={client.id} className="flex items-center justify-between gap-2 p-2 border rounded-md">
+                  <div className="min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatDrilldown(null);
+                        setActiveTab('clients');
+                        setActiveClientId(client.id);
+                      }}
+                      className="text-primary hover:underline font-semibold text-sm text-left block truncate"
+                    >
+                      {client.name}
+                    </button>
+                    <p className="text-xs text-muted-foreground truncate">{getDrilldownDetail(client)}</p>
+                  </div>
+                  {client.status && <Badge variant="outline" className="shrink-0 text-[10px]">{client.status}</Badge>}
+                </div>
+              )}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       {canViewGlobalDashboard && (
         <InzanDailyRevenueSummary payments={payments} users={users} />

@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Users, Search, Phone, Minus, CheckCircle2, AlertTriangle, Activity, TrendingUp, Flame, MessageSquare } from 'lucide-react';
 import { format, parseISO, differenceInDays, isAfter } from 'date-fns';
+import { openWhatsAppChat } from '../utils/whatsappTemplates';
 import { useTheme } from '../contexts/ThemeContext';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
@@ -440,8 +441,10 @@ export default function CoachClients({
                 )
               : null;
             const paidPtRemaining =
-              paidPtPkg?.sessionsRemaining ??
-              (typeof client.ptSessionsRemaining === 'number' ? client.ptSessionsRemaining : 0);
+              Number(
+                paidPtPkg?.sessionsRemaining ??
+                  (typeof client.ptSessionsRemaining === 'number' ? client.ptSessionsRemaining : 0)
+              ) || 0;
 
             const hasSessions = (remaining !== null && remaining > 0) || freePtRemaining > 0;
             const isLowBalance = remaining !== null && remaining <= 2 && freePtRemaining === 0;
@@ -492,8 +495,11 @@ export default function CoachClients({
                         {cleanPhone && (
                           <a
                             href={`https://wa.me/${cleanPhone}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            target="whatsapp_crm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              openWhatsAppChat({ phone: cleanPhone });
+                            }}
                             className="ml-1 inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
                           >
                             <MessageSquare className="h-3 w-3" /> WhatsApp

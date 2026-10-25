@@ -38,17 +38,23 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   const [view, setView] = useState<View>('login');
 
   // Email/password tab
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => {
+    try { return localStorage.getItem('mitrixo_saved_login_email') || ''; } catch { return ''; }
+  });
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Coach ID tab
-  const [coachId, setCoachId] = useState('');
+  const [coachId, setCoachId] = useState(() => {
+    try { return localStorage.getItem('mitrixo_saved_login_coach_id') || ''; } catch { return ''; }
+  });
   const [coachPassword, setCoachPassword] = useState('');
   const [showCoachPassword, setShowCoachPassword] = useState(false);
 
   // Member ID tab
-  const [memberId, setMemberId] = useState('');
+  const [memberId, setMemberId] = useState(() => {
+    try { return localStorage.getItem('mitrixo_saved_login_member_id') || ''; } catch { return ''; }
+  });
   const [memberPassword, setMemberPassword] = useState('');
   const [showMemberPassword, setShowMemberPassword] = useState(false);
 
@@ -200,7 +206,10 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
     setError('');
     setAuthError(null);
     setIsLoading(true);
-    try { await loginWithEmail(email, password); } catch (err) { handleError(err); }
+    try {
+      try { localStorage.setItem('mitrixo_saved_login_email', email.trim()); } catch {}
+      await loginWithEmail(email, password);
+    } catch (err) { handleError(err); }
     finally { setIsLoading(false); }
   };
 
@@ -209,7 +218,10 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
     if (!coachId || !coachPassword) { setError('Please enter your Coach ID and password.'); return; }
     setError('');
     setIsLoading(true);
-    try { await loginWithCoachId(coachId, coachPassword); } catch (err) { handleError(err); }
+    try {
+      try { localStorage.setItem('mitrixo_saved_login_coach_id', coachId.trim()); } catch {}
+      await loginWithCoachId(coachId, coachPassword);
+    } catch (err) { handleError(err); }
     finally { setIsLoading(false); }
   };
 
@@ -219,6 +231,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
     setError('');
     setIsLoading(true);
     try {
+      try { localStorage.setItem('mitrixo_saved_login_member_id', memberId.trim()); } catch {}
       const result = await loginWithMemberId(memberId, memberPassword);
       if (result?.requiresProfileSelection && result.profiles && result.profiles.length > 0) {
         setFamilyProfiles(result.profiles);
@@ -763,7 +776,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                   <form onSubmit={handleEmailLogin} className="space-y-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="staff-email">Email</Label>
-                      <Input id="staff-email" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
+                      <Input id="staff-email" type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" required />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="staff-password">Password</Label>

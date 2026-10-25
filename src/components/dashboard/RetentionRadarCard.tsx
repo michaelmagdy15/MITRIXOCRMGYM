@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Flame, MessageCircle, AlertTriangle, Clock, CreditCard, Users } from 'lucide-react';
+import { openWhatsAppUrl } from '../../utils/whatsappTemplates';
 
 export interface RetentionRadarCardProps {
   clients: Client[];
@@ -186,8 +187,11 @@ export const RetentionRadarCard: React.FC<RetentionRadarCardProps> = ({
                   {waUrl && (
                     <a
                       href={waUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      target="whatsapp_crm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openWhatsAppUrl(waUrl);
+                      }}
                       className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 shadow-xs transition-colors"
                     >
                       <MessageCircle className="h-3.5 w-3.5" />

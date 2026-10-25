@@ -3,7 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { activeConfig, getTenantId } from '../firebase';
 
 const tenantId = (activeConfig as { tenantId?: string }).tenantId || getTenantId();
-const themeLocked = tenantId === 'inzanathletics';
+const themeLocked = false;
 
 type Theme = 'light' | 'dark';
 
@@ -11,6 +11,7 @@ interface ThemeContextType {
   theme: Theme;
   themeLocked: boolean;
   toggleTheme: () => void;
+  setTheme: (theme: Theme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -18,9 +19,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const STORAGE_KEY = 'crm_theme';
 
 function getInitialTheme(): Theme {
-  if (themeLocked) return 'dark';
   // Check localStorage first
-  const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
+  const stored = typeof window !== 'undefined' ? (localStorage.getItem(STORAGE_KEY) as Theme | null) : null;
   if (stored === 'dark' || stored === 'light') {
     return stored;
   }
@@ -32,23 +32,28 @@ function getInitialTheme(): Theme {
 function applyTheme(theme: Theme) {
   document.documentElement.dataset.tenantTheme = tenantId;
   document.documentElement.classList.toggle('dark', theme === 'dark');
-  if (!themeLocked) localStorage.setItem(STORAGE_KEY, theme);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, theme);
+  }
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => getInitialTheme());
+  const [theme, setThemeState] = useState<Theme>(() => getInitialTheme());
 
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
 
   const toggleTheme = () => {
-    if (themeLocked) return;
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+    setThemeState(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
+  const setTheme = (newTheme: Theme) => {
+    setThemeState(newTheme);
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, themeLocked }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme, themeLocked }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -272,12 +272,13 @@ export default function Users() {
   };
 
   const handleActivatePending = async (user: User) => {
-    if (!window.confirm(`Create a login account for ${user.name} (${user.email})?\n\nThey will be able to sign in with email + password \"12345678\". They should change this after first login.`)) return;
+    if (!window.confirm(`Create a login account for ${user.name} (${user.email})?\n\nThey will be able to sign in with email + password "12345678". They should change this after first login.`)) return;
     setActivatingUserId(user.id);
     try {
       await activatePendingUser(user.id, user.email, user.role, user.name);
       setActivatedUserId(user.id);
       setTimeout(() => setActivatedUserId(null), 3000);
+      window.alert(`Done! ${user.name} (${user.email}) has been activated with default password "12345678".`);
     } catch (err: any) {
       window.alert(`Failed to activate account: ${err?.message || 'Unknown error'}`);
     } finally {

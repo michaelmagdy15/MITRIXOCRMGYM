@@ -1,4 +1,5 @@
 import { matchesPhoneSearch } from './utils/phoneUtils';
+import { scoreNameMatch } from './utils/fuzzyNameSearch';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -37,12 +38,12 @@ import Bookings from './Bookings';
 import NutritionModule from './NutritionModule';
 import { ClassManager } from './components/ClassManager';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList } from 'lucide-react';
+import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList, Bell } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { NotificationCenter } from './components/NotificationCenter';
+import { NotificationCenter, NotificationsProvider, NotificationsPage } from './components/NotificationCenter';
 import BuildVersionFooter from './components/BuildVersionFooter';
 import CoachPortal from './coach/CoachPortal';
 import MemberPortal from './member/MemberPortal';
@@ -67,6 +68,7 @@ import { RedgitsLiveSyncDialog } from './components/RedgitsLiveSyncDialog';
 import Complaints from './Complaints';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
+import { ClickToCallModal } from './components/ClickToCallModal';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com', 'simary@inzan.com'];
 const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
@@ -165,14 +167,24 @@ function AppContent() {
     const q = searchQuery.toLowerCase().trim();
     const cleanId = q.replace(/^#/, '');
     
-    const matches = clients.filter(c => 
-      c.name.toLowerCase().includes(q) || 
-      matchesPhoneSearch(c.phone, q) ||
-      matchesPhoneSearch((c as any).parentPhone, q) ||
-      (c.memberId && c.memberId.toString().toLowerCase().includes(cleanId)) ||
-      (c.startDate && c.startDate.includes(q)) ||
-      (c.membershipExpiry && c.membershipExpiry.includes(q))
-    );
+    const matches = clients
+      .map(c => {
+        const nameRes = scoreNameMatch(c.name, q);
+        if (nameRes.matched) return { client: c, score: nameRes.score };
+        if (
+          matchesPhoneSearch(c.phone, q) ||
+          matchesPhoneSearch((c as any).parentPhone, q) ||
+          (c.memberId && c.memberId.toString().toLowerCase().includes(cleanId)) ||
+          (c.startDate && c.startDate.includes(q)) ||
+          (c.membershipExpiry && c.membershipExpiry.includes(q))
+        ) {
+          return { client: c, score: 100 };
+        }
+        return null;
+      })
+      .filter((entry): entry is { client: typeof clients[number]; score: number } => entry !== null)
+      .sort((a, b) => b.score - a.score)
+      .map(entry => entry.client);
 
     if (matches.length === 1) {
       const match = matches[0];
@@ -649,6 +661,7 @@ function AppContent() {
 
   const navItems = [
     { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, show: can('dashboard.view') },
+    { id: 'notifications', label: t('nav.notifications') === 'nav.notifications' ? 'Notifications' : t('nav.notifications'), icon: Bell, show: true },
     {
       id: 'leads',
       label: t('nav.leads'),
@@ -780,7 +793,7 @@ function AppContent() {
   ];
 
   const getNavSection = (id: string): string => {
-    if (['dashboard', 'attendance', 'calendar', 'class-manager', 'operations', 'call-center', 'lost-and-found', 'complaints'].includes(id)) {
+    if (['dashboard', 'notifications', 'attendance', 'calendar', 'class-manager', 'operations', 'call-center', 'lost-and-found', 'complaints'].includes(id)) {
       return 'OPERATIONS';
     }
     if (['clients', 'leads', 'nutrition', 'tasks'].includes(id)) {
@@ -1317,7 +1330,11 @@ function AppContent() {
           {/* Main scrollable viewport */}
           <main className="flex-grow overflow-y-auto p-3 sm:p-4 lg:p-6 xl:p-8 min-w-0">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
-              <TabsContent value="dashboard" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+            <TabsContent value="notifications" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <NotificationsPage />
+            </TabsContent>
+
+            <TabsContent value="dashboard" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <Dashboard />
             </TabsContent>
 
@@ -1539,7 +1556,10 @@ export default function App() {
                   <CartProvider>
                     <TenantInitWrapper>
                       <OfflineBanner />
-                      <AppContent />
+                      <NotificationsProvider>
+                        <AppContent />
+                      </NotificationsProvider>
+                      <ClickToCallModal />
                       <BuildVersionFooter />
                       <Toaster richColors position="top-right" />
                     </TenantInitWrapper>

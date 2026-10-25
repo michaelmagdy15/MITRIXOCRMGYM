@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db } from './firebase';
-import { auth } from './firebase';
+import { db, auth, getTenantId } from './firebase';
+import InzanLockerConsole from './components/InzanLockerConsole';
 import { collection, onSnapshot, setDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { addAuditLog } from './services/auditService';
 import { activatePendingGuestInvite } from './services/guestReferralService';
@@ -15,10 +15,18 @@ import { Coffee, Lock, UserCheck, Search, Plus, Key, RefreshCw, XCircle, CheckCi
 import { JuiceBarOrder, Locker, LockerRequest, GuestInvite } from './types';
 import { useSettings } from './contexts/SettingsContext';
 
-const BRANCHES = ['Heliopolis', 'Fifth Settlement', 'Zamalek', 'Sheikh Zayed'];
+const DEFAULT_BRANCHES = ['Garden 8', 'Heliopolis', 'Fifth Settlement', 'Zamalek', 'Sheikh Zayed'];
 
 export default function ClubOperations() {
-  const { features, branding } = useSettings();
+  const { features, branding, branches: settingsBranches } = useSettings();
+  const BRANCHES = useMemo(
+    () => (settingsBranches && settingsBranches.length > 0 ? settingsBranches : DEFAULT_BRANCHES),
+    [settingsBranches]
+  );
+  const isInzan = useMemo(() => {
+    const tid = getTenantId().toLowerCase();
+    return tid.includes('inzan') || (branding?.companyName || '').toLowerCase().includes('inzan');
+  }, [branding?.companyName]);
 
   // --- Earth's Kitchen Juice Bar State ---
   const [juiceOrders, setJuiceOrders] = useState<JuiceBarOrder[]>([]);
@@ -26,11 +34,11 @@ export default function ClubOperations() {
   const operationsTabs = useMemo(() => {
     const list = [
       { id: 'juicebar', label: "Earth's Kitchen Orders", count: juiceOrders.length, icon: <Coffee className="h-4 w-4" />, requiredFeature: features.juiceBar },
-      { id: 'lockers', label: 'Lockers & Smart Locks', icon: <Lock className="h-4 w-4" />, requiredFeature: features.locker },
+      { id: 'lockers', label: isInzan ? 'Smart Lockers (Inzan Hardware)' : 'Lockers & Smart Locks', icon: <Lock className="h-4 w-4" />, requiredFeature: isInzan ? true : features.locker },
       { id: 'guests', label: 'Guest Invites & Leads', icon: <UserCheck className="h-4 w-4" /> },
     ];
     return list.filter(t => t.requiredFeature !== false);
-  }, [features, juiceOrders.length]);
+  }, [features, juiceOrders.length, isInzan]);
 
   const [activeTab, setActiveTab] = useState<'juicebar' | 'lockers' | 'guests'>('juicebar');
 
@@ -399,7 +407,8 @@ export default function ClubOperations() {
       )}
 
       {/* Lockers management tab */}
-      {activeTab === 'lockers' && (
+      {activeTab === 'lockers' && isInzan && <InzanLockerConsole />}
+      {activeTab === 'lockers' && !isInzan && (
         <div className="space-y-6">
           {/* Section: Pending Locker Requests */}
           {lockerRequests.length > 0 && (

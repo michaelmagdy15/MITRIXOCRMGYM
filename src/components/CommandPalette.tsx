@@ -1,10 +1,11 @@
 import { matchesPhoneSearch } from '../utils/phoneUtils';
+import { scoreNameMatch } from '../utils/fuzzyNameSearch';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppContext } from '../context';
 import { useLanguage } from '../contexts/LanguageContext';
 import { 
   Search, BarChart3, Users, Activity, DollarSign, 
-  Calendar, Shield, Settings, FileText, CornerDownLeft, X, Sparkles, Package
+  Calendar, Shield, Settings, FileText, CornerDownLeft, X, Sparkles, Package, Bell
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
 
   const navigationItems = [
     { id: 'dashboard', name: 'Go to Dashboard', description: 'View gym statistics, active member counts, and sales metrics', icon: BarChart3 },
+    { id: 'notifications', name: 'Go to Notifications & History', description: 'View all active notifications and saved history of dismissed alerts', icon: Bell },
     { id: 'clients', name: 'Go to Members List', description: 'View client database, check active packages, and manage records', icon: Users },
     { id: 'leads', name: 'Go to Leads Pipeline', description: 'Track leads, trial sessions, and customer follow-up actions', icon: Activity },
     { id: 'payments', name: 'Go to Payments & Ledger', description: 'Record transactions, print receipts, and track gym revenue', icon: DollarSign },
@@ -54,16 +56,31 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
     item.description.toLowerCase().includes(query.toLowerCase())
   );
 
-  // Filter clients/members (limit to top 10 for performance)
+  // Filter clients/members with fuzzy/phonetic scoring (limit to top 10, ranked Exact > Phonetic > Fuzzy)
   const trimmedQuery = query.trim();
   const cleanIdQuery = trimmedQuery.replace(/^#/, '');
-  const filteredClients = trimmedQuery ? clients.filter(c => 
-    c.name.toLowerCase().includes(query.toLowerCase()) || 
-    matchesPhoneSearch(c.phone, trimmedQuery) ||
-    matchesPhoneSearch((c as any).parentPhone, trimmedQuery) ||
-    (c.memberId && c.memberId.toString().includes(cleanIdQuery)) ||
-    (c.packageType && c.packageType.toLowerCase().includes(query.toLowerCase()))
-  ).slice(0, 10) : [];
+  const filteredClients = trimmedQuery
+    ? clients
+        .map(c => {
+          const nameRes = scoreNameMatch(c.name, trimmedQuery);
+          if (nameRes.matched) return { client: c, score: nameRes.score };
+          if (
+            matchesPhoneSearch(c.phone, trimmedQuery) ||
+            matchesPhoneSearch((c as any).parentPhone, trimmedQuery) ||
+            (c.memberId && c.memberId.toString().includes(cleanIdQuery))
+          ) {
+            return { client: c, score: 100 };
+          }
+          if (c.packageType && c.packageType.toLowerCase().includes(trimmedQuery.toLowerCase())) {
+            return { client: c, score: 75 };
+          }
+          return null;
+        })
+        .filter((entry): entry is { client: typeof clients[number]; score: number } => entry !== null)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10)
+        .map(entry => entry.client)
+    : [];
 
   const totalResults = filteredNav.length + filteredClients.length;
 

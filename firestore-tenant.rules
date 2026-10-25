@@ -315,22 +315,23 @@ service cloud.firestore {
     }
 
     match /targets/{targetId} {
-      allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
-      allow list: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
+      allow get: if isTenantStaff() || canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
+      allow list: if isTenantStaff() || canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid);
       allow write: if canViewGlobalDashboard();
     }
 
     match /userTargets/{targetId} {
-      allow get: if canViewGlobalDashboard() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      allow list: if canViewGlobalDashboard() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow get: if isTenantStaff() || canViewGlobalDashboard() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow list: if isTenantStaff() || canViewGlobalDashboard() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow write: if canViewGlobalDashboard();
     }
 
     match /payments/{paymentId} {
-      allow get: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid) || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
-      allow list: if canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid) || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow get: if isTenantStaff() || canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid) || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
+      allow list: if isTenantStaff() || canViewGlobalDashboard() || (isSalesRep() && resource.data.sales_rep_id == request.auth.uid) || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
       allow create: if (isTenantStaff() || (isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId))) && isValidPaymentCreate(request.resource.data);
-      allow update, delete: if canDeletePayments();
+      allow update: if isTenantStaff() || canDeletePayments();
+      allow delete: if canDeletePayments();
     }
 
     match /settings/{settingId} {
@@ -618,7 +619,7 @@ service cloud.firestore {
 
     match /bookingRequests/{requestId} {
       allow read: if isTenantStaff() || (isAuthenticated() && (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId)));
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() || (request.resource.data.clientId == 'guest' && isNonEmptyString(request.resource.data.phone));
       allow update, delete: if isTenantStaff();
     }
 
@@ -642,7 +643,7 @@ service cloud.firestore {
     }
 
     match /lockers/{lockerId} {
-      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.assignedTo != null && isOwnClientRecord(resource.data.assignedTo));
+      allow read: if isAuthenticated();
       allow write: if isTenantStaff();
     }
 
@@ -724,7 +725,11 @@ service cloud.firestore {
         (resource.data.clientId != null && isOwnClientRecord(resource.data.clientId)) ||
         (resource.data.portalUserId != null && resource.data.portalUserId == request.auth.uid)
       ));
-      allow create: if isTenantStaff() || (isAuthenticated() && (
+      allow create: if isTenantStaff() || (
+        request.resource.data.clientId == 'guest' &&
+        isNonEmptyString(request.resource.data.clientName) &&
+        isNonEmptyString(request.resource.data.phone)
+      ) || (isAuthenticated() && (
         request.resource.data.clientId != null && (
           isOwnClientRecord(request.resource.data.clientId) ||
           request.resource.data.clientId == request.auth.uid ||
@@ -745,8 +750,12 @@ service cloud.firestore {
       allow update, delete: if isTenantStaff();
     }
 
-    // CALL CENTER LOGS
+    // CALL CENTER LOGS & CROSS-DEVICE CLICK-TO-CALL REQUESTS
     match /callCenterLog/{logId} {
+      allow read, write: if isTenantStaff();
+    }
+
+    match /callRequests/{requestId} {
       allow read, write: if isTenantStaff();
     }
 

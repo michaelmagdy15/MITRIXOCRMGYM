@@ -1,8 +1,13 @@
 import { initializeApp, deleteApp } from 'firebase/app';
 import {
   getAuth,
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserCookiePersistence,
   signOut,
   signInWithEmailAndPassword,
+  signInWithCustomToken,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   fetchSignInMethodsForEmail,
@@ -180,7 +185,25 @@ export const getMemberEmail = (memberId: string): string => {
 };
 
 const app = initializeApp(activeConfig);
-export const auth = getAuth(app);
+
+const initPersistentAuth = () => {
+  if (typeof window !== 'undefined') {
+    try {
+      return initializeAuth(app, {
+        persistence: [
+          browserLocalPersistence,
+          indexedDBLocalPersistence,
+          browserCookiePersistence,
+        ],
+      });
+    } catch {
+      return getAuth(app);
+    }
+  }
+  return getAuth(app);
+};
+
+export const auth = initPersistentAuth();
 
 export const db = initializeFirestore(app, {
   localCache: (typeof window !== 'undefined' && typeof indexedDB !== 'undefined')
@@ -194,6 +217,10 @@ export const storage = getStorage(app);
 
 export const signInWithEmail = async (email: string, password: string) => {
   return signInWithEmailAndPassword(auth, email, password);
+};
+
+export const signInWithCustomAuthToken = async (customToken: string) => {
+  return signInWithCustomToken(auth, customToken);
 };
 
 export const sendPasswordReset = async (email: string) => {

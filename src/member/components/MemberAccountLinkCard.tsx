@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { auth, getTenantId } from '../../firebase';
 import { Client } from '../../types';
+import { openWhatsAppUrl } from '../../utils/whatsappTemplates';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -365,8 +366,11 @@ export const MemberAccountLinkCard: React.FC<MemberAccountLinkCardProps> = ({ on
           </span>
           <a
             href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            target="whatsapp_crm"
+            onClick={(e) => {
+              e.preventDefault();
+              openWhatsAppUrl(whatsappUrl);
+            }}
             className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
           >
             <MessageCircle className="w-3.5 h-3.5" />

@@ -7,8 +7,10 @@ export const redgitsSyncRouter = Router();
 
 const INZAN_DATABASE_ID = 'db-inzanathletics';
 const REDGITS_ORIGIN = 'https://inzan.redgits.com';
-const DEFAULT_REDGITS_USER = process.env.REDGITS_USERNAME || 'trasnfer';
-const DEFAULT_REDGITS_PASS = process.env.REDGITS_PASSWORD || '12122020Aa$';
+const DEFAULT_REDGITS_USER = process.env.REDGITS_USERNAME || 'mi5a';
+const DEFAULT_REDGITS_PASS = process.env.REDGITS_PASSWORD || 'Miko0019_!';
+const FALLBACK_REDGITS_USER = 'trasnfer';
+const FALLBACK_REDGITS_PASS = '12122020Aa$';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
@@ -16,8 +18,11 @@ interface SyncStats {
   mode: 'fast' | 'full';
   startedAt: string;
   completedAt: string;
+  lastSyncAt?: string;
+  syncedAt?: string;
   durationMs: number;
   syncedBy: string;
+  redgitsAccountUsed?: string;
   counts: {
     activeMembers: number;
     expiredMembers: number;
@@ -34,13 +39,26 @@ interface SyncStats {
 
 function normalizePhone(raw?: string): string {
   if (!raw) return '';
-  if (String(raw).includes('*')) return '';
-  const digits = String(raw).replace(/[^\d]/g, '');
+  const str = String(raw).trim();
+  if (str.includes('*') || str === 'NOT ALLOWED') return '';
+  const digits = str.replace(/[^\d]/g, '');
   if (!digits || digits.length < 8) return '';
+  if (/^(20)?0?1[0125]0{8,}$/.test(digits) || /^0{8,}$/.test(digits)) return '';
   if (digits.startsWith('2001') && digits.length === 13) return digits.slice(2);
-  if (digits.startsWith('201') && digits.length === 12) return '0' + digits.slice(2);
+  if (digits.startsWith('201') && (digits.length === 12 || digits.length === 11)) return '0' + digits.slice(2);
   if (digits.startsWith('1') && digits.length === 10) return '0' + digits;
   return digits;
+}
+
+function cleanMemberId(raw?: string, rId?: string): string {
+  if (!raw) return '';
+  const s = String(raw)
+    .replace(/\[ID:\d+\]/g, '')
+    .trim();
+  if (!s || s === '0' || s === '-' || s.toLowerCase() === 'null' || s.toLowerCase() === 'none') return '';
+  if (/^code\s*\(/i.test(s)) return '';
+  if (rId && s === String(rId).trim() && Number(rId) >= 10000) return '';
+  return s;
 }
 
 function cleanSalesRepName(raw?: string): string {
@@ -296,16 +314,32 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     const inzanDb = getFirestore(INZAN_DATABASE_ID);
     let storedUser = '';
     let storedPass = '';
+    let storedFallbackUser = '';
+    let storedFallbackPass = '';
     try {
       const credSnap = await inzanDb.collection('settings').doc('redgits_credentials').get();
       if (credSnap.exists) {
         const cData = credSnap.data();
         storedUser = String(cData?.username || '').trim();
         storedPass = String(cData?.password || '');
+        storedFallbackUser = String(cData?.fallbackUsername || '').trim();
+        storedFallbackPass = String(cData?.fallbackPassword || '');
       }
     } catch {}
-    const redgitsUsername = String(req.body?.username || process.env.REDGITS_USERNAME || storedUser || DEFAULT_REDGITS_USER).trim();
-    const redgitsPassword = String(req.body?.password || process.env.REDGITS_PASSWORD || storedPass || DEFAULT_REDGITS_PASS);
+    const primaryUsername = String(req.body?.username || process.env.REDGITS_USERNAME || storedUser || DEFAULT_REDGITS_USER).trim();
+    const primaryPassword = String(req.body?.password || process.env.REDGITS_PASSWORD || storedPass || DEFAULT_REDGITS_PASS);
+
+    const candidateAccounts: Array<{ username: string; password: string }> = [];
+    const addCandidate = (u: string, p: string) => {
+      const cleanU = u.trim();
+      if (!cleanU || !p) return;
+      if (!candidateAccounts.some((a) => a.username === cleanU && a.password === p)) {
+        candidateAccounts.push({ username: cleanU, password: p });
+      }
+    };
+    addCandidate(primaryUsername, primaryPassword);
+    addCandidate(DEFAULT_REDGITS_USER, DEFAULT_REDGITS_PASS);
+    addCandidate(storedFallbackUser || FALLBACK_REDGITS_USER, storedFallbackPass || FALLBACK_REDGITS_PASS);
 
     // 2. Authenticate with https://inzan.redgits.com (with BlockIntel device fingerprint & session cookie rotation)
     const cookieJar = new Map<string, string>();
@@ -359,33 +393,45 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       timezone: 'Africa/Cairo',
     });
 
-    const loginPageRes = await fetch(`${REDGITS_ORIGIN}/admin/login`, {
-      headers: { 'User-Agent': USER_AGENT, Cookie: getCookieHeader() },
-    });
-    saveCookies(loginPageRes);
+    let authenticatedAccount = '';
+    for (const acct of candidateAccounts) {
+      cookieJar.delete('ci_session');
+      const loginPageRes = await fetch(`${REDGITS_ORIGIN}/admin/login`, {
+        headers: { 'User-Agent': USER_AGENT, Cookie: getCookieHeader() },
+      });
+      saveCookies(loginPageRes);
 
-    const loginRes = await fetch(`${REDGITS_ORIGIN}/admin/login/check_login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Cookie: getCookieHeader(),
-        'User-Agent': USER_AGENT,
-        Referer: `${REDGITS_ORIGIN}/admin/login`,
-        Origin: REDGITS_ORIGIN,
-      },
-      body: new URLSearchParams({
-        username: redgitsUsername,
-        password: redgitsPassword,
-        code: deviceCode,
-        client_info: clientInfoPayload,
-      }).toString(),
-      redirect: 'manual',
-    });
-    saveCookies(loginRes);
+      const loginRes = await fetch(`${REDGITS_ORIGIN}/admin/login/check_login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Cookie: getCookieHeader(),
+          'User-Agent': USER_AGENT,
+          Referer: `${REDGITS_ORIGIN}/admin/login`,
+          Origin: REDGITS_ORIGIN,
+        },
+        body: new URLSearchParams({
+          username: acct.username,
+          password: acct.password,
+          code: deviceCode,
+          client_info: clientInfoPayload,
+        }).toString(),
+        redirect: 'manual',
+      });
+      saveCookies(loginRes);
 
-    const loginLocation = loginRes.headers.get('location') || '';
-    const isLoginRedirectToLogin = loginLocation.includes('/admin/login');
-    if (isLoginRedirectToLogin || (!cookieJar.has('ci_session') && loginRes.status !== 302)) {
+      const loginLocation = loginRes.headers.get('location') || '';
+      const isLoginRedirectToLogin = loginLocation.includes('/admin/login');
+      if (!isLoginRedirectToLogin && (cookieJar.has('ci_session') || loginRes.status === 302)) {
+        authenticatedAccount = acct.username;
+        break;
+      }
+    }
+
+    const redgitsUsername = authenticatedAccount || primaryUsername;
+    const redgitsPassword = primaryPassword;
+
+    if (!authenticatedAccount) {
       res.status(401).json({
         error: 'Failed to authenticate with inzan.redgits.com. Please verify RedGITS username and password.',
       });
@@ -683,7 +729,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       inzanDb.collection('users').get(),
       inzanDb
         .collection('clients')
-        .select('phone', 'redgitsId', 'memberId', 'status', 'packages', 'invitationsUsed', 'freezeDaysUsed', 'freePtSessionsUsed', 'lastCall', 'lastComment', 'lastCallText', 'lastCallDate', 'lastCallBy', 'comeFromType', 'createdAt', 'lastContactDate')
+        .select('phone', 'redgitsId', 'memberId', 'status', 'packages', 'invitationsUsed', 'freezeDaysUsed', 'freePtSessionsUsed', 'lastCall', 'lastComment', 'lastCallText', 'lastCallDate', 'lastCallBy', 'comeFromType', 'createdAt', 'lastContactDate', 'redgitsMobileChecked')
         .get(),
     ]);
 
@@ -692,8 +738,9 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     for (const cDoc of existingClientsSnap.docs) {
       const d = cDoc.data();
       existingClientDataByDocId.set(cDoc.id, d || {});
-      if (d?.phone && String(d.phone).length >= 8) {
-        existingPhoneByDocId.set(cDoc.id, String(d.phone));
+      const cleanExistingPhone = normalizePhone(d?.phone);
+      if (cleanExistingPhone) {
+        existingPhoneByDocId.set(cDoc.id, cleanExistingPhone);
       }
     }
 
@@ -732,17 +779,6 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       const existingId = repUserIdByName.get(lower);
       if (existingId) {
         const canonicalName = repDisplayNameById.get(existingId) || clean;
-        if (!userDocsMap.has(existingId)) {
-          userDocsMap.set(existingId, {
-            id: existingId,
-            data: {
-              id: existingId,
-              name: canonicalName,
-              status: 'working',
-              updatedAt: nowIso,
-            },
-          });
-        }
         return { id: existingId, name: canonicalName };
       }
 
@@ -1021,26 +1057,41 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       listByRedgitsId.set(rId, { rowType: 'lead', row: gRow });
     }
 
-    // Fetch unmasked mobile numbers via /admin/member_data/get_mobile/{id} for any active member or lead missing a phone
+    // Fetch unmasked mobile numbers via /admin/member_data/get_mobile/{id} for any member or lead missing a phone
+    // Prioritize Active members first, then Leads, then Expired members
     const idsNeedingMobile: string[] = [];
-    for (const [rId, entry] of listByRedgitsId.entries()) {
-      if (entry.rowType === 'expired') continue;
-      const docId = `redgits-${rId}`;
-      const natEntry = natByRedgitsId.get(rId);
-      const realCardId = entry.rowType === 'active' ? String(entry.row[2] || natEntry?.memberId || '').trim() : '';
-      const knownPhone =
-        existingPhoneByDocId.get(docId) ||
-        phoneByRedgitsId.get(rId) ||
-        (realCardId ? phoneByCardId.get(realCardId) : undefined);
-      if (!knownPhone && idsNeedingMobile.length < 100) {
-        idsNeedingMobile.push(rId);
+    const checkedMobileIds = new Set<string>();
+    const maxMobileLookups = mode === 'full' ? 2500 : 1200;
+    const priorityOrder: Array<'active' | 'lead' | 'expired'> = ['active', 'lead', 'expired'];
+
+    for (const targetType of priorityOrder) {
+      for (const [rId, entry] of listByRedgitsId.entries()) {
+        if (entry.rowType !== targetType) continue;
+        if (idsNeedingMobile.length >= maxMobileLookups) break;
+        const docId = `redgits-${rId}`;
+        const existingC = existingClientDataByDocId.get(docId);
+        const natEntry = natByRedgitsId.get(rId);
+        const rawRowCardId =
+          entry.rowType === 'active'
+            ? entry.row[2]
+            : entry.rowType === 'expired'
+            ? entry.row[1]
+            : '';
+        const realCardId = cleanMemberId(rawRowCardId || natEntry?.memberId, rId);
+        const knownPhone =
+          existingPhoneByDocId.get(docId) ||
+          phoneByRedgitsId.get(rId) ||
+          (realCardId ? phoneByCardId.get(realCardId) : undefined);
+        if (!knownPhone && !existingC?.redgitsMobileChecked) {
+          idsNeedingMobile.push(rId);
+        }
       }
     }
 
     let unmaskedPhonesFetched = 0;
     if (idsNeedingMobile.length > 0) {
       let mIdx = 0;
-      const MOBILE_CONCURRENCY = 4;
+      const MOBILE_CONCURRENCY = 8;
       const fetchMobileWorker = async () => {
         while (mIdx < idsNeedingMobile.length) {
           const targetId = idsNeedingMobile[mIdx++];
@@ -1056,6 +1107,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
             saveCookies(r);
             if (r.ok) {
               const j: any = await r.json();
+              checkedMobileIds.add(targetId);
               const clean = normalizePhone(j?.mobile);
               if (clean) {
                 phoneByRedgitsId.set(targetId, clean);
@@ -1136,10 +1188,9 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
 
       if (!name) continue;
 
-      if (realCardMemberId === '0' || realCardMemberId === '-') realCardMemberId = '';
-
       // Strictly look up subscriptions by RedGITS internal ID rId (never by sequential cardMemberId)
       const memberSubs = subscriptionsByRedgitsId.get(rId) || [];
+      realCardMemberId = cleanMemberId(realCardMemberId || memberSubs[0]?.memberId || natEntry?.memberId, rId);
       const fallbackSalesName =
         cleanSalesRepName(rawSalesName) ||
         cleanSalesRepName(memberSubs[0]?.salesman) ||
@@ -1276,14 +1327,24 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         }
       }
 
-      // Determine true Primary Membership vs Secondary Package from mergedPackages
+      // Determine true Primary Membership vs Secondary Package from mergedPackages (sorted by latest endDate DESC)
+      const sortedPackagesDesc = [...mergedPackages].sort((a, b) =>
+        String(b.endDate || '0000-00-00').localeCompare(String(a.endDate || '0000-00-00'))
+      );
       const primaryRecord =
-        mergedPackages.find((p) => p.hierarchyType === 'Primary' && p.status !== 'Expired') ||
-        mergedPackages.find((p) => p.hierarchyType === 'Primary') ||
-        mergedPackages[0];
-      const secondaryRecord = mergedPackages.find(
+        sortedPackagesDesc.find((p) => p.hierarchyType === 'Primary' && p.status !== 'Expired') ||
+        sortedPackagesDesc.find((p) => p.status !== 'Expired') ||
+        sortedPackagesDesc.find((p) => p.hierarchyType === 'Primary') ||
+        sortedPackagesDesc[0];
+      const secondaryRecord = sortedPackagesDesc.find(
         (p) => p.hierarchyType === 'Secondary' && p.status !== 'Expired'
       );
+
+      // If any package in mergedPackages is currently Active/Frozen, never leave member global status as Expired
+      const todayStr = nowIso.slice(0, 10);
+      if (status === 'Expired' && primaryRecord && primaryRecord.status !== 'Expired' && (!primaryRecord.endDate || primaryRecord.endDate >= todayStr)) {
+        status = primaryRecord.status === 'Frozen' ? 'Hold' : 'Active';
+      }
 
       const resolvedPrimaryPkgName =
         primaryRecord?.packageName || existingClient.primaryPackageName || packageName || (status === 'Lead' ? 'Prospect' : 'Membership');
@@ -1291,8 +1352,6 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         primaryRecord?.endDate || existingClient.membershipExpiry || endDate || null;
       const resolvedPrimaryStart =
         primaryRecord?.startDate || existingClient.startDate || startDate || nowIso.slice(0, 10);
-
-      const todayStr = nowIso.slice(0, 10);
       const computedDaysRemaining = resolvedPrimaryExpiry
         ? Math.max(
             0,
@@ -1314,13 +1373,13 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         existingClient.freeClassTrialsTotal ?? catalogPkg?.freeClassTrials ?? 0;
 
       const resolvedLeadId = String(existingClient.leadId || rId).trim();
-      const existingMemberIdStr = existingClient.memberId ? String(existingClient.memberId).trim() : '';
+      const existingMemberIdStr = cleanMemberId(existingClient.memberId, rId);
       const resolvedMemberId =
         status === 'Lead'
           ? ''
-          : realCardMemberId && realCardMemberId !== rId
+          : realCardMemberId
           ? realCardMemberId
-          : existingMemberIdStr && existingMemberIdStr !== rId
+          : existingMemberIdStr
           ? existingMemberIdStr
           : '';
 
@@ -1356,6 +1415,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         memberId: resolvedMemberId ? resolvedMemberId : FieldValue.delete(),
         name,
         phone,
+        redgitsMobileChecked: Boolean(phone || existingClient.redgitsMobileChecked || checkedMobileIds.has(rId)) || undefined,
         photoURL: resolvedPhotoUrl,
         nationalId: nationalId || existingClient.nationalId || undefined,
         dateOfBirth: dateOfBirth || existingClient.dateOfBirth || undefined,
@@ -1596,8 +1656,11 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       mode,
       startedAt,
       completedAt,
+      lastSyncAt: completedAt,
+      syncedAt: completedAt,
       durationMs,
       syncedBy: caller.name || caller.email,
+      redgitsAccountUsed: authenticatedAccount || redgitsUsername,
       counts: {
         activeMembers: syncedActiveCount,
         expiredMembers: syncedExpiredCount,

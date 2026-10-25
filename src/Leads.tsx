@@ -30,7 +30,9 @@ import { MessageCircle } from 'lucide-react';
 import { downloadFile } from './utils/download';
 import { PhoneInput } from './components/ui/PhoneInput';
 import { addAuditLog } from './services/auditService';
+import { openClickToCallModal } from './services/clickToCallService';
 import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
+import { matchesFuzzyNameSearch } from './utils/fuzzyNameSearch';
 
 export default function Leads() {
   const {
@@ -106,7 +108,8 @@ export default function Leads() {
   const [filterStage, setFilterStage] = useState<LeadStage | 'All'>('All');
   const [filterInterest, setFilterInterest] = useState<LeadInterest | 'All'>('All');
   const [filterAssignedTo, setFilterAssignedTo] = useState<string | 'All'>('All');
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'score'>('newest');
+  const [sortBy, setSortBy] = useState<'transferred' | 'newest' | 'oldest' | 'score'>('transferred');
+  const [onlyRecentTransfers, setOnlyRecentTransfers] = useState(false);
 
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const deferredFilterBranch = useDeferredValue(filterBranch);
@@ -115,6 +118,7 @@ export default function Leads() {
   const deferredFilterAssignedTo = useDeferredValue(filterAssignedTo);
   const deferredSortBy = useDeferredValue(sortBy);
   const deferredActiveTab = useDeferredValue(activeTab);
+  const deferredOnlyRecentTransfers = useDeferredValue(onlyRecentTransfers);
   
   const [newLeadName, setNewLeadName] = useState('');
   const [newLeadPhone, setNewLeadPhone] = useState('');
@@ -332,6 +336,24 @@ export default function Leads() {
     return '';
   };
 
+  const getLeadTransferTimestamp = (lead: Client): number => {
+    const raw = lead.transferredAt || lead.assignedAt;
+    if (!raw) return 0;
+    const ms = new Date(raw).getTime();
+    return isNaN(ms) ? 0 : ms;
+  };
+
+  const isRecentlyTransferred = (lead: Client, windowHours = 24): boolean => {
+    const ts = getLeadTransferTimestamp(lead);
+    if (!ts) return false;
+    const diffMs = Date.now() - ts;
+    return diffMs >= -60000 && diffMs <= windowHours * 60 * 60 * 1000;
+  };
+
+  const recentTransfersCount = useMemo(() => {
+    return allLeads.filter(l => isRecentlyTransferred(l, 24)).length;
+  }, [allLeads]);
+
   // Build unified list of sales reps (both CRM users and RedGITS salesName values on leads) with lead counts
   const repSummaries = useMemo(() => {
     const map = new Map<string, { value: string; label: string; userId?: string; count: number; isLegacyName?: boolean; isNonWorking?: boolean }>();
@@ -408,6 +430,7 @@ export default function Leads() {
     // Tab filtering
     switch (deferredActiveTab) {
       case 'unassigned': filtered = filtered.filter(l => !l.assignedTo); break;
+      case 'recently_transferred': filtered = filtered.filter(l => isRecentlyTransferred(l, 24)); break;
       case 'referrals':
         filtered = filtered.filter(l =>
           String(l.source || '') === 'Referral' ||
@@ -433,11 +456,11 @@ export default function Leads() {
         const callInfo = getLatestCallInfo(l);
         const commentInfo = getLatestCommentInfo(l);
         return (
-          (l.name || '').toLowerCase().includes(term) || 
+          matchesFuzzyNameSearch(l.name, term) || 
           (l.phone || '').includes(term) ||
           String(l.leadId || l.redgitsId || '').toLowerCase().includes(term) ||
-          (l.salesName || '').toLowerCase().includes(term) ||
-          (l.salesRep || '').toLowerCase().includes(term) ||
+          matchesFuzzyNameSearch(l.salesName, term) ||
+          matchesFuzzyNameSearch(l.salesRep, term) ||
           (callInfo?.text || '').toLowerCase().includes(term) ||
           (callInfo?.author || '').toLowerCase().includes(term) ||
           (commentInfo?.text || '').toLowerCase().includes(term)
@@ -457,8 +480,20 @@ export default function Leads() {
     if (deferredFilterAssignedTo !== 'All') {
       filtered = filtered.filter(l => matchesRepFilter(l, deferredFilterAssignedTo));
     }
+    if (deferredOnlyRecentTransfers) {
+      filtered = filtered.filter(l => isRecentlyTransferred(l, 24));
+    }
 
-    if (deferredSortBy === 'score') {
+    if (deferredSortBy === 'transferred') {
+      filtered.sort((a, b) => {
+        const transA = getLeadTransferTimestamp(a);
+        const transB = getLeadTransferTimestamp(b);
+        if (transA !== transB) return transB - transA;
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : (a.lastContactDate ? new Date(a.lastContactDate).getTime() : 0);
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : (b.lastContactDate ? new Date(b.lastContactDate).getTime() : 0);
+        return dateB - dateA;
+      });
+    } else if (deferredSortBy === 'score') {
       filtered.sort((a, b) => calculateLeadScore(b) - calculateLeadScore(a));
     } else if (deferredSortBy === 'newest') {
       filtered.sort((a, b) => {
@@ -484,6 +519,7 @@ export default function Leads() {
     deferredFilterInterest,
     deferredFilterAssignedTo,
     deferredSortBy,
+    deferredOnlyRecentTransfers,
     users
   ]);
 
@@ -542,6 +578,7 @@ export default function Leads() {
   const handleBulkAssign = async (userId: string) => {
     const isRep = currentUser?.role === 'rep';
     const resolved = resolveRepTarget(userId);
+    const nowIso = new Date().toISOString();
     for (const id of selectedLeadIds) {
       const lead = clients.find(c => c.id === id);
       // Reps cannot reassign leads that already have an assigned rep (commission protection)
@@ -550,6 +587,9 @@ export default function Leads() {
         assignedTo: resolved.assignedTo,
         salesName: resolved.salesName || undefined,
         salesRep: resolved.salesRep || undefined,
+        assignedAt: resolved.assignedTo ? nowIso : undefined,
+        transferredAt: resolved.assignedTo ? nowIso : undefined,
+        assignedBy: currentUser?.name || currentUser?.id || 'System',
       });
     }
     setSelectedLeadIds([]);
@@ -603,6 +643,7 @@ export default function Leads() {
     setIsTransferringRep(true);
     try {
       const sourceLabel = repSummaries.find(r => r.value === transferSourceRep)?.label || transferSourceRep;
+      const nowIso = new Date().toISOString();
       for (let i = 0; i < transferCandidateLeads.length; i++) {
         const lead = transferCandidateLeads[i];
         const targetKey = targets[i % targets.length];
@@ -612,6 +653,10 @@ export default function Leads() {
           assignedTo: resolved.assignedTo,
           salesName: resolved.salesName,
           salesRep: resolved.salesRep,
+          assignedAt: nowIso,
+          transferredAt: nowIso,
+          assignedBy: currentUser?.name || currentUser?.id || 'System',
+          previousAssignedTo: lead.assignedTo || lead.salesName || sourceLabel,
         });
       }
       await addAuditLog(
@@ -1069,10 +1114,11 @@ export default function Leads() {
           const latestCall = getLatestCallInfo(lead);
           const latestComment = getLatestCommentInfo(lead);
           const repLabel = getLeadRepLabel(lead);
+          const recentlyTransferred = isRecentlyTransferred(lead, 24);
           return (
             <div
               key={lead.id}
-              className={`flex items-start gap-3 px-4 py-3 ${overdue ? 'bg-red-50/50 dark:bg-red-900/10' : dueSoon ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}
+              className={`flex items-start gap-3 px-4 py-3 ${overdue ? 'bg-red-50/50 dark:bg-red-900/10' : dueSoon ? 'bg-amber-50/50 dark:bg-amber-900/10' : recentlyTransferred ? 'bg-emerald-500/5 border-l-4 border-l-emerald-500' : ''}`}
             >
               <Checkbox
                 checked={selectedLeadIds.includes(lead.id)}
@@ -1097,6 +1143,11 @@ export default function Leads() {
                   >
                     {lead.name}
                   </button>
+                  {recentlyTransferred && (
+                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white text-[9px] h-4 px-1.5 font-bold uppercase tracking-wider">
+                      ⚡ New Transfer
+                    </Badge>
+                  )}
                   <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{lead.stage || 'New'}</Badge>
                   {score >= 20 ? <Badge className="bg-green-500 text-[10px] h-4 px-1.5">{score}</Badge>
                     : score >= 10 ? <Badge className="bg-yellow-500 text-black text-[10px] h-4 px-1.5">{score}</Badge>
@@ -1107,9 +1158,22 @@ export default function Leads() {
                 <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
                   <button
                     type="button"
-                    onClick={() => openLeadAccount(lead)}
-                    className="flex items-center gap-1 hover:text-primary hover:underline cursor-pointer"
-                    title="Open Account Details"
+                    onClick={() => {
+                      if (currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id) return;
+                      openClickToCallModal({
+                        clientId: lead.id,
+                        memberId: lead.memberId,
+                        name: lead.name,
+                        phone: lead.phone,
+                        backupPhone: lead.backupPhone,
+                        status: lead.status,
+                        branch: lead.branch,
+                        packageType: lead.packageType,
+                        source: lead.source,
+                      });
+                    }}
+                    className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer"
+                    title="Click to Call"
                   >
                     <Phone className="h-3 w-3" />
                     {currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id ? '**********' : lead.phone}
@@ -1212,12 +1276,20 @@ export default function Leads() {
             const latestComment = getLatestCommentInfo(lead);
             const repLabel = getLeadRepLabel(lead);
             const isQuickLogging = quickNoteLeadId === lead.id;
+            const recentlyTransferred = isRecentlyTransferred(lead, 24);
+            const transferIso = lead.transferredAt || lead.assignedAt;
 
             return (
-            <TableRow key={lead.id} className={isReminderDue(lead) ? (() => {
-              const d = toValidDate(lead.nextReminderDate);
-              return d && isBefore(d, new Date()) ? 'bg-red-50/50 dark:bg-red-900/10' : 'bg-amber-50/50 dark:bg-amber-900/10';
-            })() : ''}>
+            <TableRow key={lead.id} className={
+              recentlyTransferred
+                ? 'bg-emerald-500/5 dark:bg-emerald-500/10 border-l-2 border-l-emerald-500'
+                : isReminderDue(lead)
+                ? (() => {
+                    const d = toValidDate(lead.nextReminderDate);
+                    return d && isBefore(d, new Date()) ? 'bg-red-50/50 dark:bg-red-900/10' : 'bg-amber-50/50 dark:bg-amber-900/10';
+                  })()
+                : ''
+            }>
               <TableCell className="pl-3 py-3 align-top">
                 <Checkbox
                   checked={selectedLeadIds.includes(lead.id)}
@@ -1246,15 +1318,36 @@ export default function Leads() {
                       {lead.name}
                     </button>
                     {getScoreBadge(calculateLeadScore(lead))}
+                    {recentlyTransferred && (
+                      <Badge
+                        className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[9px] px-1.5 py-0 h-4 font-extrabold uppercase tracking-wider"
+                        title={`Transferred ${safeFormatDate(transferIso, 'MMM d, yyyy HH:mm')}${lead.previousAssignedTo ? ` (from ${lead.previousAssignedTo})` : ''}`}
+                      >
+                        ⚡ New Transfer
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                     <button
                       type="button"
-                      onClick={() => openLeadAccount(lead)}
-                      className="inline-flex items-center hover:text-primary hover:underline cursor-pointer transition-colors"
-                      title="Click to open account details"
+                      onClick={() => {
+                        if (currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id) return;
+                        openClickToCallModal({
+                          clientId: lead.id,
+                          memberId: lead.memberId,
+                          name: lead.name,
+                          phone: lead.phone,
+                          backupPhone: lead.backupPhone,
+                          status: lead.status,
+                          branch: lead.branch,
+                          packageType: lead.packageType,
+                          source: lead.source,
+                        });
+                      }}
+                      className="inline-flex items-center text-blue-600 dark:text-blue-400 font-semibold hover:underline cursor-pointer transition-colors"
+                      title="Click to Call"
                     >
-                      <Phone className="h-3 w-3 mr-1 text-muted-foreground/80" />
+                      <Phone className="h-3 w-3 mr-1" />
                       {currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id ? '**********' : lead.phone}
                     </button>
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{lead.branch || 'Unassigned'}</Badge>
@@ -1267,6 +1360,11 @@ export default function Leads() {
                     {lead.createdAt && (
                       <span className="text-[10px] text-muted-foreground/80">
                         • {safeFormatDate(lead.createdAt, 'yyyy-MM-dd')}
+                      </span>
+                    )}
+                    {transferIso && (
+                      <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                        • Assigned {safeFormatDate(transferIso, 'MMM d, HH:mm')}
                       </span>
                     )}
                   </div>
@@ -1333,10 +1431,14 @@ export default function Leads() {
                         value={lead.assignedTo || (lead.salesName ? `name:${lead.salesName}` : 'unassigned')}
                         onValueChange={(v) => {
                           const resolved = resolveRepTarget(v || 'unassigned');
+                          const nowIso = new Date().toISOString();
                           updateClient(lead.id, {
                             assignedTo: resolved.assignedTo,
                             salesName: resolved.salesName || undefined,
                             salesRep: resolved.salesRep || undefined,
+                            assignedAt: resolved.assignedTo ? nowIso : undefined,
+                            transferredAt: resolved.assignedTo ? nowIso : undefined,
+                            assignedBy: currentUser?.name || currentUser?.id || 'System',
                           });
                         }}
                       >
@@ -1481,6 +1583,28 @@ export default function Leads() {
               {/* Column 7: Actions */}
               <TableCell className="text-right pr-4 pl-3 py-3 align-top whitespace-nowrap w-[1%]" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/30"
+                    onClick={() => {
+                      if (currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id) return;
+                      openClickToCallModal({
+                        clientId: lead.id,
+                        memberId: lead.memberId,
+                        name: lead.name,
+                        phone: lead.phone,
+                        backupPhone: lead.backupPhone,
+                        status: lead.status,
+                        branch: lead.branch,
+                        packageType: lead.packageType,
+                        source: lead.source,
+                      });
+                    }}
+                    title="Click to Call"
+                  >
+                    <Phone className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -2398,17 +2522,18 @@ export default function Leads() {
         </div>
       </div>
 
-      <Card className="p-4">
+      <Card className="p-4 space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
           <div className="space-y-2">
             <Label className="text-xs">{t('leads.sort_by')}</Label>
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'newest' | 'oldest' | 'score')}>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'transferred' | 'newest' | 'oldest' | 'score')}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="Sort" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="newest">Newest First</SelectItem>
-                <SelectItem value="oldest">Oldest First</SelectItem>
+                <SelectItem value="transferred">Recently Transferred / Assigned</SelectItem>
+                <SelectItem value="newest">Newest Created First</SelectItem>
+                <SelectItem value="oldest">Oldest Created First</SelectItem>
                 <SelectItem value="score">Score (High-Low)</SelectItem>
               </SelectContent>
             </Select>
@@ -2493,33 +2618,72 @@ export default function Leads() {
             </Select>
           </div>
         </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={onlyRecentTransfers ? 'default' : 'outline'}
+              className={`h-8 text-xs font-bold gap-1.5 ${
+                onlyRecentTransfers
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700 border-emerald-600'
+                  : 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10'
+              }`}
+              onClick={() => {
+                setOnlyRecentTransfers(prev => !prev);
+                setSortBy('transferred');
+                setCurrentPage(1);
+              }}
+            >
+              <span>⚡ Recently Assigned (&lt; 24h)</span>
+              <Badge
+                variant="secondary"
+                className={`text-[10px] px-1.5 py-0 h-4 ${
+                  onlyRecentTransfers
+                    ? 'bg-white/20 text-white'
+                    : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                }`}
+              >
+                {recentTransfersCount}
+              </Badge>
+            </Button>
+            {onlyRecentTransfers && (
+              <span className="text-xs text-muted-foreground">
+                Showing only leads assigned or transferred in the last 24 hours.
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            Sorted by: <strong className="text-foreground">{sortBy === 'transferred' ? 'Latest Transfer / Assignment Date' : sortBy === 'newest' ? 'Creation Date (Newest)' : sortBy === 'oldest' ? 'Creation Date (Oldest)' : 'Lead Score'}</strong>
+          </span>
+        </div>
       </Card>
 
       {selectedLeadIds.length > 0 && (
-        <div className="sticky top-0 z-10 bg-primary text-primary-foreground p-3 rounded-lg shadow-lg flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-300">
+        <div className="sticky top-0 z-10 bg-card text-card-foreground border border-primary/30 p-3 rounded-lg shadow-lg flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-300">
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="secondary" className="bg-primary-foreground text-primary">
+            <Badge variant="secondary" className="bg-primary text-primary-foreground font-semibold">
               {selectedLeadIds.length} selected
             </Badge>
             {selectedLeadIds.length < leads.length && (
               <Button
                 variant="secondary"
                 size="sm"
-                className="h-7 text-xs font-bold bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30 border border-primary-foreground/30"
+                className="h-7 text-xs font-bold bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border"
                 onClick={handleSelectAllFiltered}
               >
                 Select All {leads.length} Matching Leads
               </Button>
             )}
-            <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10" onClick={() => setSelectedLeadIds([])}>
+            <Button variant="ghost" size="sm" className="text-foreground hover:bg-muted font-medium" onClick={() => setSelectedLeadIds([])}>
               Cancel
             </Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2 bg-primary-foreground/10 p-1 rounded-md">
-              <ArrowRight className="h-4 w-4" />
+            <div className="flex items-center gap-2 bg-secondary/80 border border-border px-2 py-1 rounded-md text-foreground">
+              <ArrowRight className="h-4 w-4 text-foreground shrink-0" />
               <Select onValueChange={(v: string | null) => v && handleBulkStageUpdate(v as LeadStage)}>
-                <SelectTrigger className="h-8 w-[140px] bg-transparent border-none text-primary-foreground">
+                <SelectTrigger className="h-8 w-[140px] bg-transparent dark:bg-transparent border-none text-foreground font-medium shadow-none [&_span]:!text-foreground [&_svg]:!text-foreground">
                   <SelectValue placeholder="Update Stage" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2532,10 +2696,10 @@ export default function Leads() {
             </div>
 
             {canAssignLeads ? (
-              <div className="flex items-center gap-2 bg-primary-foreground/10 p-1 rounded-md">
-                <UserCheck className="h-4 w-4" />
+              <div className="flex items-center gap-2 bg-secondary/80 border border-border px-2 py-1 rounded-md text-foreground">
+                <UserCheck className="h-4 w-4 text-foreground shrink-0" />
                 <Select onValueChange={(v: string | null) => v && handleBulkAssign(v)}>
-                  <SelectTrigger className="h-8 w-[160px] bg-transparent border-none text-primary-foreground">
+                  <SelectTrigger className="h-8 w-[160px] bg-transparent dark:bg-transparent border-none text-foreground font-medium shadow-none [&_span]:!text-foreground [&_svg]:!text-foreground">
                     <SelectValue placeholder="Assign / Transfer To" />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
@@ -2604,6 +2768,9 @@ export default function Leads() {
           <TabsList className="flex w-max sm:w-full bg-muted/50 rounded-lg p-1 justify-start sm:justify-center mb-4">
             <TabsTrigger value="unassigned" className="px-4 text-xs sm:text-sm text-amber-600 font-bold dark:text-amber-500">{t('leads.tabs.unassigned')}</TabsTrigger>
             <TabsTrigger value="all" className="px-4 text-xs sm:text-sm">{t('leads.tabs.all')}</TabsTrigger>
+            <TabsTrigger value="recently_transferred" className="px-4 text-xs sm:text-sm text-emerald-600 font-bold dark:text-emerald-400">
+              ⚡ Recently Assigned ({recentTransfersCount})
+            </TabsTrigger>
             <TabsTrigger value="referrals" className="px-4 text-xs sm:text-sm text-purple-600 font-bold dark:text-purple-400">
               Referrals ({allLeads.filter(l => String(l.source || '') === 'Referral' || String(l.comeFromType || '') === 'Referral' || Boolean((l as any).referredByClientId) || Boolean((l as any).invitedByClientId) || Boolean(l.referredBy)).length})
             </TabsTrigger>

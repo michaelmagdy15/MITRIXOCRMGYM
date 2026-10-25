@@ -16,6 +16,7 @@ import { ApprovalRequest } from '../types/approval';
 import { approveRequest, rejectRequest } from '../services/approvalService';
 import { addAuditLog } from '../services/auditService';
 import { AuditDiff, Payment } from '../types';
+import { openWhatsAppChat } from '../utils/whatsappTemplates';
 
 export default function AdminRequests() {
   const { users } = useAppContext();
@@ -459,8 +460,11 @@ export default function AdminRequests() {
                           <span className="font-semibold text-muted-foreground">WhatsApp:</span>
                           <a
                             href={`https://wa.me/${cleanPhone}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            target="whatsapp_crm"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              openWhatsAppChat({ phone: cleanPhone });
+                            }}
                             className="font-medium text-emerald-600 hover:underline flex items-center gap-1"
                           >
                             {req.phone} <ExternalLink className="h-3 w-3" />

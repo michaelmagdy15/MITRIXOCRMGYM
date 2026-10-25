@@ -75,7 +75,7 @@ export const MemberAttendanceHistoryTab: React.FC<MemberAttendanceHistoryTabProp
             branchName: data.branch || client.branch || 'Maxim Compound',
             sessionDate: data.date ? String(data.date).substring(0, 10) : '',
             checkedInAt: data.date || new Date().toISOString(),
-            checkedInBy: data.recordedBy || 'Front Desk',
+            checkedInBy: data.recordedByName || data.recordedBy || 'Front Desk',
             status: (data.status || 'ATTENDED').toUpperCase(),
             remainingCreditsAfter: typeof data.remainingCreditsAfter === 'number' ? data.remainingCreditsAfter : (typeof client.sessionsRemaining === 'number' ? client.sessionsRemaining : 0)
           });
@@ -87,7 +87,14 @@ export const MemberAttendanceHistoryTab: React.FC<MemberAttendanceHistoryTabProp
     });
 
     const updateSortedList = () => {
-      const list = Array.from(recordMap.values()).sort((a, b) => {
+      const dedupedByTs = new Map<string, AttendanceRecord>();
+      for (const r of recordMap.values()) {
+        const tsKey = String(r.checkedInAt || r.sessionDate || r.id).slice(0, 19);
+        if (!dedupedByTs.has(tsKey)) {
+          dedupedByTs.set(tsKey, r);
+        }
+      }
+      const list = Array.from(dedupedByTs.values()).sort((a, b) => {
         const timeA = new Date(a.checkedInAt || a.sessionDate || 0).getTime();
         const timeB = new Date(b.checkedInAt || b.sessionDate || 0).getTime();
         return timeB - timeA;

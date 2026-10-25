@@ -76,6 +76,7 @@ import {
 } from './utils/universalQr';
 import { getCachedDeviceFingerprint } from './utils/deviceFingerprint';
 import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/phoneSimilarity';
+import { matchesFuzzyNameSearch } from './utils/fuzzyNameSearch';
 import {
   evaluateTurnstileGateAccess,
   triggerTurnstileRelay,
@@ -400,7 +401,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     if (rosterSearch.trim()) {
       const q = rosterSearch.toLowerCase().trim();
       result = result.filter(item => 
-        item.name.toLowerCase().includes(q) ||
+        matchesFuzzyNameSearch(item.name, q) ||
         String(item.memberId).toLowerCase().includes(q) ||
         item.phone.includes(q) ||
         item.slot.toLowerCase().includes(q) ||
@@ -1396,16 +1397,29 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     let scanner: Html5Qrcode | null = null;
 
     const config = {
-      fps: 10,
+      fps: 12,
+      aspectRatio: 1.0,
+      disableFlip: false,
       qrbox: (w: number, h: number) => {
-        const side = Math.min(Math.floor(Math.min(w, h) * 0.7), 280);
+        const safeW = w && w >= 80 ? w : 250;
+        const safeH = h && h >= 80 ? h : 250;
+        const side = Math.max(60, Math.min(Math.floor(Math.min(safeW, safeH) * 0.72), 260));
         return { width: side, height: side };
       },
     };
 
     const onScan = (decodedText: string) => {
-      if (isComponentMounted) handleScanSuccessRef.current(decodedText);
+      if (isComponentMounted && decodedText) {
+        handleScanSuccessRef.current(decodedText);
+      }
     };
+
+    const createScannerInstance = () =>
+      new Html5Qrcode('qr-reader', {
+        verbose: false,
+        // Disable WebKit's experimental BarcodeDetector on iOS 17/18 Safari which fails silently on canvas frames
+        experimentalFeatures: { useBarCodeDetectorIfSupported: false },
+      } as any);
 
     const safeDestroy = (s: Html5Qrcode | null) => {
       if (!s) return;
@@ -1413,52 +1427,88 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       try { s.clear(); } catch { /* ignore if already destroyed */ }
     };
 
-    // Delay 50 ms so React has committed #qr-reader to the DOM
     const timer = setTimeout(async () => {
+      if (!isComponentMounted) return;
       try {
-        scanner = new Html5Qrcode('qr-reader', { verbose: false });
+        if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          throw new Error('HTTPS_REQUIRED');
+        }
+
+        scanner = createScannerInstance();
         scannerRef.current = scanner;
 
         try {
-          // Prefer rear camera
+          // 1. Prefer rear camera via facingMode
           await scanner.start({ facingMode: 'environment' }, config, onScan, undefined);
         } catch (envErr: unknown) {
-          const errName = (envErr as { name?: string })?.name ?? '';
-          // Only retry on constraint errors (no rear cam). NotReadableError = hardware busy,
-          // retrying won't help and reusing the same instance breaks internal state.
-          if (errName === 'OverconstrainedError' || errName === 'NotFoundError') {
-            safeDestroy(scanner);
-            scanner = new Html5Qrcode('qr-reader', { verbose: false });
-            scannerRef.current = scanner;
-            await scanner.start({ facingMode: 'user' }, config, onScan, undefined);
-          } else {
+          const rawErrStr = typeof envErr === 'string' ? envErr : `${(envErr as any)?.name || ''} ${(envErr as any)?.message || ''}`;
+          if (/NotAllowedError|PermissionDeniedError|permission/i.test(rawErrStr)) {
             throw envErr;
           }
+
+          // 2. Fallback for iPhone / iOS Safari multi-lens cameras: enumerate devices and pick rear camera by ID
+          safeDestroy(scanner);
+          scanner = createScannerInstance();
+          scannerRef.current = scanner;
+
+          let startedWithDevice = false;
+          try {
+            const cameras = await Html5Qrcode.getCameras();
+            if (cameras && cameras.length > 0) {
+              const rearCam =
+                cameras.find((c) => /back|rear|environment|wide|خلف/i.test(c.label || '')) ||
+                cameras[cameras.length - 1] ||
+                cameras[0];
+              if (rearCam?.id) {
+                await scanner.start(rearCam.id, config, onScan, undefined);
+                startedWithDevice = true;
+              }
+            }
+          } catch {
+            // Fall through to facingMode: 'user'
+          }
+
+          if (!startedWithDevice) {
+            safeDestroy(scanner);
+            scanner = createScannerInstance();
+            scannerRef.current = scanner;
+            await scanner.start({ facingMode: 'user' }, config, onScan, undefined);
+          }
+        }
+
+        // Ensure iOS Safari inline video playback attributes are set on the injected <video> element
+        const videoEl = document.querySelector('#qr-reader video') as HTMLVideoElement | null;
+        if (videoEl) {
+          videoEl.setAttribute('playsinline', 'true');
+          videoEl.setAttribute('webkit-playsinline', 'true');
+          videoEl.setAttribute('muted', 'true');
+          videoEl.muted = true;
         }
 
         scannerStarted = true;
       } catch (err: unknown) {
-        console.error(err);
+        console.error('[LiveScanner] Failed to start camera:', err);
         // Always destroy to stop internal polling timers
         safeDestroy(scanner);
         scannerRef.current = null;
         scanner = null;
 
         if (!isComponentMounted) return;
-        const name = (err as { name?: string })?.name ?? '';
-        const msg  = (err as { message?: string })?.message ?? '';
-        if (name === 'NotReadableError' || msg.includes('Could not start')) {
+        const raw = typeof err === 'string' ? err : `${(err as { name?: string })?.name ?? ''} ${(err as { message?: string })?.message ?? ''}`;
+        if (raw.includes('HTTPS_REQUIRED') || raw.includes('secure context')) {
+          setError('Camera access on iPhone requires a secure HTTPS connection.');
+        } else if (/NotReadableError|Could not start|hardware|in use/i.test(raw)) {
           setError(t('attendance.camera_in_use'));
-        } else if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        } else if (/NotAllowedError|PermissionDeniedError|not allowed/i.test(raw)) {
           setError(t('attendance.camera_permission_denied'));
-        } else if (name === 'NotFoundError') {
+        } else if (/NotFoundError|Requested device not found/i.test(raw)) {
           setError(t('attendance.no_camera_found'));
         } else {
           setError(t('attendance.could_not_start_camera'));
         }
         setIsScanning(false);
       }
-    }, 50);
+    }, 30);
 
     return () => {
       isComponentMounted = false;
@@ -1472,7 +1522,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       }
       scannerRef.current = null;
     };
-  }, [isScanning, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isScanning]);
 
   const handleRecordAttendance = async () => {
     if (!lastScannedMember || isRecording) return;
@@ -1718,14 +1769,12 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             </Button>
           </div>
 
-          {isScanning && (
-            <div className="relative w-full bg-black border-b">
-              <div
-                id="qr-reader"
-                className="w-full max-h-[210px] min-h-[180px]"
-              />
-            </div>
-          )}
+          <div className={isScanning ? 'relative w-full bg-black border-b overflow-hidden' : 'hidden'}>
+            <div
+              id="qr-reader"
+              className="w-full min-h-[260px] overflow-hidden [&_video]:w-full [&_video]:h-auto [&_video]:object-cover"
+            />
+          </div>
 
           <div className="bg-muted/20 p-3.5 space-y-3">
             {/* 4-Mode Lookup Selector (Member ID, Universal QR, Invitation ID, Service Member ID) */}

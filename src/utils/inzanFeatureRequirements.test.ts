@@ -145,6 +145,8 @@ import {
   buildWhatsAppPaymentReceiptUrl,
   buildWhatsAppRenewalReminderUrl,
   buildWhatsAppWaitlistPromotionUrl,
+  buildWhatsAppTargets,
+  parseWhatsAppUrl,
 } from './whatsappTemplates';
 
 describe('Core UX Improvements — Benefits Wallet, Waitlist Auto-Promote & WhatsApp Templates', () => {
@@ -260,6 +262,16 @@ describe('Core UX Improvements — Benefits Wallet, Waitlist Auto-Promote & What
       clubName: 'Inzan Athletics',
     });
     assert.ok(renewUrl?.startsWith('https://wa.me/201012345678?text='));
+
+    const targets = buildWhatsAppTargets('01012345678', 'Hello Karim!');
+    assert.ok(targets);
+    assert.strictEqual(targets?.phone, '201012345678');
+    assert.strictEqual(targets?.nativeUri, 'whatsapp://send?phone=201012345678&text=Hello+Karim%21');
+    assert.strictEqual(targets?.webDirectUrl, 'https://web.whatsapp.com/send?phone=201012345678&text=Hello+Karim%21');
+
+    const parsedFromWaMe = parseWhatsAppUrl(renewUrl!);
+    assert.strictEqual(parsedFromWaMe?.phone, '201012345678');
+    assert.ok(parsedFromWaMe?.text?.includes('Karim'));
   });
 });
 

@@ -16,6 +16,7 @@ import { useAppContext } from '../context';
 import { MessageSquare, Calendar, Send } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useLanguage } from '../contexts/LanguageContext';
+import { openWhatsAppChat } from '../utils/whatsappTemplates';
 
 interface WhatsAppDialogProps {
   isOpen: boolean;
@@ -83,23 +84,11 @@ export const WhatsAppDialog: React.FC<WhatsAppDialogProps> = ({
   }, [selectedTemplate, client]);
 
   const handleSendAndLog = async () => {
-    // 1. Format the phone number correctly for Egyptian numbers
-    // Remove all non-digit characters
-    let cleanedPhone = client.phone.replace(/[^0-9]/g, '');
-    
-    // Normalize Egyptian number: e.g. "01012345678" -> "201012345678"
-    if (cleanedPhone.startsWith('0') && cleanedPhone.length === 11) {
-      cleanedPhone = '20' + cleanedPhone.substring(1);
-    } else if (!cleanedPhone.startsWith('20') && cleanedPhone.length === 10 && cleanedPhone.startsWith('1')) {
-      cleanedPhone = '20' + cleanedPhone;
-    }
-
-    // Generate WhatsApp wa.me link
-    const waText = encodeURIComponent(messageText);
-    const waUrl = `https://wa.me/${cleanedPhone}${waText ? `?text=${waText}` : ''}`;
-    
-    // Open in a new tab/window
-    window.open(waUrl, '_blank');
+    // 1. Route via Smart WhatsApp Router (native app handoff with single-tab web reuse fallback)
+    openWhatsAppChat({
+      phone: client.phone,
+      text: messageText,
+    });
 
     // 2. Log Interaction in CRM
     const newIA = {

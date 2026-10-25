@@ -14,6 +14,7 @@ import { format, parseISO, isBefore, addDays, differenceInDays, startOfDay } fro
 import { Client, Payment } from '../types';
 import { resolveUserDisplay } from '../utils/resolveUserDisplay';
 import { AlertTriangle, Clock, Phone, DollarSign, User, Calendar } from 'lucide-react';
+import { computeMemberGlobalStatus } from '../utils/memberLifecycle';
 
 export default function RenewalPipeline() {
   const {
@@ -61,13 +62,13 @@ export default function RenewalPipeline() {
     const upcArr: Client[] = [];
 
     for (const c of clients) {
-      if (c.status !== 'Nearly Expired' && c.status !== 'Expired') continue;
-      const expiry = safeParseISO(c.membershipExpiry);
+      const lifecycle = computeMemberGlobalStatus(c); if (lifecycle.globalStatus === 'GUEST' || lifecycle.globalStatus === 'HOLD') continue;
+      const expiry = safeParseISO(lifecycle.latestPackageEndDate || c.membershipExpiry);
       if (!expiry) {
         if (c.status === 'Expired') expArr.push(c);
         continue;
       }
-      if (isBefore(expiry, today)) {
+      if (isBefore(expiry, today) && !lifecycle.hasActiveOrUpcomingPackage) {
         expArr.push(c);
       } else {
         const diff = differenceInDays(expiry, today);

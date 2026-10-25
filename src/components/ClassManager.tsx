@@ -56,7 +56,7 @@ import { safeFormatDate, safeFormatTime, safeFormatDistanceToNow, toValidDate } 
 import { getSessionAllowedTiers, toCanonicalTier, CanonicalTier } from '../utils/memberCategories';
 import { resolveAttendee } from '../utils/attendeeUtils';
 import { promoteNextWaitlistedMember } from '../utils/memberBenefitsWallet';
-import { buildWhatsAppWaitlistPromotionUrl } from '../utils/whatsappTemplates';
+import { buildWhatsAppWaitlistPromotionUrl, openWhatsAppUrl } from '../utils/whatsappTemplates';
 import { toast } from 'sonner';
 
 export const TIER_OPTIONS: { id: CanonicalTier; label: string }[] = [
@@ -722,7 +722,7 @@ export const ClassManager: React.FC = () => {
         description: 'Click to notify them on WhatsApp immediately.',
         action: {
           label: 'WhatsApp Alert',
-          onClick: () => window.open(waUrl, '_blank', 'noopener,noreferrer'),
+          onClick: () => openWhatsAppUrl(waUrl),
         },
         duration: 10000,
       });
@@ -1623,9 +1623,12 @@ export const ClassManager: React.FC = () => {
                   <div className="flex items-center gap-1.5">
                     <a
                       href={lastPromotedWhatsApp.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => setLastPromotedWhatsApp(null)}
+                      target="whatsapp_crm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        openWhatsAppUrl(lastPromotedWhatsApp.url);
+                        setLastPromotedWhatsApp(null);
+                      }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-xs font-bold transition-colors"
                     >
                       <MessageCircle className="h-3.5 w-3.5" />

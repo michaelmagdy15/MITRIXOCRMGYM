@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import enTranslations from '../locales/en.json';
 import arTranslations from '../locales/ar.json';
 import { useSettings } from './SettingsContext';
@@ -39,18 +39,18 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
   }, [language, isRtl]);
 
-  const setLanguage = (lang: Language) => {
+  const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
-  };
+  }, []);
 
-  const toggleLanguage = () => {
+  const toggleLanguage = useCallback(() => {
     setLanguageState((prev) => (prev === 'en' ? 'ar' : 'en'));
-  };
+  }, []);
 
   // Nested key translation helper (e.g. t('nav.dashboard'))
-  const t = (keyPath: string): string => {
+  const t = useCallback((keyPath: string): string => {
     if (keyPath === 'payments.currency_le') {
-      return branding.currencySymbol || (language === 'ar' ? 'ج.م' : 'LE');
+      return branding?.currencySymbol || (language === 'ar' ? 'ج.م' : 'LE');
     }
     const dictionary = language === 'ar' ? arTranslations : enTranslations;
     const value = keyPath.split('.').reduce((acc: any, key) => {
@@ -58,10 +58,15 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }, dictionary);
 
     return typeof value === 'string' ? value : keyPath;
-  };
+  }, [language, branding?.currencySymbol]);
+
+  const contextValue = useMemo(
+    () => ({ language, isRtl, setLanguage, toggleLanguage, t }),
+    [language, isRtl, setLanguage, toggleLanguage, t]
+  );
 
   return (
-    <LanguageContext.Provider value={{ language, isRtl, setLanguage, toggleLanguage, t }}>
+    <LanguageContext.Provider value={contextValue}>
       {children}
     </LanguageContext.Provider>
   );
