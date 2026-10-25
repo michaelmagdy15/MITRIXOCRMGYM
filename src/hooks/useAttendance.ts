@@ -24,7 +24,13 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
     }
     
     const unsub = onSnapshot(collection(db, 'attendance'), (snapshot) => {
-      setAttendances(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Attendance)));
+      const list = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Attendance));
+      list.sort((a, b) => {
+        const tsB = new Date((b as any).date || (b as any).checkedInAt || 0).getTime() || 0;
+        const tsA = new Date((a as any).date || (a as any).checkedInAt || 0).getTime() || 0;
+        return tsB - tsA;
+      });
+      setAttendances(list);
       setLoading(false);
     }, (error) => {
       console.error('[Attendance] Failed to fetch attendances:', error);

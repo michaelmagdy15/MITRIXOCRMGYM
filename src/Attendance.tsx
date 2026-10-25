@@ -310,23 +310,24 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                                 ptAttendees.some(x => x.clientId === checkin.clientId && (!isGlobal || x.sessionDate === checkin.date));
         if (!alreadyIncluded) {
           const client = clients.find(c => c.id === checkin.clientId || c.memberId === checkin.clientId);
-          if (client) {
+          const fallbackName = client?.name || (checkin as any).memberName;
+          if (client || fallbackName) {
             const checkinDateOnly = checkin.date ? checkin.date.substring(0, 10) : rosterDate;
-            const sessionsRemaining = client.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft;
-            const packageType = client.packageType || client.memberCategory || 'Walk-in Member';
+            const sessionsRemaining = client ? (client.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft) : undefined;
+            const packageType = checkin.packageName || client?.packageType || client?.memberCategory || 'Walk-in Member';
 
             walkins.push({
               clientId: checkin.clientId,
               client,
-              memberId: client.memberId || '—',
-              name: client.name,
-              phone: client.phone || '',
+              memberId: client?.memberId || (checkin as any).memberId || (checkin as any).cardId || '—',
+              name: fallbackName || 'Member',
+              phone: client?.phone || '',
               sessionsRemaining,
               packageType,
               slot: `Walk-in (${safeFormatTime(checkin.date, 'h:mm a', 'Walk-in')})`,
               sessionId: '',
-              sessionTitle: 'Walk-in',
-              sessionTime: '',
+              sessionTitle: checkin.packageName || 'Walk-in',
+              sessionTime: (checkin as any).checkInTime || safeFormatTime(checkin.date, 'HH:mm:ss', ''),
               sessionDate: checkinDateOnly,
               branch: checkin.branch,
               checkedIn: true,
@@ -343,7 +344,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     const combined = [...classAttendees, ...ptAttendees, ...walkins];
     const uniqueMap = new Map<string, any>();
     combined.forEach(item => {
-      const key = `${item.sessionId || 'none'}_${item.sessionDate || 'nodate'}_${item.clientId}`;
+      const key = `${item.sessionId || 'none'}_${item.sessionDate || 'nodate'}_${item.clientId}_${item.checkinTime || ''}`;
       const existing = uniqueMap.get(key);
       if (!existing) {
         uniqueMap.set(key, item);
@@ -375,16 +376,19 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       result = result.filter(item => item.sessionsRemaining !== undefined && item.sessionsRemaining !== null && item.sessionsRemaining !== '—' && Number(item.sessionsRemaining) <= 2);
     }
 
-    // Sort order
-    if (isGlobal) {
-      result.sort((a, b) => {
-        const timeB = toValidDate(b.sessionDate)?.getTime() || 0;
-        const timeA = toValidDate(a.sessionDate)?.getTime() || 0;
-        return timeB - timeA;
-      });
-    } else {
-      result.sort((a, b) => (a.sessionTime || '').localeCompare(b.sessionTime || ''));
-    }
+    // Sort order: latest check-in time first (most recent on top)
+    result.sort((a, b) => {
+      const timeB =
+        toValidDate(b.checkinTime)?.getTime() ||
+        toValidDate(b.sessionDate && b.sessionTime ? `${b.sessionDate}T${b.sessionTime}` : b.sessionDate)?.getTime() ||
+        0;
+      const timeA =
+        toValidDate(a.checkinTime)?.getTime() ||
+        toValidDate(a.sessionDate && a.sessionTime ? `${a.sessionDate}T${a.sessionTime}` : a.sessionDate)?.getTime() ||
+        0;
+      if (timeB !== timeA) return timeB - timeA;
+      return String(b.sessionTime || '').localeCompare(String(a.sessionTime || ''));
+    });
 
     return result;
   }, [attendances, classes, ptPackageRecords, clients, rosterDate, selectedSessionFilter, rosterSearch, searchScope, showLowCreditsOnly]);
@@ -1656,69 +1660,34 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start no-print">
-        {/* Scanner Section (Compact — No Excessive Negative Space) */}
-        <Card className="lg:col-span-5 overflow-hidden border-2 border-primary/10 shadow-lg">
-          <CardHeader className="bg-primary/5 border-b py-3 px-4">
-            <CardTitle className="flex items-center justify-between text-primary text-base">
-              <span className="flex items-center">
-                <Scan className="me-2 h-4 w-4" />
-                {t('attendance.live_scanner')}
-              </span>
-              {!isScanning && (
-                <Button
-                  size="sm"
-                  className="h-7 px-3 text-xs font-bold"
-                  onClick={() => setIsScanning(true)}
-                >
-                  <Camera className="h-3.5 w-3.5 me-1.5" />
-                  {t('attendance.start_camera')}
-                </Button>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0 relative bg-black flex items-center justify-center overflow-hidden">
-            {isScanning ? (
-              <div className="relative w-full">
-                <div
-                  id="qr-reader"
-                  className="w-full max-h-[220px] min-h-[190px]"
-                />
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="absolute bottom-3 right-3 z-10 h-7 text-xs shadow-lg"
-                  onClick={() => setIsScanning(false)}
-                >
-                  {t('common.cancel')}
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between gap-3 text-white px-4 py-3.5 w-full bg-zinc-950/90">
-                <div className="flex items-center gap-3 text-left">
-                  <div className="bg-white/10 p-2.5 rounded-full shrink-0">
-                    <Camera className="h-5 w-5 text-emerald-400" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold leading-tight">{t('attendance.ready_to_scan')}</h3>
-                    <p className="text-white/60 text-[11px] mt-0.5 leading-snug">
-                      {(window as any).ReactNativeWebView
-                        ? 'Uses native device camera for faster scanning.'
-                        : t('attendance.point_camera')}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  className="bg-white text-black hover:bg-white/90 font-bold h-8 px-4 text-xs shrink-0"
-                  onClick={() => setIsScanning(true)}
-                >
-                  {t('attendance.start_camera')}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-          
-          <div className="bg-muted/30 p-4 border-t space-y-3">
+        {/* Scanner & Lookup Section (Ultra-Compact, Zero Empty Camera Box) */}
+        <Card className="lg:col-span-5 overflow-hidden border border-primary/15 shadow-md py-0 gap-0">
+          <div className="bg-primary/5 border-b py-2.5 px-4 flex items-center justify-between gap-2">
+            <span className="flex items-center text-primary text-sm font-bold">
+              <Scan className="me-2 h-4 w-4 shrink-0" />
+              {t('attendance.live_scanner')}
+            </span>
+            <Button
+              size="sm"
+              variant={isScanning ? 'destructive' : 'default'}
+              className="h-7 px-3 text-xs font-bold shrink-0"
+              onClick={() => setIsScanning((prev) => !prev)}
+            >
+              <Camera className="h-3.5 w-3.5 me-1.5" />
+              {isScanning ? t('common.cancel') : t('attendance.start_camera')}
+            </Button>
+          </div>
+
+          {isScanning && (
+            <div className="relative w-full bg-black border-b">
+              <div
+                id="qr-reader"
+                className="w-full max-h-[210px] min-h-[180px]"
+              />
+            </div>
+          )}
+
+          <div className="bg-muted/20 p-3.5 space-y-3">
             {/* 4-Mode Lookup Selector (Member ID, Universal QR, Invitation ID, Service Member ID) */}
             {isInzan && !isKiosk && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
@@ -1779,7 +1748,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                 />
                 <Button 
                   variant="secondary" 
-                  className="h-10 px-5 font-bold"
+                  className="h-10 px-4 font-bold shrink-0"
                   onClick={(e) => {
                     const input = e.currentTarget.previousElementSibling as HTMLInputElement;
                     handleScanSuccess(input.value);
@@ -2259,14 +2228,14 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       {/* Primary & Secondary Package + Interactive PT Deduction & Freeze/Unfreeze Tiles */}
                       <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2.5">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                          <div className="p-2.5 rounded-lg bg-background border border-emerald-500/25 space-y-1">
-                            <div className="flex items-center justify-between gap-1">
+                          <div className="p-2.5 rounded-lg bg-background border border-emerald-500/25 space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center justify-between gap-1">
                               <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
                                 Primary Package
                               </span>
                               <Badge
                                 variant="outline"
-                                className={`text-[9px] h-4 px-1.5 font-bold ${
+                                className={`text-[9px] h-4 px-1.5 font-bold shrink-0 ${
                                   daysLeft <= 0
                                     ? 'border-destructive/40 text-destructive'
                                     : daysLeft <= 7
@@ -2277,29 +2246,29 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                                 {daysLeft}d to renew
                               </Badge>
                             </div>
-                            <span className="font-bold text-foreground truncate block">
+                            <span className="font-bold text-foreground truncate block" title={resolvedPkgName}>
                               {resolvedPkgName}
                             </span>
-                            <span className="text-[10px] font-mono text-muted-foreground block">
+                            <span className="text-[10px] font-mono text-muted-foreground block leading-relaxed">
                               Start: <strong className="text-foreground">{pkgStartDateStr}</strong> • End:{' '}
                               <strong className="text-foreground">{pkgEndDateStr}</strong>
                             </span>
                           </div>
-                          <div className="p-2.5 rounded-lg bg-background border border-blue-500/25 space-y-1">
-                            <div className="flex items-center justify-between gap-1">
+                          <div className="p-2.5 rounded-lg bg-background border border-blue-500/25 space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center justify-between gap-1">
                               <span className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400">
                                 Secondary Package
                               </span>
                               {secondaryPkg?.endDate && (
-                                <span className="text-[9px] font-mono text-muted-foreground">
+                                <span className="text-[9px] font-mono text-muted-foreground shrink-0">
                                   End: {String(secondaryPkg.endDate).slice(0, 10)}
                                 </span>
                               )}
                             </div>
-                            <span className="font-bold text-foreground truncate block">
+                            <span className="font-bold text-foreground truncate block" title={secondaryName || 'No Secondary Package'}>
                               {secondaryName || 'No Secondary Package'}
                             </span>
-                            <span className="text-[10px] text-muted-foreground block">
+                            <span className="text-[10px] text-muted-foreground block leading-relaxed">
                               {paidPtTot > 0
                                 ? `Paid PT: ${paidPtRem} / ${paidPtTot} sessions left`
                                 : secondaryPkg?.startDate
@@ -2312,12 +2281,12 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                         {/* 4 Interactive Entitlement & Action Tiles (Paid PT, Free PT, Invites, Freeze Days) */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                           {/* Tile 1: Paid PT + Direct -1 Deduct Button */}
-                          <div className="p-2 rounded-lg bg-background border border-blue-500/25 flex flex-col justify-between gap-1.5">
-                            <div>
-                              <span className="text-[9px] uppercase text-muted-foreground font-bold block">
+                          <div className="p-2.5 rounded-lg bg-background border border-blue-500/25 flex flex-col justify-between gap-2 min-w-0">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] uppercase text-muted-foreground font-bold block tracking-tight">
                                 Paid PT
                               </span>
-                              <span className="font-black text-sm text-blue-500">
+                              <span className="font-black text-sm text-blue-500 block leading-tight">
                                 {paidPtRem} / {paidPtTot}
                               </span>
                             </div>
@@ -2328,21 +2297,21 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                                 variant="outline"
                                 disabled={isCheckinActionBusy || paidPtRem <= 0}
                                 onClick={() => handleDeductCheckinPtSession('paid', paidPtRem, paidPtTot)}
-                                className="h-6 px-1.5 text-[10px] font-bold border-blue-500/40 text-blue-600 dark:text-blue-400 hover:bg-blue-500/15 w-full gap-1"
+                                className="h-7 px-2 text-[10px] font-bold border-blue-500/40 text-blue-600 dark:text-blue-400 hover:bg-blue-500/15 w-full gap-1 whitespace-nowrap"
                               >
-                                <Minus className="h-2.5 w-2.5" />
-                                Deduct PT
+                                <Minus className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">Deduct PT</span>
                               </Button>
                             )}
                           </div>
 
                           {/* Tile 2: Free PT + Direct -1 Deduct Button */}
-                          <div className="p-2 rounded-lg bg-background border border-purple-500/25 flex flex-col justify-between gap-1.5">
-                            <div>
-                              <span className="text-[9px] uppercase text-muted-foreground font-bold block">
+                          <div className="p-2.5 rounded-lg bg-background border border-purple-500/25 flex flex-col justify-between gap-2 min-w-0">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] uppercase text-muted-foreground font-bold block tracking-tight">
                                 Free PT
                               </span>
-                              <span className="font-black text-sm text-purple-500">
+                              <span className="font-black text-sm text-purple-500 block leading-tight">
                                 {freePtRem} / {freePtTot}
                               </span>
                             </div>
@@ -2353,21 +2322,21 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                                 variant="outline"
                                 disabled={isCheckinActionBusy || freePtRem <= 0}
                                 onClick={() => handleDeductCheckinPtSession('free', freePtRem, freePtTot)}
-                                className="h-6 px-1.5 text-[10px] font-bold border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/15 w-full gap-1"
+                                className="h-7 px-2 text-[10px] font-bold border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/15 w-full gap-1 whitespace-nowrap"
                               >
-                                <Minus className="h-2.5 w-2.5" />
-                                Deduct PT
+                                <Minus className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">Deduct PT</span>
                               </Button>
                             )}
                           </div>
 
                           {/* Tile 3: Guest Invites + Quick Open */}
-                          <div className="p-2 rounded-lg bg-background border border-primary/25 flex flex-col justify-between gap-1.5">
-                            <div>
-                              <span className="text-[9px] uppercase text-muted-foreground font-bold block">
+                          <div className="p-2.5 rounded-lg bg-background border border-primary/25 flex flex-col justify-between gap-2 min-w-0">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] uppercase text-muted-foreground font-bold block tracking-tight">
                                 Invites
                               </span>
-                              <span className="font-black text-sm text-primary">
+                              <span className="font-black text-sm text-primary block leading-tight">
                                 {invRem} / {invTot}
                               </span>
                             </div>
@@ -2377,21 +2346,21 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setIsGuestInviteOpen((prev) => !prev)}
-                                className="h-6 px-1.5 text-[10px] font-bold border-primary/40 text-primary hover:bg-primary/15 w-full gap-1"
+                                className="h-7 px-2 text-[10px] font-bold border-primary/40 text-primary hover:bg-primary/15 w-full gap-1 whitespace-nowrap"
                               >
-                                <Ticket className="h-2.5 w-2.5" />
-                                {isGuestInviteOpen ? 'Close' : 'Use Invite'}
+                                <Ticket className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">{isGuestInviteOpen ? 'Close' : 'Use Invite'}</span>
                               </Button>
                             )}
                           </div>
 
                           {/* Tile 4: Freeze Days + Direct Freeze / Unfreeze Button */}
-                          <div className="p-2 rounded-lg bg-background border border-cyan-500/30 flex flex-col justify-between gap-1.5">
-                            <div>
-                              <span className="text-[9px] uppercase text-muted-foreground font-bold block">
+                          <div className="p-2.5 rounded-lg bg-background border border-cyan-500/30 flex flex-col justify-between gap-2 min-w-0">
+                            <div className="space-y-0.5">
+                              <span className="text-[9px] uppercase text-muted-foreground font-bold block tracking-tight">
                                 Freeze Days
                               </span>
-                              <span className="font-black text-sm text-cyan-500">
+                              <span className="font-black text-sm text-cyan-500 block leading-tight">
                                 {freezeRem} / {freezeTot}d
                               </span>
                             </div>
@@ -2402,10 +2371,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                                   size="sm"
                                   disabled={isCheckinActionBusy}
                                   onClick={() => handleDirectFreezeOrUnfreeze('unfreeze', freezeRem, freezeTot)}
-                                  className="h-6 px-1.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white w-full gap-1"
+                                  className="h-7 px-2 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white w-full gap-1 whitespace-nowrap"
                                 >
-                                  <Unlock className="h-2.5 w-2.5" />
-                                  Unfreeze
+                                  <Unlock className="h-2.5 w-2.5 shrink-0" />
+                                  <span className="truncate">Unfreeze</span>
                                 </Button>
                               ) : (
                                 <Button
@@ -2417,10 +2386,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                                     setQuickFreezeDays(Math.min(7, Math.max(1, freezeRem || 7)));
                                     setIsQuickFreezeOpen((prev) => !prev);
                                   }}
-                                  className="h-6 px-1.5 text-[10px] font-bold border-cyan-500/40 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/15 w-full gap-1"
+                                  className="h-7 px-2 text-[10px] font-bold border-cyan-500/40 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/15 w-full gap-1 whitespace-nowrap"
                                 >
-                                  <Snowflake className="h-2.5 w-2.5" />
-                                  {isQuickFreezeOpen ? 'Cancel' : 'Freeze'}
+                                  <Snowflake className="h-2.5 w-2.5 shrink-0" />
+                                  <span className="truncate">{isQuickFreezeOpen ? 'Cancel' : 'Freeze'}</span>
                                 </Button>
                               )
                             )}
@@ -2666,10 +2635,33 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               <CardContent className="p-0">
                 <div className="max-h-[250px] overflow-y-auto">
                   {attendances
-                    .filter(a => toValidDate(a.date)?.toDateString() === new Date().toDateString())
+                    .filter((a) => {
+                      const aAny = a as any;
+                      if (aAny.sessionDate === cairoTodayStr) return true;
+                      const d = toValidDate(a.date);
+                      if (!d) return false;
+                      try {
+                        return d.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }) === cairoTodayStr;
+                      } catch {
+                        return d.toDateString() === new Date().toDateString();
+                      }
+                    })
+                    .sort((a, b) => {
+                      const timeB = toValidDate(b.date)?.getTime() || 0;
+                      const timeA = toValidDate(a.date)?.getTime() || 0;
+                      if (timeB !== timeA) return timeB - timeA;
+                      return String((b as any).checkInTime || '').localeCompare(String((a as any).checkInTime || ''));
+                    })
                     .map(a => {
                       const client = clients.find(c => c.id === a.clientId);
                       const recorder = users.find(u => u.id === a.recordedBy);
+                      const aAny = a as any;
+                      const displayMemberName = client?.name || aAny.memberName || aAny.clientName;
+                      const displayRecorderName =
+                        recorder?.name?.split(' ')[0] ||
+                        aAny.recordedByName?.split(' ')[0] ||
+                        (a.recordedBy && !a.recordedBy.startsWith('redgits-') ? a.recordedBy.split(' ')[0] : '') ||
+                        'Admin';
                       return (
                         <div key={a.id} className="p-3 border-b last:border-0 flex items-center justify-between hover:bg-muted/30 transition-colors">
                           <div className="space-y-0.5">
@@ -2684,15 +2676,29 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                               >
                                 {client.name}
                               </button>
+                            ) : displayMemberName ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (a.clientId) {
+                                    setActiveTab('clients');
+                                    setActiveClientId(a.clientId);
+                                  }
+                                }}
+                                className="text-primary hover:underline font-bold text-sm text-left block"
+                              >
+                                {displayMemberName}
+                              </button>
                             ) : (
                               <p className="text-sm font-bold">{t('attendance.unknown')}</p>
                             )}
                             <p className="text-[10px] text-muted-foreground flex items-center">
                               <MapPin className="h-3 w-3 me-1" /> {a.branch} · {safeFormatDate(a.date, 'h:mm a')}
+                              {a.packageName ? ` · ${a.packageName}` : ''}
                             </p>
                           </div>
                           <Badge variant="outline" className="text-[10px] h-5 px-1.5 opacity-70">
-                            {t('attendance.by')} {recorder?.name?.split(' ')[0] || 'Admin'}
+                            {t('attendance.by')} {displayRecorderName}
                           </Badge>
                         </div>
                       );
@@ -3041,7 +3047,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   {dailyRoster.map((item) => {
                     const isBusy = actionLoadingAttendeeId === item.clientId;
                     return (
-                      <tr key={`${item.sessionId || 'nosess'}_${item.sessionDate || 'nodate'}_${item.clientId}`} className="hover:bg-muted/30 transition-colors">
+                      <tr key={`${item.sessionId || 'nosess'}_${item.sessionDate || 'nodate'}_${item.clientId}_${item.checkinTime || ''}`} className="hover:bg-muted/30 transition-colors">
                         <td className="p-3 font-mono font-bold text-muted-foreground">#{item.memberId}</td>
                         <td className="p-3">
                           <div className="flex items-center gap-1.5 flex-wrap">
