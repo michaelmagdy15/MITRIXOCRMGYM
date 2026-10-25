@@ -162,6 +162,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [currentAnnouncementIndex, setCurrentAnnouncementIndex] = useState(0);
   const [upcomingSessions, setUpcomingSessions] = useState<any[]>([]);
+  const [assignedWorkouts, setAssignedWorkouts] = useState<any[]>([]);
   const [activeAnnouncementModal, setActiveAnnouncementModal] = useState<Announcement | null>(null);
   const [isPushPromptDismissed, setIsPushPromptDismissed] = useState(() => {
     try {
@@ -201,10 +202,11 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
       });
   }, [client?.id]);
 
-  // ─── Fetch performance logs ───
+  // ─── Fetch performance logs & assigned workouts ───
   useEffect(() => {
     if (!client?.id) {
       setLoadingPerformance(false);
+      setAssignedWorkouts([]);
       return;
     }
     const q = query(collection(db, 'clientPerformance'), where('clientId', '==', client.id));
@@ -219,6 +221,20 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
         setPerformanceLogs([]);
       })
       .finally(() => setLoadingPerformance(false));
+
+    const assignedQ = query(collection(db, 'assignedWorkouts'), where('clientId', '==', client.id));
+    const unsubAssigned = onSnapshot(
+      assignedQ,
+      (snap) => {
+        const list = snap.docs
+          .map(d => ({ id: d.id, ...d.data() } as any))
+          .filter(w => w.status !== 'Completed')
+          .sort((a, b) => String(b.scheduledDate || b.createdAt || '').localeCompare(String(a.scheduledDate || a.createdAt || '')));
+        setAssignedWorkouts(list);
+      },
+      () => {}
+    );
+    return () => unsubAssigned();
   }, [client?.id]);
 
   // ─── Fetch gym traffic data ───
@@ -798,6 +814,55 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
 
       {/* ─── Member Entitlements & Benefits Wallet ─── */}
       <MemberBenefitsWallet client={client} clubName={branding?.companyName} />
+
+      {/* ─── Coach Assigned Workout Quick Card ─── */}
+      {assignedWorkouts.length > 0 && (
+        <Card className="border border-primary/40 bg-gradient-to-br from-primary/10 via-card to-background rounded-2xl shadow-xs overflow-hidden">
+          <CardHeader className="pb-2">
+            <SectionHeader
+              title="Your Assigned Workout"
+              subtitle={`From Coach ${assignedWorkouts[0].coachName || 'Trainer'} • ${safeFormatDate(assignedWorkouts[0].scheduledDate || assignedWorkouts[0].createdAt, 'dd MMM yyyy')}`}
+              action={<Dumbbell className="h-4 w-4 text-primary" />}
+            />
+          </CardHeader>
+          <CardContent className="space-y-2.5 pt-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-black text-foreground">{assignedWorkouts[0].title}</p>
+              <Badge variant="outline" className="text-[9px] font-bold border-primary/30 text-primary">
+                {(assignedWorkouts[0].exercises || []).length} Exercises
+              </Badge>
+            </div>
+            {assignedWorkouts[0].coachNotes && (
+              <p className="text-[11px] text-muted-foreground italic line-clamp-2">
+                &ldquo;{assignedWorkouts[0].coachNotes}&rdquo;
+              </p>
+            )}
+            <div className="space-y-1">
+              {(assignedWorkouts[0].exercises || []).slice(0, 4).map((ex: any, i: number) => (
+                <div key={i} className="flex items-center justify-between text-xs bg-background/80 border rounded-lg px-2.5 py-1.5">
+                  <span className="font-semibold truncate pr-2">{i + 1}. {ex.name}</span>
+                  <span className="font-mono text-[10px] font-bold text-primary shrink-0">
+                    {ex.targetSets || 3} × {ex.targetReps || 10}
+                    {Number(ex.targetWeightKg) > 0 ? ` @ ${ex.targetWeightKg}kg` : ''}
+                  </span>
+                </div>
+              ))}
+              {(assignedWorkouts[0].exercises || []).length > 4 && (
+                <p className="text-[10px] text-muted-foreground text-center pt-0.5">
+                  + {(assignedWorkouts[0].exercises || []).length - 4} more exercises
+                </p>
+              )}
+            </div>
+            <Button
+              size="sm"
+              className="w-full h-9 rounded-xl text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => onNavigate?.('progress')}
+            >
+              <Dumbbell className="h-3.5 w-3.5 mr-1.5" /> Open Full Workout & Exercise Demos
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Upcoming Bookings + Calendar Export ─── */}
       {upcomingSessions.length > 0 && (

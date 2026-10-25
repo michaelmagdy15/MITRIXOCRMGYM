@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { Client } from '../types';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useTheme } from '../contexts/ThemeContext';
-import { format, parseISO } from 'date-fns';
 import { safeFormatDate } from '../utils/dateUtils';
-import { Activity, Award, Calendar, MessageSquare, TrendingUp, Apple, Dumbbell, Flame } from 'lucide-react';
+import { Activity, Award, Calendar, TrendingUp, Apple, Dumbbell, Flame, CheckCircle2, Eye } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
-const CORE_MUSCLE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms & Core', 'Conditioning'] as const;
+const CORE_MUSCLE_GROUPS = ['Calisthenics', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms & Core', 'Conditioning'] as const;
 
 export default function MemberProgress({ client }: { client: Client | null }) {
   const { theme } = useTheme();
   const [performanceLogs, setPerformanceLogs] = useState<any[]>([]);
   const [bodyRecords, setBodyRecords] = useState<any[]>([]);
+  const [assignedWorkouts, setAssignedWorkouts] = useState<any[]>([]);
+  const [expandedExerciseDemo, setExpandedExerciseDemo] = useState<string | null>(null);
+  const [completingWorkoutId, setCompletingWorkoutId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -58,11 +61,44 @@ export default function MemberProgress({ client }: { client: Client | null }) {
       console.error("Error loading body records:", err);
     });
 
+    const assignedQ = query(
+      collection(db, 'assignedWorkouts'),
+      where('clientId', '==', client.id)
+    );
+
+    const unsubscribeAssigned = onSnapshot(assignedQ, (snapshot) => {
+      const list = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+      list.sort((a: any, b: any) =>
+        String(b.scheduledDate || b.createdAt || '').localeCompare(String(a.scheduledDate || a.createdAt || ''))
+      );
+      setAssignedWorkouts(list);
+    }, (err) => {
+      console.warn("Error loading assigned workouts:", err);
+    });
+
     return () => {
       unsubscribePerf();
       unsubscribeBody();
+      unsubscribeAssigned();
     };
   }, [client?.id]);
+
+  const handleMarkWorkoutCompleted = async (workoutId: string) => {
+    setCompletingWorkoutId(workoutId);
+    try {
+      await updateDoc(doc(db, 'assignedWorkouts', workoutId), {
+        status: 'Completed',
+        completedAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Failed to mark workout completed:", err);
+    } finally {
+      setCompletingWorkoutId(null);
+    }
+  };
 
   if (!client) {
     return (
@@ -204,12 +240,152 @@ export default function MemberProgress({ client }: { client: Client | null }) {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
       <div>
         <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-          <Activity className="h-5 w-5 text-primary" /> Fitness Progress
+          <Activity className="h-5 w-5 text-primary" /> Workouts & Fitness Progress
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Monitor your body weight trends, personal records, and training logs.
+          View your coach-assigned workout programs, personal records, and training logs.
         </p>
       </div>
+
+      {/* Assigned Workouts from Coach */}
+      <Card className="border border-primary/30 bg-card/60 shadow-sm overflow-hidden">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Dumbbell className="h-4 w-4 text-primary" /> Your Assigned Workouts
+              </CardTitle>
+              <CardDescription className="text-[11px]">
+                Workout templates and exercise plans assigned to you by your coach.
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="text-[10px] font-bold border-primary/30 text-primary">
+              {assignedWorkouts.filter(w => w.status !== 'Completed').length} Active
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {assignedWorkouts.length === 0 ? (
+            <div className="py-6 text-center text-xs text-muted-foreground italic">
+              No workouts assigned yet. Your coach can assign custom Gym or Calisthenics templates to your profile.
+            </div>
+          ) : (
+            assignedWorkouts.map((workout) => {
+              const isCompleted = workout.status === 'Completed';
+              return (
+                <div
+                  key={workout.id}
+                  className={`rounded-2xl border p-3.5 space-y-3 transition-all ${
+                    isCompleted
+                      ? 'bg-emerald-500/5 border-emerald-500/30'
+                      : 'bg-background border-border/80'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-bold text-foreground">{workout.title || 'Assigned Workout'}</h3>
+                        <Badge
+                          variant="outline"
+                          className={`text-[9px] font-bold ${
+                            isCompleted
+                              ? 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                              : 'border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10'
+                          }`}
+                        >
+                          {isCompleted ? 'Completed' : 'Upcoming Workout'}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Coach {workout.coachName || 'Trainer'} • Scheduled: <span className="font-mono font-semibold text-foreground">{safeFormatDate(workout.scheduledDate || workout.createdAt, 'dd MMM yyyy')}</span>
+                      </p>
+                    </div>
+
+                    {!isCompleted && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleMarkWorkoutCompleted(workout.id)}
+                        disabled={completingWorkoutId === workout.id}
+                        className="h-7 px-2.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1 shrink-0"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        {completingWorkoutId === workout.id ? 'Saving...' : 'Mark Done'}
+                      </Button>
+                    )}
+                  </div>
+
+                  {workout.coachNotes && (
+                    <div className="text-xs bg-muted/40 border rounded-xl p-2.5 text-muted-foreground italic">
+                      <strong className="text-foreground not-italic">Coach Notes:</strong> {workout.coachNotes}
+                    </div>
+                  )}
+
+                  <div className="divide-y border rounded-xl overflow-hidden bg-card/50">
+                    {(workout.exercises || []).map((ex: any, idx: number) => {
+                      const demoKey = `${workout.id}_${idx}`;
+                      const isExpanded = expandedExerciseDemo === demoKey;
+                      const hasDemo = Boolean(ex.gifUrl || (Array.isArray(ex.instructions) && ex.instructions.length > 0));
+                      return (
+                        <div key={idx} className="p-2.5 text-xs space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="h-5 w-5 rounded-md bg-primary/10 text-primary font-mono font-black text-[10px] flex items-center justify-center shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="font-bold text-foreground truncate">{ex.name}</p>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {ex.category} {ex.equipment ? `• ${ex.equipment}` : ''}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Badge variant="outline" className="font-mono text-[10px] font-bold bg-primary/5 border-primary/20 text-foreground">
+                                {ex.targetSets || 3} × {ex.targetReps || 10}
+                                {Number(ex.targetWeightKg) > 0 ? ` @ ${ex.targetWeightKg}kg` : ' (BW)'}
+                              </Badge>
+                              {hasDemo && (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedExerciseDemo(isExpanded ? null : demoKey)}
+                                  className="px-2 py-1 rounded-lg border text-[10px] font-bold hover:bg-muted flex items-center gap-1 text-primary"
+                                >
+                                  <Eye className="h-3 w-3" /> {isExpanded ? 'Hide' : 'Demo'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {isExpanded && hasDemo && (
+                            <div className="p-2.5 rounded-xl bg-muted/40 border flex flex-col sm:flex-row gap-3 items-start">
+                              {ex.gifUrl && (
+                                <img
+                                  src={ex.gifUrl}
+                                  alt={ex.name}
+                                  loading="lazy"
+                                  className="w-28 h-28 rounded-xl object-cover border bg-white shrink-0"
+                                />
+                              )}
+                              {Array.isArray(ex.instructions) && ex.instructions.length > 0 && (
+                                <ol className="list-decimal list-inside space-y-1 text-[11px] text-muted-foreground">
+                                  {ex.instructions.map((step: string, sIdx: number) => (
+                                    <li key={sIdx} className="leading-relaxed">{step}</li>
+                                  ))}
+                                </ol>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
 
       {/* Weight History Chart */}
       <Card className="border bg-card/40 shadow-sm overflow-hidden">
