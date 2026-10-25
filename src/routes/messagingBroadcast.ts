@@ -1092,6 +1092,134 @@ export function createMessagingBroadcastRouter(
   });
 
   /**
+   * GET /api/messaging/live-status
+   * Queries Twilio ContentAndApprovals + Messages.json in real time to return:
+   * 1. Exact Meta WhatsApp Template approval status (approved / pending / rejected)
+   * 2. Real-time delivery receipt breakdown (read / delivered / sent / queued / undelivered 63016 / failed 63007)
+   */
+  router.get('/live-status', requireAuthMiddleware, async (req, res) => {
+    try {
+      const ctx = await ensureAdminOrManager(req, res);
+      if (!ctx) return;
+
+      const saved = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
+      if (!saved.accountSid || !saved.authToken) {
+        return res.json({
+          configured: false,
+          templates: [],
+          deliverySummary: null,
+        });
+      }
+
+      const authHeader =
+        'Basic ' + Buffer.from(`${saved.accountSid}:${saved.authToken}`).toString('base64');
+
+      const [contentRes, messagesRes] = await Promise.all([
+        fetch('https://content.twilio.com/v1/ContentAndApprovals?PageSize=30', {
+          headers: { Authorization: authHeader },
+        }).catch(() => null),
+        fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(
+            saved.accountSid
+          )}/Messages.json?PageSize=250`,
+          { headers: { Authorization: authHeader } }
+        ).catch(() => null),
+      ]);
+
+      const templates: Array<{
+        sid: string;
+        friendlyName: string;
+        status: string;
+        category: string;
+        rejectionReason: string;
+        body: string;
+      }> = [];
+
+      if (contentRes && contentRes.ok) {
+        const contentData: any = await contentRes.json().catch(() => ({}));
+        for (const c of contentData.contents || []) {
+          templates.push({
+            sid: String(c.sid || ''),
+            friendlyName: String(c.friendly_name || c.approval_requests?.name || c.sid || ''),
+            status: String(c.approval_requests?.status || 'unsubmitted').toLowerCase(),
+            category: String(c.approval_requests?.category || 'UTILITY'),
+            rejectionReason: String(c.approval_requests?.rejection_reason || ''),
+            body: String(c.types?.['twilio/text']?.body || ''),
+          });
+        }
+      }
+
+      const deliverySummary = {
+        totalOutbound: 0,
+        read: 0,
+        delivered: 0,
+        sent: 0,
+        queued: 0,
+        undelivered: 0,
+        failed: 0,
+        error63016Count: 0,
+        error63007Count: 0,
+        deliveredRecipients: [] as Array<{ to: string; status: string; dateSent: string }>,
+        failedSample: [] as Array<{ to: string; status: string; errorCode: number | null }>,
+      };
+
+      if (messagesRes && messagesRes.ok) {
+        const msgData: any = await messagesRes.json().catch(() => ({}));
+        const outbound = (msgData.messages || []).filter(
+          (m: any) => m.direction && String(m.direction).startsWith('outbound')
+        );
+        deliverySummary.totalOutbound = outbound.length;
+        for (const m of outbound) {
+          const st = String(m.status || '').toLowerCase();
+          const toClean = String(m.to || '').replace(/^whatsapp:/i, '');
+          const errCode = m.error_code ? Number(m.error_code) : null;
+          if (st === 'read') {
+            deliverySummary.read += 1;
+            deliverySummary.deliveredRecipients.push({
+              to: toClean,
+              status: 'read',
+              dateSent: String(m.date_sent || m.date_created || ''),
+            });
+          } else if (st === 'delivered') {
+            deliverySummary.delivered += 1;
+            deliverySummary.deliveredRecipients.push({
+              to: toClean,
+              status: 'delivered',
+              dateSent: String(m.date_sent || m.date_created || ''),
+            });
+          } else if (st === 'sent') {
+            deliverySummary.sent += 1;
+          } else if (st === 'queued' || st === 'accepted' || st === 'sending') {
+            deliverySummary.queued += 1;
+          } else if (st === 'undelivered') {
+            deliverySummary.undelivered += 1;
+            if (errCode === 63016) deliverySummary.error63016Count += 1;
+            if (deliverySummary.failedSample.length < 15) {
+              deliverySummary.failedSample.push({ to: toClean, status: st, errorCode: errCode });
+            }
+          } else if (st === 'failed') {
+            deliverySummary.failed += 1;
+            if (errCode === 63007) deliverySummary.error63007Count += 1;
+            if (deliverySummary.failedSample.length < 15) {
+              deliverySummary.failedSample.push({ to: toClean, status: st, errorCode: errCode });
+            }
+          }
+        }
+      }
+
+      return res.json({
+        configured: true,
+        activeContentSid: saved.contentSid || '',
+        templates,
+        deliverySummary,
+      });
+    } catch (err: any) {
+      console.error('[API Messaging] Live status error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to load live Twilio status' });
+    }
+  });
+
+  /**
    * POST /api/messaging/webhook-noreply
    * Public Twilio inbound webhook that records the incoming member reply in Firestore
    * and returns an empty <Response></Response> TwiML so no automated reply is sent back.

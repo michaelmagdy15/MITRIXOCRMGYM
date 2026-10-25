@@ -153,6 +153,30 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyDraft, setReplyDraft] = useState<string>('');
   const [isSendingReply, setIsSendingReply] = useState<boolean>(false);
+  const [liveStatus, setLiveStatus] = useState<{
+    activeContentSid?: string;
+    templates: Array<{
+      sid: string;
+      friendlyName: string;
+      status: string;
+      category: string;
+      rejectionReason: string;
+      body: string;
+    }>;
+    deliverySummary: {
+      totalOutbound: number;
+      read: number;
+      delivered: number;
+      sent: number;
+      queued: number;
+      undelivered: number;
+      failed: number;
+      error63016Count: number;
+      error63007Count: number;
+      deliveredRecipients: Array<{ to: string; status: string; dateSent: string }>;
+      failedSample: Array<{ to: string; status: string; errorCode: number | null }>;
+    } | null;
+  } | null>(null);
 
   const getAuthHeaders = useCallback(async () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -168,10 +192,11 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
     try {
       const headers = await getAuthHeaders();
       const query = branchFilter !== 'ALL' ? `?branch=${encodeURIComponent(branchFilter)}` : '';
-      const [cfgRes, histRes, repRes] = await Promise.all([
+      const [cfgRes, histRes, repRes, liveRes] = await Promise.all([
         fetch(`/api/messaging/config${query}`, { headers }),
         fetch('/api/messaging/history', { headers }),
         fetch('/api/messaging/replies', { headers }),
+        fetch('/api/messaging/live-status', { headers }),
       ]);
 
       if (cfgRes.ok) {
@@ -205,6 +230,11 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
       if (repRes.ok) {
         const repData = await repRes.json();
         setReplies(repData.replies || []);
+      }
+
+      if (liveRes.ok) {
+        const liveData = await liveRes.json();
+        setLiveStatus(liveData);
       }
     } catch (err) {
       console.error('[TwilioBroadcastManager] Error loading config:', err);
@@ -1110,6 +1140,156 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
               )}
             </CardContent>
           </Card>
+
+          {/* Live Twilio Delivery Receipts & Meta Template Approval Monitor */}
+          {liveStatus && (
+            <Card className="border-primary/30 shadow-sm">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-bold flex items-center gap-1.5 text-primary">
+                    <ShieldCheck className="h-4 w-4" />
+                    Live Twilio Delivery &amp; Meta Template Status
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={loadConfigAndCounts}
+                    disabled={loadingConfig}
+                    className="h-7 px-2.5 text-[11px] font-bold gap-1"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${loadingConfig ? 'animate-spin' : ''}`} />
+                    Refresh Live Status
+                  </Button>
+                </div>
+                <CardDescription className="text-[11px]">
+                  Real-time delivery receipts from Twilio &amp; Meta WhatsApp Template approval queue.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-xs">
+                {/* 1. Live Delivery Receipt Counters */}
+                {liveStatus.deliverySummary && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                      Live Outbound Delivery Receipts (Last {liveStatus.deliverySummary.totalOutbound} Messages)
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                      <div className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10">
+                        <span className="text-[9px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">
+                          Delivered / Read
+                        </span>
+                        <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                          {liveStatus.deliverySummary.delivered + liveStatus.deliverySummary.read}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground block">
+                          ({liveStatus.deliverySummary.read} Read)
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-lg border border-blue-500/30 bg-blue-500/10">
+                        <span className="text-[9px] font-bold uppercase text-blue-700 dark:text-blue-300 block">
+                          Sent / Queued
+                        </span>
+                        <span className="text-sm font-black text-blue-600 dark:text-blue-400">
+                          {liveStatus.deliverySummary.sent + liveStatus.deliverySummary.queued}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground block">In Transit</span>
+                      </div>
+                      <div className="p-2 rounded-lg border border-amber-500/30 bg-amber-500/10">
+                        <span className="text-[9px] font-bold uppercase text-amber-700 dark:text-amber-300 block">
+                          Undelivered (63016)
+                        </span>
+                        <span className="text-sm font-black text-amber-600 dark:text-amber-400">
+                          {liveStatus.deliverySummary.undelivered}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground block">Needs Approved Template</span>
+                      </div>
+                      <div className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10">
+                        <span className="text-[9px] font-bold uppercase text-rose-700 dark:text-rose-300 block">
+                          Failed (No WA)
+                        </span>
+                        <span className="text-sm font-black text-rose-600 dark:text-rose-400">
+                          {liveStatus.deliverySummary.failed}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground block">Not on WhatsApp</span>
+                      </div>
+                    </div>
+
+                    {liveStatus.deliverySummary.error63016Count > 0 && (
+                      <div className="p-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-800 dark:text-amber-200">
+                        <strong>Why {liveStatus.deliverySummary.error63016Count} messages show Undelivered (63016):</strong>{' '}
+                        Meta requires a WhatsApp Template to be in <strong>APPROVED</strong> status before delivering to members outside the 24-hour reply window. Check the template status below — as soon as a template turns <strong className="text-emerald-600 dark:text-emerald-400">APPROVED</strong>, click <strong>Use Template</strong> and re-send!
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Meta WhatsApp Template Approval Status List */}
+                <div className="space-y-1.5 pt-2 border-t">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Meta WhatsApp Content Templates ({liveStatus.templates.length})
+                  </span>
+                  <div className="space-y-1.5 max-h-[210px] overflow-y-auto">
+                    {liveStatus.templates.map((tpl) => {
+                      const isApproved = tpl.status === 'approved';
+                      const isPending = tpl.status === 'pending' || tpl.status === 'received';
+                      const isCurrent = contentSid === tpl.sid;
+                      return (
+                        <div
+                          key={tpl.sid}
+                          className={`p-2 rounded-lg border flex flex-col gap-1 ${
+                            isApproved
+                              ? 'border-emerald-500/40 bg-emerald-500/10'
+                              : isPending
+                              ? 'border-amber-500/30 bg-amber-500/5'
+                              : 'border-border bg-muted/20 opacity-75'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-bold text-foreground truncate">{tpl.friendlyName}</span>
+                              <Badge variant="outline" className="text-[9px] h-4 px-1 font-mono">
+                                {tpl.category}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Badge
+                                variant="outline"
+                                className={`text-[9px] h-4 px-1.5 font-extrabold uppercase ${
+                                  isApproved
+                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                    : isPending
+                                    ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/40'
+                                    : 'bg-rose-500/20 text-rose-600 border-rose-500/40'
+                                }`}
+                              >
+                                {isApproved ? '✅ APPROVED' : isPending ? `⏳ ${tpl.status.toUpperCase()}` : `❌ ${tpl.status.toUpperCase()}`}
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={isCurrent ? 'secondary' : 'outline'}
+                                className="h-5 px-2 text-[10px] font-bold"
+                                onClick={() => {
+                                  setContentSid(tpl.sid);
+                                  setUseTemplate(true);
+                                  toast.success(`Selected template ${tpl.friendlyName} (${tpl.sid})`);
+                                }}
+                              >
+                                {isCurrent ? 'Selected' : 'Use SID'}
+                              </Button>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            SID: {tpl.sid}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Recent Broadcast History */}
           {!compact && (
