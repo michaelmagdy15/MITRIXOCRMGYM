@@ -300,26 +300,32 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       q,
       (snapshot) => {
         const nowMs = Date.now();
-        const isLiveClickToCall = (data: Record<string, any>) =>
-          data.type === 'click_to_call' &&
-          data.senderSessionId !== CURRENT_DEVICE_SESSION_ID &&
-          (!data.expiresAtMs || Number(data.expiresAtMs) > nowMs);
+        const isLiveUserNotification = (data: Record<string, any>) => {
+          if (data.type === 'click_to_call') {
+            return (
+              data.senderSessionId !== CURRENT_DEVICE_SESSION_ID &&
+              (!data.expiresAtMs || Number(data.expiresAtMs) > nowMs)
+            );
+          }
+          return true;
+        };
 
-        const addedClickToCall = snapshot
+        const addedUserNotifs = snapshot
           .docChanges()
-          .filter((change) => change.type === 'added' && isLiveClickToCall(change.doc.data()));
+          .filter((change) => change.type === 'added' && isLiveUserNotification(change.doc.data()));
 
         const rows = snapshot.docs
-          .filter((d) => isLiveClickToCall(d.data()))
+          .filter((d) => isLiveUserNotification(d.data()))
           .map((d) => {
             const data = d.data();
+            const isClickToCall = data.type === 'click_to_call';
             return {
               id: d.id,
-              type: 'click_to_call' as NotificationType,
-              title: data.title || `📞 Click to Call: ${data.leadName || 'Member'}`,
-              description: data.description || data.body || `Tap to dial ${data.phoneNumber || ''}`,
+              type: (isClickToCall ? 'click_to_call' : 'system') as NotificationType,
+              title: data.title || (isClickToCall ? `📞 Click to Call: ${data.leadName || 'Member'}` : 'Notification'),
+              description: data.description || data.body || data.message || (isClickToCall ? `Tap to dial ${data.phoneNumber || ''}` : ''),
               date: safeParseDate(data.createdAt),
-              recordName: data.leadName || 'Member',
+              recordName: data.clientName || data.leadName || 'Member',
               recordId: data.clientId || data.memberId || d.id,
               source: 'user_notification' as const,
               data,
@@ -329,7 +335,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
         setUserNotifications(rows);
 
-        if (hasSeenInitialUserSnapshot.current && addedClickToCall.length > 0) {
+        if (hasSeenInitialUserSnapshot.current && addedUserNotifs.length > 0) {
           playAlertSound();
         }
         hasSeenInitialUserSnapshot.current = true;
