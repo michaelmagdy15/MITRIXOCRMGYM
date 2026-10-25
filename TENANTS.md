@@ -52,6 +52,13 @@
 - Default company name: Inzan Athletics
 - No special email branding override
 
+**iOS Mobile App:**
+- Bundle ID: com.inzanathletics.crm
+- ASC App ID: 6826942319
+- EAS Build Profile: production-inzanathletics
+- Status: Submitted / Waiting for Review (v1.0.0, Build 17)
+- Publishing Automation Skill: gymcrm-appstore-publisher
+
 **Notes:** This is the Inzan Athletics fitness tenant. The CRM dashboard is hosted on `admin.inzanathletics.com`, while `inzanathletics.com` serves the gym's public website landing page.
 
 ---
