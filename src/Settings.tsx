@@ -34,6 +34,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import NotificationTemplateSettings from './components/NotificationTemplateSettings';
+import TwilioBroadcastManager from './components/TwilioBroadcastManager';
 
 export default function Settings() {
   const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches, defaultPayoutRates, updateDefaultPayoutRates } = useAppContext();
@@ -480,15 +481,15 @@ export default function Settings() {
     setSmsStatus(null);
     setIsSendingSms(true);
     try {
-      const fnUrl = 'https://sendtestsms-rqxxytxffq-uc.a.run.app';
-      const response = await fetch(fnUrl, {
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/messaging/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: testSmsPhone, message: testSmsMessage })
+        headers,
+        body: JSON.stringify({ to: testSmsPhone, message: testSmsMessage, channel: 'whatsapp' })
       });
       const data = await response.json();
-      if (response.ok) {
-        setSmsStatus({ type: 'success', message: `SMS sent successfully to ${testSmsPhone}` });
+      if (response.ok && data.success) {
+        setSmsStatus({ type: 'success', message: `Message sent successfully to ${testSmsPhone} (SID: ${data.sid})` });
       } else {
         setSmsStatus({ type: 'error', message: `Failed: ${data.error}` });
       }
@@ -1501,7 +1502,8 @@ export default function Settings() {
         </TabsContent>
 
         {/* ── Notification Templates ── */}
-        <TabsContent value="notifications" className="animate-in fade-in-50 duration-500">
+        <TabsContent value="notifications" className="space-y-6 animate-in fade-in-50 duration-500">
+          <TwilioBroadcastManager />
           <NotificationTemplateSettings />
         </TabsContent>
 
@@ -1649,7 +1651,8 @@ export default function Settings() {
         </TabsContent>
 
         {/* ── Announcements ── */}
-        <TabsContent value="announcements" className="animate-in fade-in-50 duration-500">
+        <TabsContent value="announcements" className="space-y-6 animate-in fade-in-50 duration-500">
+          <TwilioBroadcastManager />
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>

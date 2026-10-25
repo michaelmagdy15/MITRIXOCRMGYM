@@ -475,6 +475,38 @@ describe('Egypt Top-Tier Gym Platform — Payments, InBody, Shift Handover, Turn
     assert.ok(arUrl?.startsWith('https://wa.me/201011112222?text='));
     assert.ok(decodeURIComponent(arUrl!).includes('افتقدناك في'));
   });
+
+  it('normalizes Egyptian phone numbers and guarantees INZAN Athletics sender branding on Twilio broadcasts', async () => {
+    const { normalizeBroadcastPhone, formatBrandedMessage } = await import('./phoneUtils');
+
+    // Valid Egyptian formats (local, international, Arabic numerals)
+    assert.strictEqual(normalizeBroadcastPhone('01012345678'), '+201012345678');
+    assert.strictEqual(normalizeBroadcastPhone('+20 122 345 6789'), '+201223456789');
+    assert.strictEqual(normalizeBroadcastPhone('00201145678901'), '+201145678901');
+    assert.strictEqual(normalizeBroadcastPhone('٠١٠٩٨٧٦٥٤٣٢'), '+201098765432');
+
+    // Placeholder / bogus numbers rejected to save broadcast cost
+    assert.strictEqual(normalizeBroadcastPhone('01111111111'), null);
+    assert.strictEqual(normalizeBroadcastPhone('01000000000'), null);
+    assert.strictEqual(normalizeBroadcastPhone('000-000-0000'), null);
+
+    // Enforces INZAN Athletics branding & personalization
+    const brandedWhatsApp = formatBrandedMessage({
+      body: 'Hi {firstName}, join us tomorrow at 6 PM!',
+      brandName: 'INZAN Athletics',
+      channel: 'whatsapp',
+      recipientName: 'Omar Hassan',
+    });
+    assert.ok(brandedWhatsApp.startsWith('🏋️ *INZAN Athletics*\n\n'));
+    assert.ok(brandedWhatsApp.includes('Hi Omar, join us tomorrow at 6 PM!'));
+
+    const brandedSms = formatBrandedMessage({
+      body: 'Event tomorrow at 6 PM!',
+      brandName: 'INZAN Athletics',
+      channel: 'sms',
+    });
+    assert.strictEqual(brandedSms, 'INZAN Athletics: Event tomorrow at 6 PM!');
+  });
 });
 
 

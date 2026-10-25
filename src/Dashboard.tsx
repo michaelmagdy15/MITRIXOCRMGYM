@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ConversionFunnel from './components/ConversionFunnel';
+import TwilioBroadcastManager from './components/TwilioBroadcastManager';
 import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -331,8 +332,10 @@ export default function Dashboard() {
 
   const canSendPushNotifications = React.useMemo(() => {
     if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    if (['admin', 'super_admin', 'crm_admin', 'owner'].includes(role)) return true;
     const nameEmail = (currentUser.name || currentUser.email || '').toLowerCase();
-    return ['michael', 'magd', 'shady'].some(k => nameEmail.includes(k));
+    return ['michael', 'magd', 'shady', 'inzan'].some(k => nameEmail.includes(k));
   }, [currentUser]);
 
   const clientMap = React.useMemo(() => {
@@ -1808,9 +1811,10 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── MULTI-CHANNEL ANNOUNCEMENTS (PUSH & IN-APP MODAL) ── */}
+      {/* ── MULTI-CHANNEL ANNOUNCEMENTS (TWILIO WHATSAPP, SMS, PUSH & IN-APP MODAL) ── */}
       {canSendPushNotifications && (
         <div className="grid grid-cols-1 gap-6">
+          <TwilioBroadcastManager compact />
           <Card className="border-primary/15 bg-primary/[0.02] dark:bg-primary/[0.02] rounded-2xl shadow-sm border">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center text-sm font-extrabold uppercase tracking-wider text-primary gap-2">

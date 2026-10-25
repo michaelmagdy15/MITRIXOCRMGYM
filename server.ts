@@ -31,6 +31,7 @@ import {
 } from './src/utils/bookingCutoff.js';
 import { desktopSyncRouter } from './src/routes/desktopSync.js';
 import { redgitsSyncRouter } from './src/routes/redgitsSync.js';
+import { createMessagingBroadcastRouter } from './src/routes/messagingBroadcast.js';
 import { generateSlotBucketKeys, validateNutritionSlotRules } from './src/utils/nutritionBooking.js';
 import { parseSessionStartMs } from './src/utils/ptAttendance.js';
 import {
@@ -488,6 +489,7 @@ async function startServer() {
 
   // Live RedGITS -> Inzan Athletics DB sync router
   app.use('/api/inzan/redgits-sync', redgitsSyncRouter);
+  app.use('/api/messaging', createMessagingBroadcastRouter(requireAuth));
 
   // Dedicated Cloud Run health check probe
   app.get("/api/health", async (req, res) => {

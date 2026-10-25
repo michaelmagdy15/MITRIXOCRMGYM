@@ -457,3 +457,38 @@ export { processNoShows } from "./classes/noShowJob";
 export { onBookingCreated, onBookingStatusChange } from "./notifications/bookingNotifications";
 export { sendClassReminders } from "./notifications/classReminder";
 export { onClientStatusChangeNotification } from "./notifications/statusChangeNotification";
+import { sendSms, SMS_SECRETS } from "./utils/smsService";
+
+export const sendTestSms = onRequest({ cors: true, secrets: SMS_SECRETS }, async (req: any, res: any) => {
+  if (req.method !== "POST") {
+    res.status(405).send({ error: "Only POST is allowed" });
+    return;
+  }
+  try {
+    const authHeader = String(req.headers.authorization || "");
+    if (!authHeader.startsWith("Bearer ")) {
+      res.status(401).send({ error: "Unauthorized: Missing token" });
+      return;
+    }
+    const token = authHeader.split("Bearer ")[1];
+    await admin.auth().verifyIdToken(token!);
+
+    const { to, message, channel, brandName } = req.body || {};
+    if (!to || !message) {
+      res.status(400).send({ error: "Missing required fields: to, message" });
+      return;
+    }
+    const result = await sendSms(to, message, {
+      channel: channel === "whatsapp" ? "whatsapp" : "sms",
+      brandName: brandName || "INZAN Athletics",
+    });
+    if (!result) {
+      res.status(400).send({ error: "Twilio credentials not configured on Cloud Function" });
+      return;
+    }
+    res.status(200).send({ success: true, sid: result.sid, status: result.status });
+  } catch (err: any) {
+    logger.error("Error in sendTestSms:", err);
+    res.status(500).send({ error: err?.message || "Failed to send message" });
+  }
+});

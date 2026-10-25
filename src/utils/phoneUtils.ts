@@ -87,3 +87,117 @@ export function matchesPhoneSearch(storedPhone?: string | null, searchQuery?: st
   
   return false;
 }
+
+/**
+ * Normalizes raw phone input into strict E.164 format for Twilio WhatsApp / SMS broadcasting.
+ * Handles Egyptian local numbers (010xxxxxxxx, 10xxxxxxxx, +2010xxxxxxxx, 002010xxxxxxxx),
+ * Arabic numerals, and international numbers (+1..., +971..., +966..., etc.).
+ * Returns null if the number is invalid or a placeholder (e.g. 000-000-0000, 01111111111).
+ */
+export function normalizeBroadcastPhone(raw?: string | null): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+
+  const converted = convertArabicNumerals(raw)
+    .replace(/^whatsapp:/i, '')
+    .trim();
+
+  const hasPlus = converted.startsWith('+');
+  let digits = converted.replace(/\D/g, '');
+
+  if (!digits || digits.length < 9) return null;
+  if (/^0+$/.test(digits)) return null;
+
+  if (digits.startsWith('00') && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+
+  let e164 = '';
+  if (digits.startsWith('201') && digits.length === 12) {
+    e164 = `+${digits}`;
+  } else if (digits.startsWith('01') && digits.length === 11) {
+    e164 = `+20${digits.slice(1)}`;
+  } else if (/^1[0125]\d{8}$/.test(digits)) {
+    e164 = `+20${digits}`;
+  } else if (hasPlus && digits.length >= 10 && digits.length <= 15) {
+    e164 = `+${digits}`;
+  } else if (digits.length >= 10 && digits.length <= 15 && !digits.startsWith('0')) {
+    e164 = `+${digits}`;
+  } else {
+    return null;
+  }
+
+  if (e164.startsWith('+20')) {
+    if (!/^\+201[0125]\d{8}$/.test(e164)) {
+      return null;
+    }
+    if (/^\+201[0125](\d)\1{7}$/.test(e164)) {
+      return null;
+    }
+  }
+
+  return e164;
+}
+
+/**
+ * Formats the outgoing broadcast message so the recipient clearly sees the sender brand ("INZAN Athletics")
+ * and personalizes {memberName} / {firstName} / {clubName} placeholders.
+ */
+export function formatBrandedMessage(params: {
+  body: string;
+  title?: string;
+  brandName: string;
+  channel: 'whatsapp' | 'sms';
+  recipientName?: string;
+  includeBrandHeader?: boolean;
+}): string {
+  const {
+    body,
+    title,
+    brandName,
+    channel,
+    recipientName = 'Member',
+    includeBrandHeader = true,
+  } = params;
+
+  const cleanName = recipientName.trim() || 'Member';
+  const firstName = cleanName.split(/\s+/)[0] || cleanName;
+
+  const replacePlaceholders = (text: string) =>
+    text
+      .replace(/\{memberName\}/gi, cleanName)
+      .replace(/\{name\}/gi, cleanName)
+      .replace(/\{firstName\}/gi, firstName)
+      .replace(/\{clubName\}/gi, brandName);
+
+  const personalizedBody = replacePlaceholders(body.trim());
+  const personalizedTitle = title ? replacePlaceholders(title.trim()) : '';
+
+  const alreadyHasBrand = personalizedBody
+    .toLowerCase()
+    .includes(brandName.toLowerCase());
+
+  if (channel === 'whatsapp') {
+    const lines: string[] = [];
+    if (includeBrandHeader && !alreadyHasBrand) {
+      lines.push(`🏋️ *${brandName}*`);
+      lines.push('');
+    }
+    if (personalizedTitle) {
+      lines.push(`📢 *${personalizedTitle}*`);
+      lines.push('');
+    }
+    lines.push(personalizedBody);
+    return lines.join('\n');
+  }
+
+  const parts: string[] = [];
+  if (includeBrandHeader && !alreadyHasBrand) {
+    parts.push(`${brandName}:`);
+  }
+  if (personalizedTitle) {
+    parts.push(`${personalizedTitle} -`);
+  }
+  parts.push(personalizedBody);
+  return parts.join(' ');
+}
+
