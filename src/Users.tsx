@@ -430,7 +430,7 @@ export default function Users() {
                 </Button>
 
                 <Dialog open={isInviteOpen} onOpenChange={setIsInviteOpen}>
-                  <DialogContent className="w-[96vw] max-w-[96vw] sm:max-w-[94vw] md:max-w-5xl lg:max-w-6xl xl:max-w-7xl 2xl:max-w-[1440px] h-[92vh] max-h-[92vh] p-0 flex flex-col gap-0 rounded-3xl border shadow-2xl bg-background overflow-hidden">
+                  <DialogContent className="!w-[98vw] !max-w-[98vw] sm:!max-w-[98vw] md:!max-w-[98vw] lg:!max-w-[98vw] xl:!max-w-[98vw] 2xl:!max-w-[98vw] h-[95dvh] max-h-[95dvh] p-0 flex flex-col gap-0 rounded-3xl border shadow-2xl bg-background overflow-hidden">
                     {/* Sticky Header */}
                     <div className="px-6 py-4 border-b bg-card/80 backdrop-blur-sm flex items-center justify-between shrink-0 pr-14">
                       <div className="flex items-center gap-3">

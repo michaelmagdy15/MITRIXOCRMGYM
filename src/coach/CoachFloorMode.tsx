@@ -24,6 +24,7 @@ import {
   ExerciseCategory,
   ExerciseEquipment
 } from '../data/exerciseLibraryData';
+import { POPULAR_WORKOUT_TEMPLATES } from '../data/workoutTemplatesData';
 
 export type EquipmentType = ExerciseEquipment;
 
@@ -451,9 +452,29 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
     return () => clearInterval(restTimerRef.current);
   }, [isRestRunning, restSecondsRemaining]);
 
-  // All templates combined (Custom first, then Built-in)
+  // All templates combined (deduplicated by ID across Firestore & 78 Popular Open-Source Templates)
   const allTemplates = useMemo(() => {
-    return [...customTemplates, ...BUILTIN_WORKOUT_TEMPLATES];
+    const byId = new Map<string, WorkoutTemplateRecord>();
+    for (const tpl of POPULAR_WORKOUT_TEMPLATES) {
+      byId.set(tpl.id, {
+        ...tpl,
+        isBuiltIn: true,
+        items: tpl.items || []
+      });
+    }
+    for (const tpl of BUILTIN_WORKOUT_TEMPLATES) {
+      if (!byId.has(tpl.id)) byId.set(tpl.id, tpl);
+    }
+    for (const custom of customTemplates) {
+      const items = Array.isArray(custom.items)
+        ? custom.items
+        : Array.isArray((custom as any).exercises)
+          ? (custom as any).exercises
+          : [];
+      if (items.length === 0) continue;
+      byId.set(custom.id, { ...custom, items });
+    }
+    return Array.from(byId.values());
   }, [customTemplates]);
 
   // Category counts for the Exercise Library

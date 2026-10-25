@@ -1128,7 +1128,7 @@ export default function ExerciseLibraryHub({
 
       {/* EXERCISE GIF & FORM DETAIL MODAL */}
       <Dialog open={!!detailExercise} onOpenChange={(open) => !open && setDetailExercise(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="!w-[95vw] !max-w-[1100px] max-h-[92dvh] overflow-y-auto">
           {detailExercise && (
             <>
               <DialogHeader>
@@ -1141,12 +1141,12 @@ export default function ExerciseLibraryHub({
                     </Badge>
                   )}
                 </div>
-                <DialogTitle className="text-lg font-black pt-1">{detailExercise.name}</DialogTitle>
+                <DialogTitle className="text-xl font-black pt-1">{detailExercise.name}</DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
                 {detailExercise.gifUrl && (
-                  <div className="rounded-2xl border bg-white p-3 flex items-center justify-center h-64 overflow-hidden">
+                  <div className="md:col-span-5 rounded-2xl border bg-white p-4 flex items-center justify-center h-72 sm:h-80 overflow-hidden">
                     <img
                       src={detailExercise.gifUrl}
                       alt={detailExercise.name}
@@ -1155,31 +1155,33 @@ export default function ExerciseLibraryHub({
                   </div>
                 )}
 
-                {detailExercise.secondary && detailExercise.secondary.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-bold text-muted-foreground">Secondary Muscles:</span>
-                    {detailExercise.secondary.map((s) => (
-                      <Badge key={s} variant="outline" className="text-[10px] capitalize">
-                        {s}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                {detailExercise.instructions && detailExercise.instructions.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
-                      Step-by-Step Coaching Instructions
-                    </h4>
-                    <ol className="space-y-1.5 text-xs text-foreground list-decimal list-inside bg-muted/40 p-3.5 rounded-xl">
-                      {detailExercise.instructions.map((step, idx) => (
-                        <li key={idx} className="leading-relaxed">
-                          {step}
-                        </li>
+                <div className={`${detailExercise.gifUrl ? 'md:col-span-7' : 'md:col-span-12'} space-y-4`}>
+                  {detailExercise.secondary && detailExercise.secondary.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-bold text-muted-foreground">Secondary Muscles:</span>
+                      {detailExercise.secondary.map((s) => (
+                        <Badge key={s} variant="outline" className="text-xs capitalize">
+                          {s}
+                        </Badge>
                       ))}
-                    </ol>
-                  </div>
-                )}
+                    </div>
+                  )}
+
+                  {detailExercise.instructions && detailExercise.instructions.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
+                        Step-by-Step Coaching Instructions
+                      </h4>
+                      <ol className="space-y-2 text-xs sm:text-sm text-foreground list-decimal list-inside bg-muted/40 p-4 rounded-xl">
+                        {detailExercise.instructions.map((step, idx) => (
+                          <li key={idx} className="leading-relaxed">
+                            {step}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <DialogFooter className="gap-2">
@@ -1207,206 +1209,242 @@ export default function ExerciseLibraryHub({
         </DialogContent>
       </Dialog>
 
-      {/* TEMPLATE / ASSIGN WORKOUT BUILDER MODAL */}
+      {/* TEMPLATE / ASSIGN WORKOUT BUILDER MODAL — FULL SCREEN WORKBENCH */}
       <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!w-[96vw] !max-w-[1440px] max-h-[92dvh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-lg font-black">
+            <DialogTitle className="text-xl font-black">
               {builderMode === 'template' ? 'Create Coach Workout Template' : 'Assign Workout to Client'}
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs sm:text-sm">
               {builderMode === 'template'
-                ? 'Build a reusable workout template from the 1,585-exercise library.'
+                ? 'Build a reusable workout template from the 1,492-exercise animated GIF library.'
                 : 'Select a client, customize sets/reps/weights, and send this workout directly to their Member Portal.'}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {builderMode === 'assign' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-muted/40 border">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Client Picker, Metadata & Exercise Catalog Picker */}
+            <div className="lg:col-span-6 space-y-4">
+              {builderMode === 'assign' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-muted/40 border">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold flex items-center gap-1">
+                      <User className="h-3.5 w-3.5 text-primary" /> Select Client
+                    </label>
+                    <Input
+                      value={builderClientSearch}
+                      onChange={(e) => setBuilderClientSearch(e.target.value)}
+                      placeholder="Filter client by name or ID..."
+                      className="h-9 text-xs mb-1.5"
+                    />
+                    <select
+                      value={builderClientId}
+                      onChange={(e) => setBuilderClientId(e.target.value)}
+                      className="w-full h-10 rounded-xl border bg-background px-3 text-xs font-semibold"
+                    >
+                      <option value="">-- Choose Member --</option>
+                      {filteredClients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} {c.memberId ? `(#${c.memberId})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5 text-primary" /> Scheduled Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={builderDate}
+                      onChange={(e) => setBuilderDate(e.target.value)}
+                      className="h-10 text-xs"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold flex items-center gap-1">
-                    <User className="h-3.5 w-3.5 text-primary" /> Select Client
-                  </label>
+                  <label className="text-xs font-bold">Workout / Template Title</label>
                   <Input
-                    value={builderClientSearch}
-                    onChange={(e) => setBuilderClientSearch(e.target.value)}
-                    placeholder="Filter client by name or ID..."
-                    className="h-8 text-xs mb-1"
+                    value={builderTitle}
+                    onChange={(e) => setBuilderTitle(e.target.value)}
+                    placeholder="e.g. Calisthenics Upper Skill Day"
+                    className="h-10"
                   />
-                  <select
-                    value={builderClientId}
-                    onChange={(e) => setBuilderClientId(e.target.value)}
-                    className="w-full h-9 rounded-lg border bg-background px-2.5 text-xs font-semibold"
-                  >
-                    <option value="">-- Choose Member --</option>
-                    {filteredClients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} {c.memberId ? `(#${c.memberId})` : ''}
-                      </option>
-                    ))}
-                  </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5 text-primary" /> Scheduled Date
-                  </label>
+                  <label className="text-xs font-bold">Coach Notes / Description</label>
                   <Input
-                    type="date"
-                    value={builderDate}
-                    onChange={(e) => setBuilderDate(e.target.value)}
-                    className="h-9 text-xs"
+                    value={builderDescription}
+                    onChange={(e) => setBuilderDescription(e.target.value)}
+                    placeholder="Optional focus cues or rest times..."
+                    className="h-10"
                   />
                 </div>
               </div>
-            )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-bold">Workout / Template Title</label>
-                <Input
-                  value={builderTitle}
-                  onChange={(e) => setBuilderTitle(e.target.value)}
-                  placeholder="e.g. Calisthenics Upper Skill Day"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold">Coach Notes / Description</label>
-                <Input
-                  value={builderDescription}
-                  onChange={(e) => setBuilderDescription(e.target.value)}
-                  placeholder="Optional focus cues or rest times..."
-                />
-              </div>
-            </div>
-
-            {/* Exercise Picker */}
-            <div className="rounded-xl border p-3 space-y-2.5 bg-muted/20">
-              <div className="flex flex-col sm:flex-row gap-2">
+              {/* Exercise Picker */}
+              <div className="rounded-2xl border p-4 space-y-3 bg-muted/20">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
+                    Add Exercises from GIF Catalog
+                  </label>
+                  <span className="text-[11px] text-muted-foreground">{FULL_EXERCISE_CATALOG.length} exercises</span>
+                </div>
                 <Input
                   value={builderPickerSearch}
                   onChange={(e) => setBuilderPickerSearch(e.target.value)}
-                  placeholder="Search 1,585 exercises to add..."
-                  className="h-9 text-xs flex-1"
+                  placeholder="Search 1,492 exercises to add..."
+                  className="h-9 text-xs"
                 />
-                <div className="flex gap-1 overflow-x-auto no-scrollbar">
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
                   {CATEGORIES.map((cat) => (
                     <button
                       key={cat}
                       type="button"
                       onClick={() => setBuilderPickerCategory(cat)}
-                      className={`px-2 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap border ${
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap border ${
                         builderPickerCategory === cat
                           ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-background text-muted-foreground'
+                          : 'bg-background text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       {cat}
                     </button>
                   ))}
                 </div>
-              </div>
-              <div className="max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1.5 pr-1">
-                {builderCatalogMatches.map((ex) => (
-                  <button
-                    key={ex.id}
-                    type="button"
-                    onClick={() =>
-                      setBuilderExercises((prev) => [
-                        ...prev,
-                        {
-                          name: ex.name,
-                          category: ex.category,
-                          equipment: ex.equipment,
-                          targetSets: 3,
-                          targetReps: 10,
-                          targetWeightKg: 0,
-                          gifUrl: ex.gifUrl,
-                          instructions: ex.instructions,
-                        },
-                      ])
-                    }
-                    className="flex items-center justify-between gap-2 p-1.5 rounded-lg border bg-background hover:bg-muted text-left text-xs"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {ex.gifUrl && (
-                        <img src={ex.gifUrl} alt={ex.name} className="h-7 w-7 rounded object-contain bg-white border shrink-0" />
-                      )}
-                      <span className="font-semibold truncate">{ex.name}</span>
-                    </div>
-                    <Plus className="h-3.5 w-3.5 text-primary shrink-0" />
-                  </button>
-                ))}
+                <div className="max-h-72 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2 pr-1">
+                  {builderCatalogMatches.map((ex) => (
+                    <button
+                      key={ex.id}
+                      type="button"
+                      onClick={() =>
+                        setBuilderExercises((prev) => [
+                          ...prev,
+                          {
+                            name: ex.name,
+                            category: ex.category,
+                            equipment: ex.equipment,
+                            targetSets: 3,
+                            targetReps: 10,
+                            targetWeightKg: 0,
+                            gifUrl: ex.gifUrl,
+                            instructions: ex.instructions,
+                          },
+                        ])
+                      }
+                      className="flex items-center justify-between gap-2 p-2 rounded-xl border bg-background hover:bg-muted text-left text-xs transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {ex.gifUrl && (
+                          <img src={ex.gifUrl} alt={ex.name} className="h-9 w-9 rounded-lg object-contain bg-white border shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate">{ex.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{ex.category} • {ex.equipment}</p>
+                        </div>
+                      </div>
+                      <Plus className="h-4 w-4 text-primary shrink-0" />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Selected Exercises List */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold">
-                Workout Exercises ({builderExercises.length})
-              </label>
+            {/* Right Column: Selected Exercises List */}
+            <div className="lg:col-span-6 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-black">
+                  Workout Exercises ({builderExercises.length})
+                </label>
+                {builderExercises.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setBuilderExercises([])}
+                    className="h-7 text-xs text-muted-foreground"
+                  >
+                    Clear All
+                  </Button>
+                )}
+              </div>
               {builderExercises.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-4 text-center border rounded-xl">
-                  Click any exercise above to add it to this workout.
-                </p>
+                <div className="text-xs text-muted-foreground py-16 text-center border rounded-2xl bg-muted/10">
+                  Click any exercise on the left to add it to this workout.
+                </div>
               ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                <div className="space-y-2.5 max-h-[58dvh] overflow-y-auto pr-1">
                   {builderExercises.map((item, idx) => (
                     <div
                       key={`${item.name}_${idx}`}
-                      className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 p-2.5 rounded-xl border bg-card text-xs"
+                      className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3 rounded-2xl border bg-card text-xs shadow-2xs"
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         {item.gifUrl && (
-                          <img src={item.gifUrl} alt={item.name} className="h-9 w-9 rounded-lg object-contain bg-white border shrink-0" />
+                          <img src={item.gifUrl} alt={item.name} className="h-11 w-11 rounded-xl object-contain bg-white border shrink-0" />
                         )}
-                        <span className="font-bold truncate">{item.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm truncate">{item.name}</p>
+                          {item.notes && (
+                            <p className="text-[11px] text-muted-foreground truncate">{item.notes}</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Input
-                          type="number"
-                          value={item.targetSets}
-                          onChange={(e) =>
-                            setBuilderExercises((prev) =>
-                              prev.map((it, i) => (i === idx ? { ...it, targetSets: Number(e.target.value) } : it))
-                            )
-                          }
-                          className="w-14 h-8 text-xs text-center"
-                          title="Sets"
-                        />
-                        <span className="text-[10px] text-muted-foreground">sets</span>
-                        <Input
-                          type="number"
-                          value={item.targetReps}
-                          onChange={(e) =>
-                            setBuilderExercises((prev) =>
-                              prev.map((it, i) => (i === idx ? { ...it, targetReps: Number(e.target.value) } : it))
-                            )
-                          }
-                          className="w-14 h-8 text-xs text-center"
-                          title="Reps"
-                        />
-                        <span className="text-[10px] text-muted-foreground">reps</span>
-                        <Input
-                          type="number"
-                          value={item.targetWeightKg}
-                          onChange={(e) =>
-                            setBuilderExercises((prev) =>
-                              prev.map((it, i) => (i === idx ? { ...it, targetWeightKg: Number(e.target.value) } : it))
-                            )
-                          }
-                          className="w-16 h-8 text-xs text-center"
-                          title="Weight (kg)"
-                        />
-                        <span className="text-[10px] text-muted-foreground">kg</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            value={item.targetSets}
+                            onChange={(e) =>
+                              setBuilderExercises((prev) =>
+                                prev.map((it, i) => (i === idx ? { ...it, targetSets: Number(e.target.value) } : it))
+                              )
+                            }
+                            className="w-16 h-9 text-xs font-bold text-center"
+                            title="Sets"
+                          />
+                          <span className="text-[11px] text-muted-foreground font-medium">sets</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            value={item.targetReps}
+                            onChange={(e) =>
+                              setBuilderExercises((prev) =>
+                                prev.map((it, i) => (i === idx ? { ...it, targetReps: Number(e.target.value) } : it))
+                              )
+                            }
+                            className="w-16 h-9 text-xs font-bold text-center"
+                            title="Reps"
+                          />
+                          <span className="text-[11px] text-muted-foreground font-medium">reps</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            value={item.targetWeightKg}
+                            onChange={(e) =>
+                              setBuilderExercises((prev) =>
+                                prev.map((it, i) => (i === idx ? { ...it, targetWeightKg: Number(e.target.value) } : it))
+                              )
+                            }
+                            className="w-18 h-9 text-xs font-bold text-center"
+                            title="Weight (kg)"
+                          />
+                          <span className="text-[11px] text-muted-foreground font-medium">kg</span>
+                        </div>
                         <Button
                           type="button"
                           size="icon"
                           variant="ghost"
                           onClick={() => setBuilderExercises((prev) => prev.filter((_, i) => i !== idx))}
-                          className="h-8 w-8 text-destructive"
+                          className="h-9 w-9 text-destructive hover:bg-destructive/10 rounded-xl"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -1417,10 +1455,10 @@ export default function ExerciseLibraryHub({
           </div>
 
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => setBuilderOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setBuilderOpen(false)} className="rounded-xl">
               Cancel
             </Button>
-            <Button type="button" onClick={handleSaveBuilder} disabled={isSavingBuilder} className="font-bold gap-1.5">
+            <Button type="button" onClick={handleSaveBuilder} disabled={isSavingBuilder} className="rounded-xl font-bold gap-1.5">
               {builderMode === 'template' ? (
                 <>
                   <Sparkles className="h-4 w-4" />

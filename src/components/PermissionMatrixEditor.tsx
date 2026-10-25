@@ -376,7 +376,7 @@ export const PermissionMatrixEditor: React.FC<PermissionMatrixEditorProps> = ({
 
               {/* Permissions Checkbox Grid */}
               {isExpanded && (
-                <div className="p-3 sm:p-4 grid grid-cols-1 md:grid-cols-2 gap-2.5 bg-card/40">
+                <div className="p-3 sm:p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 bg-card/40">
                   {defs.map(def => {
                     const isChecked = !!permissions[def.key];
                     return (

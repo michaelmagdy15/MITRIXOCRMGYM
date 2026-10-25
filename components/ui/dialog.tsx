@@ -29,7 +29,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/40 duration-100 supports-backdrop-filter:backdrop-blur-xs data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
         className
       )}
       {...props}
@@ -45,14 +45,22 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  const expandedClassName =
+    typeof className === "string"
+      ? className.replace(
+          /(?:^|\s+)(?:sm:|md:|lg:|xl:|2xl:)?!?max-w-(?:xs|sm|md|lg|xl|2xl|3xl|4xl|5xl|\[(?:3\d\d|4\d\d|5\d\d|6\d\d|7\d\d|8\d\d)px\])(?=\s|$)/g,
+          " "
+        )
+      : className
+
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-lg md:max-w-xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-          className
+          "fixed top-1/2 left-1/2 z-50 grid w-[96vw] max-w-[96vw] sm:max-w-[96vw] md:max-w-[95vw] lg:max-w-[94vw] xl:max-w-[1440px] 2xl:max-w-[1600px] max-h-[92dvh] overflow-y-auto -translate-x-1/2 -translate-y-1/2 gap-4 rounded-2xl bg-popover p-5 sm:p-6 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          expandedClassName
         )}
         {...props}
       >
@@ -63,7 +71,7 @@ function DialogContent({
             render={
               <Button
                 variant="ghost"
-                className="absolute top-3 right-3 md:top-2 md:right-2 h-11 w-11 md:h-7 md:w-7 rounded-full bg-muted/30 hover:bg-muted/50 border border-border/50 text-foreground/85 hover:text-foreground flex items-center justify-center [&_svg]:size-5 md:[&_svg]:size-4"
+                className="absolute top-3 right-3 md:top-3 md:right-3 h-10 w-10 md:h-8 md:w-8 rounded-full bg-muted/40 hover:bg-muted/70 border border-border/60 text-foreground/85 hover:text-foreground flex items-center justify-center [&_svg]:size-5 md:[&_svg]:size-4"
                 size="icon"
               />
             }
@@ -99,7 +107,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        "-mx-5 -mb-5 sm:-mx-6 sm:-mb-6 flex flex-col-reverse gap-2 rounded-b-2xl border-t bg-muted/50 p-4 px-6 sm:flex-row sm:justify-end",
         className
       )}
       {...props}
