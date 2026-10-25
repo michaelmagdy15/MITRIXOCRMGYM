@@ -4,7 +4,117 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+interface SelectLabelsContextValue {
+  getLabel: (val: any) => string | undefined;
+  registerLabel: (val: string, label: string) => void;
+}
+
+const SelectLabelsContext = React.createContext<SelectLabelsContextValue | null>(null);
+
+function looksLikeFirestoreId(val: any): boolean {
+  if (typeof val !== 'string') return false;
+  // Firestore auto-generated document IDs are typically 20 alphanumeric chars, e.g. "CiQUIsakv5yqjSRaciKX"
+  return /^[a-zA-Z0-9_-]{18,32}$/.test(val.trim());
+}
+
+function extractTextFromNode(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) {
+    return node
+      .map(extractTextFromNode)
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  if (React.isValidElement(node) && (node.props as any)?.children !== undefined) {
+    return extractTextFromNode((node.props as any).children);
+  }
+  return '';
+}
+
+function collectSelectItems(node: React.ReactNode, map: Map<string, string>): void {
+  if (!node) return;
+  if (Array.isArray(node)) {
+    node.forEach((child) => collectSelectItems(child, map));
+    return;
+  }
+  if (React.isValidElement(node)) {
+    const props = node.props as any;
+    const isItem =
+      node.type === SelectItem ||
+      (node.type as any)?.displayName === 'SelectItem' ||
+      props?.['data-slot'] === 'select-item';
+    if (isItem && props && props.value !== undefined) {
+      const valKey = String(props.value);
+      const label =
+        props.label ||
+        (typeof props.children === 'string'
+          ? props.children
+          : extractTextFromNode(props.children));
+      if (label) {
+        map.set(valKey, label);
+      }
+    }
+    if (props && props.children) {
+      collectSelectItems(props.children, map);
+    }
+  }
+}
+
+function Select({ children, items, ...props }: SelectPrimitive.Root.Props<any>) {
+  const dynamicLabelsRef = React.useRef<Map<string, string>>(new Map());
+  const [, forceUpdate] = React.useState(0);
+
+  const staticLabelsMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    collectSelectItems(children, map);
+    return map;
+  }, [children]);
+
+  const registerLabel = React.useCallback((val: string, label: string) => {
+    if (!label) return;
+    if (dynamicLabelsRef.current.get(val) !== label) {
+      dynamicLabelsRef.current.set(val, label);
+      forceUpdate((n) => n + 1);
+    }
+  }, []);
+
+  const getLabel = React.useCallback(
+    (val: any): string | undefined => {
+      if (val === null || val === undefined) return undefined;
+      const key = String(val);
+      return staticLabelsMap.get(key) ?? dynamicLabelsRef.current.get(key);
+    },
+    [staticLabelsMap]
+  );
+
+  const resolvedItems = React.useMemo(() => {
+    if (items) return items;
+    const obj: Record<string, string> = {};
+    dynamicLabelsRef.current.forEach((v, k) => {
+      obj[k] = v;
+    });
+    staticLabelsMap.forEach((v, k) => {
+      obj[k] = v;
+    });
+    return obj;
+  }, [items, staticLabelsMap]);
+
+  const ctxValue = React.useMemo(
+    () => ({ getLabel, registerLabel }),
+    [getLabel, registerLabel]
+  );
+
+  return (
+    <SelectLabelsContext.Provider value={ctxValue}>
+      <SelectPrimitive.Root items={resolvedItems} {...props}>
+        {children}
+      </SelectPrimitive.Root>
+    </SelectLabelsContext.Provider>
+  );
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -16,27 +126,13 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   )
 }
 
-function looksLikeFirestoreId(val: any): boolean {
-  if (typeof val !== 'string') return false;
-  // Firestore auto-generated document IDs are typically 20 alphanumeric chars, e.g. "CiQUIsakv5yqjSRaciKX"
-  return /^[a-zA-Z0-9_-]{18,32}$/.test(val.trim());
-}
-
-function extractTextFromNode(node: React.ReactNode): string {
-  if (!node) return '';
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(extractTextFromNode).join(' ');
-  if (React.isValidElement(node) && (node.props as any)?.children) {
-    return extractTextFromNode((node.props as any).children);
-  }
-  return '';
-}
-
 function SelectValue({ className, children, placeholder, ...props }: SelectPrimitive.Value.Props) {
+  const labelsCtx = React.useContext(SelectLabelsContext);
+
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
-      className={cn("flex flex-1 text-left", className)}
+      className={cn("flex flex-1 text-left truncate", className)}
       placeholder={placeholder}
       {...props}
     >
@@ -44,11 +140,19 @@ function SelectValue({ className, children, placeholder, ...props }: SelectPrimi
         ? children
         : (val: any) => {
             if (children) return children;
-            if (!val) return placeholder || null;
+            if (val === null || val === undefined || val === '') {
+              return placeholder ? (
+                <span className="text-muted-foreground">{placeholder}</span>
+              ) : null;
+            }
+            const mappedLabel = labelsCtx?.getLabel(val);
+            if (mappedLabel) {
+              return mappedLabel;
+            }
             if (looksLikeFirestoreId(val)) {
               return placeholder || 'Selected';
             }
-            return val;
+            return String(val);
           }}
     </SelectPrimitive.Value>
   )
@@ -140,7 +244,14 @@ function SelectItem({
   label,
   ...props
 }: SelectPrimitive.Item.Props) {
+  const labelsCtx = React.useContext(SelectLabelsContext);
   const derivedLabel = label || (typeof children === 'string' ? children : extractTextFromNode(children));
+
+  React.useEffect(() => {
+    if (props.value !== undefined && derivedLabel) {
+      labelsCtx?.registerLabel(String(props.value), derivedLabel);
+    }
+  }, [props.value, derivedLabel, labelsCtx]);
 
   return (
     <SelectPrimitive.Item
@@ -165,6 +276,7 @@ function SelectItem({
     </SelectPrimitive.Item>
   )
 }
+SelectItem.displayName = "SelectItem"
 
 function SelectSeparator({
   className,

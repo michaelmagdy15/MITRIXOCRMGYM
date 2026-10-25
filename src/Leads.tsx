@@ -2714,7 +2714,11 @@ export default function Leads() {
                     </SelectTrigger>
                     <SelectContent className="max-h-72">
                       {availablePackages.map((pkg: Package) => (
-                        <SelectItem key={pkg.id} value={pkg.id}>
+                        <SelectItem
+                          key={pkg.id}
+                          value={pkg.id}
+                          label={`${pkg.name} — ${pkg.price} EGP (${pkg.sessions === 9999 || pkg.sessions === -1 ? 'Unlimited' : `${pkg.sessions} ses.`} · ${pkg.expiryDays}d)`}
+                        >
                           <div className="flex items-center justify-between w-full gap-4">
                             <span className="font-semibold">{pkg.name}</span>
                             <div className="flex items-center gap-2 text-xs">

@@ -226,6 +226,7 @@ export default function Clients() {
   const [bulkPkgSearch, setBulkPkgSearch] = useState('');
   const [memberFeedbackDraft, setMemberFeedbackDraft] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+  const [packagesSectionView, setPackagesSectionView] = useState<'all' | 'packages-referrals' | 'guest-invitations'>('all');
 
   React.useEffect(() => {
     if (activeClientId) {
@@ -2783,6 +2784,7 @@ export default function Clients() {
                   {[
                     { value: 'overview', label: isInzanTenant ? 'Overview (User Details)' : 'Overview', icon: <User className="h-3.5 w-3.5" /> },
                     ...(isInzanTenant ? [{ value: 'packages', label: `Packages & Invites (${(activeClient.packages || []).length || 1})`, icon: <Gift className="h-3.5 w-3.5" /> }] : []),
+                    { value: 'benefits', label: 'Member Benefits', icon: <CheckCircle className="h-3.5 w-3.5" /> },
                     { value: 'attendance-history', label: 'Attendance & Session History', icon: <History className="h-3.5 w-3.5" /> },
                     { value: 'activity', label: 'Activity', icon: <MessageSquare className="h-3.5 w-3.5" /> },
                     { value: 'history', label: 'History', icon: <FileText className="h-3.5 w-3.5" /> },
@@ -2807,39 +2809,54 @@ export default function Clients() {
               </div>
 
               <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                {/* ── OVERVIEW TAB ── */}
-                <TabsContent value="overview" className="mt-0 outline-none p-5 space-y-5">
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                    {/* Left: Editable fields */}
-                    <div className="space-y-4 p-4 rounded-xl border bg-muted/20 text-left">
-                      <div className="flex items-center justify-between border-b pb-2 mb-2">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Member Details</p>
-                        <div className="flex items-center gap-2">
-                          {canDownloadContract && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs font-semibold px-2 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                              onClick={handleDownloadContract}
-                              title="Download Contract (PDF)"
-                            >
-                              <FileText className="h-3.5 w-3.5 mr-1" /> Download Contract (PDF)
-                            </Button>
-                          )}
-                          {getTenantId().toLowerCase().includes('inzan') && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 text-xs font-semibold px-2"
-                              onClick={() => setIsEditing(!isEditing)}
-                            >
-                              {isEditing ? 'Cancel' : 'Edit'}
-                            </Button>
-                          )}
-                        </div>
+                {/* ── OVERVIEW TAB (SPREAD HORIZONTALLY ACROSS FULL WIDTH) ── */}
+                <TabsContent value="overview" className="mt-0 outline-none p-5 space-y-6">
+                  {/* SECTION 1: MEMBER DETAILS (FULL-WIDTH HORIZONTAL SPREAD) */}
+                  <div className="rounded-2xl border-2 border-border/80 bg-card shadow-sm overflow-hidden text-left">
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 border-b px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-wider bg-primary/10 text-primary border-primary/30">
+                          Section 1
+                        </Badge>
+                        <p className="text-xs font-bold uppercase tracking-widest text-foreground">Member Details &amp; Profile Information</p>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1 col-span-1 sm:col-span-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs font-semibold px-2.5 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                          onClick={() => setMemberProfileTab('benefits')}
+                        >
+                          <Gift className="h-3.5 w-3.5 mr-1" /> Member Benefits
+                        </Button>
+                        {canDownloadContract && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs font-semibold px-2.5 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                            onClick={handleDownloadContract}
+                            title="Download Contract (PDF)"
+                          >
+                            <FileText className="h-3.5 w-3.5 mr-1" /> Download Contract (PDF)
+                          </Button>
+                        )}
+                        {getTenantId().toLowerCase().includes('inzan') && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs font-semibold px-3"
+                            onClick={() => setIsEditing(!isEditing)}
+                          >
+                            {isEditing ? 'Cancel' : 'Edit'}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-5 space-y-5">
+                      {/* Horizontal 4-Column Core Fields Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                        <div className="space-y-1">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Name</Label>
                           <Input
                             type="text"
@@ -2850,7 +2867,7 @@ export default function Clients() {
                             placeholder="Member name"
                           />
                         </div>
-                        <div className="space-y-1 col-span-1 sm:col-span-2">
+                        <div className="space-y-1">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Phone</Label>
                           <Input
                             type="text"
@@ -2946,7 +2963,7 @@ export default function Clients() {
                             <option value="Adults">Adults</option>
                           </select>
                         </div>
-                        <div className="space-y-1 col-span-1 sm:col-span-2">
+                        <div className="space-y-1 sm:col-span-2 lg:col-span-2">
                           <div className="flex items-center justify-between">
                             <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Sales Rep</Label>
                             {isInzanTenant && Boolean(activeClient.assignedTo && activeClient.assignedTo !== 'unassigned') && !canReassignMemberSalesRep(currentUser) && (
@@ -2971,7 +2988,7 @@ export default function Clients() {
                               ))}
                           </select>
                         </div>
-                        <div className="space-y-2 col-span-1 sm:col-span-2 pt-2 border-t">
+                        <div className="space-y-2 sm:col-span-2 lg:col-span-2">
                           <div className="flex items-center justify-between">
                             <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                               <Users className="h-3.5 w-3.5 text-primary" />
@@ -3079,204 +3096,229 @@ export default function Clients() {
                         </div>
                       </div>
 
-                      {/* Additional whitelabeling fields */}
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground pt-4 border-t">Additional Information</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">National ID</Label>
-                          <Input
-                            type="text"
-                            className="h-9 text-sm bg-background rounded-lg"
-                            defaultValue={activeClient.nationalId || ''}
-                            onChange={(e) => debouncedUpdate(activeClient.id, { nationalId: e.target.value })}
-                            placeholder="National ID"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Email</Label>
-                          <Input
-                            type="email"
-                            className="h-9 text-sm bg-background rounded-lg"
-                            defaultValue={activeClient.email || ''}
-                            onChange={(e) => debouncedUpdate(activeClient.id, { email: e.target.value })}
-                            placeholder="Email address"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Backup Phone</Label>
-                          <Input
-                            type="text"
-                            className="h-9 text-sm bg-background rounded-lg"
-                            defaultValue={activeClient.backupPhone || ''}
-                            onChange={(e) => debouncedUpdate(activeClient.id, { backupPhone: e.target.value })}
-                            placeholder="Backup phone number"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Military/Civilian Status</Label>
-                          <select
-                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            defaultValue={activeClient.civilianOrMilitary || 'None'}
-                            onChange={(e) => updateClient(activeClient.id, { civilianOrMilitary: e.target.value as any })}
-                          >
-                            <option value="None">None</option>
-                            <option value="Civilian">Civilian</option>
-                            <option value="Military">Military</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1 col-span-1 sm:col-span-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Lead Advertising Source</Label>
-                          <select
-                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            defaultValue={activeClient.advertisingSource || ''}
-                            onChange={(e) => updateClient(activeClient.id, { advertisingSource: e.target.value })}
-                          >
-                            <option value="">Select source</option>
-                            <option value="Call in">Call in</option>
-                            <option value="Walk-in">Walk-in</option>
-                            <option value="Word Of Mouth">Word Of Mouth</option>
-                            <option value="Instagram">Instagram</option>
-                            <option value="ADS">ADS</option>
-                            <option value="Facebook">Facebook</option>
-                            <option value="Website">Website</option>
-                            <option value="Google">Google</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1 col-span-1 sm:col-span-2">
-                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referred By Name/ID</Label>
-                          <Input
-                            type="text"
-                            className="h-9 text-sm bg-background rounded-lg"
-                            defaultValue={activeClient.referredByName || activeClient.referredBy || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              debouncedUpdate(activeClient.id, { referredByName: val, referredBy: val });
-                            }}
-                            placeholder="Referred by details"
-                          />
-                        </div>
-                        {getTenantId().toLowerCase().includes('inzan') && (
-                          <>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Emergency Contact Name</Label>
-                              <Input
-                                type="text"
-                                className="h-9 text-sm bg-background rounded-lg"
-                                defaultValue={activeClient.emergencyContactName || ''}
-                                onChange={(e) => debouncedUpdate(activeClient.id, { emergencyContactName: e.target.value })}
-                                placeholder="Emergency Contact Name"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Civil Status</Label>
-                              <select
-                                className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                defaultValue={activeClient.civilStatus || ''}
-                                onChange={(e) => updateClient(activeClient.id, { civilStatus: e.target.value })}
-                              >
-                                <option value="">Select status</option>
-                                <option value="Single">Single</option>
-                                <option value="Married">Married</option>
-                                <option value="Divorced">Divorced</option>
-                                <option value="Widowed">Widowed</option>
-                              </select>
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Barcode</Label>
-                              <Input
-                                type="text"
-                                className="h-9 text-sm bg-background rounded-lg"
-                                defaultValue={activeClient.barcode || ''}
-                                onChange={(e) => debouncedUpdate(activeClient.id, { barcode: e.target.value })}
-                                placeholder="Barcode"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Card ID</Label>
-                              <Input
-                                type="text"
-                                className="h-9 text-sm bg-background rounded-lg"
-                                defaultValue={activeClient.cardId || ''}
-                                onChange={(e) => debouncedUpdate(activeClient.id, { cardId: e.target.value })}
-                                placeholder="Card ID"
-                              />
-                            </div>
-                            {activeClient.legacyNotes && (
-                              <div className="space-y-1 col-span-1 sm:col-span-2">
-                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Legacy Notes</Label>
-                                <Textarea
-                                  className="text-xs bg-background rounded-lg resize-none min-h-[80px]"
-                                  value={activeClient.legacyNotes}
-                                  readOnly
-                                  placeholder="Imported notes"
+                      {/* Additional whitelabeling fields (Horizontal 4-Column Grid) */}
+                      <div className="pt-4 border-t space-y-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Additional Information</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">National ID</Label>
+                            <Input
+                              type="text"
+                              className="h-9 text-sm bg-background rounded-lg"
+                              defaultValue={activeClient.nationalId || ''}
+                              onChange={(e) => debouncedUpdate(activeClient.id, { nationalId: e.target.value })}
+                              placeholder="National ID"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Email</Label>
+                            <Input
+                              type="email"
+                              className="h-9 text-sm bg-background rounded-lg"
+                              defaultValue={activeClient.email || ''}
+                              onChange={(e) => debouncedUpdate(activeClient.id, { email: e.target.value })}
+                              placeholder="Email address"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Backup Phone</Label>
+                            <Input
+                              type="text"
+                              className="h-9 text-sm bg-background rounded-lg"
+                              defaultValue={activeClient.backupPhone || ''}
+                              onChange={(e) => debouncedUpdate(activeClient.id, { backupPhone: e.target.value })}
+                              placeholder="Backup phone number"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Military/Civilian Status</Label>
+                            <select
+                              className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              defaultValue={activeClient.civilianOrMilitary || 'None'}
+                              onChange={(e) => updateClient(activeClient.id, { civilianOrMilitary: e.target.value as any })}
+                            >
+                              <option value="None">None</option>
+                              <option value="Civilian">Civilian</option>
+                              <option value="Military">Military</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Lead Advertising Source</Label>
+                            <select
+                              className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              defaultValue={activeClient.advertisingSource || ''}
+                              onChange={(e) => updateClient(activeClient.id, { advertisingSource: e.target.value })}
+                            >
+                              <option value="">Select source</option>
+                              <option value="Call in">Call in</option>
+                              <option value="Walk-in">Walk-in</option>
+                              <option value="Word Of Mouth">Word Of Mouth</option>
+                              <option value="Instagram">Instagram</option>
+                              <option value="ADS">ADS</option>
+                              <option value="Facebook">Facebook</option>
+                              <option value="Website">Website</option>
+                              <option value="Google">Google</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Referred By Name/ID</Label>
+                            <Input
+                              type="text"
+                              className="h-9 text-sm bg-background rounded-lg"
+                              defaultValue={activeClient.referredByName || activeClient.referredBy || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                debouncedUpdate(activeClient.id, { referredByName: val, referredBy: val });
+                              }}
+                              placeholder="Referred by details"
+                            />
+                          </div>
+                          {getTenantId().toLowerCase().includes('inzan') && (
+                            <>
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Emergency Contact Name</Label>
+                                <Input
+                                  type="text"
+                                  className="h-9 text-sm bg-background rounded-lg"
+                                  defaultValue={activeClient.emergencyContactName || ''}
+                                  onChange={(e) => debouncedUpdate(activeClient.id, { emergencyContactName: e.target.value })}
+                                  placeholder="Emergency Contact Name"
                                 />
                               </div>
-                            )}
-                          </>
-                        )}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Civil Status</Label>
+                                <select
+                                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                  defaultValue={activeClient.civilStatus || ''}
+                                  onChange={(e) => updateClient(activeClient.id, { civilStatus: e.target.value })}
+                                >
+                                  <option value="">Select status</option>
+                                  <option value="Single">Single</option>
+                                  <option value="Married">Married</option>
+                                  <option value="Divorced">Divorced</option>
+                                  <option value="Widowed">Widowed</option>
+                                </select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Barcode</Label>
+                                <Input
+                                  type="text"
+                                  className="h-9 text-sm bg-background rounded-lg"
+                                  defaultValue={activeClient.barcode || ''}
+                                  onChange={(e) => debouncedUpdate(activeClient.id, { barcode: e.target.value })}
+                                  placeholder="Barcode"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Card ID</Label>
+                                <Input
+                                  type="text"
+                                  className="h-9 text-sm bg-background rounded-lg"
+                                  defaultValue={activeClient.cardId || ''}
+                                  onChange={(e) => debouncedUpdate(activeClient.id, { cardId: e.target.value })}
+                                  placeholder="Card ID"
+                                />
+                              </div>
+                              {activeClient.legacyNotes && (
+                                <div className="space-y-1 sm:col-span-2 lg:col-span-4">
+                                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Legacy Notes</Label>
+                                  <Textarea
+                                    className="text-xs bg-background rounded-lg resize-none min-h-[70px]"
+                                    value={activeClient.legacyNotes}
+                                    readOnly
+                                    placeholder="Imported notes"
+                                  />
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       {/* Portal Access Control */}
-                      <div className="border-t pt-3 mt-4 space-y-2">
-                        <Label className="text-[10px] font-bold uppercase tracking-wider text-primary">Portal Access</Label>
-                        <div className="flex items-center justify-between">
+                      <div className="border-t pt-3 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-primary">Portal Access</Label>
                           {activeClient.portalUserId ? (
-                            <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
                               <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
                                 <CheckCircle className="h-3.5 w-3.5" /> Portal Active
                               </p>
-                              <p className="text-[9px] text-muted-foreground font-mono select-all cursor-pointer" title="Click to copy email">
-                                Email: member-{activeClient.memberId?.toLowerCase()}@mitrixogymcrm-member.local
+                              <p className="text-[10px] text-muted-foreground font-mono select-all cursor-pointer" title="Click to copy email">
+                                (Email: member-{activeClient.memberId?.toLowerCase()}@mitrixogymcrm-member.local)
                               </p>
                             </div>
                           ) : (
-                            <div className="space-y-0.5">
-                              <p className="text-xs text-muted-foreground">No portal access enabled yet.</p>
-                            </div>
+                            <p className="text-xs text-muted-foreground">No portal access enabled yet.</p>
                           )}
-
-                          {!activeClient.portalUserId &&
-                            (activeClient.memberId ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-xs font-bold text-primary border-primary/20 hover:border-primary/40"
-                                disabled={isActivatingPortal === activeClient.id}
-                                onClick={async () => {
-                                  if (window.confirm(`Enable portal access for ${activeClient.name}?`)) {
-                                    setIsActivatingPortal(activeClient.id);
-                                    try {
-                                      await createClientAccount(activeClient.id, activeClient.memberId!, activeClient.name, activeClient.phone);
-                                      alert('Portal access enabled! Default password is: 12345678');
-                                    } catch (err: any) {
-                                      alert('Failed to enable portal access: ' + err.message);
-                                    } finally {
-                                      setIsActivatingPortal(null);
-                                    }
-                                  }
-                                }}
-                              >
-                                {isActivatingPortal === activeClient.id ? 'Activating...' : 'Enable Access'}
-                              </Button>
-                            ) : (
-                              <p className="text-[10px] text-amber-500 font-semibold italic">Requires a Member ID to enable access</p>
-                            ))}
                         </div>
+
+                        {!activeClient.portalUserId &&
+                          (activeClient.memberId ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs font-bold text-primary border-primary/20 hover:border-primary/40"
+                              disabled={isActivatingPortal === activeClient.id}
+                              onClick={async () => {
+                                if (window.confirm(`Enable portal access for ${activeClient.name}?`)) {
+                                  setIsActivatingPortal(activeClient.id);
+                                  try {
+                                    await createClientAccount(activeClient.id, activeClient.memberId!, activeClient.name, activeClient.phone);
+                                    alert('Portal access enabled! Default password is: 12345678');
+                                  } catch (err: any) {
+                                    alert('Failed to enable portal access: ' + err.message);
+                                  } finally {
+                                    setIsActivatingPortal(null);
+                                  }
+                                }
+                              }}
+                            >
+                              {isActivatingPortal === activeClient.id ? 'Activating...' : 'Enable Access'}
+                            </Button>
+                          ) : (
+                            <p className="text-[10px] text-amber-500 font-semibold italic">Requires a Member ID to enable access</p>
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 2: PACKAGES SUMMARY & MEMBER FEEDBACK (FULL-WIDTH HORIZONTAL SPREAD) */}
+                  <div className="rounded-2xl border-2 border-border/80 bg-card shadow-sm overflow-hidden text-left">
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 border-b px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                          Section 2
+                        </Badge>
+                        <p className="text-xs font-bold uppercase tracking-widest text-foreground">
+                          Packages Summary &amp; Front-Desk Feedback
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setMemberProfileTab('benefits')}
+                          className="h-7 text-xs font-bold gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                        >
+                          <CheckCircle className="h-3.5 w-3.5" /> View Member Benefits →
+                        </Button>
+                        {isInzanTenant && (
+                          <Button
+                            size="sm"
+                            onClick={() => setMemberProfileTab('packages')}
+                            className="h-7 text-xs font-bold gap-1"
+                          >
+                            Manage Packages &amp; Invites →
+                          </Button>
+                        )}
                       </div>
                     </div>
 
-                    {/* Right: Inzan Overview Quick Actions (Invitations vs Unlimited Referrals + Packages Tab Link) OR Legacy Package Card */}
-                    <div className="p-4 rounded-xl border bg-muted/20 space-y-4 text-left">
-                      <MemberBenefitsWallet
-                        client={activeClient}
-                        packages={packages}
-                        isAdminView={true}
-                        clubName={branding?.companyName || (isInzanTenant ? 'Inzan Athletics' : 'Strike Boxing Club')}
-                      />
-
+                    <div className="p-5">
                       {isInzanTenant ? (
-                        <div className="space-y-4">
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
                           {/* Read-Only Primary & Secondary Package Summary Card */}
                           {(() => {
                             const rawC = activeClient as any;
@@ -3306,16 +3348,9 @@ export default function Clients() {
                                       Packages are locked from random profile edits (&lt;24h creation lock enforced in Packages tab).
                                     </span>
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => setMemberProfileTab('packages')}
-                                    className="h-8 text-xs font-bold gap-1"
-                                  >
-                                    Manage Packages &amp; Invites →
-                                  </Button>
                                 </div>
 
-                                <div className="grid grid-cols-1 2xl:grid-cols-2 gap-2.5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                   <div className="p-3 rounded-lg border bg-background space-y-1">
                                     <div className="flex items-center justify-between gap-1">
                                       <Badge className="bg-emerald-600 text-white text-[9px] font-bold uppercase">Primary Package</Badge>
@@ -3435,7 +3470,7 @@ export default function Clients() {
                           </div>
                         </div>
                       ) : (
-                        <>
+                        <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Current Package</p>
                             <div className="flex gap-1">
@@ -3481,7 +3516,7 @@ export default function Clients() {
                             </div>
                           </div>
                           {(activeClient.packages || []).length > 0 ? (
-                            <div className="space-y-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {(activeClient.packages || []).map((pkg, idx) => (
                                 <div key={pkg.id} className="p-3 bg-background rounded-lg border text-xs space-y-2">
                                   <Select
@@ -3614,23 +3649,94 @@ export default function Clients() {
                           ) : (
                             <p className="text-xs text-muted-foreground text-center py-4">No package found. Click "+ Add" to assign one.</p>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
                 </TabsContent>
 
-                {/* ── INZAN PACKAGES & INVITES TAB (CONSOLIDATED HUB) ── */}
-                {isInzanTenant && (
-                  <TabsContent value="packages" className="mt-0 outline-none p-5 space-y-5 text-left">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                {/* ── DEDICATED MEMBER BENEFITS TAB (NEXT TO PACKAGES & INVITES) ── */}
+                <TabsContent value="benefits" className="mt-0 outline-none p-5 space-y-6 text-left">
+                  <div className="rounded-2xl border-2 border-primary/25 bg-card shadow-sm overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-primary/10 border-b border-primary/20 px-5 py-3.5">
                       <div>
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-primary">
-                          Packages, Invitations &amp; Referrals Hub ({(activeClient.packages || []).length || 1} Package{(activeClient.packages || []).length === 1 ? '' : 's'})
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          Primary &amp; Secondary packages with creator audit trail, &lt;24h Same-Day Edit Lock, Upgrade/Renew/Transfer, Guest Pass Invitations, and Unlimited Referrals.
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-primary text-primary-foreground text-[10px] font-black uppercase">
+                            Member Benefits
+                          </Badge>
+                          <h3 className="text-sm font-black uppercase tracking-wider text-foreground">
+                            Entitlements &amp; Benefits Wallet
+                          </h3>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Track PT sessions, class trials, guest invitation passes, and freeze day allowances unlocked by this member&apos;s packages.
                         </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isInzanTenant && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs font-bold"
+                            onClick={() => setMemberProfileTab('packages')}
+                          >
+                            Manage Packages &amp; Invites →
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs font-bold"
+                          onClick={() => setMemberProfileTab('freeze')}
+                        >
+                          Manage Freeze →
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="p-5">
+                      <MemberBenefitsWallet
+                        client={activeClient}
+                        packages={packages}
+                        isAdminView={true}
+                        clubName={branding?.companyName || (isInzanTenant ? 'Inzan Athletics' : 'Strike Boxing Club')}
+                      />
+                    </div>
+                  </div>
+                </TabsContent>
+
+                {/* ── INZAN PACKAGES & INVITES TAB (2 DISTINCT VISUAL SECTIONS) ── */}
+                {isInzanTenant && (
+                  <TabsContent value="packages" className="mt-0 outline-none p-5 space-y-6 text-left">
+                    {/* Top Section Switcher Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 p-2 rounded-xl border border-border/80">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2">
+                          View Section:
+                        </span>
+                        <Button
+                          size="sm"
+                          variant={packagesSectionView === 'all' ? 'default' : 'outline'}
+                          onClick={() => setPackagesSectionView('all')}
+                          className="h-7 text-xs font-bold"
+                        >
+                          All Sections (2)
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={packagesSectionView === 'packages-referrals' ? 'default' : 'outline'}
+                          onClick={() => setPackagesSectionView('packages-referrals')}
+                          className="h-7 text-xs font-bold"
+                        >
+                          1. Packages &amp; Unlimited Referrals
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={packagesSectionView === 'guest-invitations' ? 'default' : 'outline'}
+                          onClick={() => setPackagesSectionView('guest-invitations')}
+                          className="h-7 text-xs font-bold"
+                        >
+                          2. Guest Invitations &amp; Visitor Log
+                        </Button>
                       </div>
                       <Button
                         size="sm"
@@ -3649,7 +3755,29 @@ export default function Clients() {
                       </Button>
                     </div>
 
-                    {((activeClient.packages || []).length > 0 ? activeClient.packages! : []).map((pkg, idx) => {
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 1 CARD: PACKAGES, QUOTA & UNLIMITED REFERRALS HUB
+                       ══════════════════════════════════════════════════════════════ */}
+                    {(packagesSectionView === 'all' || packagesSectionView === 'packages-referrals') && (
+                      <div className="rounded-2xl border-2 border-primary/25 bg-card shadow-md overflow-hidden">
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-primary/10 border-b border-primary/20 px-5 py-3.5">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-wider">
+                                Section 1
+                              </Badge>
+                              <h3 className="text-sm font-black uppercase tracking-wider text-foreground">
+                                Packages, Invitations Quota &amp; Unlimited Referrals ({(activeClient.packages || []).length || 1} Package{(activeClient.packages || []).length === 1 ? '' : 's'})
+                              </h3>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Primary &amp; Secondary packages with creator audit trail, &lt;24h Same-Day Edit Lock, Upgrade/Renew/Transfer, Guest Pass Quota, and Unlimited Referrals.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="p-5 space-y-5">
+                          {((activeClient.packages || []).length > 0 ? activeClient.packages! : []).map((pkg, idx) => {
                       const pkgNorm = String(pkg.packageName || activeClient.packageType || '').trim().toLowerCase();
                       const catMatch = packages.find(cp => (cp.name || '').trim().toLowerCase() === pkgNorm || cp.id === (pkg as any).packageId) as any;
                       const rawC = activeClient as any;
@@ -4194,11 +4322,37 @@ export default function Clients() {
                             </div>
                           );
                         })()}
+                            </div>
+                          </div>
+                        </div>
                       </div>
+                    )}
 
-                      {/* Guest Invitations Manager Embedded Directly in Packages Tab */}
-                      <MemberGuestInvitationsTab client={activeClient} />
-                    </div>
+                    {/* ══════════════════════════════════════════════════════════════
+                        SECTION 2 CARD: MEMBER GUEST INVITATIONS & VISITOR ATTENDANCE LOG
+                       ══════════════════════════════════════════════════════════════ */}
+                    {(packagesSectionView === 'all' || packagesSectionView === 'guest-invitations') && (
+                      <div className="rounded-2xl border-2 border-emerald-500/25 bg-card shadow-md overflow-hidden">
+                        <div className="flex flex-wrap items-center justify-between gap-2 bg-emerald-500/10 border-b border-emerald-500/20 px-5 py-3.5">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider">
+                                Section 2
+                              </Badge>
+                              <h3 className="text-sm font-black uppercase tracking-wider text-foreground">
+                                Member Guest Invitations &amp; Visitor Attendance Log
+                              </h3>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Generate guest passes, create deduplicated Lead profiles (Full Name, Phone, National ID), and confirm visitor reception check-in.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="p-5">
+                          <MemberGuestInvitationsTab client={activeClient} />
+                        </div>
+                      </div>
+                    )}
                   </TabsContent>
                 )}
 
