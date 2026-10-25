@@ -176,6 +176,8 @@ export interface Assessment {
   clientId: string;
   clientName: string;
   phone?: string;
+  email?: string;
+  source?: string;
   membershipId?: string;
   timePeriod?: AssessmentTimePeriod;
   preferredHour?: string;
@@ -701,11 +703,14 @@ export interface GuestInvite {
   hostName: string;
   guestName: string;
   guestPhone: string;
+  guestNationalId?: string;
+  guestClientId?: string;
   inviteCode: string;
   status: 'Pending' | 'Attended' | 'Expired';
   createdAt: string;
   attendedAt?: string;
   attendanceDate?: string;
+  confirmedBy?: string;
   branch?: string;
 }
 

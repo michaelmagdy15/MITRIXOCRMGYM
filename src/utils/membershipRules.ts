@@ -49,6 +49,53 @@ export function isPrimaryMembershipPackage(
 }
 
 /**
+ * Resolves the effective Hierarchy ('Primary' | 'Secondary') of a package for UI display and filtering.
+ */
+export function getEffectivePackageHierarchy(
+  pkg?: Package | null | { category?: string; name?: string; packageName?: string; type?: string; hierarchy?: string; hierarchyType?: string }
+): 'Primary' | 'Secondary' {
+  if (!pkg) return 'Secondary';
+  const explicit = (pkg as any).hierarchy || (pkg as any).hierarchyType;
+  const cat = (pkg.category || '').toLowerCase().trim();
+  const isSecondaryCat =
+    cat === 'personal training' ||
+    cat === 'personal training (pt)' ||
+    cat === 'pt' ||
+    cat === 'sgf' ||
+    cat === 'classes' ||
+    cat === 'gymnastics' ||
+    cat === 'nutrition' ||
+    cat === 'physiotherapy' ||
+    cat === 'complimentary' ||
+    cat === 'drop-in / day pass' ||
+    cat === 'mma';
+
+  if (explicit === 'Secondary') return 'Secondary';
+  if (isSecondaryCat) return 'Secondary';
+  if (explicit === 'Primary') return 'Primary';
+  return isPrimaryMembershipPackage(pkg) ? 'Primary' : 'Secondary';
+}
+
+/**
+ * Resolves a human-readable package category label.
+ */
+export function getEffectivePackageCategory(
+  pkg?: Package | null | { category?: string; name?: string; packageName?: string; type?: string }
+): string {
+  if (!pkg) return 'Membership';
+  if (pkg.category && pkg.category.trim()) return pkg.category.trim();
+  const name = ((pkg as any).packageName || pkg.name || '').toLowerCase();
+  if (pkg.type === 'Private' || name.includes('pt') || name.includes('personal training')) return 'Personal Training';
+  if (name.includes('sgf')) return 'SGF';
+  if (name.includes('gymnastic')) return 'Gymnastics';
+  if (name.includes('nutrition')) return 'Nutrition';
+  if (name.includes('physio') || name.includes('recovery')) return 'Physiotherapy';
+  if (name.includes('complimentary')) return 'Complimentary';
+  if (name.includes('class') || name.includes('academy') || name.includes('mma')) return 'Classes';
+  return 'Membership';
+}
+
+/**
  * Checks whether a package is an Academy / SGF / MMA / Gymnastics package
  * which does NOT require an active primary membership.
  */

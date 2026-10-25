@@ -3,6 +3,7 @@ import { db } from './firebase';
 import { auth } from './firebase';
 import { collection, onSnapshot, setDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { addAuditLog } from './services/auditService';
+import { activatePendingGuestInvite } from './services/guestReferralService';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -271,45 +272,30 @@ export default function ClubOperations() {
 
   // --- Guest Invites Actions ---
   const handleCheckinGuest = async (invite: GuestInvite) => {
-    if (!window.confirm(`Check in ${invite.guestName}? This will convert them to a Lead.`)) return;
+    if (!window.confirm(`Confirm & activate Guest Invite ${invite.inviteCode} for ${invite.guestName}?`)) return;
 
     try {
-      // 1. Update guestInvite status
-      await updateDoc(doc(db, 'guestInvites', invite.id), {
-        status: 'Attended',
-        updatedAt: new Date().toISOString()
+      await activatePendingGuestInvite({
+        inviteId: invite.id,
+        sourceCollection: 'guestInvites',
+        inviteData: {
+          inviteCode: invite.inviteCode,
+          guestName: invite.guestName,
+          guestPhone: invite.guestPhone,
+          guestNationalId: invite.guestNationalId,
+          guestClientId: invite.guestClientId,
+          hostClientId: invite.hostClientId,
+          hostMemberId: invite.hostMemberId,
+          hostName: invite.hostName,
+          branch: invite.branch || 'Garden 8',
+        },
+        confirmedBy: 'Club Receptionist',
       });
 
-      // 2. Add client record as Lead
-      const leadDocRef = doc(collection(db, 'clients'));
-      await setDoc(leadDocRef, {
-        id: leadDocRef.id,
-        name: invite.guestName,
-        phone: invite.guestPhone,
-        status: 'Lead',
-        stage: 'Trial',
-        source: 'Walk-in',
-        interest: 'Pending',
-        category: 'None',
-        createdAt: new Date().toISOString(),
-        assignedTo: '',
-        comments: [
-          {
-            id: Math.random().toString(),
-            text: `Guest Checked In via referral code: ${invite.inviteCode} (Invited by ${invite.hostName})`,
-            date: new Date().toISOString(),
-            author: 'Front Desk'
-          }
-        ]
-      });
-
-      // 3. Log to audit logs
-      await addAuditLog('CREATE', 'LEAD', invite.inviteCode, `Guest ${invite.guestName} checked in using referral code ${invite.inviteCode} (Member: ${invite.hostName})`, 'Club Receptionist');
-
-      alert(`${invite.guestName} successfully checked in and added to Leads list.`);
-    } catch (err) {
+      alert(`${invite.guestName} (${invite.inviteCode}) confirmed & checked in — Lead profile moved to Trial.`);
+    } catch (err: any) {
       console.error("Error checking in guest:", err);
-      alert("Failed to check in guest.");
+      alert(err?.message || "Failed to check in guest.");
     }
   };
 
@@ -615,7 +601,11 @@ export default function ClubOperations() {
                           {invite.status === 'Attended' ? 'Checked In' : 'Pending Check-In'}
                         </Badge>
                       </div>
-                      <p className="text-[10px] text-muted-foreground font-semibold">Phone: {invite.guestPhone} | Host Member: {invite.hostName}</p>
+                      <p className="text-[10px] text-muted-foreground font-semibold">
+                        Phone: {invite.guestPhone}
+                        {invite.guestNationalId ? ` | National ID: ${invite.guestNationalId}` : ''}
+                        {' | '}Host Member: {invite.hostName}
+                      </p>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -628,7 +618,7 @@ export default function ClubOperations() {
                           className="h-8 font-bold text-[10px]"
                           onClick={() => handleCheckinGuest(invite)}
                         >
-                          Check-In Guest
+                          Confirm & Activate Invite
                         </Button>
                       )}
                     </div>

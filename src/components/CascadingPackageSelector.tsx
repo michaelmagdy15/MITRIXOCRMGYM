@@ -2,6 +2,7 @@ import { getTenantId } from '../firebase';
 import React, { useState, useMemo, useEffect } from 'react';
 import { Package } from '../types';
 import { MEMBER_CATEGORIES, MemberCategory, normalizeMemberCategory, isPackageMatchingFilter } from '../utils/memberCategories';
+import { getEffectivePackageHierarchy, getEffectivePackageCategory } from '../utils/membershipRules';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -54,8 +55,9 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
 
   // Segmented package category filter (Inzan-only POS segmentation)
   const showCategoryTabs = getTenantId().toLowerCase().includes('inzan');
+  const [hierarchyFilter, setHierarchyFilter] = useState<'ALL' | 'Primary' | 'Secondary'>('ALL');
   const [packageTypeFilter, setPackageTypeFilter] = useState<
-    'ALL' | 'MEMBERSHIP' | 'PT' | 'CLASSES' | 'SGF' | 'NUTRITION' | 'DROPIN'
+    'ALL' | 'MEMBERSHIP' | 'PT' | 'CLASSES' | 'SGF' | 'GYMNASTICS' | 'NUTRITION' | 'PHYSIO' | 'DROPIN'
   >('ALL');
 
   // Instant quick search query across all packages
@@ -66,6 +68,18 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
     const c = (pkg.category || '').toLowerCase().trim();
     const team = (pkg.targetTeam || '').toLowerCase().trim();
     return c === 'nutrition' || c.includes('nutrition') || team === 'nutrition' || n.includes('nutrition') || n.includes('diet');
+  };
+
+  const isPhysioPackage = (pkg: Package) => {
+    const n = (pkg.name || '').toLowerCase();
+    const c = (pkg.category || '').toLowerCase().trim();
+    return c === 'physiotherapy' || c.includes('physio') || n.includes('physio') || n.includes('recovery');
+  };
+
+  const isGymnasticsPackage = (pkg: Package) => {
+    const n = (pkg.name || '').toLowerCase();
+    const c = (pkg.category || '').toLowerCase().trim();
+    return c === 'gymnastics' || c.includes('gymnastic') || n.includes('gymnastic');
   };
 
   const isSgfPackage = (pkg: Package) => {
@@ -80,14 +94,12 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
     const team = (pkg.targetTeam || '').toLowerCase().trim();
     return (
       c === 'classes' ||
-      c === 'gymnastics' ||
+      c === 'mma' ||
       c.includes('class') ||
-      c.includes('gymnastic') ||
       team === 'class instructors' ||
       n.includes('class') ||
-      n.includes('gymnastic') ||
       n.includes('mma') ||
-      n.includes('academy') ||
+      (n.includes('academy') && !isGymnasticsPackage(pkg) && !isSgfPackage(pkg)) ||
       n.includes('bootcamp')
     );
   };
@@ -96,9 +108,11 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
     const c = (pkg.category || '').toLowerCase().trim();
     if (
       c === 'nutrition' ||
+      c === 'physiotherapy' ||
       c === 'sgf' ||
       c === 'classes' ||
       c === 'gymnastics' ||
+      c === 'complimentary' ||
       c === 'membership' ||
       c === 'memberships'
     ) {
@@ -109,6 +123,7 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
     const team = (pkg.targetTeam || '').toLowerCase().trim();
     return (
       c === 'personal training' ||
+      c === 'personal training (pt)' ||
       c === 'pt' ||
       team === 'pt' ||
       t === 'private' ||
@@ -128,22 +143,28 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
       n.includes('drop') ||
       n.includes('day pass') ||
       n.includes('daypass') ||
+      n.includes('complimentary') ||
       n.includes('visit') ||
       n.includes('single') ||
-      (pkg.sessions === 1 && !isPtPackage(pkg) && !isNutritionPackage(pkg))
+      (pkg.sessions === 1 && !isPtPackage(pkg) && !isNutritionPackage(pkg) && !isPhysioPackage(pkg) && !isGymnasticsPackage(pkg))
     );
   };
 
   const isMembershipPackage = (pkg: Package) => {
     const c = (pkg.category || '').toLowerCase().trim();
-    if (pkg.hierarchy === 'Primary' || c === 'membership' || c === 'memberships' || c === 'gym memberships') {
+    if (c === 'membership' || c === 'memberships' || c === 'gym memberships') {
+      return true;
+    }
+    if (getEffectivePackageHierarchy(pkg) === 'Primary') {
       return true;
     }
     return (
       !isPtPackage(pkg) &&
       !isDropInPackage(pkg) &&
       !isSgfPackage(pkg) &&
+      !isGymnasticsPackage(pkg) &&
       !isNutritionPackage(pkg) &&
+      !isPhysioPackage(pkg) &&
       !isClassesPackage(pkg)
     );
   };
@@ -151,17 +172,27 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
   const getPackageMetadataBadges = (pkg: Package) => {
     const badges: { key: string; label: string; className: string }[] = [];
 
-    if (pkg.hierarchy === 'Primary') {
+    const resolvedHierarchy = showCategoryTabs ? getEffectivePackageHierarchy(pkg) : pkg.hierarchy;
+    if (resolvedHierarchy === 'Primary') {
       badges.push({
         key: 'hierarchy',
         label: 'Primary',
         className: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
       });
-    } else if (pkg.hierarchy === 'Secondary') {
+    } else if (resolvedHierarchy === 'Secondary') {
       badges.push({
         key: 'hierarchy',
         label: 'Secondary',
         className: 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30',
+      });
+    }
+
+    const resolvedCat = getEffectivePackageCategory(pkg);
+    if (resolvedCat) {
+      badges.push({
+        key: 'category',
+        label: resolvedCat,
+        className: 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30',
       });
     }
 
@@ -245,21 +276,30 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
   };
 
   const isPackageActive = (pkg: Package) =>
-    pkg.status !== 'Hold' && pkg.isActive !== false && pkg.is_active !== false && !pkg.archivedAt;
+    pkg.status !== 'Hold' && (pkg.status as string) !== 'Inactive' && pkg.isActive !== false && pkg.is_active !== false && !pkg.archivedAt;
 
-  // Filter packages dynamically based on Step 1, Step 2, and PT toggle using SQL RBAC parity
+  // Filter packages dynamically
   const filteredPackages = useMemo(() => {
     return packages.filter((pkg) => {
       if (!isPackageActive(pkg)) return false;
       const isPkgPt = isPtPackage(pkg);
-      const pkgForMatch = { ...pkg, type: (isPkgPt ? 'Private' : 'Group') as Package['type'] };
-      const shouldMatchPt =
-        showCategoryTabs && packageTypeFilter === 'ALL' && !isPtSelected
-          ? isPkgPt
-          : packageTypeFilter === 'PT' || isPtSelected;
-      if (!isPackageMatchingFilter(pkgForMatch, category, branch, shouldMatchPt)) {
-        return false;
+
+      if (showCategoryTabs) {
+        if (hierarchyFilter !== 'ALL') {
+          const h = getEffectivePackageHierarchy(pkg);
+          if (h !== hierarchyFilter) return false;
+        }
+        if (isPtSelected && packageTypeFilter === 'ALL' && !isPkgPt) {
+          return false;
+        }
+      } else {
+        const pkgForMatch = { ...pkg, type: (isPkgPt ? 'Private' : 'Group') as Package['type'] };
+        const shouldMatchPt = packageTypeFilter === 'PT' || isPtSelected;
+        if (!isPackageMatchingFilter(pkgForMatch, category, branch, shouldMatchPt)) {
+          return false;
+        }
       }
+
       if (packageTypeFilter === 'MEMBERSHIP') {
         return isMembershipPackage(pkg);
       }
@@ -272,15 +312,21 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
       if (packageTypeFilter === 'SGF') {
         return isSgfPackage(pkg);
       }
+      if (packageTypeFilter === 'GYMNASTICS') {
+        return isGymnasticsPackage(pkg);
+      }
       if (packageTypeFilter === 'NUTRITION') {
         return isNutritionPackage(pkg);
+      }
+      if (packageTypeFilter === 'PHYSIO') {
+        return isPhysioPackage(pkg);
       }
       if (packageTypeFilter === 'DROPIN') {
         return isDropInPackage(pkg);
       }
       return true;
     });
-  }, [packages, category, branch, isPtSelected, packageTypeFilter, showCategoryTabs]);
+  }, [packages, category, branch, isPtSelected, hierarchyFilter, packageTypeFilter, showCategoryTabs]);
 
   // Currently selected package object
   const activePackage = useMemo(() => {
@@ -533,160 +579,233 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
         )}
       </div>
 
-      {/* Step 1: Member Category */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <UserCheck className="h-3.5 w-3.5 text-primary" />
-            Step 1: Member Tier & Category
-          </Label>
-          <span className="text-[11px] text-muted-foreground">
-            Current: <strong className="text-foreground">{category}</strong>
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-          {MEMBER_CATEGORIES.map((cat) => {
-            const isSelected = category === cat;
-            return (
-              <button
-                type="button"
-                key={cat}
-                disabled={readOnlyCategory}
-                onClick={() => handleCategoryChange(cat)}
-                className={`flex flex-col items-center justify-center p-2 rounded-xl text-xs font-semibold transition-all border ${
-                  isSelected
-                    ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-[1.02]'
-                    : 'bg-background/80 text-muted-foreground border-border/50 hover:bg-accent hover:text-foreground'
-                } ${readOnlyCategory ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-              >
-                <span>{cat}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Step 2: Branch Location & PT Add-on Toggle */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-        {/* Step 2: Branch */}
-        <div className="space-y-2">
-          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <MapPin className="h-3.5 w-3.5 text-primary" />
-            Step 2: Location / Branch
-          </Label>
-          <Select
-            value={branch}
-            onValueChange={handleBranchChange}
-            disabled={readOnlyBranch}
-          >
-            <SelectTrigger className="h-10 rounded-xl bg-background/70 border-border/50 text-xs font-semibold">
-              <SelectValue placeholder="Select Branch" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              {branchOptions.map((b) => (
-                <SelectItem key={b} value={b} className="text-xs font-medium">
-                  {b}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* PT Add-on Toggle */}
-        {showPtToggle && (
+      {/* Step 1 & Step 2: Member Category & Branch (Non-Inzan / Strike Boxing) */}
+      {!showCategoryTabs && (
+        <>
           <div className="space-y-2">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Dumbbell className="h-3.5 w-3.5 text-amber-500" />
-              Private Training (PT) Add-on
-            </Label>
-            <div
-              onClick={() => {
-                const nextVal = !isPtSelected;
-                setIsPtSelected(nextVal);
-                // Clear selection if currently selected package doesn't match
-                if (activePackage) {
-                  const isPtPkg = isPtPackage(activePackage);
-                  if (isPtPkg !== nextVal) {
-                    onPackageSelect(null, nextVal);
-                  }
-                }
-              }}
-              className={`flex items-center justify-between h-10 px-3 rounded-xl border transition-all cursor-pointer ${
-                isPtSelected
-                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400 font-semibold'
-                  : 'bg-background/70 border-border/50 text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={isPtSelected}
-                  onCheckedChange={(checked) => setIsPtSelected(!!checked)}
-                  id="pt-addon-checkbox"
-                />
-                <span className="text-xs font-medium">Show Private PT Packages</span>
-              </div>
-              <Badge variant={isPtSelected ? 'default' : 'secondary'} className="text-[10px] h-5 px-1.5">
-                {isPtSelected ? 'PT Filter Active' : 'Group Sessions'}
-              </Badge>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <UserCheck className="h-3.5 w-3.5 text-primary" />
+                Step 1: Member Tier & Category
+              </Label>
+              <span className="text-[11px] text-muted-foreground">
+                Current: <strong className="text-foreground">{category}</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+              {MEMBER_CATEGORIES.map((cat) => {
+                const isSelected = category === cat;
+                return (
+                  <button
+                    type="button"
+                    key={cat}
+                    disabled={readOnlyCategory}
+                    onClick={() => handleCategoryChange(cat)}
+                    className={`flex flex-col items-center justify-center p-2 rounded-xl text-xs font-semibold transition-all border ${
+                      isSelected
+                        ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-[1.02]'
+                        : 'bg-background/80 text-muted-foreground border-border/50 hover:bg-accent hover:text-foreground'
+                    } ${readOnlyCategory ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    <span>{cat}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Segmented Package Category Filter Tabs */}
-      {showCategoryTabs && (
-      <div className="space-y-1.5 pt-1">
-        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-          <span className="flex items-center gap-1.5">
-            <Layers className="h-3.5 w-3.5 text-primary" />
-            POS Package Category
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            {packageTypeFilter === 'ALL' && 'All Types'}
-            {packageTypeFilter === 'MEMBERSHIP' && 'Primary Memberships'}
-            {packageTypeFilter === 'PT' && 'Private Coaching'}
-            {packageTypeFilter === 'CLASSES' && 'Classes & Gymnastics'}
-            {packageTypeFilter === 'SGF' && 'Small Group Fitness (SGF)'}
-            {packageTypeFilter === 'NUTRITION' && 'Nutrition & Diet'}
-            {packageTypeFilter === 'DROPIN' && 'Day Pass / Drop-in'}
-          </span>
-        </Label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5 bg-muted/40 p-1.5 rounded-xl border border-border/40">
-          {[
-            { id: 'ALL', label: 'All' },
-            { id: 'MEMBERSHIP', label: 'Membership' },
-            { id: 'PT', label: 'PT' },
-            { id: 'CLASSES', label: 'Classes' },
-            { id: 'SGF', label: 'SGF' },
-            { id: 'NUTRITION', label: 'Nutrition' },
-            { id: 'DROPIN', label: 'Drop-in' },
-          ].map((tab) => {
-            const isSel = packageTypeFilter === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setPackageTypeFilter(tab.id as any);
-                  if (tab.id === 'PT') {
-                    setIsPtSelected(true);
-                  } else {
-                    setIsPtSelected(false);
-                  }
-                }}
-                className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-all text-center truncate ${
-                  isSel
-                    ? 'bg-primary text-primary-foreground shadow-sm font-bold scale-[1.02]'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-background/70'
-                }`}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-primary" />
+                Step 2: Location / Branch
+              </Label>
+              <Select
+                value={branch}
+                onValueChange={handleBranchChange}
+                disabled={readOnlyBranch}
               >
-                {tab.label}
-              </button>
-            );
-          })}
+                <SelectTrigger className="h-10 rounded-xl bg-background/70 border-border/50 text-xs font-semibold">
+                  <SelectValue placeholder="Select Branch" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {branchOptions.map((b) => (
+                    <SelectItem key={b} value={b} className="text-xs font-medium">
+                      {b}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {showPtToggle && (
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Dumbbell className="h-3.5 w-3.5 text-amber-500" />
+                  Private Training (PT) Add-on
+                </Label>
+                <div
+                  onClick={() => {
+                    const nextVal = !isPtSelected;
+                    setIsPtSelected(nextVal);
+                    if (activePackage) {
+                      const isPtPkg = isPtPackage(activePackage);
+                      if (isPtPkg !== nextVal) {
+                        onPackageSelect(null, nextVal);
+                      }
+                    }
+                  }}
+                  className={`flex items-center justify-between h-10 px-3 rounded-xl border transition-all cursor-pointer ${
+                    isPtSelected
+                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400 font-semibold'
+                      : 'bg-background/70 border-border/50 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={isPtSelected}
+                      onCheckedChange={(checked) => setIsPtSelected(!!checked)}
+                      id="pt-addon-checkbox"
+                    />
+                    <span className="text-xs font-medium">Show Private PT Packages</span>
+                  </div>
+                  <Badge variant={isPtSelected ? 'default' : 'secondary'} className="text-[10px] h-5 px-1.5">
+                    {isPtSelected ? 'PT Filter Active' : 'Group Sessions'}
+                  </Badge>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Inzan Primary / Secondary Hierarchy + Package Category Filter Tabs */}
+      {showCategoryTabs && (
+        <div className="space-y-3 pt-1">
+          {/* Primary vs Secondary Hierarchy Filter */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5 text-primary" />
+                Step 1: Package Hierarchy (Primary vs Secondary)
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {hierarchyFilter === 'ALL' && 'All Packages'}
+                {hierarchyFilter === 'Primary' && 'Primary (Core Gym Memberships)'}
+                {hierarchyFilter === 'Secondary' && 'Secondary (PT, Classes & Add-ons)'}
+              </span>
+            </Label>
+            <div className="grid grid-cols-3 gap-1.5 bg-muted/40 p-1.5 rounded-xl border border-border/40">
+              {([
+                {
+                  id: 'ALL' as const,
+                  label: 'All Packages',
+                  count: packages.filter(isPackageActive).length,
+                  activeClass: 'bg-primary text-primary-foreground shadow-sm font-bold',
+                },
+                {
+                  id: 'Primary' as const,
+                  label: 'Primary (Memberships)',
+                  count: packages.filter((p) => isPackageActive(p) && getEffectivePackageHierarchy(p) === 'Primary').length,
+                  activeClass: 'bg-emerald-600 text-white shadow-sm font-bold',
+                },
+                {
+                  id: 'Secondary' as const,
+                  label: 'Secondary (PT / Add-ons)',
+                  count: packages.filter((p) => isPackageActive(p) && getEffectivePackageHierarchy(p) === 'Secondary').length,
+                  activeClass: 'bg-purple-600 text-white shadow-sm font-bold',
+                },
+              ]).map((hTab) => {
+                const isSel = hierarchyFilter === hTab.id;
+                return (
+                  <button
+                    key={hTab.id}
+                    type="button"
+                    onClick={() => {
+                      setHierarchyFilter(hTab.id);
+                      if (hTab.id === 'Primary' && packageTypeFilter !== 'ALL' && packageTypeFilter !== 'MEMBERSHIP') {
+                        setPackageTypeFilter('MEMBERSHIP');
+                        setIsPtSelected(false);
+                      } else if (hTab.id === 'Secondary' && packageTypeFilter === 'MEMBERSHIP') {
+                        setPackageTypeFilter('ALL');
+                      }
+                    }}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-all text-center truncate cursor-pointer ${
+                      isSel
+                        ? hTab.activeClass
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/70'
+                    }`}
+                  >
+                    {hTab.label} ({hTab.count})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Step 2: POS Package Category */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-primary" />
+                Step 2: Package Category
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                {packageTypeFilter === 'ALL' && 'All Categories'}
+                {packageTypeFilter === 'MEMBERSHIP' && 'Primary Memberships'}
+                {packageTypeFilter === 'PT' && 'Personal Training (Secondary)'}
+                {packageTypeFilter === 'CLASSES' && 'Classes (Secondary)'}
+                {packageTypeFilter === 'SGF' && 'Small Group Fitness / SGF (Secondary)'}
+                {packageTypeFilter === 'GYMNASTICS' && 'Gymnastics (Secondary)'}
+                {packageTypeFilter === 'NUTRITION' && 'Nutrition & Diet (Secondary)'}
+                {packageTypeFilter === 'PHYSIO' && 'Physiotherapy & Recovery (Secondary)'}
+                {packageTypeFilter === 'DROPIN' && 'Complimentary / Drop-in (Secondary)'}
+              </span>
+            </Label>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 bg-muted/40 p-1.5 rounded-xl border border-border/40">
+              {[
+                { id: 'ALL', label: 'All Categories' },
+                { id: 'MEMBERSHIP', label: 'Membership' },
+                { id: 'PT', label: 'Personal Training' },
+                { id: 'CLASSES', label: 'Classes' },
+                { id: 'SGF', label: 'SGF' },
+                { id: 'GYMNASTICS', label: 'Gymnastics' },
+                { id: 'NUTRITION', label: 'Nutrition' },
+                { id: 'PHYSIO', label: 'Physiotherapy' },
+                { id: 'DROPIN', label: 'Complimentary' },
+              ].map((tab) => {
+                const isSel = packageTypeFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setPackageTypeFilter(tab.id as any);
+                      if (tab.id === 'MEMBERSHIP' && hierarchyFilter === 'Secondary') {
+                        setHierarchyFilter('ALL');
+                      } else if (tab.id !== 'ALL' && tab.id !== 'MEMBERSHIP' && hierarchyFilter === 'Primary') {
+                        setHierarchyFilter('ALL');
+                      }
+                      if (tab.id === 'PT') {
+                        setIsPtSelected(true);
+                      } else {
+                        setIsPtSelected(false);
+                      }
+                    }}
+                    className={`py-2 px-2 rounded-lg text-xs font-semibold transition-all text-center truncate cursor-pointer ${
+                      isSel
+                        ? 'bg-primary text-primary-foreground shadow-sm font-bold scale-[1.02]'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/70'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </div>
       )}
 
       {/* Step 3: Dynamic Filtered Package Dropdown */}

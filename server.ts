@@ -1684,6 +1684,254 @@ async function startServer() {
   });
 
   // ===============================================================
+  // MEMBER PORTAL & STAFF GUEST INVITATIONS + SMART LEAD CREATION
+  // ===============================================================
+  app.post("/api/member/guest-invite", requireAuth, async (req, res) => {
+    try {
+      const db = await getDbForRequest(req);
+      const {
+        clientId,
+        guestName,
+        guestPhone,
+        guestNationalId,
+        status: requestedStatus,
+        visitDate,
+        createdBy,
+      } = req.body || {};
+
+      const trimmedName = String(guestName || "").trim();
+      const trimmedPhone = String(guestPhone || "").trim();
+      const cleanNatId = String(guestNationalId || "")
+        .replace(/[^a-zA-Z0-9]/g, "")
+        .trim()
+        .toUpperCase();
+
+      if (!clientId) {
+        return res.status(400).json({ error: "Missing host member clientId." });
+      }
+      if (!trimmedName || trimmedName.length < 2) {
+        return res.status(400).json({ error: "Please enter the guest's full name." });
+      }
+      if (!trimmedPhone || trimmedPhone.replace(/\D/g, "").length < 8) {
+        return res.status(400).json({ error: "Please enter a valid guest phone number." });
+      }
+      if (!cleanNatId || cleanNatId.length < 5) {
+        return res.status(400).json({ error: "Please enter the guest's National ID." });
+      }
+
+      // 1. Load Host Member
+      let hostDoc = await db.collection("clients").doc(String(clientId)).get();
+      if (!hostDoc.exists) {
+        const snap = await db.collection("clients").where("memberId", "==", String(clientId)).limit(1).get();
+        if (!snap.empty) hostDoc = snap.docs[0]!;
+      }
+      if (!hostDoc.exists) {
+        return res.status(404).json({ error: "Host member not found." });
+      }
+      const hostData = hostDoc.data() || {};
+      const hostId = hostDoc.id;
+
+      // 2. Check remaining invitations balance
+      const curRemaining =
+        typeof hostData.guestInvitesRemaining === "number"
+          ? hostData.guestInvitesRemaining
+          : typeof hostData.invitationsRemaining === "number"
+          ? hostData.invitationsRemaining
+          : Math.max(
+              0,
+              Number(hostData.invitationsTotal ?? hostData.guestInvitations ?? 3) -
+                Number(hostData.invitationsUsed ?? 0)
+            );
+
+      if (curRemaining <= 0) {
+        return res.status(400).json({
+          error: "No guest invitation passes remaining in this membership package.",
+        });
+      }
+
+      // 3. Check guestInvites and clients by Phone Variants AND National ID
+      const phoneVariants = getEgyptPhoneVariants(trimmedPhone).slice(0, 10);
+
+      if (phoneVariants.length > 0) {
+        const invPhoneSnap = await db
+          .collection("guestInvites")
+          .where("guestPhone", "in", phoneVariants)
+          .limit(1)
+          .get();
+        if (!invPhoneSnap.empty) {
+          const prev = invPhoneSnap.docs[0]!.data();
+          return res.status(409).json({
+            error: `"${prev.guestName || "This visitor"}" (${trimmedPhone}) has already been invited before by ${prev.hostName || "a member"} (Code: ${prev.inviteCode || "N/A"}). A guest cannot be invited twice — their Lead profile is already in the system!`,
+          });
+        }
+      }
+
+      const invNatSnap = await db
+        .collection("guestInvites")
+        .where("guestNationalId", "==", cleanNatId)
+        .limit(1)
+        .get();
+      if (!invNatSnap.empty) {
+        const prev = invNatSnap.docs[0]!.data();
+        return res.status(409).json({
+          error: `National ID ${cleanNatId} ("${prev.guestName || "Visitor"}") has already been invited before by ${prev.hostName || "a member"} (Code: ${prev.inviteCode || "N/A"}). A guest cannot be invited twice!`,
+        });
+      }
+
+      const matchedClients = new Map<string, Record<string, any>>();
+      if (phoneVariants.length > 0) {
+        const [byPhone, byNorm] = await Promise.all([
+          db.collection("clients").where("phone", "in", phoneVariants).get(),
+          db.collection("clients").where("normalized_phone", "in", phoneVariants).get(),
+        ]);
+        byPhone.forEach((d) => matchedClients.set(d.id, d.data()));
+        byNorm.forEach((d) => matchedClients.set(d.id, d.data()));
+      }
+      const byNat = await db.collection("clients").where("nationalId", "==", cleanNatId).get();
+      byNat.forEach((d) => matchedClients.set(d.id, d.data()));
+
+      let existingUninvitedLeadDoc: { id: string; data: Record<string, any> } | null = null;
+      for (const [docId, data] of matchedClients.entries()) {
+        if (data.isDeleted) continue;
+        const statusLower = String(data.status || "").trim().toLowerCase();
+        if (statusLower && statusLower !== "lead") {
+          return res.status(409).json({
+            error: `Cannot invite "${data.name || "Member"}" (#${data.memberId || docId}) as a guest — this Phone Number or National ID already belongs to an existing gym member (${data.status})!`,
+          });
+        }
+        if (
+          data.invitedAsGuest === true ||
+          Boolean(data.guestSerial) ||
+          String(data.advertisingSource || "").toLowerCase().includes("guest") ||
+          String(data.typeOfClient || "").toLowerCase().includes("guest")
+        ) {
+          return res.status(409).json({
+            error: `"${data.name || "This guest"}" already has a Guest Lead profile in the system (Invited by ${data.referredByName || "a member"}, Code: ${data.guestSerial || "N/A"}). They cannot be invited twice!`,
+          });
+        }
+        if (!existingUninvitedLeadDoc) {
+          existingUninvitedLeadDoc = { id: docId, data };
+        }
+      }
+
+      // 4. Generate Invite Code & Create/Update Single Deduplicated Lead Profile in clients
+      const nowIso = new Date().toISOString();
+      const tenantId = getTenantIdForRequest(req);
+      const isInzan = String(tenantId || "").toLowerCase().includes("inzan");
+      const digits = "0123456789";
+      let randomDigits = "";
+      for (let i = 0; i < 6; i++) {
+        randomDigits += digits.charAt(Math.floor(Math.random() * digits.length));
+      }
+      const inviteCode = `${isInzan ? "INV" : "ST"}-${randomDigits}`;
+      const status = requestedStatus === "Attended" ? "Attended" : "Pending";
+      const normPhone = normalizeEgyptPhone(trimmedPhone);
+      const chosenAttendanceIso = visitDate
+        ? new Date(`${visitDate}T12:00:00`).toISOString()
+        : nowIso;
+
+      const leadRef = existingUninvitedLeadDoc
+        ? db.collection("clients").doc(existingUninvitedLeadDoc.id)
+        : db.collection("clients").doc();
+
+      const noteText = `Guest Invitation (${inviteCode}) by Member ${hostData.name || ""} (#${hostData.memberId || hostId}) • National ID: ${cleanNatId}`;
+      const leadPayload: Record<string, any> = {
+        id: leadRef.id,
+        leadId: existingUninvitedLeadDoc?.data?.leadId || inviteCode,
+        name: trimmedName,
+        phone: trimmedPhone,
+        normalized_phone: normPhone,
+        nationalId: cleanNatId,
+        status: "Lead",
+        stage: status === "Attended" ? "Trial" : "New",
+        source: "Referral",
+        advertisingSource: "Guest Invitation",
+        typeOfClient: "Guest Invitation",
+        interest: "Interested",
+        category: "None",
+        invitedByType: "Member",
+        invitedById: hostId,
+        referredBy: hostId,
+        referredByMemberId: hostData.memberId || hostData.legacyMemberId || hostId,
+        referredByName: hostData.name || "",
+        salesRep: hostData.salesRep || hostData.assignedTo || "",
+        assignedTo: hostData.assignedTo || hostData.salesRep || "",
+        salesName: hostData.salesName || "",
+        invitedAsGuest: true,
+        invitedAt: nowIso,
+        guestSerial: inviteCode,
+        ...(status === "Attended" ? { trialDate: chosenAttendanceIso.slice(0, 10) } : {}),
+        frontDeskNote: noteText,
+        notes: noteText,
+        branch: hostData.branch || hostData.homeBranch || "Garden 8",
+        createdAt: existingUninvitedLeadDoc?.data?.createdAt || nowIso,
+        updatedAt: nowIso,
+      };
+      await leadRef.set(leadPayload, { merge: true });
+
+      // 5. Save guestInvites record
+      const invitePayload: Record<string, any> = {
+        hostClientId: hostId,
+        hostId,
+        hostMemberId: hostData.memberId || hostData.legacyMemberId || "",
+        hostName: hostData.name || "",
+        guestName: trimmedName,
+        guestPhone: trimmedPhone,
+        normalizedPhone: normPhone,
+        guestNationalId: cleanNatId,
+        guestClientId: leadRef.id,
+        inviteCode,
+        status,
+        createdAt: nowIso,
+        branch: hostData.branch || hostData.homeBranch || "Garden 8",
+        ...(status === "Attended"
+          ? {
+              attendedAt: chosenAttendanceIso,
+              attendanceDate: chosenAttendanceIso,
+              confirmedBy: createdBy || req.user?.name || req.user?.email || "Reception",
+            }
+          : visitDate
+          ? { attendanceDate: chosenAttendanceIso }
+          : {}),
+      };
+      const inviteDocRef = await db.collection("guestInvites").add(invitePayload);
+
+      // 6. Deduct 1 Guest Invite Pass from Host Member
+      const newRemaining = Math.max(0, curRemaining - 1);
+      await hostDoc.ref.set(
+        {
+          guestInvitesRemaining: newRemaining,
+          invitationsRemaining: newRemaining,
+          invitationsUsed: admin.firestore.FieldValue.increment(1),
+          updatedAt: nowIso,
+        },
+        { merge: true }
+      );
+
+      await db.collection("auditLogs").add({
+        action: "CREATE",
+        entityType: "CLIENT",
+        entityId: hostId,
+        details: `Generated guest invitation (${inviteCode}) & Lead profile for "${trimmedName}" (${trimmedPhone}, National ID: ${cleanNatId}) under member ${hostData.name || hostId} [${status}]`,
+        timestamp: nowIso,
+        userId: req.user?.uid || hostId,
+        userName: createdBy || req.user?.name || hostData.name || "Member",
+      });
+
+      return res.status(201).json({
+        ok: true,
+        inviteId: inviteDocRef.id,
+        inviteCode,
+        guestClientId: leadRef.id,
+        remaining: newRemaining,
+      });
+    } catch (err) {
+      console.error("[API] Error in POST /api/member/guest-invite:", err);
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ===============================================================
   // AGENT 3: STRICT SERVER-SIDE BOOKING INTERCEPTOR & ACCESS GUARD
   // Endpoint: POST /api/v1/bookings
   // Objective: Intercept and reject invalid bookings before insertion
@@ -5273,8 +5521,10 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
       const db = await getDbForRequest(req);
       const {
         clientId: targetClientId,
-        clientName,
+        clientName: rawClientName,
+        fullName,
         phone,
+        email,
         membershipId,
         timePeriod,
         preferredHour,
@@ -5285,9 +5535,14 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         goals,
         hasCoachPreference,
         preferredCoachId,
-        coachName,
+        preferredCoachName,
+        coachName: rawCoachName,
         referralSource,
+        source,
       } = req.body;
+
+      const clientName = (rawClientName || fullName || "").trim();
+      const coachName = (rawCoachName || preferredCoachName || "").trim();
 
       if (!clientName || !phone) {
         return res.status(400).json({ error: "Client name and phone number are required." });
@@ -5329,8 +5584,9 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
       const assessmentData: Record<string, any> = {
         clientId: clientId || "guest",
         portalUserId: req.user.uid,
-        clientName: clientName.trim(),
+        clientName,
         phone: phone.trim(),
+        email: (email || "").trim(),
         membershipId: String(resolvedMemberId).trim(),
         timePeriod: timePeriod || "Morning [8AM - 4PM]",
         preferredHour: preferredHour || "10:00 AM",
@@ -5341,14 +5597,16 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         goals: goals?.trim() || "",
         hasCoachPreference: Boolean(hasCoachPreference),
         preferredCoachId: preferredCoachId && preferredCoachId !== "any" ? preferredCoachId : null,
-        preferredCoachName: coachName?.trim() || "Any Coach",
-        coachName: coachName?.trim() || null,
+        preferredCoachName: coachName || "Any Coach",
+        coachName: coachName || null,
         referralSource: referralSource || "Floor Service",
         assignedCoachId: isInzan ? null : (preferredCoachId && preferredCoachId !== "any" ? preferredCoachId : null),
-        assignedCoachName: isInzan ? null : (hasCoachPreference ? (coachName?.trim() || null) : null),
+        assignedCoachName: isInzan ? null : (hasCoachPreference ? (coachName || null) : null),
         routedTo: isInzan ? "fitness_manager" : "coach",
         triageStatus: isInzan ? "AwaitingFitnessManager" : "Assigned",
         status: "Pending",
+        source: source || "member_app",
+        tenantId: tenantId || "inzanathletics",
         freePtSessionsRemaining: freePtRemaining,
         hasPaidPtPackage: hasPaidPt,
         ptEntitlementSummary: hasPaidPt
@@ -5366,6 +5624,7 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         await db.collection("clients").doc(clientId).set({
           ptAssessmentStatus: "PendingFitnessManager",
           ptAssessmentRequestedAt: nowIso,
+          ...(email ? { email: String(email).trim() } : {}),
         }, { merge: true });
       }
 
@@ -5373,16 +5632,173 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         action: "CREATE",
         entityType: "ASSESSMENT",
         entityId: asmntRef.id,
-        details: `PT Assessment requested for ${clientName.trim()} (${phone.trim()}) - Preferred Coach: ${coachName?.trim() || "Any Coach"}`,
+        details: `PT Assessment requested for ${clientName} (${phone.trim()}${email ? `, ${email.trim()}` : ""}) - Preferred Coach: ${coachName || "Any Coach"}`,
         timestamp: nowIso,
         userId: req.user.uid,
-        userName: clientName.trim(),
+        userName: clientName,
       });
 
       return res.json({ success: true, id: asmntRef.id });
     } catch (err: any) {
       console.error("[Assessment Request API] Error:", err);
       return res.status(500).json({ error: err.message || "Failed to submit assessment request." });
+    }
+  });
+
+  // --- Public Website Assessment & Catalog API (CORS-enabled for inzanathletics.com) ---
+  const setPublicInzanCors = (req: express.Request, res: express.Response) => {
+    const origin = req.headers.origin || "*";
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-tenant-id");
+  };
+
+  app.options("/api/public/assessment", (req, res) => {
+    setPublicInzanCors(req, res);
+    return res.status(204).end();
+  });
+
+  app.post("/api/public/assessment", async (req: any, res: any) => {
+    setPublicInzanCors(req, res);
+    try {
+      const db = getFirestore("db-inzanathletics");
+      const {
+        fullName,
+        clientName: rawClientName,
+        phone,
+        email,
+        membershipId,
+        timePeriod,
+        preferredHour,
+        ageGroup,
+        membershipType,
+        notes,
+        injuries,
+        goals,
+        hasCoachPreference,
+        preferredCoachId,
+        preferredCoachName,
+        coachName: rawCoachName,
+        referralSource,
+      } = req.body || {};
+
+      const clientName = String(rawClientName || fullName || "").trim();
+      const cleanPhone = String(phone || "").trim();
+      const cleanEmail = String(email || "").trim();
+      const coachName = String(rawCoachName || preferredCoachName || "").trim();
+
+      if (!clientName || !cleanPhone || !cleanEmail) {
+        return res.status(400).json({ error: "Full name, phone number, and email address are required." });
+      }
+
+      // Check if an existing member/lead matches by phone or membershipId
+      let matchedClientId = "guest";
+      let resolvedMemberId = String(membershipId || "Guest").trim() || "Guest";
+      let freePtRemaining = 0;
+      let hasPaidPt = false;
+
+      if (resolvedMemberId && resolvedMemberId.toLowerCase() !== "guest") {
+        const mSnap = await db.collection("clients").where("memberId", "==", resolvedMemberId).limit(1).get();
+        if (!mSnap.empty && mSnap.docs[0]) {
+          const docSnap = mSnap.docs[0];
+          matchedClientId = docSnap.id;
+          const cData = docSnap.data() || {};
+          const freePtCount = Number(cData.freePtSessionsTotal || 0);
+          const freePtUsed = Number(cData.freePtSessionsUsed || 0);
+          freePtRemaining = Math.max(0, freePtCount - freePtUsed);
+          hasPaidPt = (Number(cData.paidPtSessionsRemaining) || Number(cData.ptSessionsRemaining) || 0) > 0;
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      const assessmentData: Record<string, any> = {
+        clientId: matchedClientId,
+        clientName,
+        phone: cleanPhone,
+        email: cleanEmail,
+        membershipId: resolvedMemberId,
+        timePeriod: timePeriod || "Morning [8AM - 4PM]",
+        preferredHour: preferredHour || "10:00 AM",
+        ageGroup: ageGroup || "21 to 30",
+        membershipType: membershipType || "Guest",
+        notes: String(notes || "").trim(),
+        injuries: String(injuries || notes || "").trim(),
+        goals: String(goals || "").trim(),
+        hasCoachPreference: Boolean(hasCoachPreference),
+        preferredCoachId: preferredCoachId && preferredCoachId !== "any" ? preferredCoachId : null,
+        preferredCoachName: Boolean(hasCoachPreference) ? (coachName || "Any Coach") : "Any Coach",
+        coachName: Boolean(hasCoachPreference) ? (coachName || null) : null,
+        referralSource: referralSource || "Social Media",
+        assignedCoachId: null,
+        assignedCoachName: null,
+        routedTo: "fitness_manager",
+        triageStatus: "AwaitingFitnessManager",
+        status: "Pending",
+        source: "website",
+        tenantId: "inzanathletics",
+        freePtSessionsRemaining: freePtRemaining,
+        hasPaidPtPackage: hasPaidPt,
+        ptEntitlementSummary: hasPaidPt
+          ? "Paid PT Package Active"
+          : freePtRemaining > 0
+          ? `${freePtRemaining} Free PT Sessions Available`
+          : "Website Booking — Complimentary Assessment",
+        preferredDate: timePeriod || "Morning [8AM - 4PM]",
+        preferredTime: preferredHour || "10:00 AM",
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      const asmntRef = await db.collection("assessments").add(assessmentData);
+
+      await db.collection("auditLogs").add({
+        action: "CREATE",
+        entityType: "ASSESSMENT",
+        entityId: asmntRef.id,
+        details: `[Website] PT Assessment requested for ${clientName} (${cleanPhone}, ${cleanEmail}) - Preferred Coach: ${coachName || "Any Coach"}`,
+        timestamp: nowIso,
+        userId: "website_public",
+        userName: clientName,
+      });
+
+      return res.json({ success: true, id: asmntRef.id });
+    } catch (err: any) {
+      console.error("[Public Assessment API] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to submit assessment request." });
+    }
+  });
+
+  app.options("/api/public/inzan-catalog", (req, res) => {
+    setPublicInzanCors(req, res);
+    return res.status(204).end();
+  });
+
+  app.get("/api/public/inzan-catalog", async (req: any, res: any) => {
+    setPublicInzanCors(req, res);
+    try {
+      const db = getFirestore("db-inzanathletics");
+      const [pkgSnap, coachSnap, schedSnap] = await Promise.all([
+        db.collection("packages").get(),
+        db.collection("coaches").get(),
+        db.collection("classSchedules").get(),
+      ]);
+
+      const packages = pkgSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as any))
+        .filter((p) => !p.deleted_at && p.status !== "inactive");
+
+      const coaches = coachSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as any))
+        .filter((c) => c.active === true && c.status !== "Inactive" && c.status !== "inactive");
+
+      const classSchedules = schedSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as any))
+        .filter((s) => s.status !== "cancelled");
+
+      return res.json({ packages, coaches, classSchedules });
+    } catch (err: any) {
+      console.error("[Public Inzan Catalog API] Error:", err);
+      return res.status(500).json({ error: err.message || "Failed to load catalog." });
     }
   });
 

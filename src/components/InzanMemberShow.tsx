@@ -32,6 +32,7 @@ import { addAuditLog } from '../services/auditService';
 import { canReassignMemberSalesRep } from '../utils/permissions';
 import { Trash2, CalendarClock, TrendingUp } from 'lucide-react';
 import { MemberGuestInvitationsTab } from './member/MemberGuestInvitationsTab';
+import { createMemberReferralWithProfile } from '../services/guestReferralService';
 import { MemberDocumentUploader } from './member/MemberDocumentUploader';
 import { isFieldLockedForUser, sanitizeMemberProfileUpdates } from '../utils/memberProfileLocking';
 
@@ -319,43 +320,25 @@ export function InzanMemberShow({
     }
     setIsSubmittingReferral(true);
     try {
-      const nowIso = new Date().toISOString();
-      const newRefEntry = {
-        id: `ref_${Date.now()}`,
-        name: referralName.trim(),
-        phone: referralPhone.trim(),
-        notes: referralNotes.trim(),
-        referredByClientId: client.id,
-        referredByMemberId: client.memberId || client.id,
-        referredByName: client.name,
-        createdAt: nowIso,
+      const { referralEntry } = await createMemberReferralWithProfile({
+        hostClient: client,
+        referralName: referralName.trim(),
+        referralPhone: referralPhone.trim(),
+        referralNotes: referralNotes.trim(),
         createdBy: currentUser?.name || 'Staff',
-      };
-      // 1. Add to leads collection so sales team can follow up
-      await addDoc(collection(db, 'leads'), {
-        name: referralName.trim(),
-        phone: referralPhone.trim(),
-        notes: referralNotes.trim() ? `Member Referral from ${client.name} (#${client.memberId || client.id}): ${referralNotes.trim()}` : `Referred by member ${client.name} (#${client.memberId || client.id})`,
-        source: 'Member Referral',
-        referredBy: client.id,
-        referredByName: client.name,
-        status: 'New',
-        branch: client.branch || currentUser?.branch || 'Inzan Athletics',
-        createdAt: nowIso,
       });
-      // 2. Append to member's unlimited referrals list on client doc
       const existingRefs = Array.isArray((client as any).referrals) ? (client as any).referrals : [];
       await onUpdateClient(client.id, {
-        referrals: [newRefEntry, ...existingRefs],
+        referrals: [referralEntry, ...existingRefs],
       } as any);
       setReferralName('');
       setReferralPhone('');
       setReferralNotes('');
       setShowAddReferralForm(false);
-      toast.success(`Referral "${newRefEntry.name}" added (Unlimited Referrals — 0 guest quota used)!`);
-    } catch (err) {
+      toast.success(`Referral "${referralEntry.name}" added & Lead profile created in Leads (0 guest quota used)!`);
+    } catch (err: any) {
       console.error('Failed to add referral:', err);
-      toast.error('Failed to save referral.');
+      toast.error(err?.message || 'Failed to save referral.');
     } finally {
       setIsSubmittingReferral(false);
     }
@@ -2257,6 +2240,52 @@ export function InzanMemberShow({
                   </div>
                 );
               })()}
+
+              {/* Member Referrals Table */}
+              {Array.isArray((client as any).referrals) && (client as any).referrals.length > 0 && (
+                <div className="space-y-2.5 text-left">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Member Referrals Submitted ({(client as any).referrals.length})
+                    </h4>
+                    <span className="text-[11px] text-muted-foreground">
+                      Each referral automatically creates a deduplicated Lead profile in the Sales Leads pipeline
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-emerald-500/25 bg-background overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-emerald-500/5 border-b border-border">
+                        <TableRow>
+                          <TableHead className="text-[10px] uppercase font-bold py-2.5 px-4 w-12">#</TableHead>
+                          <TableHead className="text-[10px] uppercase font-bold py-2.5 px-4">Referred Friend Name</TableHead>
+                          <TableHead className="text-[10px] uppercase font-bold py-2.5 px-4">Phone Number</TableHead>
+                          <TableHead className="text-[10px] uppercase font-bold py-2.5 px-4">Notes</TableHead>
+                          <TableHead className="text-[10px] uppercase font-bold py-2.5 px-4">Submitted By</TableHead>
+                          <TableHead className="text-[10px] uppercase font-bold py-2.5 px-4">Date</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(client as any).referrals.map((refItem: any, idx: number) => (
+                          <TableRow key={refItem.id || idx} className="border-b border-border/50 hover:bg-muted/30">
+                            <TableCell className="py-2.5 px-4 text-xs font-mono text-muted-foreground">{idx + 1}</TableCell>
+                            <TableCell className="py-2.5 px-4 text-xs font-bold text-foreground">
+                              {refItem.name}
+                              <Badge className="ml-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 text-[9px]">
+                                Lead Profile Created
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="py-2.5 px-4 text-xs font-mono text-muted-foreground">{refItem.phone}</TableCell>
+                            <TableCell className="py-2.5 px-4 text-xs text-muted-foreground">{refItem.notes || '—'}</TableCell>
+                            <TableCell className="py-2.5 px-4 text-xs text-muted-foreground">{refItem.createdBy || 'Staff'}</TableCell>
+                            <TableCell className="py-2.5 px-4 text-xs text-muted-foreground">{safeFormatDate(refItem.createdAt, 'dd MMM yyyy HH:mm')}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
 
               {/* Full Guest Invitations & Visitor Check-in Table */}
               <MemberGuestInvitationsTab client={client} />

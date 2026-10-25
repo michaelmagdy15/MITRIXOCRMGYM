@@ -685,8 +685,12 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       const freezeMaxDays = parseInt(String(freezeMax), 10) || 0;
       const freezeMinDays = parseInt(String(freezeMin), 10) || (freezeMaxDays > 0 ? 7 : 0);
       const sessions = parseSessionsFromName(sessionName, expiryDays);
-      const isSecondary = /^yes$/i.test(String(mustHavePrimaryRaw || '').trim());
       const isPtPackage = /pt|private|trainer/i.test(`${pkgCategory || ''} ${sessionName}`);
+      const resolvedCategory = pkgCategory?.trim() || (isPtPackage ? 'Personal Training' : 'Membership');
+      const resolvedCatLower = resolvedCategory.toLowerCase();
+      const isSecondary =
+        /^(yes|secondary|1|true)$/i.test(String(mustHavePrimaryRaw || '').trim()) ||
+        (resolvedCatLower !== 'membership' && resolvedCatLower !== 'gym memberships' && resolvedCatLower !== 'memberships');
       const defaultFreePt =
         !isPtPackage && !isSecondary
           ? expiryDays >= 300
@@ -710,7 +714,8 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         price,
         sessions,
         expiryDays,
-        category: pkgCategory?.trim() || (isPtPackage ? 'PT' : 'Membership'),
+        category: resolvedCategory,
+        hierarchy: isSecondary ? 'Secondary' : 'Primary',
         hierarchyType: isSecondary ? 'Secondary' : 'Primary',
         requiresPrimaryPackage: isSecondary,
         targetAttribution: targetRoleRaw?.trim() || 'Sales',

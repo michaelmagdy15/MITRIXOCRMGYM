@@ -46,6 +46,8 @@ import { ClientAuditLogs } from './components/ClientAuditLogs';
 import { canReassignMemberSalesRep } from './utils/permissions';
 import { validateMembershipEligibility, validateFreezeDurationLimits } from './utils/membershipRules';
 import { isTenantInzan } from './utils/inzanOrg';
+import { getEffectivePackageHierarchy, getEffectivePackageCategory } from './utils/membershipRules';
+import { createMemberReferralWithProfile } from './services/guestReferralService';
 import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
 import { MemberGuestInvitationsTab } from './components/member/MemberGuestInvitationsTab';
 import { MemberDocumentUploader } from './components/member/MemberDocumentUploader';
@@ -216,7 +218,11 @@ export default function Clients() {
   const [isTransferringClientPkg, setIsTransferringClientPkg] = useState(false);
   const [pkgSelectSearch, setPkgSelectSearch] = useState('');
   const [upgradePkgSearch, setUpgradePkgSearch] = useState('');
+  const [upgradeHierarchyFilter, setUpgradeHierarchyFilter] = useState<'ALL' | 'Primary' | 'Secondary'>('ALL');
+  const [upgradeCategoryFilter, setUpgradeCategoryFilter] = useState<string>('ALL');
   const [addPkgSearch, setAddPkgSearch] = useState('');
+  const [addPkgHierarchyFilter, setAddPkgHierarchyFilter] = useState<'ALL' | 'Primary' | 'Secondary'>('ALL');
+  const [addPkgCategoryFilter, setAddPkgCategoryFilter] = useState<string>('ALL');
   const [bulkPkgSearch, setBulkPkgSearch] = useState('');
   const [memberFeedbackDraft, setMemberFeedbackDraft] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
@@ -4142,42 +4148,24 @@ export default function Clients() {
                                         }
                                         setIsSubmittingQuickReferral(true);
                                         try {
-                                          const nowIso = new Date().toISOString();
-                                          const newRef = {
-                                            id: `ref_${Date.now()}`,
-                                            name: quickReferralName.trim(),
-                                            phone: quickReferralPhone.trim(),
-                                            notes: quickReferralNotes.trim(),
-                                            referredByClientId: activeClient.id,
-                                            referredByMemberId: activeClient.memberId || activeClient.id,
-                                            referredByName: activeClient.name,
-                                            createdAt: nowIso,
+                                          const { referralEntry } = await createMemberReferralWithProfile({
+                                            hostClient: activeClient,
+                                            referralName: quickReferralName.trim(),
+                                            referralPhone: quickReferralPhone.trim(),
+                                            referralNotes: quickReferralNotes.trim(),
                                             createdBy: currentUser?.name || 'Staff',
-                                          };
-                                          await addDoc(collection(db, 'leads'), {
-                                            name: quickReferralName.trim(),
-                                            phone: quickReferralPhone.trim(),
-                                            notes: quickReferralNotes.trim()
-                                              ? `Member Referral from ${activeClient.name} (#${activeClient.memberId || activeClient.id}): ${quickReferralNotes.trim()}`
-                                              : `Referred by member ${activeClient.name} (#${activeClient.memberId || activeClient.id})`,
-                                            source: 'Member Referral',
-                                            referredBy: activeClient.id,
-                                            referredByName: activeClient.name,
-                                            status: 'New',
-                                            branch: activeClient.branch || currentUser?.branch || 'Inzan Athletics',
-                                            createdAt: nowIso,
                                           });
                                           await updateClient(activeClient.id, {
-                                            referrals: [newRef, ...memberReferrals],
+                                            referrals: [referralEntry, ...memberReferrals],
                                           } as any);
                                           setQuickReferralName('');
                                           setQuickReferralPhone('');
                                           setQuickReferralNotes('');
                                           setShowQuickReferralForm(false);
-                                          toast.success(`Referral "${newRef.name}" added (Unlimited Referrals — 0 guest quota used)!`);
-                                        } catch (err) {
+                                          toast.success(`Referral "${referralEntry.name}" added & Lead profile created in Leads!`);
+                                        } catch (err: any) {
                                           console.error('Failed to add referral:', err);
-                                          toast.error('Failed to save referral.');
+                                          toast.error(err?.message || 'Failed to save referral.');
                                         } finally {
                                           setIsSubmittingQuickReferral(false);
                                         }
@@ -5106,12 +5094,50 @@ export default function Clients() {
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold">New Package</Label>
                   {isInzanTenant && (
-                    <Input
-                      placeholder="🔍 Search packages by name, type, or price..."
-                      value={upgradePkgSearch}
-                      onChange={(e) => setUpgradePkgSearch(e.target.value)}
-                      className="h-9 rounded-xl text-xs"
-                    />
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(['ALL', 'Primary', 'Secondary'] as const).map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setUpgradeHierarchyFilter(h)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                              upgradeHierarchyFilter === h
+                                ? h === 'Primary'
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : h === 'Secondary'
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background text-muted-foreground border-border/60 hover:border-primary/40'
+                            }`}
+                          >
+                            {h === 'ALL' ? 'All Tiers' : h === 'Primary' ? 'Primary (Memberships)' : 'Secondary (PT / Add-ons)'}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {(['ALL', 'Membership', 'Personal Training', 'Classes', 'SGF', 'Gymnastics', 'Nutrition', 'Physiotherapy', 'Complimentary'] as const).map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setUpgradeCategoryFilter(cat)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
+                              upgradeCategoryFilter === cat
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background/60 text-muted-foreground border-border/60 hover:text-foreground'
+                            }`}
+                          >
+                            {cat === 'ALL' ? 'All Categories' : cat}
+                          </button>
+                        ))}
+                      </div>
+                      <Input
+                        placeholder="🔍 Search packages by name, category, Primary/Secondary, or price..."
+                        value={upgradePkgSearch}
+                        onChange={(e) => setUpgradePkgSearch(e.target.value)}
+                        className="h-9 rounded-xl text-xs"
+                      />
+                    </div>
                   )}
                   <Select value={upgradePkgName} onValueChange={v => v && setUpgradePkgName(v)}>
                     <SelectTrigger className="h-11 rounded-xl">
@@ -5119,12 +5145,24 @@ export default function Clients() {
                     </SelectTrigger>
                     <SelectContent className="max-h-72">
                       {visiblePackages
-                        .filter(p => !isInzanTenant || !upgradePkgSearch.trim() || `${p.name} ${p.category || ''} ${p.hierarchy || ''} ${p.price}`.toLowerCase().includes(upgradePkgSearch.toLowerCase()))
-                        .map(p => (
-                          <SelectItem key={p.id} value={p.name}>
-                            {p.name} ({p.price.toLocaleString()} LE){isInzanTenant && p.hierarchy ? ` — ${p.hierarchy}` : ''}
-                          </SelectItem>
-                        ))}
+                        .filter(p => {
+                          if (!isInzanTenant) return true;
+                          const effH = getEffectivePackageHierarchy(p);
+                          const effCat = getEffectivePackageCategory(p);
+                          if (upgradeHierarchyFilter !== 'ALL' && effH !== upgradeHierarchyFilter) return false;
+                          if (upgradeCategoryFilter !== 'ALL' && effCat.toLowerCase() !== upgradeCategoryFilter.toLowerCase()) return false;
+                          if (upgradePkgSearch.trim() && !`${p.name} ${effCat} ${effH} ${p.price}`.toLowerCase().includes(upgradePkgSearch.toLowerCase())) return false;
+                          return true;
+                        })
+                        .map(p => {
+                          const effH = getEffectivePackageHierarchy(p);
+                          const effCat = getEffectivePackageCategory(p);
+                          return (
+                            <SelectItem key={p.id} value={p.name}>
+                              [{effH}] [{effCat}] {p.name} ({p.price.toLocaleString()} LE)
+                            </SelectItem>
+                          );
+                        })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -5567,12 +5605,50 @@ export default function Clients() {
                 <div className="space-y-1.5">
                   <Label className="text-sm font-semibold">Select Package</Label>
                   {isInzanTenant && (
-                    <Input
-                      placeholder="🔍 Search packages by name, Primary/Secondary, or price..."
-                      value={addPkgSearch}
-                      onChange={(e) => setAddPkgSearch(e.target.value)}
-                      className="h-9 rounded-xl text-xs"
-                    />
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(['ALL', 'Primary', 'Secondary'] as const).map((h) => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setAddPkgHierarchyFilter(h)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                              addPkgHierarchyFilter === h
+                                ? h === 'Primary'
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : h === 'Secondary'
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background text-muted-foreground border-border/60 hover:border-primary/40'
+                            }`}
+                          >
+                            {h === 'ALL' ? 'All Tiers' : h === 'Primary' ? 'Primary (Memberships)' : 'Secondary (PT / Add-ons)'}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {(['ALL', 'Membership', 'Personal Training', 'Classes', 'SGF', 'Gymnastics', 'Nutrition', 'Physiotherapy', 'Complimentary'] as const).map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setAddPkgCategoryFilter(cat)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-all ${
+                              addPkgCategoryFilter === cat
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background/60 text-muted-foreground border-border/60 hover:text-foreground'
+                            }`}
+                          >
+                            {cat === 'ALL' ? 'All Categories' : cat}
+                          </button>
+                        ))}
+                      </div>
+                      <Input
+                        placeholder="🔍 Search packages by name, category, Primary/Secondary, or price..."
+                        value={addPkgSearch}
+                        onChange={(e) => setAddPkgSearch(e.target.value)}
+                        className="h-9 rounded-xl text-xs"
+                      />
+                    </div>
                   )}
                   <Select 
                     value={addPackageName} 
@@ -5590,12 +5666,24 @@ export default function Clients() {
                     </SelectTrigger>
                     <SelectContent className="max-h-72">
                       {visiblePackages
-                        .filter(p => !isInzanTenant || !addPkgSearch.trim() || `${p.name} ${p.category || ''} ${p.hierarchy || ''} ${p.price}`.toLowerCase().includes(addPkgSearch.toLowerCase()))
-                        .map(p => (
-                          <SelectItem key={p.id} value={p.name}>
-                            {p.name} ({p.price.toLocaleString()} LE){isInzanTenant && p.hierarchy ? ` — ${p.hierarchy}` : ''}
-                          </SelectItem>
-                        ))}
+                        .filter(p => {
+                          if (!isInzanTenant) return true;
+                          const effH = getEffectivePackageHierarchy(p);
+                          const effCat = getEffectivePackageCategory(p);
+                          if (addPkgHierarchyFilter !== 'ALL' && effH !== addPkgHierarchyFilter) return false;
+                          if (addPkgCategoryFilter !== 'ALL' && effCat.toLowerCase() !== addPkgCategoryFilter.toLowerCase()) return false;
+                          if (addPkgSearch.trim() && !`${p.name} ${effCat} ${effH} ${p.price}`.toLowerCase().includes(addPkgSearch.toLowerCase())) return false;
+                          return true;
+                        })
+                        .map(p => {
+                          const effH = getEffectivePackageHierarchy(p);
+                          const effCat = getEffectivePackageCategory(p);
+                          return (
+                            <SelectItem key={p.id} value={p.name}>
+                              [{effH}] [{effCat}] {p.name} ({p.price.toLocaleString()} LE)
+                            </SelectItem>
+                          );
+                        })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -5635,6 +5723,12 @@ export default function Clients() {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Standard Price:</span>
                         <span className="font-semibold font-mono">{pkg.price.toLocaleString()} LE</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Hierarchy / Category:</span>
+                        <span className="font-semibold">
+                          [{getEffectivePackageHierarchy(pkg)}] • {getEffectivePackageCategory(pkg)}
+                        </span>
                       </div>
                       <div className="flex justify-between text-xs">
                         <span className="text-muted-foreground">Sessions:</span>

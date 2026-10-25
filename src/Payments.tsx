@@ -2289,7 +2289,7 @@ export default function Payments() {
                     return (
                       <>
                         <CascadingPackageSelector
-                          packages={isInzan && modalFilteredPackages.length > 0 ? modalFilteredPackages : visiblePackages}
+                          packages={visiblePackages}
                           selectedPackageName={packageType}
                           initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
                           initialBranch={paymentBranch || currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}

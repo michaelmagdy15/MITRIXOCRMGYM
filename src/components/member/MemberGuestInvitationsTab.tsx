@@ -38,6 +38,10 @@ import {
 } from 'lucide-react';
 import { format, isValid } from 'date-fns';
 import { toast } from 'sonner';
+import {
+  createGuestInvitationWithProfile,
+  activatePendingGuestInvite,
+} from '../../services/guestReferralService';
 
 interface NormalizedInvite extends GuestInvite {
   sourceCollection: 'guestInvites' | 'guests';
@@ -91,6 +95,12 @@ function normalizeInviteDoc(
       raw.phone ||
       raw.mobile ||
       '—',
+    guestNationalId:
+      raw.guestNationalId ||
+      raw.nationalId ||
+      raw.visitorNationalId ||
+      '',
+    guestClientId: raw.guestClientId || '',
     inviteCode:
       raw.inviteCode ||
       raw.code ||
@@ -135,6 +145,7 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
   // Form state for "Log / Generate Guest Invitation"
   const [guestName, setGuestName] = useState<string>('');
   const [guestPhone, setGuestPhone] = useState<string>('');
+  const [guestNationalId, setGuestNationalId] = useState<string>('');
   const [visitDate, setVisitDate] = useState<string>(() =>
     format(new Date(), 'yyyy-MM-dd')
   );
@@ -280,82 +291,38 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
 
     const trimmedName = guestName.trim();
     const trimmedPhone = guestPhone.trim();
-    if (!trimmedName || !trimmedPhone) {
-      toast.error('Please enter both the guest name and phone number.');
+    const trimmedNatId = guestNationalId.trim();
+    if (!trimmedName || !trimmedPhone || !trimmedNatId) {
+      toast.error('Please enter the guest full name, phone number, and National ID.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const nowIso = new Date().toISOString();
-      const inviteCode = generateInviteCode();
-      const chosenAttendanceIso = visitDate
-        ? new Date(`${visitDate}T12:00:00`).toISOString()
-        : nowIso;
-
-      const payload: Record<string, any> = {
-        hostClientId: client.id,
-        hostMemberId: client.memberId || client.legacyMemberId || '',
-        hostName: client.name || '',
+      const result = await createGuestInvitationWithProfile({
+        hostClient: client,
         guestName: trimmedName,
         guestPhone: trimmedPhone,
-        inviteCode,
+        guestNationalId: trimmedNatId,
         status: inviteStatus,
-        createdAt: nowIso,
-        branch: client.branch || client.homeBranch || '',
-      };
-
-      if (inviteStatus === 'Attended') {
-        payload.attendedAt = chosenAttendanceIso;
-        payload.attendanceDate = chosenAttendanceIso;
-      } else if (visitDate) {
-        payload.attendanceDate = chosenAttendanceIso;
-      }
-
-      const curRemaining = typeof client.guestInvitesRemaining === 'number'
-        ? client.guestInvitesRemaining
-        : typeof (client as any).invitationsRemaining === 'number'
-        ? (client as any).invitationsRemaining
-        : Math.max(0, Number((client as any).invitationsTotal ?? (client as any).guestInvitations ?? 3) - Number((client as any).invitationsUsed ?? 0));
-
-      if (curRemaining <= 0) {
-        toast.error(`${client.name} has used all guest invitations included in their package.`);
-        return;
-      }
-
-      await addDoc(collection(db, 'guestInvites'), payload);
-
-      const newRemaining = Math.max(0, curRemaining - 1);
-      await updateDoc(doc(db, 'clients', client.id), {
-        guestInvitesRemaining: newRemaining,
-        invitationsRemaining: newRemaining,
-        invitationsUsed: increment(1),
-        updatedAt: nowIso,
-      });
-
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'CREATE',
-        entityType: 'CLIENT',
-        entityId: client.id,
-        details: `Logged guest invitation for visitor "${trimmedName}" (${trimmedPhone}) under member ${client.name} [${inviteStatus}]`,
-        timestamp: nowIso,
-        userId: client.portalUserId || client.id,
-        userName: client.name,
+        visitDate,
+        createdBy: 'Reception / Staff',
       });
 
       toast.success(
         inviteStatus === 'Attended'
-          ? `Guest visit logged for ${trimmedName}.`
-          : `Guest invitation generated (${inviteCode}).`
+          ? `Guest visit logged & Lead profile created for ${trimmedName} (${result.inviteCode}).`
+          : `Guest invitation & Lead profile generated (${result.inviteCode}).`
       );
 
       setGuestName('');
       setGuestPhone('');
+      setGuestNationalId('');
       setVisitDate(format(new Date(), 'yyyy-MM-dd'));
       setInviteStatus('Attended');
-    } catch (err) {
+    } catch (err: any) {
       console.error('[MemberGuestInvitationsTab] Failed to log guest invitation:', err);
-      toast.error('Failed to save guest invitation. Please try again.');
+      toast.error(err?.message || 'Failed to save guest invitation. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -365,28 +332,27 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
     if (updatingId) return;
     setUpdatingId(invite.id);
     try {
-      const nowIso = new Date().toISOString();
-      const docRef = doc(db, invite.sourceCollection, invite.id);
-      await updateDoc(docRef, {
-        status: 'Attended',
-        attendedAt: nowIso,
-        attendanceDate: nowIso,
+      await activatePendingGuestInvite({
+        inviteId: invite.id,
+        sourceCollection: invite.sourceCollection,
+        inviteData: {
+          inviteCode: invite.inviteCode,
+          guestName: invite.guestName,
+          guestPhone: invite.guestPhone,
+          guestNationalId: invite.guestNationalId,
+          guestClientId: invite.guestClientId,
+          hostClientId: client.id,
+          hostMemberId: client.memberId || client.legacyMemberId || '',
+          hostName: client.name,
+          branch: invite.branch || client.branch || client.homeBranch || 'Garden 8',
+        },
+        confirmedBy: 'Reception',
       });
 
-      await addDoc(collection(db, 'auditLogs'), {
-        action: 'UPDATE',
-        entityType: 'CLIENT',
-        entityId: client.id,
-        details: `Marked guest "${invite.guestName}" (${invite.inviteCode}) as Attended Today for member ${client.name}`,
-        timestamp: nowIso,
-        userId: client.portalUserId || client.id,
-        userName: client.name,
-      });
-
-      toast.success(`Marked ${invite.guestName} as attended today.`);
-    } catch (err) {
+      toast.success(`Confirmed & activated ${invite.guestName} (${invite.inviteCode}) — Lead profile moved to Trial.`);
+    } catch (err: any) {
       console.error('[MemberGuestInvitationsTab] Failed to mark guest attended:', err);
-      toast.error('Failed to mark guest attendance. Please try again.');
+      toast.error(err?.message || 'Failed to confirm guest attendance.');
     } finally {
       setUpdatingId(null);
     }
@@ -528,10 +494,10 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
           </div>
         </div>
 
-        <form onSubmit={handleLogInvitation} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+        <form onSubmit={handleLogInvitation} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
           <div className="space-y-1.5">
             <Label htmlFor="invite-guest-name" className="text-[11px] font-bold text-muted-foreground">
-              Guest / Visitor Name *
+              Guest Full Name *
             </Label>
             <Input
               id="invite-guest-name"
@@ -560,6 +526,21 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
           </div>
 
           <div className="space-y-1.5">
+            <Label htmlFor="invite-guest-natid" className="text-[11px] font-bold text-muted-foreground">
+              National ID *
+            </Label>
+            <Input
+              id="invite-guest-natid"
+              type="text"
+              placeholder="14-digit National ID"
+              value={guestNationalId}
+              onChange={(e) => setGuestNationalId(e.target.value)}
+              required
+              className="h-9 text-xs bg-background font-mono"
+            />
+          </div>
+
+          <div className="space-y-1.5">
             <Label htmlFor="invite-visit-date" className="text-[11px] font-bold text-muted-foreground">
               Visit / Attendance Date
             </Label>
@@ -582,8 +563,8 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
               onChange={(e) => setInviteStatus(e.target.value as 'Attended' | 'Pending')}
               className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs font-medium text-foreground shadow-xs focus:outline-none focus:ring-1 focus:ring-ring"
             >
-              <option value="Attended">Attended</option>
-              <option value="Pending">Pending</option>
+              <option value="Attended">Attended (Confirm Now)</option>
+              <option value="Pending">Pending (Generate Code)</option>
             </select>
           </div>
 
@@ -594,7 +575,7 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
               className="w-full h-9 text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90"
             >
               <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-              {isSubmitting ? 'Saving...' : 'Save Invitation'}
+              {isSubmitting ? 'Saving...' : 'Save & Create Profile'}
             </Button>
           </div>
         </form>
@@ -673,7 +654,12 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
                         {invite.guestName}
                       </TableCell>
                       <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">
-                        {invite.guestPhone}
+                        <div>{invite.guestPhone}</div>
+                        {invite.guestNationalId && (
+                          <div className="text-[10px] text-primary/80 font-semibold">
+                            ID: {invite.guestNationalId}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="py-3 px-4 text-xs">
                         <div className="inline-flex items-center gap-1.5 bg-muted/40 px-2 py-0.5 rounded border border-border font-mono text-[11px] font-bold text-primary">
@@ -721,7 +707,7 @@ export function MemberGuestInvitationsTab({ client }: { client: Client }) {
                             className="h-7 px-2.5 text-[11px] font-bold border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                            {updatingId === invite.id ? 'Updating...' : 'Mark Attended Today'}
+                            {updatingId === invite.id ? 'Activating...' : 'Confirm & Activate Invite'}
                           </Button>
                         ) : (
                           <span className="text-[11px] text-muted-foreground">—</span>

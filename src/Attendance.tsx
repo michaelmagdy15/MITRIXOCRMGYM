@@ -77,6 +77,10 @@ import {
   TurnstileGateDecision,
   DEFAULT_TURNSTILE_CONFIG,
 } from './utils/turnstileGateBridge';
+import {
+  createGuestInvitationWithProfile,
+  activatePendingGuestInvite,
+} from './services/guestReferralService';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const {
@@ -110,6 +114,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const [isGuestInviteOpen, setIsGuestInviteOpen] = useState(false);
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
+  const [guestNationalId, setGuestNationalId] = useState('');
+  const [guestInviteCodeToActivate, setGuestInviteCodeToActivate] = useState('');
   const { t, language, isRtl } = useLanguage();
 
   const [classes, setClasses] = useState<any[]>([]);
@@ -1116,23 +1122,66 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   const handleRedeemGuestInvitation = async () => {
     if (!lastScannedMember || isRecording) return;
-    const trimmedName = guestName.trim();
-    const trimmedPhone = guestPhone.trim();
-    if (!trimmedName || !trimmedPhone) {
-      setError('Please enter both the Guest Name and Guest Mobile Number.');
+
+    // Mode A: Reception is activating an existing mobile-generated Invite Code (INV-XXXXXX)
+    if (guestInviteCodeToActivate.trim()) {
+      setIsRecording(true);
+      setError(null);
+      setSuccessMessage(null);
+      try {
+        const cleanCode = guestInviteCodeToActivate.trim().toUpperCase();
+        const { getDocs: fsGetDocs, query: fsQuery, where: fsWhere } = await import('firebase/firestore');
+        const snap = await fsGetDocs(
+          fsQuery(collection(db, 'guestInvites'), fsWhere('inviteCode', '==', cleanCode))
+        );
+        if (snap.empty) {
+          throw new Error(`Invite Code "${cleanCode}" not found. Check the code or create a new Guest Pass below.`);
+        }
+        const invDoc = snap.docs[0]!;
+        const invData = invDoc.data() as any;
+        if (invData.status === 'Attended') {
+          throw new Error(`Invite Code "${cleanCode}" (${invData.guestName}) was already activated & attended on ${String(invData.attendedAt || '').slice(0, 10)}!`);
+        }
+
+        await activatePendingGuestInvite({
+          inviteId: invDoc.id,
+          sourceCollection: 'guestInvites',
+          inviteData: {
+            inviteCode: cleanCode,
+            guestName: invData.guestName,
+            guestPhone: invData.guestPhone,
+            guestNationalId: guestNationalId.trim() || invData.guestNationalId,
+            guestClientId: invData.guestClientId,
+            hostClientId: invData.hostClientId || lastScannedMember.id,
+            hostMemberId: invData.hostMemberId || lastScannedMember.memberId || '',
+            hostName: invData.hostName || lastScannedMember.name,
+            branch: selectedBranch || invData.branch || lastScannedMember.branch || 'Garden 8',
+          },
+          confirmedBy: currentUser?.name || 'Reception',
+        });
+
+        setSuccessMessage(
+          `Invite Code ${cleanCode} confirmed! Guest "${invData.guestName}" checked in & Lead profile activated in Trial stage.`
+        );
+        setGuestInviteCodeToActivate('');
+        setGuestName('');
+        setGuestPhone('');
+        setGuestNationalId('');
+        setIsGuestInviteOpen(false);
+      } catch (err: any) {
+        setError(err instanceof Error ? err.message : 'Failed to activate invite code');
+      } finally {
+        setIsRecording(false);
+      }
       return;
     }
 
-    const totalInvites = Number((lastScannedMember as any).invitationsTotal ?? (lastScannedMember as any).guestInvitations ?? 3);
-    const usedInvites = Number((lastScannedMember as any).invitationsUsed ?? 0);
-    const curRemaining = typeof (lastScannedMember as any).guestInvitesRemaining === "number"
-      ? (lastScannedMember as any).guestInvitesRemaining
-      : typeof (lastScannedMember as any).invitationsRemaining === "number"
-      ? (lastScannedMember as any).invitationsRemaining
-      : Math.max(0, totalInvites - usedInvites);
-
-    if (curRemaining <= 0) {
-      setError(`${lastScannedMember.name} has 0 remaining invitation passes (${usedInvites}/${totalInvites} used).`);
+    // Mode B: Creating & redeeming a new Guest Pass at Reception (Full Name + Phone + National ID required)
+    const trimmedName = guestName.trim();
+    const trimmedPhone = guestPhone.trim();
+    const trimmedNatId = guestNationalId.trim();
+    if (!trimmedName || !trimmedPhone || !trimmedNatId) {
+      setError('Please enter Guest Full Name, Phone Number, and National ID (or enter an existing INV-XXXXXX code to activate).');
       return;
     }
 
@@ -1140,70 +1189,25 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     setError(null);
     setSuccessMessage(null);
     try {
-      const inviteSerial = `INV-${Date.now().toString().slice(-6)}`;
-      const newUsed = usedInvites + 1;
-      const newRemaining = Math.max(0, curRemaining - 1);
-      await updateClient(lastScannedMember.id, {
-        invitationsTotal: Math.max(totalInvites, newUsed + newRemaining),
-        invitationsUsed: newUsed,
-        invitationsRemaining: newRemaining,
-        guestInvitesRemaining: newRemaining,
-      } as any);
-
-      // Record in guestInvites collection so it shows up in MemberInvites & MemberGuestInvitationsTab
-      try {
-        const { collection: fsCol, addDoc: fsAddDoc } = await import("firebase/firestore");
-        await fsAddDoc(fsCol(db, "guestInvites"), {
-          hostClientId: lastScannedMember.id,
-          hostId: lastScannedMember.id,
-          hostMemberId: (lastScannedMember as any).memberId || (lastScannedMember as any).legacyMemberId || "",
-          hostName: lastScannedMember.name || "",
-          guestName: trimmedName,
-          guestPhone: trimmedPhone,
-          inviteCode: inviteSerial,
-          status: "Attended",
-          attendedAt: new Date().toISOString(),
-          attendanceDate: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-          branch: selectedBranch || lastScannedMember.branch || "MAIN",
-        });
-      } catch (giErr) {
-        console.warn("Could not record into guestInvites collection:", giErr);
-      }
-
-      // Auto-create a Sales Lead if phone does not already exist
-      const existingLeadOrMember = clients.find((c) => c.phone === trimmedPhone);
-      let guestClientId = existingLeadOrMember?.id;
-      if (!guestClientId) {
-        guestClientId = await addClient({
-          id: '',
-          name: trimmedName,
-          phone: trimmedPhone,
-          status: 'Lead',
-          branch: selectedBranch || lastScannedMember.branch || branches[0] || 'MAIN',
-          interest: 'Interested',
-          category: 'None',
-          source: 'Word Of Mouth',
-          stage: 'Trial',
-          advertisingSource: 'Member Invitation',
-          invitedByType: 'Member',
-          invitedById: lastScannedMember.id,
-          referredByName: lastScannedMember.name,
-          guestSerial: inviteSerial,
-          trialDate: new Date().toISOString().slice(0, 10),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      const result = await createGuestInvitationWithProfile({
+        hostClient: lastScannedMember,
+        guestName: trimmedName,
+        guestPhone: trimmedPhone,
+        guestNationalId: trimmedNatId,
+        status: 'Attended',
+        createdBy: currentUser?.name || 'Reception',
+      });
 
       await recordAttendance(lastScannedMember.id, selectedBranch);
       if (turnstileConfig.enabled && turnstileEval) {
         triggerTurnstileRelay(turnstileConfig, turnstileEval, lastScannedMember).catch(() => {});
       }
       setSuccessMessage(
-        `Guest "${trimmedName}" checked in (Pass ${usedInvites + 1}/${totalInvites}) & added to Sales Leads!`
+        `Guest "${trimmedName}" checked in (Code: ${result.inviteCode}, ${result.newRemaining} passes left) & Lead profile created in Sales Leads!`
       );
       setGuestName('');
       setGuestPhone('');
+      setGuestNationalId('');
       setIsGuestInviteOpen(false);
       setTimeout(() => {
         setLastScannedMember(null);
@@ -1709,17 +1713,37 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
                     {isGuestInviteOpen && (
                       <div className="space-y-2 pt-1 border-t border-primary/15">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div className="p-2 rounded-lg bg-background/80 border border-primary/20 space-y-1.5">
+                          <Label className="text-[10px] font-bold uppercase text-primary block">
+                            Have a Mobile App Invite Code? (e.g. INV-123456)
+                          </Label>
                           <Input
-                            placeholder="Guest Full Name..."
+                            placeholder="Enter INV-XXXXXX code to confirm & activate..."
+                            value={guestInviteCodeToActivate}
+                            onChange={(e) => setGuestInviteCodeToActivate(e.target.value.toUpperCase())}
+                            className="h-8 bg-background text-xs font-mono uppercase"
+                          />
+                        </div>
+                        <div className="text-[10px] font-bold uppercase text-muted-foreground text-center">
+                          — OR Register New Guest Visit (Full Name + Phone + National ID) —
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <Input
+                            placeholder="Guest Full Name *"
                             value={guestName}
                             onChange={(e) => setGuestName(e.target.value)}
                             className="h-9 bg-background text-xs"
                           />
                           <Input
-                            placeholder="Guest Mobile (01XXXXXXXXX)..."
+                            placeholder="Guest Phone (01XXXXXXXXX) *"
                             value={guestPhone}
                             onChange={(e) => setGuestPhone(e.target.value)}
+                            className="h-9 bg-background text-xs font-mono"
+                          />
+                          <Input
+                            placeholder="Guest National ID *"
+                            value={guestNationalId}
+                            onChange={(e) => setGuestNationalId(e.target.value)}
                             className="h-9 bg-background text-xs font-mono"
                           />
                         </div>

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { UserPlus, Copy, Check, Info, Calendar, UserCheck, AlertCircle, Ticket } from 'lucide-react';
 import { toast } from 'sonner';
 import { computeMemberBenefitsSummary } from '../utils/memberBenefitsWallet';
+import { createGuestInvitationWithProfile } from '../services/guestReferralService';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
   Pending: { badge: 'bg-primary/10 text-primary border-primary/20', text: 'Active Invite' },
@@ -21,6 +22,7 @@ export default function MemberInvites({ client }: { client: Client | null }) {
   const [invites, setInvites] = useState<GuestInvite[]>([]);
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
+  const [guestNationalId, setGuestNationalId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [generatedCode, setGeneratedCode] = useState('');
@@ -83,7 +85,12 @@ export default function MemberInvites({ client }: { client: Client | null }) {
 
   const handleCreateInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!client || !guestName.trim() || !guestPhone.trim() || isSubmitting) return;
+    if (!client || !guestName.trim() || !guestPhone.trim() || !guestNationalId.trim() || isSubmitting) {
+      if (!guestNationalId.trim()) {
+        toast.error('Please enter the guest’s National ID.');
+      }
+      return;
+    }
 
     if (remainingInvites <= 0) {
       toast.error('You have no guest invitation passes remaining in your package.');
@@ -95,87 +102,22 @@ export default function MemberInvites({ client }: { client: Client | null }) {
     setGeneratedCode('');
 
     try {
-      let finalInviteCode = '';
-      let apiSuccess = false;
+      const result = await createGuestInvitationWithProfile({
+        hostClient: client,
+        guestName: guestName.trim(),
+        guestPhone: guestPhone.trim(),
+        guestNationalId: guestNationalId.trim(),
+        status: 'Pending',
+        createdBy: `${client.name} (Mobile App)`,
+      });
 
-      // 1. Attempt authoritative server-side endpoint with quota deduction & audit
-      try {
-        const token = await auth.currentUser?.getIdToken();
-        const res = await fetch('/api/member/guest-invite', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            'x-tenant-id': tenantId,
-          },
-          body: JSON.stringify({
-            clientId: client.id,
-            guestName: guestName.trim(),
-            guestPhone: guestPhone.trim(),
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          finalInviteCode = data.inviteCode;
-          if (typeof data.remaining === 'number') {
-            setLocalRemainingOverride(data.remaining);
-          } else {
-            setLocalRemainingOverride(Math.max(0, remainingInvites - 1));
-          }
-          apiSuccess = true;
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          if (res.status === 400 && errData.error?.includes('remaining')) {
-            toast.error(errData.error || 'No guest invitations remaining.');
-            setIsSubmitting(false);
-            return;
-          }
-          // If server error or offline, fallback to Firestore
-          console.warn('[MemberInvites] Server API returned error, falling back to direct Firestore:', errData);
-        }
-      } catch (apiErr) {
-        console.warn('[MemberInvites] API fetch failed, falling back to direct Firestore:', apiErr);
-      }
-
-      // 2. Direct Firestore fallback if API wasn't used or succeeded
-      if (!apiSuccess) {
-        finalInviteCode = generateInviteCode();
-        const nowIso = new Date().toISOString();
-
-        await addDoc(collection(db, 'guestInvites'), {
-          hostClientId: client.id,
-          hostId: client.id,
-          hostMemberId: (client as any).memberId || (client as any).legacyMemberId || '',
-          hostName: client.name,
-          guestName: guestName.trim(),
-          guestPhone: guestPhone.trim(),
-          inviteCode: finalInviteCode,
-          status: 'Pending',
-          createdAt: nowIso,
-          branch: client.branch || (client as any).homeBranch || 'MAIN',
-        });
-
-        // Deduct quota from client document
-        const newRemaining = Math.max(0, remainingInvites - 1);
-        const updates: Record<string, any> = {
-          guestInvitesRemaining: newRemaining,
-          invitationsRemaining: newRemaining,
-          invitationsUsed: increment(1),
-          updatedAt: nowIso,
-        };
-        await updateDoc(doc(db, 'clients', client.id), updates).catch((updateErr) => {
-          console.warn('[MemberInvites] Non-critical: could not update client doc:', updateErr);
-        });
-
-        setLocalRemainingOverride(newRemaining);
-      }
-
-      setGeneratedCode(finalInviteCode);
+      setLocalRemainingOverride(result.newRemaining);
+      setGeneratedCode(result.inviteCode);
       setSubmitSuccess(true);
       setGuestName('');
       setGuestPhone('');
-      toast.success(`Guest pass generated! Code: ${finalInviteCode}`);
+      setGuestNationalId('');
+      toast.success(`Guest pass generated! Code: ${result.inviteCode}`);
     } catch (err: any) {
       console.error("Failed to create guest invite:", err);
       toast.error(err?.message || "Failed to generate invitation. Please try again.");
@@ -255,11 +197,11 @@ export default function MemberInvites({ client }: { client: Client | null }) {
         <CardContent>
           <form onSubmit={handleCreateInvite} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="guestName" className="text-xs font-bold text-muted-foreground">Guest Name</Label>
+              <Label htmlFor="guestName" className="text-xs font-bold text-muted-foreground">Guest Full Name *</Label>
               <Input
                 id="guestName"
                 type="text"
-                placeholder="Enter full name"
+                placeholder="Enter guest full name"
                 value={guestName}
                 onChange={e => setGuestName(e.target.value)}
                 required
@@ -269,11 +211,11 @@ export default function MemberInvites({ client }: { client: Client | null }) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="guestPhone" className="text-xs font-bold text-muted-foreground">Guest Phone Number</Label>
+              <Label htmlFor="guestPhone" className="text-xs font-bold text-muted-foreground">Guest Phone Number *</Label>
               <Input
                 id="guestPhone"
                 type="tel"
-                placeholder="e.g. +201012345678"
+                placeholder="e.g. 01012345678"
                 value={guestPhone}
                 onChange={e => setGuestPhone(e.target.value)}
                 required
@@ -282,14 +224,28 @@ export default function MemberInvites({ client }: { client: Client | null }) {
               />
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="guestNationalId" className="text-xs font-bold text-muted-foreground">Guest National ID *</Label>
+              <Input
+                id="guestNationalId"
+                type="text"
+                placeholder="Enter 14-digit National ID or Passport"
+                value={guestNationalId}
+                onChange={e => setGuestNationalId(e.target.value)}
+                required
+                disabled={remainingInvites <= 0}
+                className="bg-background font-mono"
+              />
+            </div>
+
             {submitSuccess && generatedCode && (
               <div className="bg-primary/10 border border-primary/20 text-primary p-4 rounded-2xl space-y-2.5 animate-in zoom-in-95">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
-                  <UserCheck className="h-4 w-4" /> Guest Pass Generated!
+                  <UserCheck className="h-4 w-4" /> Guest Pass & Lead Profile Created!
                 </div>
                 <div className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800">
                   <div>
-                    <span className="text-[10px] text-zinc-500 font-bold block uppercase tracking-wider">PASS CODE</span>
+                    <span className="text-[10px] text-zinc-500 font-bold block uppercase tracking-wider">RECEPTION INVITE CODE</span>
                     <strong className="text-xl font-mono tracking-widest text-white">{generatedCode}</strong>
                   </div>
                   <Button
@@ -303,7 +259,7 @@ export default function MemberInvites({ client }: { client: Client | null }) {
                   </Button>
                 </div>
                 <p className="text-[10px] text-zinc-400 leading-normal">
-                  Share this code with your guest. They should show this code to the front desk receptionist when checking in.
+                  Share this code with your guest. They must give this code and show their National ID to Reception to confirm & activate the guest invite upon arrival.
                 </p>
               </div>
             )}
@@ -351,7 +307,10 @@ export default function MemberInvites({ client }: { client: Client | null }) {
                           {style.text}
                         </Badge>
                       </div>
-                      <p className="text-[10px] text-muted-foreground font-semibold">Phone: {invite.guestPhone}</p>
+                      <p className="text-[10px] text-muted-foreground font-semibold">
+                        Phone: {invite.guestPhone}
+                        {invite.guestNationalId ? ` • National ID: ${invite.guestNationalId}` : ''}
+                      </p>
                       <p className="text-[9px] text-zinc-500 font-mono">
                         Created: {dateObj.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>

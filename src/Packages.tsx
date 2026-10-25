@@ -15,6 +15,7 @@ import { Package, Branch } from './types';
 import { Plus, Edit, Upload, X, Archive, RotateCcw, HelpCircle, ChevronDown, ChevronUp, Layers, Tag, FolderCog, PauseCircle, PlayCircle, Target, Calendar, User as UserIcon, Search, ArrowUpDown } from 'lucide-react';
 import { storage, getTenantId } from './firebase';
 import { isTenantInzan } from './utils/inzanOrg';
+import { getEffectivePackageHierarchy, getEffectivePackageCategory } from './utils/membershipRules';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import ImageCropperDialog from './components/ImageCropperDialog';
@@ -292,7 +293,7 @@ export default function Packages() {
 
     setEnhancements({
       ...DEFAULT_PACKAGE_ENHANCEMENTS,
-      hierarchy: pkg.hierarchy || 'Primary',
+      hierarchy: getEffectivePackageHierarchy(pkg),
       status: isOnHold(pkg) ? 'Hold' : 'Active',
       freePtSessions,
       freezeAllowanceDays,
@@ -416,7 +417,7 @@ export default function Packages() {
     .filter(pkg => {
       if (!isInzan || typeFilter === 'ALL') return true;
       if (typeFilter === 'Primary' || typeFilter === 'Secondary') {
-        const h = pkg.hierarchy || 'Primary';
+        const h = getEffectivePackageHierarchy(pkg);
         return h === typeFilter;
       }
       return pkg.type === typeFilter;
@@ -424,8 +425,8 @@ export default function Packages() {
     .filter(pkg => {
       if (!isInzan || !searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
-      const cat = pkg.category || (pkg.type === 'Private' ? 'Personal Training (PT)' : 'Gym Memberships');
-      const h = pkg.hierarchy || 'Primary';
+      const cat = getEffectivePackageCategory(pkg);
+      const h = getEffectivePackageHierarchy(pkg);
       return `${pkg.name} ${cat} ${h} ${pkg.type || ''} ${pkg.price} ${pkg.expiryDays}`.toLowerCase().includes(q);
     })
     .sort((a, b) => {
@@ -435,8 +436,8 @@ export default function Packages() {
       if (sortBy === 'duration-desc') return (b.expiryDays || 0) - (a.expiryDays || 0);
       if (sortBy === 'name-asc') return (a.name || '').localeCompare(b.name || '');
       if (sortBy === 'type') {
-        const hA = a.hierarchy || 'Primary';
-        const hB = b.hierarchy || 'Primary';
+        const hA = getEffectivePackageHierarchy(a);
+        const hB = getEffectivePackageHierarchy(b);
         if (hA !== hB) return hA === 'Primary' ? -1 : 1;
         const cA = a.category || '';
         const cB = b.category || '';

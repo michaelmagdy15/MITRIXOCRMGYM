@@ -511,11 +511,35 @@ export default function AdvancedReports() {
   // 14. Referrals
   // ============================================================
   const referralsData = useMemo(() => {
-    return (clients || []).filter(c => {
+    const directLeads = (clients || []).filter(c => {
       if (!c.referredBy && !c.referredByName) return false;
       if (!matchBranch(c.branch)) return false;
       return true;
     });
+    const seenPhones = new Set(directLeads.map(c => String(c.phone || '').replace(/\D/g, '').slice(-10)));
+    const embeddedRefs: any[] = [];
+    (clients || []).forEach(host => {
+      if (!matchBranch(host.branch)) return;
+      const refs = Array.isArray((host as any).referrals) ? (host as any).referrals : [];
+      refs.forEach((r: any) => {
+        const cleanP = String(r.phone || '').replace(/\D/g, '').slice(-10);
+        if (cleanP && seenPhones.has(cleanP)) return;
+        if (cleanP) seenPhones.add(cleanP);
+        embeddedRefs.push({
+          id: r.leadClientId || r.id || `ref-${host.id}-${cleanP}`,
+          name: r.name || 'Referred Friend',
+          phone: r.phone || '—',
+          status: 'Lead',
+          stage: 'New',
+          source: 'Referral',
+          referredBy: host.id,
+          referredByName: r.referredByName || host.name,
+          branch: host.branch || 'Garden 8',
+          createdAt: r.createdAt || host.createdAt,
+        });
+      });
+    });
+    return [...directLeads, ...embeddedRefs];
   }, [clients, branchFilter]);
 
   // ============================================================
