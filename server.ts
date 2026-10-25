@@ -70,8 +70,8 @@ if (admin.apps.length === 0) {
   }
   if (isStandaloneMode()) {
     adminOptions.projectId = 'strike-production-f5242';
-  } else if (process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT) {
-    adminOptions.projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT;
+  } else {
+    adminOptions.projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || 'faa-test-guide-v2';
   }
   admin.initializeApp(adminOptions);
 }

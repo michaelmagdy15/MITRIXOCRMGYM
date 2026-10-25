@@ -90,12 +90,20 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
       });
       if (res.ok) {
         const data = await res.json();
-        if (data?.ok) {
-          setStatusRecord(data.status || data);
+        const st = data?.ok ? data.status : null;
+        if (st) {
+          setStatusRecord({
+            ...st,
+            lastSyncAt: st.lastSyncAt || st.completedAt || st.syncedAt,
+            lastSyncBy: st.lastSyncBy || st.syncedBy,
+          });
         }
+      } else {
+        console.warn(`[RedGITS Sync] Status check returned HTTP ${res.status}`);
       }
-    } catch {
-      // Ignore background status check errors
+    } catch (statusErr) {
+      // Background status check only — the sync button itself still reports errors.
+      console.warn('[RedGITS Sync] Status check failed:', statusErr);
     }
   };
 
@@ -122,40 +130,81 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
         bodyPayload.password = password.trim();
       }
 
-      const res = await fetch('/api/inzan/redgits-sync', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(bodyPayload),
-      });
+      // Abort just under the Cloud Run request timeout (300s) so the user always gets a clear message.
+      const controller = new AbortController();
+      const abortTimer = setTimeout(() => controller.abort(), 290_000);
+      let res: Response;
+      try {
+        res = await fetch('/api/inzan/redgits-sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(bodyPayload),
+          signal: controller.signal,
+        });
+      } catch (netErr: any) {
+        if (netErr?.name === 'AbortError') {
+          throw new Error('RedGITS sync is taking longer than expected. It may still finish in the background — reopen this dialog in a minute to check the last sync time.');
+        }
+        throw new Error('Could not reach the CRM server. Check your internet connection and try again.');
+      } finally {
+        clearTimeout(abortTimer);
+      }
 
-      const data = await res.json().catch(() => ({}));
+      const rawText = await res.text();
+      let data: any = {};
+      try {
+        data = rawText ? JSON.parse(rawText) : {};
+      } catch {
+        data = {};
+      }
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || `Sync failed with HTTP ${res.status}`);
+        if (data?.error) throw new Error(data.error);
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Your session does not have permission to run RedGITS sync. Sign out and back in, or ask an Inzan admin.');
+        }
+        if (res.status === 502 || res.status === 503 || res.status === 504) {
+          throw new Error(`The server timed out talking to RedGITS (HTTP ${res.status}). Please try again in a minute.`);
+        }
+        throw new Error(`Sync failed with HTTP ${res.status}`);
       }
 
-      if (selectedMode === 'full') {
-        await clearInzanExpiredClientsIdbCache();
-      }
+      // Always drop cached expired members so refreshed phones / Member IDs show immediately.
+      await clearInzanExpiredClientsIdbCache();
+
+      const syncedAt: string = data.syncedAt || data.completedAt || new Date().toISOString();
+      const counts: SyncCounts = {
+        activeMembers: 0,
+        expiredMembers: 0,
+        leads: 0,
+        packages: 0,
+        payments: 0,
+        staff: 0,
+        invitations: 0,
+        checkIns: 0,
+        unmaskedPhonesFetched: 0,
+        ...(data.counts || {}),
+      };
 
       setLastResult({
-        counts: data.counts,
-        durationMs: data.durationMs,
-        syncedAt: data.syncedAt,
+        counts,
+        durationMs: Number(data.durationMs) || 0,
+        syncedAt,
       });
 
       setStatusRecord({
-        lastSyncAt: data.syncedAt,
+        lastSyncAt: syncedAt,
+        lastSyncBy: data.lastSyncBy || data.syncedBy,
         mode: selectedMode,
         durationMs: data.durationMs,
-        counts: data.counts,
+        counts,
         status: 'completed',
       });
 
-      if (onSyncComplete && data.counts) {
-        onSyncComplete(data.counts);
+      if (onSyncComplete) {
+        onSyncComplete(counts);
       }
     } catch (err: any) {
       setError(err?.message || 'Failed to sync with RedGITS');

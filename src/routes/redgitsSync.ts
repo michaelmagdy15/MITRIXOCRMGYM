@@ -22,6 +22,9 @@ interface SyncStats {
   syncedAt?: string;
   durationMs: number;
   syncedBy: string;
+  lastSyncBy?: string;
+  status?: 'completed';
+  mobileLookupsDeferred?: number;
   redgitsAccountUsed?: string;
   counts: {
     activeMembers: number;
@@ -193,15 +196,21 @@ async function authenticateCallerForInzan(
     const email = (decoded.email || '').toLowerCase();
     const inzanDb = getFirestore(INZAN_DATABASE_ID);
     const userSnap = await inzanDb.collection('users').doc(decoded.uid).get();
-    const userData = userSnap.exists ? userSnap.data() : null;
-    const role = String(userData?.role || (email === 'michaelmitry13@gmail.com' ? 'crm_admin' : ''));
+    let userData: FirebaseFirestore.DocumentData | null = userSnap.exists ? userSnap.data() || null : null;
+    // Fallback: some staff docs were created with a non-UID document ID — resolve by email instead.
+    if (!userData && email) {
+      const byEmail = await inzanDb.collection('users').where('email', '==', email).limit(1).get();
+      if (!byEmail.empty) userData = byEmail.docs[0]!.data();
+    }
+    // Custom claims are only trusted when they were issued for this tenant.
+    const claimRole = decoded.tenantId === 'inzanathletics' ? String(decoded.role || '') : '';
+    const role = String(userData?.role || claimRole || (email === 'michaelmitry13@gmail.com' ? 'crm_admin' : ''));
     const allowedRoles = ['admin', 'crm_admin', 'super_admin', 'manager'];
 
     if (
       allowedRoles.includes(role) ||
       email === 'michaelmitry13@gmail.com' ||
-      email === 'magd.gallab@gmail.com' ||
-      (email.endsWith('@inzan.com') && decoded.email_verified === true)
+      email === 'magd.gallab@gmail.com'
     ) {
       return {
         uid: decoded.uid,
@@ -210,8 +219,10 @@ async function authenticateCallerForInzan(
         role: role || 'admin',
       };
     }
+    console.warn(`[RedGITS Sync] Access denied for ${email || decoded.uid} (role: "${role || 'none'}")`);
     return null;
-  } catch {
+  } catch (authErr: any) {
+    console.warn('[RedGITS Sync] Caller token verification failed:', authErr?.message || authErr);
     return null;
   }
 }
@@ -394,42 +405,49 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     });
 
     let authenticatedAccount = '';
+    let authenticatedPassword = '';
     for (const acct of candidateAccounts) {
       cookieJar.delete('ci_session');
-      const loginPageRes = await fetch(`${REDGITS_ORIGIN}/admin/login`, {
-        headers: { 'User-Agent': USER_AGENT, Cookie: getCookieHeader() },
-      });
-      saveCookies(loginPageRes);
+      try {
+        const loginPageRes = await fetch(`${REDGITS_ORIGIN}/admin/login`, {
+          headers: { 'User-Agent': USER_AGENT, Cookie: getCookieHeader() },
+        });
+        saveCookies(loginPageRes);
 
-      const loginRes = await fetch(`${REDGITS_ORIGIN}/admin/login/check_login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Cookie: getCookieHeader(),
-          'User-Agent': USER_AGENT,
-          Referer: `${REDGITS_ORIGIN}/admin/login`,
-          Origin: REDGITS_ORIGIN,
-        },
-        body: new URLSearchParams({
-          username: acct.username,
-          password: acct.password,
-          code: deviceCode,
-          client_info: clientInfoPayload,
-        }).toString(),
-        redirect: 'manual',
-      });
-      saveCookies(loginRes);
+        const loginRes = await fetch(`${REDGITS_ORIGIN}/admin/login/check_login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Cookie: getCookieHeader(),
+            'User-Agent': USER_AGENT,
+            Referer: `${REDGITS_ORIGIN}/admin/login`,
+            Origin: REDGITS_ORIGIN,
+          },
+          body: new URLSearchParams({
+            username: acct.username,
+            password: acct.password,
+            code: deviceCode,
+            client_info: clientInfoPayload,
+          }).toString(),
+          redirect: 'manual',
+        });
+        saveCookies(loginRes);
 
-      const loginLocation = loginRes.headers.get('location') || '';
-      const isLoginRedirectToLogin = loginLocation.includes('/admin/login');
-      if (!isLoginRedirectToLogin && (cookieJar.has('ci_session') || loginRes.status === 302)) {
-        authenticatedAccount = acct.username;
-        break;
+        const loginLocation = loginRes.headers.get('location') || '';
+        const isLoginRedirectToLogin = loginLocation.includes('/admin/login');
+        if (!isLoginRedirectToLogin && (cookieJar.has('ci_session') || loginRes.status === 302)) {
+          authenticatedAccount = acct.username;
+          authenticatedPassword = acct.password;
+          break;
+        }
+        console.warn(`[RedGITS Sync] Login rejected for RedGITS account "${acct.username}" — trying next account.`);
+      } catch (loginErr: any) {
+        console.warn(`[RedGITS Sync] Login request failed for "${acct.username}":`, loginErr?.message || loginErr);
       }
     }
 
     const redgitsUsername = authenticatedAccount || primaryUsername;
-    const redgitsPassword = primaryPassword;
+    const redgitsPassword = authenticatedPassword || primaryPassword;
 
     if (!authenticatedAccount) {
       res.status(401).json({
@@ -593,15 +611,13 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     // 3. Fetch datasets in controlled waves so CodeIgniter / PHPSESSID file locks never drop or collide
     const pkgCatalogRows = await fetchHtmlTable('/admin/packages/show');
     const activeRows = await fetchDataTableJson('active', 50000);
-    const [pkgListRows, natRows] = await Promise.all([
-      fetchHtmlTable('/admin/packagelist'),
-      fetchHtmlTable('/admin/reports/nationalMembers'),
-    ]);
-    const [guestRows, invRows, staffRows] = await Promise.all([
-      fetchDataTableJson('guest', 450),
-      fetchDataTableJson('viewinvitation', 400),
-      fetchHtmlTable('/admin/staff/show'),
-    ]);
+    // RedGITS (CodeIgniter) locks + rotates `ci_session` per request, so concurrent requests on the
+    // same cookie jar can race on rotation and get bounced to /admin/login. Fetch strictly sequentially.
+    const pkgListRows = await fetchHtmlTable('/admin/packagelist');
+    const natRows = await fetchHtmlTable('/admin/reports/nationalMembers');
+    const guestRows = await fetchDataTableJson('guest', 450);
+    const invRows = await fetchDataTableJson('viewinvitation', 400);
+    const staffRows = await fetchHtmlTable('/admin/staff/show');
     const guestReportFromDate = mode === 'full' ? '2025-01-01' : new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
     const guestReportByRedgitsId = await fetchGuestReportMap(guestReportFromDate, '2026-12-31');
     const expiredRows = mode === 'full' ? await fetchDataTableJson('expiredmember', 10000) : [];
@@ -711,9 +727,9 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    // 4. Persist updated credentials if explicitly supplied and authenticated
+    // 4. Persist updated credentials only if explicitly supplied AND those exact credentials authenticated
     const nowIso = new Date().toISOString();
-    if (req.body?.username && req.body?.password) {
+    if (req.body?.username && req.body?.password && authenticatedAccount === String(req.body.username).trim()) {
       try {
         await inzanDb.collection('settings').doc('redgits_credentials').set({
           username: redgitsUsername,
@@ -721,7 +737,9 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           updatedAt: nowIso,
           updatedBy: caller.email,
         }, { merge: true });
-      } catch {}
+      } catch (credErr: any) {
+        console.error('[RedGITS Sync] Failed to persist RedGITS credentials:', credErr?.message || credErr);
+      }
     }
 
     // Load existing users and existing redgits client phones/packages so we don't overwrite or re-fetch unnecessarily
@@ -1089,11 +1107,17 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     }
 
     let unmaskedPhonesFetched = 0;
+    let mobileLookupsSkipped = 0;
     if (idsNeedingMobile.length > 0) {
+      // RedGITS serializes requests per ci_session, so extra concurrency only adds cookie-rotation races.
+      // A wall-clock budget keeps the HTTP request well under Cloud Run / proxy timeouts; any IDs not
+      // reached stay un-flagged (redgitsMobileChecked unset) and are picked up by the next sync.
+      const MOBILE_CONCURRENCY = 2;
+      const mobileDeadlineMs = Date.now() + (mode === 'full' ? 75_000 : 30_000);
       let mIdx = 0;
-      const MOBILE_CONCURRENCY = 8;
+      let sessionLost = false;
       const fetchMobileWorker = async () => {
-        while (mIdx < idsNeedingMobile.length) {
+        while (mIdx < idsNeedingMobile.length && !sessionLost && Date.now() < mobileDeadlineMs) {
           const targetId = idsNeedingMobile[mIdx++];
           if (!targetId) continue;
           try {
@@ -1103,8 +1127,14 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
                 'User-Agent': USER_AGENT,
                 'X-Requested-With': 'XMLHttpRequest',
               },
+              redirect: 'manual',
             });
             saveCookies(r);
+            if (r.status >= 300 && r.status < 400) {
+              sessionLost = true;
+              console.warn('[RedGITS Sync] get_mobile redirected (session expired) — stopping phone lookups for this run.');
+              break;
+            }
             if (r.ok) {
               const j: any = await r.json();
               checkedMobileIds.add(targetId);
@@ -1114,12 +1144,16 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
                 unmaskedPhonesFetched++;
               }
             }
-          } catch {
-            // ignore individual lookup error
+          } catch (mobileErr: any) {
+            console.warn(`[RedGITS Sync] get_mobile/${targetId} failed:`, mobileErr?.message || mobileErr);
           }
         }
       };
       await Promise.all(Array.from({ length: MOBILE_CONCURRENCY }, () => fetchMobileWorker()));
+      mobileLookupsSkipped = Math.max(0, idsNeedingMobile.length - checkedMobileIds.size);
+      if (mobileLookupsSkipped > 0) {
+        console.log(`[RedGITS Sync] ${mobileLookupsSkipped} phone lookups deferred to the next sync (time budget).`);
+      }
     }
 
     const clientDocs: Array<{ id: string; data: Record<string, any> }> = [];
@@ -1660,6 +1694,9 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       syncedAt: completedAt,
       durationMs,
       syncedBy: caller.name || caller.email,
+      lastSyncBy: caller.name || caller.email,
+      status: 'completed',
+      mobileLookupsDeferred: mobileLookupsSkipped,
       redgitsAccountUsed: authenticatedAccount || redgitsUsername,
       counts: {
         activeMembers: syncedActiveCount,

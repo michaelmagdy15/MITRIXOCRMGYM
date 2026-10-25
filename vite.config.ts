@@ -118,7 +118,7 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true,
       proxy: {
         '/api': {
-          target: 'http://localhost:8080',
+          target: `http://localhost:${env['PORT'] || 8080}`,
           changeOrigin: true,
         }
       },
