@@ -22,11 +22,17 @@ import {
   CheckCircle2,
   Inbox,
   Archive,
+  PhoneCall,
 } from 'lucide-react';
 import { differenceInDays, isSameDay, parseISO, isBefore, startOfDay, format, isValid } from 'date-fns';
 import { db } from '../firebase';
-import { arrayRemove, arrayUnion, collection, doc, limit, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore';
+import { arrayRemove, arrayUnion, collection, doc, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { DismissedNotificationRecord } from '../types';
+import {
+  CURRENT_DEVICE_SESSION_ID,
+  triggerLocalDeviceDialer,
+  updateCallRequestStatus,
+} from '../services/clickToCallService';
 
 export type NotificationType =
   | 'lead_stale'
@@ -36,6 +42,7 @@ export type NotificationType =
   | 'booking_request'
   | 'class_booking_created'
   | 'class_waitlist_joined'
+  | 'click_to_call'
   | 'system';
 
 export interface AppNotification {
@@ -47,7 +54,9 @@ export interface AppNotification {
   dismissedAt?: Date;
   recordName: string;
   recordId: string;
-  source?: 'generated' | 'system';
+  // 'user_notification' = per-user docs in `notifications` (e.g. Click-to-Call). They are ephemeral:
+  // dismissing/opening marks the Firestore doc read instead of adding to dismissed history.
+  source?: 'generated' | 'system' | 'user_notification';
   readBy?: string[];
   data?: Record<string, any>;
   isDismissed?: boolean;
@@ -128,6 +137,12 @@ export function getNotificationTypeMeta(type: NotificationType) {
         icon: <ShoppingCart className="h-4 w-4 text-amber-500" />,
         badgeClass: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
       };
+    case 'click_to_call':
+      return {
+        label: 'Click to Call',
+        icon: <PhoneCall className="h-4 w-4 text-blue-600 animate-pulse" />,
+        badgeClass: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+      };
     default:
       return {
         label: 'System',
@@ -162,8 +177,10 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   const [historyMap, setHistoryMap] = useState<Map<string, DismissedNotificationRecord>>(new Map());
   const [allBookings, setAllBookings] = useState<any[]>([]);
   const [systemNotifications, setSystemNotifications] = useState<AppNotification[]>([]);
+  const [userNotifications, setUserNotifications] = useState<AppNotification[]>([]);
 
   const hasSeenInitialSystemSnapshot = useRef(false);
+  const hasSeenInitialUserSnapshot = useRef(false);
   const soundEnabledRef = useRef(true);
 
   const playAlertSound = () => {
@@ -261,6 +278,64 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       },
       (err) => {
         console.error('[Notifications] Error loading system notifications:', err);
+      }
+    );
+
+    return () => unsub();
+  }, [currentUser?.id, currentUser?.role]);
+
+  // Subscribe to per-user notifications addressed to this staff member (e.g. Click-to-Call requests
+  // sent from their laptop). The tab that sent the request is excluded via CURRENT_DEVICE_SESSION_ID.
+  useEffect(() => {
+    if (!currentUser?.id || currentUser.role === 'client') return;
+    hasSeenInitialUserSnapshot.current = false;
+    const q = query(
+      collection(db, 'notifications'),
+      where('recipientUid', '==', currentUser.id),
+      where('read', '==', false),
+      limit(50)
+    );
+
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const nowMs = Date.now();
+        const isLiveClickToCall = (data: Record<string, any>) =>
+          data.type === 'click_to_call' &&
+          data.senderSessionId !== CURRENT_DEVICE_SESSION_ID &&
+          (!data.expiresAtMs || Number(data.expiresAtMs) > nowMs);
+
+        const addedClickToCall = snapshot
+          .docChanges()
+          .filter((change) => change.type === 'added' && isLiveClickToCall(change.doc.data()));
+
+        const rows = snapshot.docs
+          .filter((d) => isLiveClickToCall(d.data()))
+          .map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              type: 'click_to_call' as NotificationType,
+              title: data.title || `📞 Click to Call: ${data.leadName || 'Member'}`,
+              description: data.description || data.body || `Tap to dial ${data.phoneNumber || ''}`,
+              date: safeParseDate(data.createdAt),
+              recordName: data.leadName || 'Member',
+              recordId: data.clientId || data.memberId || d.id,
+              source: 'user_notification' as const,
+              data,
+            } as AppNotification;
+          })
+          .sort((a, b) => b.date.getTime() - a.date.getTime());
+
+        setUserNotifications(rows);
+
+        if (hasSeenInitialUserSnapshot.current && addedClickToCall.length > 0) {
+          playAlertSound();
+        }
+        hasSeenInitialUserSnapshot.current = true;
+      },
+      (err) => {
+        console.error('[Notifications] Error loading user notifications:', err);
       }
     );
 
@@ -453,8 +528,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     });
 
     generated.sort((a, b) => b.date.getTime() - a.date.getTime());
-    setNotifications([...systemNotifications, ...generated]);
-  }, [sourceClients, tasks, pendingBookings, systemNotifications]);
+    setNotifications([...userNotifications, ...systemNotifications, ...generated]);
+  }, [sourceClients, tasks, pendingBookings, systemNotifications, userNotifications]);
 
   // Helper to reconstruct a legacy dismissed notification ID that wasn't saved with full metadata yet
   const reconstructFromLegacyId = useCallback(
@@ -473,7 +548,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           dismissedAt: nowIso,
           recordName: liveMatch.recordName,
           recordId: liveMatch.recordId,
-          source: liveMatch.source || 'generated',
+          source: liveMatch.source === 'system' ? 'system' : 'generated',
           data: liveMatch.data || {},
         };
       }
@@ -764,6 +839,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       case 'lead_stale':
       case 'member_expiring':
       case 'birthday':
+      case 'click_to_call':
         return {
           tab: 'clients',
           clientId: notification.recordId,
@@ -813,6 +889,21 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       if (e) e.stopPropagation();
       if (!currentUser?.id) return;
 
+      // Ephemeral per-user notifications (Click-to-Call): mark read in Firestore and cancel the request.
+      const userNotif = userNotifications.find((n) => n.id === id);
+      if (userNotif) {
+        setUserNotifications((prev) => prev.filter((n) => n.id !== id));
+        if (userNotif.type === 'click_to_call' && userNotif.data?.requestId) {
+          void updateCallRequestStatus(userNotif.data.requestId, 'cancelled', { notificationId: id });
+        } else {
+          updateDoc(doc(db, 'notifications', id), {
+            read: true,
+            updatedAt: new Date().toISOString(),
+          }).catch((err) => console.error('Failed to dismiss user notification:', err));
+        }
+        return;
+      }
+
       const target =
         notifications.find((n) => n.id === id) ||
         activeNotifications.find((n) => n.id === id);
@@ -828,7 +919,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
             dismissedAt: nowIso,
             recordName: target.recordName,
             recordId: target.recordId,
-            source: target.source || 'generated',
+            source: target.source === 'system' ? 'system' : 'generated',
             data: target.data || {},
           }
         : reconstructFromLegacyId(id) || {
@@ -873,6 +964,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     },
     [
       currentUser?.id,
+      userNotifications,
       notifications,
       activeNotifications,
       reconstructFromLegacyId,
@@ -891,6 +983,18 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     const nextHistory = new Map(historyMap);
 
     activeNotifications.forEach((n) => {
+      // Ephemeral Click-to-Call / per-user notifications: mark read in Firestore, skip history.
+      if (n.source === 'user_notification') {
+        if (n.type === 'click_to_call' && n.data?.requestId) {
+          void updateCallRequestStatus(n.data.requestId, 'cancelled', { notificationId: n.id });
+        } else {
+          updateDoc(doc(db, 'notifications', n.id), { read: true, updatedAt: nowIso }).catch((err) =>
+            console.error('Failed to mark user notification read:', err)
+          );
+        }
+        return;
+      }
+
       nextDismissed.add(n.id);
       nextHistory.set(n.id, {
         id: n.id,
@@ -901,7 +1005,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         dismissedAt: nowIso,
         recordName: n.recordName,
         recordId: n.recordId,
-        source: n.source || 'generated',
+        source: n.source === 'system' ? 'system' : 'generated',
         data: n.data || {},
       });
 
@@ -919,6 +1023,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       return new Set();
     });
 
+    setUserNotifications([]);
     setDismissedIds(nextDismissed);
     setHistoryMap(nextHistory);
     persistDismissedState(nextDismissed, nextHistory);
@@ -1018,6 +1123,15 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   // WITHOUT dismissing it and WITHOUT polluting searchQuery (which previously wiped client notifications!).
   const handleNotificationClick = useCallback(
     (notification: AppNotification) => {
+      // Click-to-Call: tapping the notification on the logged-in mobile device dials the lead immediately.
+      if (notification.type === 'click_to_call' && notification.data?.phoneNumber) {
+        const requestId: string = notification.data.requestId || `call_${currentUser?.id || ''}`;
+        setUserNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+        void updateCallRequestStatus(requestId, 'dialing', { notificationId: notification.id });
+        triggerLocalDeviceDialer(notification.data.phoneNumber, notification.recordName, requestId);
+        return;
+      }
+
       const destination = getNotificationDestination(notification);
       if (searchQuery) {
         setSearchQuery('');
@@ -1028,7 +1142,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       }
       markAsRead(notification.id);
     },
-    [searchQuery, setSearchQuery, setActiveTab, setActiveClientId, markAsRead]
+    [currentUser?.id, searchQuery, setSearchQuery, setActiveTab, setActiveClientId, markAsRead]
   );
 
   const value = useMemo<NotificationsContextValue>(
