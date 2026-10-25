@@ -30,16 +30,17 @@ service cloud.firestore {
     
     function isManager() {
       let role = getUserRole();
-      return isAuthenticated() && (role == 'manager' || role == 'super_admin' || role == 'crm_admin');
+      return isAuthenticated() && (role == 'manager' || role == 'fitness_manager' || role == 'super_admin' || role == 'crm_admin');
     }
     
     function isStaff() {
       let role = getUserRole();
-      return isAuthenticated() && (role == 'manager' || role == 'admin' || role == 'rep' || role == 'coach' || role == 'super_admin' || role == 'crm_admin');
+      return isAuthenticated() && (role == 'manager' || role == 'fitness_manager' || role == 'admin' || role == 'rep' || role == 'coach' || role == 'trainer' || role == 'super_admin' || role == 'crm_admin');
     }
     
     function isCoach() {
-      return isAuthenticated() && getUserRole() == 'coach';
+      let role = getUserRole();
+      return isAuthenticated() && (role == 'coach' || role == 'trainer' || role == 'fitness_manager');
     }
     
     function isClient() {
@@ -79,7 +80,7 @@ service cloud.firestore {
     
     // USERS (Staff and client portal accounts)
     match /users/{userId} {
-      allow read: if isOwner(userId) || isManager();
+      allow read: if isOwner(userId) || isStaff();
       allow create: if isOwner(userId) && (!request.resource.data.keys().hasAny(['role']) || request.resource.data.role == 'client');
       allow update: if isManager() || (
         isOwner(userId) && 
@@ -310,6 +311,13 @@ service cloud.firestore {
     match /systemNotifications/{notificationId} {
       allow read, update: if isStaff();
       allow create, delete: if false;
+    }
+
+    // TOP-LEVEL NOTIFICATIONS (Coach Client Assignments, Click-to-Call, etc.)
+    match /notifications/{notificationId} {
+      allow read, update: if isStaff() || (isAuthenticated() && (resource.data.recipientUid == request.auth.uid || resource.data.recipientId == request.auth.uid));
+      allow create: if isStaff();
+      allow delete: if isStaff() || (isAuthenticated() && (resource.data.recipientUid == request.auth.uid || resource.data.recipientId == request.auth.uid));
     }
 
     // MEMBER APP PRESENCE

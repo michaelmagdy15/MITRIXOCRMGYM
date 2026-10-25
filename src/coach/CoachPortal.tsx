@@ -1,11 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign, Flame, UserCheck } from 'lucide-react';
+import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign, Flame, UserCheck, Bell, Check } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { getTenantId } from '../firebase';
+import { db, getTenantId } from '../firebase';
+import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
 import CoachHome from './CoachHome';
 import CoachSchedule from './CoachSchedule';
 import CoachClients from './CoachClients';
@@ -59,6 +61,49 @@ export default function CoachPortal() {
 
   const [activeTab, setActiveTab] = useState<CoachTab>('home');
   const [floorContext, setFloorContext] = useState<{ client?: Client | null; session?: Session | null } | null>(null);
+  const [coachNotifications, setCoachNotifications] = useState<any[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const hasLoadedInitialNotifs = useRef(false);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const coachId = currentUser.id;
+    const coachCustomId = currentUser.coachId || '';
+    const coachNameLower = (currentUser.name || '').trim().toLowerCase();
+
+    const q = query(collection(db, 'notifications'), where('read', '==', false));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const matchesCoach = (n: any) =>
+          (coachId && (n.recipientUid === coachId || n.recipientId === coachId || n.coachId === coachId)) ||
+          (coachCustomId && (n.coachCustomId === coachCustomId || n.coachId === coachCustomId)) ||
+          (coachNameLower && String(n.coachName || '').toLowerCase() === coachNameLower);
+
+        if (hasLoadedInitialNotifs.current) {
+          snap.docChanges().forEach(change => {
+            if (change.type === 'added') {
+              const data = change.doc.data();
+              if (matchesCoach(data)) {
+                toast.success(data.title || 'New PT Client Assigned', {
+                  description: data.body || data.description,
+                });
+              }
+            }
+          });
+        }
+        hasLoadedInitialNotifs.current = true;
+
+        const list = snap.docs
+          .map(d => ({ ...d.data(), id: d.id } as any))
+          .filter(matchesCoach)
+          .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+        setCoachNotifications(list);
+      },
+      () => {}
+    );
+    return () => unsub();
+  }, [currentUser?.id, currentUser?.coachId, currentUser?.name]);
 
   useEffect(() => {
     if (canAccessFitnessManagerBoard && (String(currentUser?.role || '').toLowerCase() === 'fitness_manager' || currentUser?.isFitnessManager)) {
@@ -120,6 +165,67 @@ export default function CoachPortal() {
           <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} className="h-8 w-8">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setNotifOpen(v => !v)}
+              title="Notifications"
+              className="h-8 w-8 relative"
+            >
+              <Bell className="h-4 w-4" />
+              {coachNotifications.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] px-1 rounded-full bg-emerald-500 text-zinc-950 text-[10px] font-extrabold flex items-center justify-center">
+                  {coachNotifications.length}
+                </span>
+              )}
+            </Button>
+            {notifOpen && (
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-card border shadow-2xl z-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                  <span className="text-xs font-extrabold uppercase tracking-wider">Coach Notifications ({coachNotifications.length})</span>
+                  {coachNotifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await Promise.all(
+                          coachNotifications.map(n => updateDoc(doc(db, 'notifications', n.id), { read: true }).catch(() => {}))
+                        );
+                        setNotifOpen(false);
+                      }}
+                      className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Check className="h-3 w-3" /> Mark all read
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-80 overflow-y-auto divide-y">
+                  {coachNotifications.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-muted-foreground">
+                      No unread notifications
+                    </div>
+                  ) : (
+                    coachNotifications.map(n => (
+                      <div
+                        key={n.id}
+                        onClick={async () => {
+                          try {
+                            await updateDoc(doc(db, 'notifications', n.id), { read: true });
+                          } catch {}
+                          setNotifOpen(false);
+                          setActiveTab('members');
+                        }}
+                        className="p-3.5 hover:bg-muted/50 cursor-pointer transition-colors"
+                      >
+                        <p className="text-xs font-bold text-foreground">{n.title || 'New PT Client Assigned'}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{n.body || n.description}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="text-right hidden sm:block">
             <p className="text-sm font-semibold leading-tight">{currentUser?.name}</p>
             {currentUser?.coachId && (
