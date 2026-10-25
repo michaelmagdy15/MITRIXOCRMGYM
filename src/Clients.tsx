@@ -3070,7 +3070,7 @@ export default function Clients() {
             <Tabs value={memberProfileTab} onValueChange={setMemberProfileTab} className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Responsive wrapping tab pills — all tabs visible without horizontal cutoff */}
               <div className="px-4 sm:px-6 py-2.5 border-b flex-shrink-0 bg-muted/10">
-                <TabsList className="bg-transparent p-0 h-auto gap-1.5 rounded-none border-none shadow-none flex flex-nowrap overflow-x-auto custom-scrollbar justify-start w-full py-1">
+                <TabsList className="bg-transparent p-0 h-auto group-data-horizontal/tabs:h-auto gap-1.5 rounded-none border-none shadow-none flex flex-nowrap overflow-x-auto custom-scrollbar justify-start w-full py-1">
                   {[
                     { value: 'overview', label: isInzanTenant ? 'Overview (User Details)' : 'Overview', icon: <User className="h-3.5 w-3.5" /> },
                     ...(isInzanTenant ? [{ value: 'packages', label: `Packages & Invites (${(activeClient.packages || []).length || 1})`, icon: <Gift className="h-3.5 w-3.5" /> }] : []),
