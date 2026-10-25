@@ -1193,8 +1193,8 @@ export default function Leads() {
             <TableHead>{t('leads.stage')} & {t('leads.table.paid_status')}</TableHead>
             <TableHead className="hidden lg:table-cell">{t('leads.interest')} & {t('leads.table.category')}</TableHead>
             <TableHead>{t('leads.table.next_reminder')}{canAssignLeads ? ` & ${t('leads.assigned_to')}` : ''}</TableHead>
-            <TableHead className="min-w-[250px] max-w-[340px]">Latest Call & Comments</TableHead>
-            <TableHead className="text-right pr-4">{t('leads.table.actions')}</TableHead>
+            <TableHead className="w-[300px] min-w-[240px] max-w-[320px]">Latest Call & Comments</TableHead>
+            <TableHead className="text-right pr-4 w-[1%] whitespace-nowrap">{t('leads.table.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1217,7 +1217,7 @@ export default function Leads() {
               </TableCell>
 
               {/* Column 2: ID + Name + Score + Phone + Branch + Come From + Source */}
-              <TableCell className="py-3 align-top">
+              <TableCell className="py-3 align-top whitespace-normal max-w-[260px]">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <button
@@ -1355,12 +1355,12 @@ export default function Leads() {
               </TableCell>
 
               {/* Column 6: Latest Call & Comments (Inline while browsing/scrolling) */}
-              <TableCell className="py-3 align-top max-w-[340px]" onClick={(e) => e.stopPropagation()}>
-                <div className="flex flex-col gap-1.5">
+              <TableCell className="py-3 align-top whitespace-normal w-[300px] min-w-[240px] max-w-[320px]" onClick={(e) => e.stopPropagation()}>
+                <div className="flex flex-col gap-1.5 w-full max-w-[300px] overflow-hidden">
                   {latestCall ? (
-                    <div className="rounded-lg bg-muted/50 border border-border/70 px-2.5 py-1.5 text-xs space-y-0.5">
-                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
-                        <span className="font-bold text-foreground break-words leading-snug">
+                    <div className="rounded-lg bg-muted/50 border border-border/70 px-2.5 py-1.5 text-xs space-y-0.5 whitespace-normal break-words">
+                      <div className="flex items-start justify-between gap-1.5 flex-wrap">
+                        <span className="font-bold text-foreground whitespace-normal break-words leading-snug line-clamp-2" title={latestCall.text}>
                           {latestCall.text}
                         </span>
                         {latestCall.outcome && latestCall.outcome !== latestCall.text && (
@@ -1387,9 +1387,12 @@ export default function Leads() {
                   )}
 
                   {latestComment && (!latestCall || latestComment.text !== latestCall.text) && (
-                    <div className="rounded-md bg-amber-500/5 border border-amber-500/20 px-2 py-1 text-[11px] text-foreground/90">
+                    <div
+                      className="rounded-md bg-amber-500/5 border border-amber-500/20 px-2.5 py-1.5 text-[11px] text-foreground/90 whitespace-normal break-words leading-snug line-clamp-2"
+                      title={`${latestComment.text}${latestComment.author ? ` (${latestComment.author})` : ''}`}
+                    >
                       <span className="font-semibold text-amber-600 dark:text-amber-400 mr-1">Comment:</span>
-                      <span className="break-words">{latestComment.text}</span>
+                      <span className="whitespace-normal break-words">{latestComment.text}</span>
                       {latestComment.author && (
                         <span className="text-[10px] text-muted-foreground ml-1">({latestComment.author})</span>
                       )}
@@ -1467,7 +1470,7 @@ export default function Leads() {
               </TableCell>
 
               {/* Column 7: Actions */}
-              <TableCell className="text-right pr-4 py-3 align-top whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+              <TableCell className="text-right pr-4 pl-3 py-3 align-top whitespace-nowrap w-[1%]" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-1">
                   <Button
                     variant="ghost"

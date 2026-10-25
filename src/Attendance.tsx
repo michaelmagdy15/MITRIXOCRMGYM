@@ -40,7 +40,11 @@ import {
   Users,
   QrCode,
   Ticket,
-  Briefcase
+  Briefcase,
+  Snowflake,
+  Dumbbell,
+  Minus,
+  Plus
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { 
@@ -60,6 +64,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toCanonicalBranchId } from './utils/memberCategories';
 import { toast } from 'sonner';
+import { addAuditLog } from './services/auditService';
 import {
   parseUniversalQrCode,
   evaluateCheckinGatekeeper,
@@ -116,6 +121,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const [guestPhone, setGuestPhone] = useState('');
   const [guestNationalId, setGuestNationalId] = useState('');
   const [guestInviteCodeToActivate, setGuestInviteCodeToActivate] = useState('');
+  const [isQuickFreezeOpen, setIsQuickFreezeOpen] = useState(false);
+  const [quickFreezeDays, setQuickFreezeDays] = useState<number>(7);
+  const [quickFreezeReason, setQuickFreezeReason] = useState<string>('');
+  const [isCheckinActionBusy, setIsCheckinActionBusy] = useState(false);
   const { t, language, isRtl } = useLanguage();
 
   const [classes, setClasses] = useState<any[]>([]);
@@ -775,6 +784,280 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     };
   };
 
+  // Keep lastScannedMember synced with live Firestore client updates (for PT deductions & Freeze/Unfreeze)
+  useEffect(() => {
+    if (!lastScannedMember?.id) return;
+    const fresh = clients.find((c) => c.id === lastScannedMember.id);
+    if (fresh && fresh !== lastScannedMember) {
+      setLastScannedMember(fresh);
+      setGatekeeperEval(evaluateCheckinGatekeeper(fresh, payments || []));
+    }
+  }, [clients, payments, lastScannedMember]);
+
+  const handleDeductCheckinPtSession = async (
+    ptType: 'paid' | 'free',
+    currentRem: number,
+    currentTot: number
+  ) => {
+    if (!lastScannedMember || isCheckinActionBusy) return;
+    if (currentRem <= 0) {
+      toast.error(`No ${ptType === 'paid' ? 'Paid PT' : 'Free PT'} sessions remaining to deduct.`);
+      return;
+    }
+
+    setIsCheckinActionBusy(true);
+    setError(null);
+    try {
+      const m = lastScannedMember as any;
+      const staffName = currentUser?.name || currentUser?.email || 'Reception';
+      const nowIso = new Date().toISOString();
+
+      if (ptType === 'paid') {
+        const nextRem = Math.max(0, currentRem - 1);
+        const nextUsed = Number(m.paidPtSessionsUsed ?? Math.max(0, currentTot - currentRem)) + 1;
+        let deductedFromPkg = false;
+        const updatedPackages = (m.packages || []).map((pkg: any) => {
+          const pkgNameLower = String(pkg.packageName || '').toLowerCase();
+          const isSecondaryOrPt =
+            pkg.hierarchy === 'Secondary' ||
+            pkgNameLower.includes('pt') ||
+            pkgNameLower.includes('private') ||
+            pkgNameLower.includes('complimentary');
+          if (!deductedFromPkg && pkg.status === 'Active' && isSecondaryOrPt) {
+            deductedFromPkg = true;
+            const pkgRem = typeof pkg.sessionsRemaining === 'number'
+              ? Math.max(0, pkg.sessionsRemaining - 1)
+              : nextRem;
+            return {
+              ...pkg,
+              sessionsRemaining: pkgRem,
+              lastModifiedBy: staffName,
+              lastModifiedAt: nowIso,
+            };
+          }
+          return pkg;
+        });
+
+        const updates: Record<string, any> = {
+          paidPtSessionsRemaining: nextRem,
+          paidPtSessionsTotal: Math.max(currentTot, nextRem + nextUsed),
+          paidPtSessionsUsed: nextUsed,
+          ...(updatedPackages.length > 0 ? { packages: updatedPackages } : {}),
+        };
+
+        await updateClient(lastScannedMember.id, updates);
+        await addAuditLog(
+          'UPDATE',
+          'CLIENT',
+          lastScannedMember.id,
+          `Deducted 1 Paid PT session from Check-in Window for ${lastScannedMember.name} (${nextRem}/${Math.max(currentTot, nextRem + nextUsed)} left)`,
+          staffName
+        );
+        const nextMember = { ...lastScannedMember, ...updates };
+        setLastScannedMember(nextMember);
+        setGatekeeperEval(evaluateCheckinGatekeeper(nextMember, payments || []));
+        setSuccessMessage(`1 Paid PT session deducted for ${lastScannedMember.name} (${nextRem} / ${Math.max(currentTot, nextRem + nextUsed)} remaining)`);
+        toast.success(`Paid PT session deducted (${nextRem} remaining)`);
+      } else {
+        const nextRem = Math.max(0, currentRem - 1);
+        const nextUsed = Number(m.freePtSessionsUsed ?? m.benefits?.freePtSessionsUsed ?? Math.max(0, currentTot - currentRem)) + 1;
+        const effTot = Math.max(currentTot, nextRem + nextUsed);
+
+        let updatedPrimary = false;
+        const updatedPackages = (m.packages || []).map((pkg: any) => {
+          if (!updatedPrimary && (pkg.status === 'Active' || pkg.packageName === selectedPackageName)) {
+            updatedPrimary = true;
+            return {
+              ...pkg,
+              freePtSessionsUsed: nextUsed,
+              benefits: {
+                ...(pkg.benefits || {}),
+                freePtSessions: effTot,
+                freePtSessionsUsed: nextUsed,
+              },
+            };
+          }
+          return pkg;
+        });
+
+        const updates: Record<string, any> = {
+          freePtSessionsRemaining: nextRem,
+          ptSessionsRemaining: nextRem,
+          freePtSessionsTotal: effTot,
+          freePtSessionsUsed: nextUsed,
+          benefits: {
+            ...(m.benefits || {}),
+            freePtSessions: effTot,
+            freePtSessionsUsed: nextUsed,
+          },
+          ...(updatedPackages.length > 0 ? { packages: updatedPackages } : {}),
+        };
+
+        await updateClient(lastScannedMember.id, updates);
+        await addAuditLog(
+          'UPDATE',
+          'CLIENT',
+          lastScannedMember.id,
+          `Deducted 1 Free PT session from Check-in Window for ${lastScannedMember.name} (${nextRem}/${effTot} left)`,
+          staffName
+        );
+        const nextMember = { ...lastScannedMember, ...updates };
+        setLastScannedMember(nextMember);
+        setGatekeeperEval(evaluateCheckinGatekeeper(nextMember, payments || []));
+        setSuccessMessage(`1 Free PT session deducted for ${lastScannedMember.name} (${nextRem} / ${effTot} remaining)`);
+        toast.success(`Free PT session deducted (${nextRem} remaining)`);
+      }
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : 'Failed to deduct PT session');
+      toast.error('Failed to deduct PT session');
+    } finally {
+      setIsCheckinActionBusy(false);
+    }
+  };
+
+  const handleDirectFreezeOrUnfreeze = async (
+    action: 'freeze' | 'unfreeze',
+    freezeRem: number,
+    freezeTot: number
+  ) => {
+    if (!lastScannedMember || isCheckinActionBusy) return;
+    setIsCheckinActionBusy(true);
+    setError(null);
+    try {
+      const m = lastScannedMember as any;
+      const staffName = currentUser?.name || currentUser?.email || 'Reception';
+      const nowIso = new Date().toISOString();
+      const todayStr = nowIso.slice(0, 10);
+
+      if (action === 'unfreeze') {
+        const updatedPackages = (m.packages || []).map((pkg: any) =>
+          pkg.status === 'Hold' || pkg.isOnHold
+            ? {
+                ...pkg,
+                status: 'Active',
+                isOnHold: false,
+                holdReason: undefined,
+                unfrozenAt: nowIso,
+                unfrozenBy: staffName,
+              }
+            : pkg
+        );
+
+        const updates: Record<string, any> = {
+          status: 'Active',
+          isFrozen: false,
+          freezeEndDate: todayStr,
+          ...(updatedPackages.length > 0 ? { packages: updatedPackages } : {}),
+        };
+
+        await updateClient(lastScannedMember.id, updates);
+        await addAuditLog(
+          'UPDATE',
+          'CLIENT',
+          lastScannedMember.id,
+          `Unfroze membership from Check-in Window for ${lastScannedMember.name}`,
+          staffName
+        );
+        const nextMember = { ...lastScannedMember, ...updates };
+        setLastScannedMember(nextMember);
+        setGatekeeperEval(evaluateCheckinGatekeeper(nextMember, payments || []));
+        setIsQuickFreezeOpen(false);
+        setSuccessMessage(`Membership unfrozen for ${lastScannedMember.name} — Status is now Active!`);
+        toast.success(`Membership unfrozen for ${lastScannedMember.name}`);
+      } else {
+        const daysToFreeze = Math.max(1, Number(quickFreezeDays) || 7);
+        if (freezeTot > 0 && daysToFreeze > freezeRem) {
+          toast.error(`Cannot freeze for ${daysToFreeze} days — only ${freezeRem} freeze days remaining.`);
+          setIsCheckinActionBusy(false);
+          return;
+        }
+
+        const nextFreezeRem = Math.max(0, freezeRem - daysToFreeze);
+        const prevFreezeUsed = Number(m.freezeDaysUsed ?? m.benefits?.freezeDaysUsed ?? Math.max(0, freezeTot - freezeRem));
+        const nextFreezeUsed = prevFreezeUsed + daysToFreeze;
+        const effFreezeTot = Math.max(freezeTot, nextFreezeRem + nextFreezeUsed);
+        const freezeEndStr = new Date(Date.now() + daysToFreeze * 86400000).toISOString().slice(0, 10);
+        const reasonStr = quickFreezeReason.trim() || `Frozen ${daysToFreeze}d from Check-in Desk by ${staffName}`;
+
+        const addDaysToIso = (dateStr?: string) => {
+          if (!dateStr) return undefined;
+          const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return dateStr;
+          return new Date(d.getTime() + daysToFreeze * 86400000).toISOString().slice(0, 10);
+        };
+
+        const nextMembershipExpiry = addDaysToIso(m.membershipExpiry);
+        let frozePrimary = false;
+        const updatedPackages = (m.packages || []).map((pkg: any, idx: number) => {
+          const isTarget =
+            pkg.packageName === selectedPackageName ||
+            (!frozePrimary && (pkg.status === 'Active' || idx === 0));
+          if (isTarget && !frozePrimary) {
+            frozePrimary = true;
+            return {
+              ...pkg,
+              status: 'Hold',
+              isOnHold: true,
+              holdReason: reasonStr,
+              freezeStartDate: todayStr,
+              freezeEndDate: freezeEndStr,
+              freezeDaysUsed: nextFreezeUsed,
+              endDate: addDaysToIso(pkg.endDate) || pkg.endDate,
+              benefits: {
+                ...(pkg.benefits || {}),
+                freezeAllowanceDays: effFreezeTot,
+                freezeDaysUsed: nextFreezeUsed,
+              },
+            };
+          }
+          return pkg;
+        });
+
+        const updates: Record<string, any> = {
+          status: 'Hold',
+          isFrozen: true,
+          freezeStartDate: todayStr,
+          freezeEndDate: freezeEndStr,
+          freezeReason: reasonStr,
+          freezeAllowanceDays: effFreezeTot,
+          freezeDaysUsed: nextFreezeUsed,
+          freezeDaysRemaining: nextFreezeRem,
+          freezeCoins: nextFreezeRem,
+          ...(nextMembershipExpiry ? { membershipExpiry: nextMembershipExpiry } : {}),
+          benefits: {
+            ...(m.benefits || {}),
+            freezeAllowanceDays: effFreezeTot,
+            freezeDaysUsed: nextFreezeUsed,
+          },
+          ...(updatedPackages.length > 0 ? { packages: updatedPackages } : {}),
+        };
+
+        await updateClient(lastScannedMember.id, updates);
+        await addAuditLog(
+          'UPDATE',
+          'CLIENT',
+          lastScannedMember.id,
+          `Froze membership for ${daysToFreeze} days from Check-in Window (${todayStr} → ${freezeEndStr}) for ${lastScannedMember.name}. Remaining freeze days: ${nextFreezeRem}/${effFreezeTot}d.`,
+          staffName
+        );
+        const nextMember = { ...lastScannedMember, ...updates };
+        setLastScannedMember(nextMember);
+        setGatekeeperEval(evaluateCheckinGatekeeper(nextMember, payments || []));
+        setIsQuickFreezeOpen(false);
+        setQuickFreezeReason('');
+        setSuccessMessage(
+          `Membership Frozen for ${daysToFreeze} days (${todayStr} → ${freezeEndStr}). Expiry extended & ${nextFreezeRem}/${effFreezeTot}d freeze allowance left.`
+        );
+        toast.success(`Froze ${lastScannedMember.name} for ${daysToFreeze} days!`);
+      }
+    } catch (err: any) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} membership`);
+      toast.error(`Failed to ${action} membership`);
+    } finally {
+      setIsCheckinActionBusy(false);
+    }
+  };
+
   const handleBreakFreezeAndCheckin = async () => {
     if (!lastScannedMember || isRecording) return;
     setIsRecording(true);
@@ -785,17 +1068,20 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           ? { ...pkg, status: 'Active', isOnHold: false, holdReason: undefined }
           : pkg
       );
-      await updateClient(lastScannedMember.id, {
-        status: 'Active',
+      const updates = {
+        status: 'Active' as const,
+        isFrozen: false,
         packages: updatedPackages,
-      });
+      };
+      await updateClient(lastScannedMember.id, updates);
       await recordAttendance(lastScannedMember.id, selectedBranch);
+      const nextMember = { ...lastScannedMember, ...updates };
+      setLastScannedMember(nextMember);
+      setGatekeeperEval(evaluateCheckinGatekeeper(nextMember, payments || []));
       setSuccessMessage(`Freeze cancelled & check-in recorded for ${lastScannedMember.name}`);
-      setGatekeeperEval(null);
       setTimeout(() => {
-        setLastScannedMember(null);
         setSuccessMessage(null);
-      }, 3000);
+      }, 4000);
     } catch (err: any) {
       setError(err instanceof Error ? err.message : 'Failed to break freeze and record attendance');
     } finally {
@@ -951,21 +1237,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         }
         setSuccessMessage(t('attendance.attendance_recorded').replace('{name}', member.name));
         setTimeout(() => {
-          setLastScannedMember(null);
-          setGatekeeperEval(null);
-          setTurnstileEval(null);
           setSuccessMessage(null);
-          if (manualInputRef.current) manualInputRef.current.value = '';
-        }, 3000);
+        }, 4000);
       } catch (err: any) {
         setError(err instanceof Error ? err.message : t('attendance.failed_record_attendance'));
         setTimeout(() => {
-          setLastScannedMember(null);
-          setGatekeeperEval(null);
-          setTurnstileEval(null);
           setError(null);
-          if (manualInputRef.current) manualInputRef.current.value = '';
-        }, 4000);
+        }, 5000);
       } finally {
         setIsRecording(false);
       }
@@ -1590,107 +1868,537 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                     </div>
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.member_id')}</Label>
-                    <p className="font-mono text-sm">{lastScannedMember.memberId ? `#${lastScannedMember.memberId}` : '—'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.status')}</Label>
-                    <div>
-                      <Badge variant={lastScannedMember.status === 'Active' ? 'secondary' : 'destructive'} className="text-[10px]">
-                        {lastScannedMember.status === 'Active' ? t('members.tabs.active') : lastScannedMember.status === 'Hold' ? t('members.tabs.hold') : lastScannedMember.status === 'Expired' ? t('members.tabs.expired') : lastScannedMember.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.package')}</Label>
-                    <p className="text-sm font-medium truncate">{selectedPackageName || lastScannedMember.packageType || '-'}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground uppercase font-bold tracking-wider">{t('attendance.packages_left')}</Label>
-                    {lastScannedMember.sessionsRemaining === 'unlimited' ? (
-                      <p className="text-lg font-bold text-emerald-600">∞ {t('attendance.unlimited')}</p>
-                    ) : (
-                      <p className={`text-lg font-bold ${Number(lastScannedMember.sessionsRemaining) <= 0 ? 'text-destructive' : 'text-green-600'}`}>
-                        {lastScannedMember.sessionsRemaining} {t('attendance.packages_unit')}
-                      </p>
-                    )}
-                  </div>
-                  {isInzan && (() => {
-                    const m = lastScannedMember as any;
-                    const daysLeft = typeof m.daysRemaining === 'number'
-                      ? m.daysRemaining
-                      : (m.membershipExpiry ? Math.max(0, Math.ceil((new Date(m.membershipExpiry).getTime() - Date.now()) / 86400000)) : 0);
-                    const paidPtRem = Number(m.paidPtSessionsRemaining ?? Math.max(0, Number(m.paidPtSessionsTotal ?? 0) - Number(m.paidPtSessionsUsed ?? 0)));
-                    const paidPtTot = Number(m.paidPtSessionsTotal ?? 0);
+                {(() => {
+                  const m = lastScannedMember as any;
+                  const allClientPkgs: any[] = Array.isArray(m.packages) ? m.packages : [];
+                  const primaryPkg =
+                    allClientPkgs.find((p) => p.packageName === selectedPackageName) ||
+                    allClientPkgs.find((p) => p.status === 'Active' && p.hierarchy !== 'Secondary') ||
+                    allClientPkgs[0] ||
+                    null;
+                  const secondaryPkg =
+                    allClientPkgs.find(
+                      (p) =>
+                        p !== primaryPkg &&
+                        (p.status === 'Active' || p.status === 'Hold') &&
+                        (p.hierarchy === 'Secondary' ||
+                          String(p.packageName || '').toLowerCase().includes('pt') ||
+                          String(p.packageName || '').toLowerCase().includes('private') ||
+                          String(p.packageName || '').toLowerCase().includes('complimentary'))
+                    ) || null;
 
-                    let rawFreePtTot = Number(m.freePtSessionsTotal ?? m.freePtSessions ?? (m as any).benefits?.freePtSessions ?? 0);
-                    let rawInvTot = Number(m.invitationsTotal ?? (m as any).guestInvitations ?? (m as any).benefits?.guestInvitations ?? 0);
-                    let rawFreezeTot = Number(m.freezeAllowanceDays ?? (m as any).benefits?.freezeAllowanceDays ?? 0);
+                  const resolvedPkgName =
+                    selectedPackageName ||
+                    primaryPkg?.packageName ||
+                    m.primaryPackageName ||
+                    m.packageType ||
+                    '—';
+                  const catPkg = (packages || []).find(
+                    (cp) => (cp.name || '').trim().toLowerCase() === String(resolvedPkgName).trim().toLowerCase()
+                  );
 
-                    // Redgits / DB zero-benefit fallback:
-                    if (isInzan && rawFreezeTot === 0 && rawInvTot === 0 && rawFreePtTot === 0) {
-                      const pkgStr = String(m.primaryPackageName || selectedPackageName || m.packageType || '').toLowerCase();
-                      if (pkgStr.includes('365') || pkgStr.includes('12') || pkgStr.includes('annual') || (pkgStr.includes('year') && !pkgStr.includes('half'))) {
-                        rawFreezeTot = 30; rawInvTot = 10; rawFreePtTot = 2;
-                      } else if (pkgStr.includes('180') || pkgStr.includes('half') || pkgStr.includes('6') || pkgStr.includes('semester')) {
-                        rawFreezeTot = 15; rawInvTot = 5; rawFreePtTot = 1;
-                      } else if (pkgStr.includes('3') || pkgStr.includes('quarter') || pkgStr.includes('90')) {
-                        rawFreezeTot = 7; rawInvTot = 2; rawFreePtTot = 1;
-                      } else if (pkgStr.includes('1') || pkgStr.includes('month') || pkgStr.includes('30')) {
-                        rawFreezeTot = 0; rawInvTot = 1; rawFreePtTot = 0;
-                      }
+                  const rawStart =
+                    primaryPkg?.startDate ||
+                    m.startDate ||
+                    m.joinDate ||
+                    (m.createdAt ? String(m.createdAt).slice(0, 10) : '');
+                  const pkgStartDateStr = rawStart ? String(rawStart).slice(0, 10) : '—';
+
+                  let rawEnd = primaryPkg?.endDate || m.membershipExpiry || '';
+                  if (!rawEnd && rawStart) {
+                    const startMs = new Date(rawStart).getTime();
+                    if (!isNaN(startMs)) {
+                      const lowerPkg = String(resolvedPkgName).toLowerCase();
+                      const inferredDays =
+                        catPkg?.expiryDays ||
+                        (lowerPkg.includes('annual') || lowerPkg.includes('365') || lowerPkg.includes('12') || (lowerPkg.includes('year') && !lowerPkg.includes('half'))
+                          ? 365
+                          : lowerPkg.includes('half') || lowerPkg.includes('180') || lowerPkg.includes('6')
+                          ? 180
+                          : lowerPkg.includes('quarter') || lowerPkg.includes('90') || lowerPkg.includes('3')
+                          ? 90
+                          : 30);
+                      rawEnd = new Date(startMs + inferredDays * 86400000).toISOString().slice(0, 10);
                     }
+                  }
+                  const pkgEndDateStr = rawEnd ? String(rawEnd).slice(0, 10) : '—';
 
-                    const freePtTot = rawFreePtTot;
-                    const freePtRem = Number(m.freePtSessionsRemaining ?? Math.max(0, freePtTot - Number(m.freePtSessionsUsed ?? 0)));
-                    const invTot = rawInvTot;
-                    const invRem = Number(m.invitationsRemaining ?? (m as any).guestInvitesRemaining ?? Math.max(0, invTot - Number((m as any).invitationsUsed ?? 0)));
-                    const freezeTot = rawFreezeTot;
-                    const freezeRem = Number(m.freezeDaysRemaining ?? m.freezeCoins ?? Math.max(0, freezeTot - Number(m.freezeDaysUsed ?? 0)));
-                    const secondaryName = m.secondaryPackageName || ((m.packages || []).find((p: any) => p.status === 'Active' && p.hierarchy === 'Secondary')?.packageName);
+                  let daysLeft = 0;
+                  if (rawEnd) {
+                    const endMs = new Date(rawEnd).getTime();
+                    if (!isNaN(endMs)) {
+                      daysLeft = Math.max(0, Math.ceil((endMs - Date.now()) / 86400000));
+                    }
+                  } else if (typeof m.daysRemaining === 'number' && m.daysRemaining > 0) {
+                    daysLeft = m.daysRemaining;
+                  }
 
-                    return (
-                      <div className="col-span-2 rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2.5">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                          <div className="p-2 rounded-lg bg-background border border-emerald-500/25">
-                            <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 block">Primary Package</span>
-                            <span className="font-bold text-foreground truncate block">{m.primaryPackageName || selectedPackageName || m.packageType || '—'}</span>
-                            <span className={`text-[11px] font-semibold ${daysLeft <= 7 ? 'text-amber-500' : 'text-muted-foreground'}`}>
-                              {daysLeft} days left to renew {m.membershipExpiry ? `(${String(m.membershipExpiry).slice(0, 10)})` : ''}
-                            </span>
-                          </div>
-                          <div className="p-2 rounded-lg bg-background border border-blue-500/25">
-                            <span className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400 block">Secondary Package</span>
-                            <span className="font-bold text-foreground truncate block">{secondaryName || 'No Secondary Package'}</span>
-                            <span className="text-[11px] text-muted-foreground">
-                              {paidPtTot > 0 ? `Paid PT: ${paidPtRem} / ${paidPtTot} left` : 'Add-on / PT Tier'}
-                            </span>
+                  const isMemberFrozen =
+                    m.status === 'Hold' ||
+                    Boolean(m.isFrozen) ||
+                    Boolean(gatekeeperEval?.isFrozen) ||
+                    primaryPkg?.status === 'Hold' ||
+                    Boolean(primaryPkg?.isOnHold);
+
+                  const secPaidTot = Number(
+                    m.paidPtSessionsTotal ??
+                      (typeof secondaryPkg?.sessionsTotal === 'number' ? secondaryPkg.sessionsTotal : 0) ??
+                      0
+                  );
+                  const secPaidRem = Number(
+                    m.paidPtSessionsRemaining ??
+                      (typeof secondaryPkg?.sessionsRemaining === 'number'
+                        ? secondaryPkg.sessionsRemaining
+                        : Math.max(0, secPaidTot - Number(m.paidPtSessionsUsed ?? 0)))
+                  );
+                  const paidPtTot = Math.max(secPaidTot, secPaidRem);
+                  const paidPtRem = Math.max(0, secPaidRem);
+
+                  let rawFreePtTot = Number(
+                    m.freePtSessionsTotal ??
+                      m.freePtSessions ??
+                      primaryPkg?.benefits?.freePtSessions ??
+                      (m as any).benefits?.freePtSessions ??
+                      catPkg?.benefits?.freePtSessions ??
+                      (catPkg as any)?.freePtSessions ??
+                      0
+                  );
+                  let rawInvTot = Number(
+                    m.invitationsTotal ??
+                      primaryPkg?.benefits?.guestInvitations ??
+                      (m as any).guestInvitations ??
+                      (m as any).benefits?.guestInvitations ??
+                      catPkg?.benefits?.guestInvitations ??
+                      (catPkg as any)?.guestInvitations ??
+                      0
+                  );
+                  let rawFreezeTot = Number(
+                    m.freezeAllowanceDays ??
+                      primaryPkg?.benefits?.freezeAllowanceDays ??
+                      (m as any).benefits?.freezeAllowanceDays ??
+                      catPkg?.benefits?.freezeAllowanceDays ??
+                      (catPkg as any)?.freezeAllowanceDays ??
+                      0
+                  );
+
+                  if (rawFreezeTot === 0 && rawInvTot === 0 && rawFreePtTot === 0) {
+                    const pkgStr = String(resolvedPkgName).toLowerCase();
+                    if (pkgStr.includes('365') || pkgStr.includes('12') || pkgStr.includes('annual') || (pkgStr.includes('year') && !pkgStr.includes('half'))) {
+                      rawFreezeTot = 30; rawInvTot = 10; rawFreePtTot = 2;
+                    } else if (pkgStr.includes('180') || pkgStr.includes('half') || pkgStr.includes('6') || pkgStr.includes('semester')) {
+                      rawFreezeTot = 15; rawInvTot = 5; rawFreePtTot = 1;
+                    } else if (pkgStr.includes('3') || pkgStr.includes('quarter') || pkgStr.includes('90')) {
+                      rawFreezeTot = 7; rawInvTot = 2; rawFreePtTot = 1;
+                    } else if (pkgStr.includes('1') || pkgStr.includes('month') || pkgStr.includes('30')) {
+                      rawFreezeTot = 0; rawInvTot = 1; rawFreePtTot = 0;
+                    }
+                  }
+
+                  const freePtUsed = Number(
+                    m.freePtSessionsUsed ??
+                      primaryPkg?.benefits?.freePtSessionsUsed ??
+                      (m as any).benefits?.freePtSessionsUsed ??
+                      0
+                  );
+                  const freePtRem = Number(
+                    m.freePtSessionsRemaining ??
+                      m.ptSessionsRemaining ??
+                      Math.max(0, rawFreePtTot - freePtUsed)
+                  );
+                  const freePtTot = Math.max(rawFreePtTot, freePtRem + freePtUsed);
+
+                  const invUsed = Number((m as any).invitationsUsed ?? primaryPkg?.benefits?.invitationsUsed ?? 0);
+                  const invRem = Number(
+                    m.invitationsRemaining ??
+                      (m as any).guestInvitesRemaining ??
+                      Math.max(0, rawInvTot - invUsed)
+                  );
+                  const invTot = Math.max(rawInvTot, invRem + invUsed);
+
+                  const freezeUsed = Number(
+                    m.freezeDaysUsed ??
+                      primaryPkg?.freezeDaysUsed ??
+                      primaryPkg?.benefits?.freezeDaysUsed ??
+                      (m as any).benefits?.freezeDaysUsed ??
+                      0
+                  );
+                  const freezeRem = Number(
+                    m.freezeDaysRemaining ??
+                      m.freezeCoins ??
+                      Math.max(0, rawFreezeTot - freezeUsed)
+                  );
+                  const freezeTot = Math.max(rawFreezeTot, freezeRem + freezeUsed);
+                  const secondaryName =
+                    m.secondaryPackageName || secondaryPkg?.packageName || '';
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Renewal Countdown & Membership Status Banner */}
+                      <div
+                        className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-bold ${
+                          isMemberFrozen
+                            ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-700 dark:text-cyan-300'
+                            : m.status === 'Expired' || (rawEnd && daysLeft <= 0)
+                            ? 'bg-destructive/15 border-destructive/40 text-destructive'
+                            : daysLeft <= 7
+                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300'
+                            : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4 shrink-0" />
+                          <span>
+                            {isMemberFrozen
+                              ? `❄️ Frozen / On Hold (${daysLeft} Days Remaining)`
+                              : m.status === 'Expired' || (rawEnd && daysLeft <= 0)
+                              ? '🔴 Expired — 0 Days Remaining (Renewal Required)'
+                              : daysLeft <= 7
+                              ? `🟠 Renew Soon — ${daysLeft} Day${daysLeft === 1 ? '' : 's'} Remaining to Renew`
+                              : `🟢 Active — ${daysLeft} Day${daysLeft === 1 ? '' : 's'} Remaining to Renew`}
+                          </span>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-[10px] bg-background/80 border-current"
+                        >
+                          {pkgStartDateStr} → {pkgEndDateStr}
+                        </Badge>
+                      </div>
+
+                      {/* Member Core Details + Package Start & End Dates Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-xl border bg-background/60">
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                            {t('attendance.member_id')}
+                          </Label>
+                          <p className="font-mono text-sm font-bold">
+                            {lastScannedMember.memberId ? `#${lastScannedMember.memberId}` : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                            {t('attendance.status')}
+                          </Label>
+                          <div>
+                            <Badge
+                              variant={
+                                isMemberFrozen
+                                  ? 'outline'
+                                  : lastScannedMember.status === 'Active'
+                                  ? 'secondary'
+                                  : 'destructive'
+                              }
+                              className={`text-[10px] font-bold ${
+                                isMemberFrozen
+                                  ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/40'
+                                  : ''
+                              }`}
+                            >
+                              {isMemberFrozen
+                                ? 'On Hold / Frozen'
+                                : lastScannedMember.status === 'Active'
+                                ? t('members.tabs.active')
+                                : lastScannedMember.status === 'Expired'
+                                ? t('members.tabs.expired')
+                                : lastScannedMember.status}
+                            </Badge>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
-                          <div className="p-1.5 rounded-lg bg-background border">
-                            <span className="text-[9px] uppercase text-muted-foreground font-bold block">Paid PT</span>
-                            <span className="font-bold text-blue-500">{paidPtRem} / {paidPtTot}</span>
-                          </div>
-                          <div className="p-1.5 rounded-lg bg-background border">
-                            <span className="text-[9px] uppercase text-muted-foreground font-bold block">Free PT</span>
-                            <span className="font-bold text-purple-500">{freePtRem} / {freePtTot}</span>
-                          </div>
-                          <div className="p-1.5 rounded-lg bg-background border">
-                            <span className="text-[9px] uppercase text-muted-foreground font-bold block">Invites</span>
-                            <span className="font-bold text-primary">{invRem} / {invTot}</span>
-                          </div>
-                          <div className="p-1.5 rounded-lg bg-background border">
-                            <span className="text-[9px] uppercase text-muted-foreground font-bold block">Freeze Days</span>
-                            <span className="font-bold text-cyan-500">{freezeRem} / {freezeTot}d</span>
-                          </div>
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                            {t('attendance.packages_left')}
+                          </Label>
+                          {lastScannedMember.sessionsRemaining === 'unlimited' ? (
+                            <p className="text-sm font-extrabold text-emerald-600">
+                              ∞ {t('attendance.unlimited')}
+                            </p>
+                          ) : (
+                            <p
+                              className={`text-sm font-extrabold ${
+                                Number(lastScannedMember.sessionsRemaining) <= 0
+                                  ? 'text-destructive'
+                                  : 'text-green-600'
+                              }`}
+                            >
+                              {lastScannedMember.sessionsRemaining} {t('attendance.packages_unit')}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                            Package Start Date
+                          </Label>
+                          <p className="font-mono text-xs font-bold text-foreground">
+                            {pkgStartDateStr}
+                          </p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                            Package End Date
+                          </Label>
+                          <p className="font-mono text-xs font-bold text-foreground">
+                            {pkgEndDateStr}
+                          </p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                            Days to Renew
+                          </Label>
+                          <p
+                            className={`font-mono text-xs font-black ${
+                              daysLeft <= 0
+                                ? 'text-destructive'
+                                : daysLeft <= 7
+                                ? 'text-amber-500'
+                                : 'text-emerald-600 dark:text-emerald-400'
+                            }`}
+                          >
+                            {daysLeft} Days Left
+                          </p>
                         </div>
                       </div>
-                    );
-                  })()}
-                </div>
+
+                      {/* Primary & Secondary Package + Interactive PT Deduction & Freeze/Unfreeze Tiles */}
+                      <div className="rounded-xl border border-border/60 bg-muted/20 p-3 space-y-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          <div className="p-2.5 rounded-lg bg-background border border-emerald-500/25 space-y-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
+                                Primary Package
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className={`text-[9px] h-4 px-1.5 font-bold ${
+                                  daysLeft <= 0
+                                    ? 'border-destructive/40 text-destructive'
+                                    : daysLeft <= 7
+                                    ? 'border-amber-500/40 text-amber-500'
+                                    : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                                }`}
+                              >
+                                {daysLeft}d to renew
+                              </Badge>
+                            </div>
+                            <span className="font-bold text-foreground truncate block">
+                              {resolvedPkgName}
+                            </span>
+                            <span className="text-[10px] font-mono text-muted-foreground block">
+                              Start: <strong className="text-foreground">{pkgStartDateStr}</strong> • End:{' '}
+                              <strong className="text-foreground">{pkgEndDateStr}</strong>
+                            </span>
+                          </div>
+                          <div className="p-2.5 rounded-lg bg-background border border-blue-500/25 space-y-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400">
+                                Secondary Package
+                              </span>
+                              {secondaryPkg?.endDate && (
+                                <span className="text-[9px] font-mono text-muted-foreground">
+                                  End: {String(secondaryPkg.endDate).slice(0, 10)}
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-bold text-foreground truncate block">
+                              {secondaryName || 'No Secondary Package'}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground block">
+                              {paidPtTot > 0
+                                ? `Paid PT: ${paidPtRem} / ${paidPtTot} sessions left`
+                                : secondaryPkg?.startDate
+                                ? `Start: ${String(secondaryPkg.startDate).slice(0, 10)}`
+                                : 'Add-on / PT Tier'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 4 Interactive Entitlement & Action Tiles (Paid PT, Free PT, Invites, Freeze Days) */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                          {/* Tile 1: Paid PT + Direct -1 Deduct Button */}
+                          <div className="p-2 rounded-lg bg-background border border-blue-500/25 flex flex-col justify-between gap-1.5">
+                            <div>
+                              <span className="text-[9px] uppercase text-muted-foreground font-bold block">
+                                Paid PT
+                              </span>
+                              <span className="font-black text-sm text-blue-500">
+                                {paidPtRem} / {paidPtTot}
+                              </span>
+                            </div>
+                            {!isKiosk && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={isCheckinActionBusy || paidPtRem <= 0}
+                                onClick={() => handleDeductCheckinPtSession('paid', paidPtRem, paidPtTot)}
+                                className="h-6 px-1.5 text-[10px] font-bold border-blue-500/40 text-blue-600 dark:text-blue-400 hover:bg-blue-500/15 w-full gap-1"
+                              >
+                                <Minus className="h-2.5 w-2.5" />
+                                Deduct PT
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Tile 2: Free PT + Direct -1 Deduct Button */}
+                          <div className="p-2 rounded-lg bg-background border border-purple-500/25 flex flex-col justify-between gap-1.5">
+                            <div>
+                              <span className="text-[9px] uppercase text-muted-foreground font-bold block">
+                                Free PT
+                              </span>
+                              <span className="font-black text-sm text-purple-500">
+                                {freePtRem} / {freePtTot}
+                              </span>
+                            </div>
+                            {!isKiosk && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                disabled={isCheckinActionBusy || freePtRem <= 0}
+                                onClick={() => handleDeductCheckinPtSession('free', freePtRem, freePtTot)}
+                                className="h-6 px-1.5 text-[10px] font-bold border-purple-500/40 text-purple-600 dark:text-purple-400 hover:bg-purple-500/15 w-full gap-1"
+                              >
+                                <Minus className="h-2.5 w-2.5" />
+                                Deduct PT
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Tile 3: Guest Invites + Quick Open */}
+                          <div className="p-2 rounded-lg bg-background border border-primary/25 flex flex-col justify-between gap-1.5">
+                            <div>
+                              <span className="text-[9px] uppercase text-muted-foreground font-bold block">
+                                Invites
+                              </span>
+                              <span className="font-black text-sm text-primary">
+                                {invRem} / {invTot}
+                              </span>
+                            </div>
+                            {!isKiosk && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setIsGuestInviteOpen((prev) => !prev)}
+                                className="h-6 px-1.5 text-[10px] font-bold border-primary/40 text-primary hover:bg-primary/15 w-full gap-1"
+                              >
+                                <Ticket className="h-2.5 w-2.5" />
+                                {isGuestInviteOpen ? 'Close' : 'Use Invite'}
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Tile 4: Freeze Days + Direct Freeze / Unfreeze Button */}
+                          <div className="p-2 rounded-lg bg-background border border-cyan-500/30 flex flex-col justify-between gap-1.5">
+                            <div>
+                              <span className="text-[9px] uppercase text-muted-foreground font-bold block">
+                                Freeze Days
+                              </span>
+                              <span className="font-black text-sm text-cyan-500">
+                                {freezeRem} / {freezeTot}d
+                              </span>
+                            </div>
+                            {!isKiosk && (
+                              isMemberFrozen ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={isCheckinActionBusy}
+                                  onClick={() => handleDirectFreezeOrUnfreeze('unfreeze', freezeRem, freezeTot)}
+                                  className="h-6 px-1.5 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white w-full gap-1"
+                                >
+                                  <Unlock className="h-2.5 w-2.5" />
+                                  Unfreeze
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={isQuickFreezeOpen ? 'secondary' : 'outline'}
+                                  disabled={isCheckinActionBusy}
+                                  onClick={() => {
+                                    setQuickFreezeDays(Math.min(7, Math.max(1, freezeRem || 7)));
+                                    setIsQuickFreezeOpen((prev) => !prev);
+                                  }}
+                                  className="h-6 px-1.5 text-[10px] font-bold border-cyan-500/40 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/15 w-full gap-1"
+                                >
+                                  <Snowflake className="h-2.5 w-2.5" />
+                                  {isQuickFreezeOpen ? 'Cancel' : 'Freeze'}
+                                </Button>
+                              )
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Inline Quick Freeze / Unfreeze Drawer directly inside Check-In Card */}
+                        {!isKiosk && isQuickFreezeOpen && !isMemberFrozen && (
+                          <div className="p-3 rounded-xl border-2 border-cyan-500/40 bg-cyan-500/10 space-y-2.5 animate-in fade-in slide-in-from-top-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-700 dark:text-cyan-300 flex items-center gap-1.5">
+                                <Snowflake className="h-3.5 w-3.5" />
+                                Freeze Membership ({freezeRem} of {freezeTot} days available)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setIsQuickFreezeOpen(false)}
+                                className="text-[11px] text-muted-foreground hover:text-foreground font-bold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {[3, 7, 14, 30].map((dPreset) => (
+                                <button
+                                  key={dPreset}
+                                  type="button"
+                                  disabled={freezeTot > 0 && dPreset > freezeRem}
+                                  onClick={() => setQuickFreezeDays(dPreset)}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                                    quickFreezeDays === dPreset
+                                      ? 'bg-cyan-600 text-white border-cyan-600'
+                                      : 'bg-background border-border hover:border-cyan-500/50 disabled:opacity-40'
+                                  }`}
+                                >
+                                  {dPreset} Days
+                                </button>
+                              ))}
+                              <div className="flex items-center gap-1 ml-auto">
+                                <Label className="text-[10px] font-bold uppercase text-muted-foreground">
+                                  Custom Days:
+                                </Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={freezeTot > 0 ? Math.max(1, freezeRem) : 365}
+                                  value={quickFreezeDays}
+                                  onChange={(e) => setQuickFreezeDays(Math.max(1, parseInt(e.target.value) || 1))}
+                                  className="h-7 w-16 text-xs font-mono bg-background text-center"
+                                />
+                              </div>
+                            </div>
+                            <Input
+                              placeholder="Optional reason (e.g. Travel, Medical, Exam period)..."
+                              value={quickFreezeReason}
+                              onChange={(e) => setQuickFreezeReason(e.target.value)}
+                              className="h-8 text-xs bg-background"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={isCheckinActionBusy || (freezeTot > 0 && freezeRem <= 0)}
+                                onClick={() => handleDirectFreezeOrUnfreeze('freeze', freezeRem, freezeTot)}
+                                className="w-full h-8 text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white gap-1.5"
+                              >
+                                <Snowflake className="h-3.5 w-3.5" />
+                                Confirm Freeze for {quickFreezeDays} Day{quickFreezeDays === 1 ? '' : 's'} &amp; Extend Expiry
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* RedGITS v17.12 Parity: 1-Click Guest Invitation Pass Redemption */}
                 {isInzan && !isKiosk && (
