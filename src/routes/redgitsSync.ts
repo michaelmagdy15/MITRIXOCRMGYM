@@ -7,8 +7,8 @@ export const redgitsSyncRouter = Router();
 
 const INZAN_DATABASE_ID = 'db-inzanathletics';
 const REDGITS_ORIGIN = 'https://inzan.redgits.com';
-const DEFAULT_REDGITS_USER = process.env.REDGITS_USERNAME || 'mi5a';
-const DEFAULT_REDGITS_PASS = process.env.REDGITS_PASSWORD || String.fromCharCode(77, 105, 107, 111, 48, 48, 49, 57, 95, 33);
+const DEFAULT_REDGITS_USER = process.env.REDGITS_USERNAME || 'trasnfer';
+const DEFAULT_REDGITS_PASS = process.env.REDGITS_PASSWORD || '12122020Aa$';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
@@ -446,6 +446,103 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       }
     };
 
+    // Helper to fetch Guest Report (/admin/reports/guest_member) with LAST CALL & COME FROM
+    const fetchGuestReportMap = async (fromDate: string, toDate: string) => {
+      const map = new Map<
+        string,
+        {
+          code: string;
+          memberName: string;
+          salesMan: string;
+          comeFrom: string;
+          source: string;
+          date: string;
+          lastCall: { text: string; date: string; author: string; raw: string } | null;
+        }
+      >();
+      try {
+        const r = await fetch(
+          `${REDGITS_ORIGIN}/admin/reports/guest_member?salesID=&from=${encodeURIComponent(fromDate)}&to=${encodeURIComponent(toDate)}&trainer=&comefrom=&source=`,
+          {
+            headers: {
+              Cookie: getCookieHeader(),
+              'User-Agent': USER_AGENT,
+              Referer: `${REDGITS_ORIGIN}/admin/reports/guestmembers`,
+            },
+          }
+        );
+        saveCookies(r);
+        if (!r.ok) return map;
+        const html = await r.text();
+        const tableStart = html.indexOf('id="table1"');
+        const tbodyStart = html.indexOf('<tbody>', tableStart);
+        const tbodyEnd = html.indexOf('</tbody>', tbodyStart);
+        const tbodyHtml = tableStart > -1 && tbodyStart > -1 && tbodyEnd > -1 ? html.slice(tbodyStart, tbodyEnd) : '';
+        if (!tbodyHtml) return map;
+
+        const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        let trMatch: RegExpExecArray | null;
+        while ((trMatch = trRegex.exec(tbodyHtml)) !== null) {
+          const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+          const cells: string[] = [];
+          let tdMatch: RegExpExecArray | null;
+          while ((tdMatch = tdRegex.exec(trMatch[1] || '')) !== null) {
+            cells.push(tdMatch[1] || '');
+          }
+          if (cells.length >= 7) {
+            const code = stripHtmlAndExtractId(cells[0]).replace(/\[ID:\d+\]/g, '').trim();
+            const memberName = stripHtmlAndExtractId(cells[1]).replace(/\[ID:\d+\]/g, '').trim();
+            const salesMan = cleanSalesRepName(stripHtmlAndExtractId(cells[2]));
+            const comeFrom = stripHtmlAndExtractId(cells[3]);
+            const source = stripHtmlAndExtractId(cells[4]);
+            const date = stripHtmlAndExtractId(cells[5]);
+            const withNewlines = String(cells[6] || '')
+              .replace(/<br\s*\/?>/gi, '\n')
+              .replace(/<\/p>/gi, '\n')
+              .replace(/<[^>]+>/g, '');
+            const lines = withNewlines
+              .replace(/&nbsp;/gi, ' ')
+              .replace(/&amp;/gi, '&')
+              .replace(/&quot;/gi, '"')
+              .replace(/&#039;/gi, "'")
+              .split('\n')
+              .map((l) => l.replace(/\s+/g, ' ').trim())
+              .filter(Boolean);
+            let lastCall: { text: string; date: string; author: string; raw: string } | null = null;
+            if (lines.length > 0) {
+              let dateStr = '';
+              let authorStr = '';
+              const noteLines: string[] = [];
+              for (const line of lines) {
+                if (/^\d{4}-\d{2}-\d{2}(\s+\d{2}:\d{2}(:\d{2})?)?$/.test(line)) {
+                  dateStr = line;
+                } else if (dateStr && !authorStr) {
+                  authorStr = line;
+                } else {
+                  noteLines.push(line);
+                }
+              }
+              const text = noteLines.join(' — ').trim();
+              if (text || dateStr || authorStr) {
+                lastCall = {
+                  text: text || 'Call logged',
+                  date: dateStr || '',
+                  author: authorStr || '',
+                  raw: lines.join(' / '),
+                };
+              }
+            }
+            if (code) {
+              map.set(code, { code, memberName, salesMan, comeFrom, source, date, lastCall });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[RedGITS Sync] Warning fetching guest_member report:', e);
+      }
+      return map;
+    };
+
     // 3. Fetch datasets in controlled waves so CodeIgniter / PHPSESSID file locks never drop or collide
     const pkgCatalogRows = await fetchHtmlTable('/admin/packages/show');
     const activeRows = await fetchDataTableJson('active', 50000);
@@ -458,6 +555,8 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       fetchDataTableJson('viewinvitation', 400),
       fetchHtmlTable('/admin/staff/show'),
     ]);
+    const guestReportFromDate = mode === 'full' ? '2025-01-01' : new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10);
+    const guestReportByRedgitsId = await fetchGuestReportMap(guestReportFromDate, '2026-12-31');
     const expiredRows = mode === 'full' ? await fetchDataTableJson('expiredmember', 10000) : [];
 
     if (activeRows.length === 0 && pkgCatalogRows.length === 0) {
@@ -486,7 +585,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       inzanDb.collection('users').get(),
       inzanDb
         .collection('clients')
-        .select('phone', 'redgitsId', 'memberId', 'status', 'packages', 'invitationsUsed', 'freezeDaysUsed', 'freePtSessionsUsed')
+        .select('phone', 'redgitsId', 'memberId', 'status', 'packages', 'invitationsUsed', 'freezeDaysUsed', 'freePtSessionsUsed', 'lastCall', 'lastComment', 'lastCallText', 'lastCallDate', 'lastCallBy', 'comeFromType', 'createdAt', 'lastContactDate')
         .get(),
     ]);
 
@@ -1136,6 +1235,13 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         maxRealMemberIdNum = numericMemberId;
       }
 
+      const guestReportEntry = guestReportByRedgitsId.get(rId);
+      const resolvedLastCall = guestReportEntry?.lastCall || existingClient.lastCall || undefined;
+      const resolvedComeFrom = guestReportEntry?.comeFrom || existingClient.comeFromType || undefined;
+      const resolvedCreatedAt = guestReportEntry?.date || existingClient.createdAt || resolvedPrimaryStart || nowIso;
+      const resolvedLastContactDate =
+        resolvedLastCall?.date || existingClient.lastContactDate || guestReportEntry?.date || undefined;
+
       const clientData: Record<string, any> = {
         id: clientDocId,
         redgitsId: rId,
@@ -1149,7 +1255,8 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         gender: /fem|انث|أنث/i.test(genderRaw) ? 'Female' : 'Male',
         memberCategory: inferMemberCategory(resolvedPrimaryPkgName, name),
         status,
-        stage: status === 'Lead' ? 'New' : undefined,
+        stage: status === 'Lead' ? (existingClient.stage || 'New') : undefined,
+        paid: status === 'Lead' ? false : existingClient.paid,
         branch: 'Garden 8',
         packageType: resolvedPrimaryPkgName,
         primaryPackageName: resolvedPrimaryPkgName,
@@ -1191,8 +1298,16 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         salesRep: repInfo?.id || existingClient.salesRep || undefined,
         salesName: repInfo?.name || fallbackSalesName || existingClient.salesName || undefined,
         trainerName: trainerName || existingClient.trainerName || undefined,
-        advertisingSource: advSource,
+        advertisingSource: guestReportEntry?.source || advSource,
         source: advSource,
+        comeFromType: resolvedComeFrom,
+        createdAt: resolvedCreatedAt,
+        lastContactDate: resolvedLastContactDate,
+        lastCall: resolvedLastCall,
+        lastCallText: resolvedLastCall?.text || existingClient.lastCallText || undefined,
+        lastCallDate: resolvedLastCall?.date || existingClient.lastCallDate || undefined,
+        lastCallBy: resolvedLastCall?.author || existingClient.lastCallBy || undefined,
+        lastComment: existingClient.lastComment || undefined,
         barcode: resolvedMemberId || resolvedLeadId,
         cardId: rId,
         frontDeskNote: natEntry?.notes || existingClient.frontDeskNote || undefined,

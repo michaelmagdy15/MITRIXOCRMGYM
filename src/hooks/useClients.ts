@@ -143,8 +143,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       .filter(c => !c.isDeleted)
       .map(c => ({
         ...c,
-        comments: [],
-        interactions: [],
+        comments: Array.isArray((c as any).comments) ? (c as any).comments : [],
+        interactions: Array.isArray((c as any).interactions) ? (c as any).interactions : [],
       })) as Client[];
   }, [membersList, expiredMembersList, leadsList, searchResults]);
 
@@ -253,8 +253,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
     const q = query(
       collection(db, 'clients'),
-      where('status', '==', 'Lead'),
-      where('stage', 'in', ['New', 'Trial', 'Follow Up'])
+      where('status', '==', 'Lead')
     );
     const unsubLeads = onSnapshot(
       q,
@@ -361,6 +360,26 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       
       const comments = commentsSnap.docs.map(d => ({ ...d.data(), id: d.id } as CRMComment));
       const interactions = interactionsSnap.docs.map(d => ({ ...d.data(), id: d.id } as InteractionLog));
+
+      const existing = baseClients.find(c => c.id === clientId);
+      if (existing?.lastCall?.text && interactions.length === 0) {
+        interactions.push({
+          id: `redgits-lastcall-${clientId}`,
+          date: existing.lastCall.date || existing.lastContactDate || existing.createdAt || new Date().toISOString(),
+          type: (existing.lastCall.type as any) || 'Call',
+          outcome: (existing.lastCall.outcome as any) || 'Other',
+          notes: existing.lastCall.text,
+          author: existing.lastCall.author || existing.salesName || 'RedGITS Sync',
+        });
+      }
+      if (existing?.lastComment?.text && comments.length === 0) {
+        comments.push({
+          id: `redgits-lastcomment-${clientId}`,
+          date: existing.lastComment.date || existing.lastContactDate || existing.createdAt || new Date().toISOString(),
+          text: existing.lastComment.text,
+          author: existing.lastComment.author || existing.salesName || 'Staff',
+        });
+      }
       
       return { comments, interactions };
     } catch (error) {
@@ -945,16 +964,22 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   const addComment = async (clientId: string, text: string, author?: string) => {
     try {
       const commentAuthor = author || currentUser?.name || 'Admin';
+      const nowIso = new Date().toISOString();
       const commentData = {
         text,
-        date: new Date().toISOString(),
+        date: nowIso,
         author: commentAuthor,
       };
 
-        await addDoc(collection(db, 'clients', clientId, 'comments'), commentData);
-        await updateDoc(doc(db, 'clients', clientId), {
-          lastContactDate: new Date().toISOString(),
-        });
+      const docUpdates = {
+        lastContactDate: nowIso,
+        lastComment: commentData,
+      };
+      setLeadsList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
+      setMembersList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
+
+      await addDoc(collection(db, 'clients', clientId, 'comments'), commentData);
+      await updateDoc(doc(db, 'clients', clientId), docUpdates);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/comments`, true);
     }
@@ -969,14 +994,37 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       return;
     }
     try {
+      const nowIso = interaction.date || new Date().toISOString();
+      const summaryText = interaction.notes?.trim()
+        ? interaction.notes.trim()
+        : interaction.outcome || 'Call logged';
+      const lastCallObj = {
+        text: summaryText,
+        date: nowIso,
+        author: currentUser.name,
+        outcome: interaction.outcome,
+        type: interaction.type,
+      };
+      const docUpdates: Record<string, any> = {
+        lastContactDate: nowIso,
+        lastCall: lastCallObj,
+        lastCallText: summaryText,
+        lastCallDate: nowIso,
+        lastCallBy: currentUser.name,
+      };
+      if (interaction.nextFollowUp) {
+        docUpdates.nextReminderDate = interaction.nextFollowUp;
+      }
+
+      setLeadsList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
+      setMembersList(prev => prev.map(c => c.id === clientId ? { ...c, ...docUpdates } : c));
+
       await addDoc(collection(db, 'clients', clientId, 'interactions'), {
         ...interaction,
         author: currentUser.name,
-        date: interaction.date || new Date().toISOString(),
+        date: nowIso,
       });
-      await updateDoc(doc(db, 'clients', clientId), {
-        lastContactDate: interaction.date || new Date().toISOString(),
-      });
+      await updateDoc(doc(db, 'clients', clientId), docUpdates);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `clients/${clientId}/interactions`, true);
     }

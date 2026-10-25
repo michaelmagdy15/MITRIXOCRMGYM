@@ -506,6 +506,23 @@ export interface Client {
 
   comments?: CRMComment[];
   interactions?: InteractionLog[];
+  lastCall?: {
+    text: string;
+    date: string;
+    author: string;
+    outcome?: string;
+    type?: string;
+    raw?: string;
+  };
+  lastComment?: {
+    text: string;
+    date: string;
+    author: string;
+  };
+  lastCallText?: string;
+  lastCallDate?: string;
+  lastCallBy?: string;
+  frontDeskNote?: string;
   lastContactDate?: string; // ISO string
   nextReminderDate?: string; // ISO string
   paid?: boolean;

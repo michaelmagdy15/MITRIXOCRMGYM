@@ -152,6 +152,22 @@ export default function Leads() {
   const [conversionSuccessInfo, setConversionSuccessInfo] = useState<{ memberName: string; packageName: string; memberId?: string } | null>(null);
   const [isMobileLeadDialogOpen, setIsMobileLeadDialogOpen] = useState(false);
 
+  // Quick inline Call / Comment logger while scrolling the table
+  const [quickNoteLeadId, setQuickNoteLeadId] = useState<string | null>(null);
+  const [quickNoteText, setQuickNoteText] = useState<string>('');
+  const [quickNoteOutcome, setQuickNoteOutcome] = useState<InteractionOutcome>('Not Answered');
+  const [isSavingQuickNote, setIsSavingQuickNote] = useState<boolean>(false);
+
+  // Sales Rep Portfolio Transfer modal (for when a sales rep leaves the gym)
+  const [isTransferRepOpen, setIsTransferRepOpen] = useState<boolean>(false);
+  const [transferSourceRep, setTransferSourceRep] = useState<string>('');
+  const [transferMode, setTransferMode] = useState<'single' | 'round-robin'>('single');
+  const [transferTargetRep, setTransferTargetRep] = useState<string>('');
+  const [transferPoolReps, setTransferPoolReps] = useState<string[]>([]);
+  const [transferStageFilter, setTransferStageFilter] = useState<string>('All');
+  const [transferCallFilter, setTransferCallFilter] = useState<'all' | 'has_call' | 'no_call'>('all');
+  const [isTransferringRep, setIsTransferringRep] = useState<boolean>(false);
+
   const getQRCodeAsBlob = async (memberId: string): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const svg = document.querySelector(`[data-qr-id="${memberId}"]`);
@@ -253,12 +269,139 @@ export default function Leads() {
 
     return Math.max(0, score);
   };
+
+  const getLatestCallInfo = (lead: Client): { text: string; date?: string; author?: string; outcome?: string; type?: string } | null => {
+    if (lead.lastCall && lead.lastCall.text) {
+      return lead.lastCall;
+    }
+    if (lead.lastCallText) {
+      return {
+        text: lead.lastCallText,
+        date: lead.lastCallDate,
+        author: lead.lastCallBy,
+      };
+    }
+    if (Array.isArray(lead.interactions) && lead.interactions.length > 0) {
+      const sorted = [...lead.interactions].sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0));
+      const latest = sorted[0];
+      if (latest) {
+        return {
+          text: latest.notes || latest.outcome || latest.type || 'Call logged',
+          date: latest.date,
+          author: latest.author,
+          outcome: latest.outcome,
+          type: latest.type,
+        };
+      }
+    }
+    return null;
+  };
+
+  const getLatestCommentInfo = (lead: Client): { text: string; date?: string; author?: string } | null => {
+    if (lead.lastComment && lead.lastComment.text) {
+      return lead.lastComment;
+    }
+    if (Array.isArray(lead.comments) && lead.comments.length > 0) {
+      const sorted = [...lead.comments].sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0));
+      const latest = sorted[0];
+      if (latest && latest.text) {
+        return {
+          text: latest.text,
+          date: latest.date,
+          author: latest.author,
+        };
+      }
+    }
+    if (lead.frontDeskNote) {
+      return {
+        text: lead.frontDeskNote,
+        date: lead.createdAt,
+        author: lead.salesName || lead.salesRep,
+      };
+    }
+    return null;
+  };
+
+  const getLeadRepLabel = (lead: Client): string => {
+    if (lead.assignedTo && lead.assignedTo !== 'unassigned') {
+      const resolved = resolveUserDisplay(lead.assignedTo, users, '');
+      if (resolved) return resolved;
+    }
+    if (lead.salesName) return lead.salesName;
+    if (lead.salesRep) return lead.salesRep;
+    return '';
+  };
+
+  // Build unified list of sales reps (both CRM users and RedGITS salesName values on leads) with lead counts
+  const repSummaries = useMemo(() => {
+    const map = new Map<string, { value: string; label: string; userId?: string; count: number; isLegacyName?: boolean; isNonWorking?: boolean }>();
+
+    users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).forEach(u => {
+      const label = u.name || u.email || 'Unknown User';
+      map.set(u.id, {
+        value: u.id,
+        label,
+        userId: u.id,
+        count: 0,
+        isNonWorking: u.status === 'nonworking',
+      });
+    });
+
+    allLeads.forEach(l => {
+      if (l.assignedTo && map.has(l.assignedTo)) {
+        map.get(l.assignedTo)!.count += 1;
+      } else {
+        const repName = (l.salesName || l.salesRep || (l.assignedTo ? resolveUserDisplay(l.assignedTo, users, l.assignedTo) : '')).trim();
+        if (repName) {
+          // Check if matches an existing user by name (case-insensitive)
+          const matchedUser = Array.from(map.values()).find(r => r.label.toLowerCase() === repName.toLowerCase());
+          if (matchedUser) {
+            matchedUser.count += 1;
+          } else {
+            const key = `name:${repName}`;
+            if (!map.has(key)) {
+              map.set(key, {
+                value: key,
+                label: repName,
+                count: 0,
+                isLegacyName: true,
+              });
+            }
+            map.get(key)!.count += 1;
+          }
+        }
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }, [users, allLeads]);
+
+  const matchesRepFilter = (lead: Client, filterVal: string): boolean => {
+    if (!filterVal || filterVal === 'All') return true;
+    if (filterVal === 'unassigned') {
+      return !lead.assignedTo && !lead.salesName && !lead.salesRep;
+    }
+    if (filterVal.startsWith('name:')) {
+      const targetName = filterVal.slice(5).toLowerCase();
+      return (
+        (lead.salesName || '').toLowerCase() === targetName ||
+        (lead.salesRep || '').toLowerCase() === targetName ||
+        resolveUserDisplay(lead.assignedTo, users, '').toLowerCase() === targetName
+      );
+    }
+    const targetUser = users.find(u => u.id === filterVal);
+    const targetNameLower = (targetUser?.name || '').toLowerCase();
+    return (
+      lead.assignedTo === filterVal ||
+      (!!targetNameLower && (
+        (lead.salesName || '').toLowerCase() === targetNameLower ||
+        (lead.salesRep || '').toLowerCase() === targetNameLower
+      ))
+    );
+  };
   
   // ⚡ Bolt Performance Optimization:
   // Converted getFilteredLeads logic into a useMemo hook (now computing 'leads' directly).
-  // This avoids re-running O(n) filtering and sorting on the leads array every render,
-  // greatly enhancing performance and responsiveness when typing search queries or
-  // navigating other parts of the component.
   const leads = React.useMemo(() => {
     let filtered = [...allLeads];
     
@@ -274,14 +417,23 @@ export default function Leads() {
       case 'followup': filtered = filtered.filter(l => l.stage === 'Follow Up'); break;
     }
 
-    // Search filtering
+    // Search filtering (Name, Phone, Lead Code, Latest Call, Latest Comment, Sales Rep)
     if (deferredSearchTerm) {
       const term = deferredSearchTerm.toLowerCase();
-      filtered = filtered.filter(l => 
-        l.name.toLowerCase().includes(term) || 
-        l.phone.includes(term) ||
-        String(l.leadId || l.redgitsId || '').toLowerCase().includes(term)
-      );
+      filtered = filtered.filter(l => {
+        const callInfo = getLatestCallInfo(l);
+        const commentInfo = getLatestCommentInfo(l);
+        return (
+          (l.name || '').toLowerCase().includes(term) || 
+          (l.phone || '').includes(term) ||
+          String(l.leadId || l.redgitsId || '').toLowerCase().includes(term) ||
+          (l.salesName || '').toLowerCase().includes(term) ||
+          (l.salesRep || '').toLowerCase().includes(term) ||
+          (callInfo?.text || '').toLowerCase().includes(term) ||
+          (callInfo?.author || '').toLowerCase().includes(term) ||
+          (commentInfo?.text || '').toLowerCase().includes(term)
+        );
+      });
     }
 
     if (deferredFilterBranch !== 'All') {
@@ -294,7 +446,7 @@ export default function Leads() {
       filtered = filtered.filter(l => l.interest === deferredFilterInterest);
     }
     if (deferredFilterAssignedTo !== 'All') {
-      filtered = filtered.filter(l => deferredFilterAssignedTo === 'unassigned' ? !l.assignedTo : l.assignedTo === deferredFilterAssignedTo);
+      filtered = filtered.filter(l => matchesRepFilter(l, deferredFilterAssignedTo));
     }
 
     if (deferredSortBy === 'score') {
@@ -322,7 +474,8 @@ export default function Leads() {
     deferredFilterStage,
     deferredFilterInterest,
     deferredFilterAssignedTo,
-    deferredSortBy
+    deferredSortBy,
+    users
   ]);
 
   const totalPages = Math.ceil(leads.length / itemsPerPage);
@@ -334,6 +487,10 @@ export default function Leads() {
     } else {
       setSelectedLeadIds([]);
     }
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedLeadIds(leads.map(l => l.id));
   };
 
   const handleSelectLead = (id: string, checked: boolean) => {
@@ -351,15 +508,120 @@ export default function Leads() {
     setSelectedLeadIds([]);
   };
 
+  const resolveRepTarget = (targetVal: string): { assignedTo: string; salesName: string; salesRep: string } => {
+    if (!targetVal || targetVal === 'unassigned') {
+      return { assignedTo: '', salesName: '', salesRep: '' };
+    }
+    if (targetVal.startsWith('name:')) {
+      const repName = targetVal.slice(5);
+      const matchedUser = users.find(u => (u.name || '').toLowerCase() === repName.toLowerCase());
+      return {
+        assignedTo: matchedUser ? matchedUser.id : repName,
+        salesName: repName,
+        salesRep: repName,
+      };
+    }
+    const matchedUser = users.find(u => u.id === targetVal);
+    const repName = matchedUser?.name || matchedUser?.email || targetVal;
+    return {
+      assignedTo: targetVal,
+      salesName: repName,
+      salesRep: repName,
+    };
+  };
+
   const handleBulkAssign = async (userId: string) => {
     const isRep = currentUser?.role === 'rep';
+    const resolved = resolveRepTarget(userId);
     for (const id of selectedLeadIds) {
       const lead = clients.find(c => c.id === id);
       // Reps cannot reassign leads that already have an assigned rep (commission protection)
       if (isRep && lead?.assignedTo) continue;
-      await updateClient(id, { assignedTo: userId === 'unassigned' ? '' : userId });
+      await updateClient(id, {
+        assignedTo: resolved.assignedTo,
+        salesName: resolved.salesName || undefined,
+        salesRep: resolved.salesRep || undefined,
+      });
     }
     setSelectedLeadIds([]);
+  };
+
+  const handleQuickSaveCallNote = async (lead: Client) => {
+    if (!quickNoteText.trim()) return;
+    setIsSavingQuickNote(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const authorName = currentUser?.name || currentUser?.email || 'Sales Team';
+      await addInteraction(lead.id, {
+        type: 'Call',
+        outcome: quickNoteOutcome,
+        notes: quickNoteText.trim(),
+        date: nowIso,
+      });
+      await addComment(lead.id, quickNoteText.trim(), authorName);
+      setQuickNoteLeadId(null);
+      setQuickNoteText('');
+    } catch (err) {
+      console.error('[Leads] Failed to save quick call note:', err);
+    } finally {
+      setIsSavingQuickNote(false);
+    }
+  };
+
+  // Candidates matching the Sales Rep Portfolio Transfer modal filters
+  const transferCandidateLeads = useMemo(() => {
+    if (!transferSourceRep) return [];
+    return allLeads.filter(l => {
+      if (!matchesRepFilter(l, transferSourceRep)) return false;
+      if (transferStageFilter !== 'All' && (l.stage || 'New') !== transferStageFilter) return false;
+      const hasCall = !!getLatestCallInfo(l) || !!getLatestCommentInfo(l);
+      if (transferCallFilter === 'has_call' && !hasCall) return false;
+      if (transferCallFilter === 'no_call' && hasCall) return false;
+      return true;
+    });
+  }, [allLeads, transferSourceRep, transferStageFilter, transferCallFilter, users]);
+
+  const handleExecuteRepTransfer = async () => {
+    if (transferCandidateLeads.length === 0) return;
+    const targets = transferMode === 'single'
+      ? (transferTargetRep ? [transferTargetRep] : [])
+      : transferPoolReps;
+    if (targets.length === 0) {
+      alert('Please select at least one target Sales Rep to receive the leads.');
+      return;
+    }
+
+    setIsTransferringRep(true);
+    try {
+      const sourceLabel = repSummaries.find(r => r.value === transferSourceRep)?.label || transferSourceRep;
+      for (let i = 0; i < transferCandidateLeads.length; i++) {
+        const lead = transferCandidateLeads[i];
+        const targetKey = targets[i % targets.length];
+        if (!lead || !targetKey) continue;
+        const resolved = resolveRepTarget(targetKey);
+        await updateClient(lead.id, {
+          assignedTo: resolved.assignedTo,
+          salesName: resolved.salesName,
+          salesRep: resolved.salesRep,
+        });
+      }
+      await addAuditLog(
+        'UPDATE',
+        'CLIENT',
+        transferSourceRep,
+        `Transferred ${transferCandidateLeads.length} leads from "${sourceLabel}" (${transferMode === 'single' ? `to ${resolveRepTarget(targets[0] || '').salesName}` : `distributed across ${targets.length} reps`}).`,
+        currentUser?.name
+      );
+      setIsTransferRepOpen(false);
+      setTransferSourceRep('');
+      setTransferTargetRep('');
+      setTransferPoolReps([]);
+    } catch (err) {
+      console.error('[Leads] Failed to transfer rep leads:', err);
+      alert('Failed to complete lead transfer. Please try again.');
+    } finally {
+      setIsTransferringRep(false);
+    }
   };
 
   const handleBulkDelete = async () => {
@@ -402,23 +664,31 @@ export default function Leads() {
   }, [activeTab]);
 
   const exportToCSV = () => {
-    const headers = ['Name', 'Phone', 'Branch', 'Source', 'Stage', 'Interest', 'Category', 'Trial Date', 'Last Contact', 'Next Reminder', 'Assigned To'];
+    const headers = ['Lead Code', 'Name', 'Phone', 'Branch', 'Come From', 'Source', 'Stage', 'Interest', 'Category', 'Latest Call', 'Latest Call Date', 'Latest Call By', 'Latest Comment', 'Trial Date', 'Last Contact', 'Next Reminder', 'Assigned To'];
     const csvRows = [
       headers.join(','),
       ...leads.map(l => {
-        const assignedUser = resolveUserDisplay(l.assignedTo, users, 'Unassigned');
+        const assignedUser = getLeadRepLabel(l) || 'Unassigned';
+        const callInfo = getLatestCallInfo(l);
+        const commentInfo = getLatestCommentInfo(l);
         return [
-          `"${l.name}"`,
-          `"${l.phone}"`,
+          `"${l.leadId || l.redgitsId || ''}"`,
+          `"${(l.name || '').replace(/"/g, '""')}"`,
+          `"${l.phone || ''}"`,
           `"${l.branch || ''}"`,
+          `"${l.comeFromType || ''}"`,
           `"${l.source || ''}"`,
           `"${l.stage || ''}"`,
           `"${l.interest || ''}"`,
           `"${l.category || ''}"`,
+          `"${(callInfo?.text || '').replace(/"/g, '""')}"`,
+          `"${callInfo?.date || ''}"`,
+          `"${(callInfo?.author || '').replace(/"/g, '""')}"`,
+          `"${(commentInfo?.text || '').replace(/"/g, '""')}"`,
           `"${safeFormatDate(l.trialDate, 'yyyy-MM-dd')}"`,
           `"${safeFormatDate(l.lastContactDate, 'yyyy-MM-dd')}"`,
           `"${safeFormatDate(l.nextReminderDate, 'yyyy-MM-dd')}"`,
-          `"${assignedUser}"`
+          `"${assignedUser.replace(/"/g, '""')}"`
         ].join(',');
       })
     ];
@@ -765,6 +1035,17 @@ export default function Leads() {
     return isBefore(nextReminder, threeDaysFromNow);
   };
 
+  const openLeadAccount = (lead: Client) => {
+    if (isInzan) {
+      setActiveClientId(lead.id);
+      setNavTab('clients');
+    } else {
+      setSelectedLead(lead);
+      setIsMobileLeadDialogOpen(true);
+      loadLeadDetails(lead.id);
+    }
+  };
+
   const renderLeadsTable = (leadsData: Client[]) => (
     <div>
       {/* ── Mobile card list (< md) ── */}
@@ -776,22 +1057,37 @@ export default function Leads() {
           const reminderD = toValidDate(lead.nextReminderDate);
           const overdue = reminderD && isBefore(reminderD, new Date());
           const dueSoon = !overdue && reminderD && isBefore(reminderD, addDays(new Date(), 3));
+          const latestCall = getLatestCallInfo(lead);
+          const latestComment = getLatestCommentInfo(lead);
+          const repLabel = getLeadRepLabel(lead);
           return (
             <div
               key={lead.id}
-              className={`flex items-center gap-3 px-4 py-3 ${overdue ? 'bg-red-50/50 dark:bg-red-900/10' : dueSoon ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}
+              className={`flex items-start gap-3 px-4 py-3 ${overdue ? 'bg-red-50/50 dark:bg-red-900/10' : dueSoon ? 'bg-amber-50/50 dark:bg-amber-900/10' : ''}`}
             >
               <Checkbox
                 checked={selectedLeadIds.includes(lead.id)}
                 onCheckedChange={(checked) => handleSelectLead(lead.id, !!checked)}
-                className="shrink-0"
+                className="shrink-0 mt-1"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-[10px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                  <button
+                    type="button"
+                    onClick={() => openLeadAccount(lead)}
+                    className="font-mono text-[10px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                    title="Open Account Details"
+                  >
                     Lead #{lead.leadId || lead.redgitsId || '---'}
-                  </span>
-                  <span className="font-semibold text-sm truncate">{lead.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openLeadAccount(lead)}
+                    className="font-semibold text-sm truncate hover:text-primary hover:underline cursor-pointer text-left"
+                    title="Open Account Details"
+                  >
+                    {lead.name}
+                  </button>
                   <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{lead.stage || 'New'}</Badge>
                   {score >= 20 ? <Badge className="bg-green-500 text-[10px] h-4 px-1.5">{score}</Badge>
                     : score >= 10 ? <Badge className="bg-yellow-500 text-black text-[10px] h-4 px-1.5">{score}</Badge>
@@ -799,12 +1095,39 @@ export default function Leads() {
                   {overdue && <Badge variant="destructive" className="text-[10px] h-4 px-1">OVERDUE</Badge>}
                   {dueSoon && <Badge className="bg-amber-500 text-[10px] h-4 px-1">DUE SOON</Badge>}
                 </div>
-                <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><Phone className="h-3 w-3" />
+                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => openLeadAccount(lead)}
+                    className="flex items-center gap-1 hover:text-primary hover:underline cursor-pointer"
+                    title="Open Account Details"
+                  >
+                    <Phone className="h-3 w-3" />
                     {currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id ? '**********' : lead.phone}
-                  </span>
+                  </button>
+                  {lead.comeFromType && <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{lead.comeFromType}</Badge>}
                   {lead.source && <Badge variant="outline" className="text-[10px] h-4 px-1.5">{lead.source}</Badge>}
+                  {repLabel && <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-primary/30 text-primary">{repLabel}</Badge>}
                 </div>
+                {(latestCall || latestComment) && (
+                  <div className="mt-1.5 rounded-lg bg-muted/50 border border-border/60 px-2.5 py-1.5 text-[11px] space-y-0.5">
+                    {latestCall && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="outline" className="text-[9px] h-4 px-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30">
+                          Last Call
+                        </Badge>
+                        <span className="font-semibold text-foreground">{latestCall.text}</span>
+                        {latestCall.date && <span className="text-[10px] text-muted-foreground">• {latestCall.date.slice(0, 16).replace('T', ' ')}</span>}
+                        {latestCall.author && <span className="text-[10px] font-medium text-primary">• {latestCall.author}</span>}
+                      </div>
+                    )}
+                    {latestComment && (!latestCall || latestComment.text !== latestCall.text) && (
+                      <div className="text-muted-foreground truncate">
+                        <span className="font-semibold text-foreground/80">Note:</span> {latestComment.text}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <Button
                 variant="ghost"
@@ -862,7 +1185,7 @@ export default function Leads() {
           <TableRow>
             <TableHead className="w-[42px] pl-3">
               <Checkbox
-                checked={selectedLeadIds.length === leadsData.length && leadsData.length > 0}
+                checked={paginatedLeads.length > 0 && paginatedLeads.every(l => selectedLeadIds.includes(l.id))}
                 onCheckedChange={(checked) => handleSelectAll(!!checked)}
               />
             </TableHead>
@@ -870,11 +1193,18 @@ export default function Leads() {
             <TableHead>{t('leads.stage')} & {t('leads.table.paid_status')}</TableHead>
             <TableHead className="hidden lg:table-cell">{t('leads.interest')} & {t('leads.table.category')}</TableHead>
             <TableHead>{t('leads.table.next_reminder')}{canAssignLeads ? ` & ${t('leads.assigned_to')}` : ''}</TableHead>
+            <TableHead className="min-w-[250px] max-w-[340px]">Latest Call & Comments</TableHead>
             <TableHead className="text-right pr-4">{t('leads.table.actions')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {leadsData.map(lead => (
+          {leadsData.map(lead => {
+            const latestCall = getLatestCallInfo(lead);
+            const latestComment = getLatestCommentInfo(lead);
+            const repLabel = getLeadRepLabel(lead);
+            const isQuickLogging = quickNoteLeadId === lead.id;
+
+            return (
             <TableRow key={lead.id} className={isReminderDue(lead) ? (() => {
               const d = toValidDate(lead.nextReminderDate);
               return d && isBefore(d, new Date()) ? 'bg-red-50/50 dark:bg-red-900/10' : 'bg-amber-50/50 dark:bg-amber-900/10';
@@ -886,23 +1216,50 @@ export default function Leads() {
                 />
               </TableCell>
 
-              {/* Column 2: ID + Name + Score + Phone + Branch + Source */}
+              {/* Column 2: ID + Name + Score + Phone + Branch + Come From + Source */}
               <TableCell className="py-3 align-top">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
+                    <button
+                      type="button"
+                      onClick={() => openLeadAccount(lead)}
+                      className="font-mono text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                      title="Click to open account details"
+                    >
                       Lead #{lead.leadId || lead.redgitsId || '---'}
-                    </span>
-                    <span className="font-bold text-sm text-foreground">{lead.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openLeadAccount(lead)}
+                      className="font-bold text-sm text-foreground hover:text-primary hover:underline cursor-pointer text-left transition-colors"
+                      title="Click to open account details"
+                    >
+                      {lead.name}
+                    </button>
                     {getScoreBadge(calculateLeadScore(lead))}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => openLeadAccount(lead)}
+                      className="inline-flex items-center hover:text-primary hover:underline cursor-pointer transition-colors"
+                      title="Click to open account details"
+                    >
                       <Phone className="h-3 w-3 mr-1 text-muted-foreground/80" />
                       {currentUser?.role === 'rep' && lead.assignedTo !== currentUser.id ? '**********' : lead.phone}
-                    </span>
+                    </button>
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{lead.branch || 'Unassigned'}</Badge>
+                    {lead.comeFromType && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-primary/5 border-primary/20 text-primary">
+                        {lead.comeFromType}
+                      </Badge>
+                    )}
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">{lead.source || 'Unknown'}</Badge>
+                    {lead.createdAt && (
+                      <span className="text-[10px] text-muted-foreground/80">
+                        • {safeFormatDate(lead.createdAt, 'yyyy-MM-dd')}
+                      </span>
+                    )}
                   </div>
                 </div>
               </TableCell>
@@ -961,32 +1318,155 @@ export default function Leads() {
                       • Last: {safeFormatDate(lead.lastContactDate, 'MMM d', 'Never')}
                     </span>
                   </div>
-                  {canAssignLeads && (
+                  {canAssignLeads ? (
                     <div onClick={(e) => e.stopPropagation()}>
                       <Select
-                        defaultValue={lead.assignedTo || 'unassigned'}
-                        onValueChange={(v) => updateClient(lead.id, { assignedTo: v === 'unassigned' ? '' : (v || undefined) })}
+                        value={lead.assignedTo || (lead.salesName ? `name:${lead.salesName}` : 'unassigned')}
+                        onValueChange={(v) => {
+                          const resolved = resolveRepTarget(v || 'unassigned');
+                          updateClient(lead.id, {
+                            assignedTo: resolved.assignedTo,
+                            salesName: resolved.salesName || undefined,
+                            salesRep: resolved.salesRep || undefined,
+                          });
+                        }}
                       >
-                        <SelectTrigger className="w-[130px] h-7 text-[11px]">
+                        <SelectTrigger className="w-[155px] h-7 text-[11px]">
                           <SelectValue placeholder="Assign rep">
-                            {lead.assignedTo && lead.assignedTo !== 'unassigned'
-                              ? resolveUserDisplay(lead.assignedTo, users, 'Unknown User')
-                              : undefined}
+                            {repLabel || t('leads.tabs.unassigned')}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
-                          {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === lead.assignedTo)).map(rep => (
-                            <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                          {repSummaries.map(rep => (
+                            <SelectItem key={rep.value} value={rep.value}>
+                              {rep.label} {rep.isLegacyName ? '(RedGITS)' : ''}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+                  ) : repLabel ? (
+                    <Badge variant="outline" className="w-fit text-[10px] px-1.5 py-0 h-5">
+                      {repLabel}
+                    </Badge>
+                  ) : null}
+                </div>
+              </TableCell>
+
+              {/* Column 6: Latest Call & Comments (Inline while browsing/scrolling) */}
+              <TableCell className="py-3 align-top max-w-[340px]" onClick={(e) => e.stopPropagation()}>
+                <div className="flex flex-col gap-1.5">
+                  {latestCall ? (
+                    <div className="rounded-lg bg-muted/50 border border-border/70 px-2.5 py-1.5 text-xs space-y-0.5">
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                        <span className="font-bold text-foreground break-words leading-snug">
+                          {latestCall.text}
+                        </span>
+                        {latestCall.outcome && latestCall.outcome !== latestCall.text && (
+                          <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0 border-primary/30 text-primary">
+                            {latestCall.outcome}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground flex-wrap">
+                        {latestCall.date && (
+                          <span className="font-mono">
+                            {latestCall.date.length > 16 ? latestCall.date.slice(0, 16).replace('T', ' ') : latestCall.date}
+                          </span>
+                        )}
+                        {latestCall.author && (
+                          <span className="font-semibold text-primary">
+                            • {latestCall.author}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground italic">No call logged yet</span>
+                  )}
+
+                  {latestComment && (!latestCall || latestComment.text !== latestCall.text) && (
+                    <div className="rounded-md bg-amber-500/5 border border-amber-500/20 px-2 py-1 text-[11px] text-foreground/90">
+                      <span className="font-semibold text-amber-600 dark:text-amber-400 mr-1">Comment:</span>
+                      <span className="break-words">{latestComment.text}</span>
+                      {latestComment.author && (
+                        <span className="text-[10px] text-muted-foreground ml-1">({latestComment.author})</span>
+                      )}
+                    </div>
+                  )}
+
+                  {isQuickLogging ? (
+                    <div className="mt-1 p-2 rounded-lg border border-primary/30 bg-background shadow-sm space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Select value={quickNoteOutcome} onValueChange={(v) => setQuickNoteOutcome(v as InteractionOutcome)}>
+                          <SelectTrigger className="h-6 text-[10px] w-[115px] px-2">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Not Answered">NA / No Answer</SelectItem>
+                            <SelectItem value="Interested">Interested</SelectItem>
+                            <SelectItem value="Scheduled Trial">Trial Set</SelectItem>
+                            <SelectItem value="Rejected">Not Interested</SelectItem>
+                            <SelectItem value="Other">Other / WP</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          value={quickNoteText}
+                          onChange={(e) => setQuickNoteText(e.target.value)}
+                          placeholder="e.g. NA/wp, Busy, Follow up..."
+                          className="h-6 text-[11px] px-2 flex-1"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleQuickSaveCallNote(lead);
+                            } else if (e.key === 'Escape') {
+                              setQuickNoteLeadId(null);
+                              setQuickNoteText('');
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 px-2 text-[10px]"
+                          onClick={() => { setQuickNoteLeadId(null); setQuickNoteText(''); }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-5 px-2.5 text-[10px]"
+                          disabled={isSavingQuickNote || !quickNoteText.trim()}
+                          onClick={() => handleQuickSaveCallNote(lead)}
+                        >
+                          {isSavingQuickNote ? 'Saving...' : 'Save Call'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-primary w-fit"
+                        onClick={() => {
+                          setQuickNoteLeadId(lead.id);
+                          setQuickNoteText('');
+                          setQuickNoteOutcome('Not Answered');
+                        }}
+                      >
+                        <Plus className="h-2.5 w-2.5 mr-0.5" /> Quick Call / Note
+                      </Button>
                     </div>
                   )}
                 </div>
               </TableCell>
 
-              {/* Column 6: Actions */}
+              {/* Column 7: Actions */}
               <TableCell className="text-right pr-4 py-3 align-top whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-1">
                   <Button
@@ -1505,7 +1985,8 @@ export default function Leads() {
                 </div>
               </TableCell>
             </TableRow>
-          ))}
+            );
+          })}
         </TableBody>
       </Table>
       </div>
@@ -1517,6 +1998,236 @@ export default function Leads() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h2 className="text-2xl font-bold tracking-tight">{t('leads.title')}</h2>
         <div className="flex flex-wrap items-center gap-2">
+          {canAssignLeads && (
+            <Dialog open={isTransferRepOpen} onOpenChange={setIsTransferRepOpen}>
+              <DialogTrigger render={<Button variant="outline" size="sm" className="border-primary/40 text-primary hover:bg-primary/10 font-semibold" />}>
+                <UserCheck className="mr-2 h-4 w-4" />
+                Transfer Rep Leads
+              </DialogTrigger>
+              <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                    <UserCheck className="h-5 w-5 text-primary" />
+                    Transfer Sales Rep Portfolio
+                  </DialogTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Reassign leads when a sales rep leaves the gym or moves to Black-List. Preview latest calls and comments before transferring to one rep or distributing evenly across active reps.
+                  </p>
+                </DialogHeader>
+
+                <div className="space-y-5 py-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">From Sales Rep (Leaving)</Label>
+                      <Select value={transferSourceRep} onValueChange={(v) => setTransferSourceRep(v || '')}>
+                        <SelectTrigger className="h-10 rounded-xl">
+                          <SelectValue placeholder="Select departing rep">
+                            {transferSourceRep
+                              ? (transferSourceRep === 'unassigned'
+                                  ? 'Unassigned'
+                                  : repSummaries.find(r => r.value === transferSourceRep)?.label || transferSourceRep)
+                              : 'Select departing rep'}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className="max-h-72">
+                          <SelectItem value="unassigned">Unassigned Leads</SelectItem>
+                          {repSummaries.map(rep => (
+                            <SelectItem key={rep.value} value={rep.value}>
+                              {rep.label} ({rep.count} leads){rep.isNonWorking ? ' • Left' : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Stage Filter</Label>
+                      <Select value={transferStageFilter} onValueChange={(v) => setTransferStageFilter(v || 'All')}>
+                        <SelectTrigger className="h-10 rounded-xl">
+                          <SelectValue placeholder="All Stages" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All">All Stages</SelectItem>
+                          <SelectItem value="New">New</SelectItem>
+                          <SelectItem value="Contacted">Contacted</SelectItem>
+                          <SelectItem value="Qualified">Qualified</SelectItem>
+                          <SelectItem value="Trial">Trial / Visit</SelectItem>
+                          <SelectItem value="Proposal">Proposal</SelectItem>
+                          <SelectItem value="Follow Up">Follow Up</SelectItem>
+                          <SelectItem value="Lost">Lost</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Call History Filter</Label>
+                      <Select value={transferCallFilter} onValueChange={(v) => setTransferCallFilter((v as any) || 'all')}>
+                        <SelectTrigger className="h-10 rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Leads (With or Without Call)</SelectItem>
+                          <SelectItem value="has_call">Has Latest Call / Comment</SelectItem>
+                          <SelectItem value="no_call">No Call Logged Yet</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Preview of leads to be transferred */}
+                  {transferSourceRep && (
+                    <div className="rounded-2xl border border-border bg-muted/20 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-foreground">
+                          Matching Leads to Transfer: <Badge variant="secondary" className="ml-1">{transferCandidateLeads.length}</Badge>
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-primary"
+                          onClick={() => {
+                            setFilterAssignedTo(transferSourceRep);
+                            setActiveTab('all');
+                            setIsTransferRepOpen(false);
+                          }}
+                        >
+                          Filter Table by This Rep
+                        </Button>
+                      </div>
+                      {transferCandidateLeads.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto divide-y divide-border/60 rounded-xl border bg-background">
+                          {transferCandidateLeads.slice(0, 40).map(l => {
+                            const call = getLatestCallInfo(l);
+                            const comment = getLatestCommentInfo(l);
+                            return (
+                              <div key={l.id} className="px-3 py-2 text-xs flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <span className="font-mono text-[10px] text-muted-foreground mr-1.5">
+                                    #{l.leadId || l.redgitsId || '---'}
+                                  </span>
+                                  <span className="font-semibold text-foreground">{l.name}</span>
+                                  <span className="text-muted-foreground ml-2">{l.phone}</span>
+                                </div>
+                                <div className="text-right shrink-0 max-w-[260px] truncate">
+                                  {call ? (
+                                    <span className="text-[11px] font-medium text-primary">
+                                      {call.text} {call.date ? `(${call.date.slice(0, 10)})` : ''}
+                                    </span>
+                                  ) : comment ? (
+                                    <span className="text-[11px] text-amber-600">{comment.text}</span>
+                                  ) : (
+                                    <span className="text-[10px] text-muted-foreground italic">No call note</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {transferCandidateLeads.length > 40 && (
+                            <div className="px-3 py-1.5 text-[11px] text-center text-muted-foreground bg-muted/30">
+                              + {transferCandidateLeads.length - 40} more leads will be transferred
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Target Selection */}
+                  <div className="space-y-3 pt-1">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant={transferMode === 'single' ? 'default' : 'outline'}
+                        size="sm"
+                        className="rounded-xl text-xs"
+                        onClick={() => setTransferMode('single')}
+                      >
+                        Transfer All to One Rep
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={transferMode === 'round-robin' ? 'default' : 'outline'}
+                        size="sm"
+                        className="rounded-xl text-xs"
+                        onClick={() => setTransferMode('round-robin')}
+                      >
+                        Distribute Evenly (Round-Robin)
+                      </Button>
+                    </div>
+
+                    {transferMode === 'single' ? (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Assign To Target Sales Rep</Label>
+                        <Select value={transferTargetRep} onValueChange={(v) => setTransferTargetRep(v || '')}>
+                          <SelectTrigger className="h-10 rounded-xl">
+                            <SelectValue placeholder="Choose receiving sales rep">
+                              {transferTargetRep
+                                ? repSummaries.find(r => r.value === transferTargetRep)?.label || transferTargetRep
+                                : 'Choose receiving sales rep'}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72">
+                            {repSummaries.filter(r => !r.isNonWorking && r.value !== transferSourceRep).map(rep => (
+                              <SelectItem key={rep.value} value={rep.value}>
+                                {rep.label} ({rep.count} current leads)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Select Active Reps to Split Leads Evenly ({transferPoolReps.length} selected)
+                        </Label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 rounded-xl border bg-muted/10">
+                          {repSummaries.filter(r => !r.isNonWorking && r.value !== transferSourceRep && r.label !== 'Black-List').map(rep => {
+                            const checked = transferPoolReps.includes(rep.value);
+                            return (
+                              <label key={rep.value} className="flex items-center gap-2 p-2 rounded-lg border bg-background cursor-pointer text-xs">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(c) => {
+                                    if (c) setTransferPoolReps(prev => [...prev, rep.value]);
+                                    else setTransferPoolReps(prev => prev.filter(x => x !== rep.value));
+                                  }}
+                                />
+                                <span className="font-semibold flex-1 truncate">{rep.label}</span>
+                                <Badge variant="outline" className="text-[10px]">{rep.count}</Badge>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <DialogFooter className="gap-2">
+                  <Button variant="outline" className="rounded-xl" onClick={() => setIsTransferRepOpen(false)} disabled={isTransferringRep}>
+                    Cancel
+                  </Button>
+                  <Button
+                    className="rounded-xl font-bold"
+                    disabled={isTransferringRep || transferCandidateLeads.length === 0 || (transferMode === 'single' ? !transferTargetRep : transferPoolReps.length === 0)}
+                    onClick={handleExecuteRepTransfer}
+                  >
+                    {isTransferringRep ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Transferring {transferCandidateLeads.length} Leads...
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="mr-2 h-4 w-4" />
+                        Transfer {transferCandidateLeads.length} Leads Now
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
           <Button variant="outline" size="sm" onClick={exportToCSV}>
             <Download className="mr-2 h-4 w-4" />
             {t('leads.export_csv')}
@@ -1691,9 +2402,9 @@ export default function Leads() {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Search Name/Phone</Label>
+            <Label className="text-xs">Search Name, Phone, ID or Call Note</Label>
             <Input 
-              placeholder={t('leads.search_placeholder')} 
+              placeholder="Search name, phone, ID, or call note (e.g. NA/wp)..." 
               value={searchTerm} 
               onChange={(e) => setSearchTerm(e.target.value)}
               className="h-9"
@@ -1755,14 +2466,16 @@ export default function Leads() {
                     ? undefined
                     : filterAssignedTo === 'unassigned'
                       ? t('leads.tabs.unassigned')
-                      : users.find(u => u.id === filterAssignedTo)?.name || 'Unknown User'}
+                      : repSummaries.find(r => r.value === filterAssignedTo)?.label || users.find(u => u.id === filterAssignedTo)?.name || 'Unknown User'}
                 </SelectValue>
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-72">
                 <SelectItem value="All">All Reps</SelectItem>
                 <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
-                {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
-                  <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                {repSummaries.map(rep => (
+                  <SelectItem key={rep.value} value={rep.value}>
+                    {rep.label} ({rep.count})
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1772,10 +2485,20 @@ export default function Leads() {
 
       {selectedLeadIds.length > 0 && (
         <div className="sticky top-0 z-10 bg-primary text-primary-foreground p-3 rounded-lg shadow-lg flex flex-wrap items-center justify-between gap-4 animate-in slide-in-from-top-4 duration-300">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary" className="bg-primary-foreground text-primary">
               {selectedLeadIds.length} selected
             </Badge>
+            {selectedLeadIds.length < leads.length && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-7 text-xs font-bold bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30 border border-primary-foreground/30"
+                onClick={handleSelectAllFiltered}
+              >
+                Select All {leads.length} Matching Leads
+              </Button>
+            )}
             <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10" onClick={() => setSelectedLeadIds([])}>
               Cancel
             </Button>
@@ -1800,13 +2523,13 @@ export default function Leads() {
               <div className="flex items-center gap-2 bg-primary-foreground/10 p-1 rounded-md">
                 <UserCheck className="h-4 w-4" />
                 <Select onValueChange={(v: string | null) => v && handleBulkAssign(v)}>
-                  <SelectTrigger className="h-8 w-[140px] bg-transparent border-none text-primary-foreground">
-                    <SelectValue placeholder="Assign To" />
+                  <SelectTrigger className="h-8 w-[160px] bg-transparent border-none text-primary-foreground">
+                    <SelectValue placeholder="Assign / Transfer To" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-72">
                     <SelectItem value="unassigned">Unassigned</SelectItem>
-                    {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && u.status !== 'nonworking').map(rep => (
-                      <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
+                    {repSummaries.filter(r => !r.isNonWorking).map(rep => (
+                      <SelectItem key={rep.value} value={rep.value}>{rep.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
