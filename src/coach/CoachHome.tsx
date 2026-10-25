@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { format, parseISO, isToday, startOfWeek, endOfWeek, isWithinInterval, differenceInDays, isAfter, startOfDay } from 'date-fns';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { openWhatsAppChat } from '../utils/whatsappTemplates';
@@ -62,6 +62,7 @@ export default function CoachHome({
   });
   const [todayAgenda, setTodayAgenda] = useState<TodayAgendaItem[]>([]);
   const [pendingAssessments, setPendingAssessments] = useState<Assessment[]>([]);
+  const [assignedClientAlerts, setAssignedClientAlerts] = useState<any[]>([]);
   const [lowBalanceClients, setLowBalanceClients] = useState<RadarClientItem[]>([]);
   const [atRiskClients, setAtRiskClients] = useState<RadarClientItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,14 +94,63 @@ export default function CoachHome({
       setStats(prev => ({ ...prev, pendingAssessmentsCount: pending.length }));
     });
 
+    // 1b. Listen to PT Client Assignment Notifications for this coach
+    const unsubNotifications = onSnapshot(
+      query(collection(db, 'notifications'), where('read', '==', false)),
+      (snap) => {
+        const nameLower = coachName.toLowerCase();
+        const mine = snap.docs
+          .map(d => ({ ...d.data(), id: d.id } as any))
+          .filter(n => {
+            if (n.type !== 'coach_client_assigned') return false;
+            return (
+              (coachId && (n.recipientUid === coachId || n.recipientId === coachId || n.coachId === coachId)) ||
+              (coachCustomId && (n.coachCustomId === coachCustomId || n.coachId === coachCustomId)) ||
+              (nameLower && String(n.coachName || '').toLowerCase() === nameLower)
+            );
+          })
+          .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+        setAssignedClientAlerts(mine);
+      },
+      () => {}
+    );
+
     // 2. Fetch Assigned Clients, Today's Classes & PT Sessions
     const loadOverview = async () => {
       try {
-        // Clients assigned
-        const clientsSnap = await getDocs(
-          query(collection(db, 'clients'), where('coach', '==', coachName))
-        );
-        const totalClients = clientsSnap.size;
+        const coachNameLower = coachName.toLowerCase();
+        const clientQueries: Promise<any>[] = [
+          getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachId))),
+        ];
+        if (coachCustomId) {
+          clientQueries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachCustomId))));
+        }
+        if (coachName) {
+          clientQueries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachName', '==', coachName))));
+          clientQueries.push(getDocs(query(collection(db, 'clients'), where('trainerName', '==', coachName))));
+          clientQueries.push(getDocs(query(collection(db, 'clients'), where('coach', '==', coachName))));
+        }
+        const clientSnaps = await Promise.all(clientQueries);
+        const assignedClientDocsMap = new Map<string, Client>();
+        clientSnaps.forEach(s => {
+          s?.docs?.forEach((d: any) => {
+            assignedClientDocsMap.set(d.id, { ...d.data(), id: d.id } as Client);
+          });
+        });
+        try {
+          const activeSnap = await getDocs(query(collection(db, 'clients'), where('status', '==', 'Active')));
+          activeSnap.docs.forEach(d => {
+            if (assignedClientDocsMap.has(d.id)) return;
+            const c = { ...d.data(), id: d.id } as Client;
+            const matchesPkg = (c.packages || []).some(p => {
+              const pName = (p.trainerName || (p as any).coachName || '').toLowerCase();
+              const pId = (p as any).coachId || '';
+              return (coachNameLower && pName === coachNameLower) || pId === coachId || (coachCustomId && pId === coachCustomId);
+            });
+            if (matchesPkg) assignedClientDocsMap.set(d.id, c);
+          });
+        } catch {}
+        const totalClients = assignedClientDocsMap.size;
 
         // Classes for today
         const classesSnap = await getDocs(collection(db, 'classSchedules'));
@@ -207,10 +257,7 @@ export default function CoachHome({
         setTodayAgenda(agenda);
 
         // Build PT Client Retention & Renewal Radar
-        const clientMap = new Map<string, Client>();
-        clientsSnap.docs.forEach(d => {
-          clientMap.set(d.id, { ...d.data(), id: d.id } as Client);
-        });
+        const clientMap = new Map<string, Client>(assignedClientDocsMap);
 
         const sessionClientIds = [...new Set(mySessions.map(s => s.clientId).filter(Boolean))];
         const missingIds = sessionClientIds.filter(id => !clientMap.has(id));
@@ -303,6 +350,7 @@ export default function CoachHome({
 
     return () => {
       unsubAssessments();
+      unsubNotifications();
     };
   }, [currentUser]);
 
@@ -354,6 +402,51 @@ export default function CoachHome({
           </div>
         </div>
       </div>
+
+      {/* ─── New Assigned PT Clients Alert ─── */}
+      {assignedClientAlerts.length > 0 && (
+        <div className="space-y-2.5 animate-in fade-in">
+          {assignedClientAlerts.slice(0, 3).map(alertItem => (
+            <div
+              key={alertItem.id}
+              className="rounded-2xl bg-emerald-950/90 border border-emerald-500/40 p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-zinc-950 flex items-center justify-center shrink-0 shadow-md">
+                  <Bell className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-bold text-white">
+                      {alertItem.title || `New PT Client Assigned: ${alertItem.clientName}`}
+                    </p>
+                    <Badge className="bg-emerald-400 text-zinc-950 text-[10px] font-extrabold px-1.5 py-0.5">
+                      NEW CLIENT
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-emerald-200/90 mt-0.5">
+                    {alertItem.body || alertItem.description}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await updateDoc(doc(db, 'notifications', alertItem.id), { read: true });
+                    } catch {}
+                    onNavigate('members');
+                  }}
+                  className="bg-emerald-400 text-zinc-950 hover:bg-emerald-300 font-bold text-xs"
+                >
+                  View in My Clients <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ─── Pending Assessments Priority Alert ─── */}
       {stats.pendingAssessmentsCount > 0 && (

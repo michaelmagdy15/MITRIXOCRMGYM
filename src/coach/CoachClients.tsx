@@ -67,16 +67,37 @@ export default function CoachClients({
   const [logPrs, setLogPrs] = useState<{ exercise: string; weight: string; reps: string }[]>([]);
   const [isSavingPerformance, setIsSavingPerformance] = useState(false);
 
-  // Fetch coach's clients (sessions + Fitness Manager assigned clients & assessments)
+  // Fetch coach's clients (sessions + PT package coach assignment + Fitness Manager assigned clients & assessments)
   const fetchMyClients = async () => {
     if (!currentUser) return;
     try {
-      const [sessionsSnap1, sessionsSnap2, assignedClientsSnap, assignedAssessmentsSnap] = await Promise.all([
-        getDocs(query(collection(db, 'sessions'), where('trainerId', '==', currentUser.id))),
-        getDocs(query(collection(db, 'sessions'), where('coachId', '==', currentUser.id))),
-        getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', currentUser.id))),
-        getDocs(query(collection(db, 'assessments'), where('assignedCoachId', '==', currentUser.id))),
-      ]);
+      const coachId = currentUser.id;
+      const coachCustomId = currentUser.coachId || '';
+      const coachName = (currentUser.name || '').trim();
+      const coachNameLower = coachName.toLowerCase();
+
+      const queries: Promise<any>[] = [
+        getDocs(query(collection(db, 'sessions'), where('trainerId', '==', coachId))),
+        getDocs(query(collection(db, 'sessions'), where('coachId', '==', coachId))),
+        getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachId))),
+        getDocs(query(collection(db, 'assessments'), where('assignedCoachId', '==', coachId))),
+      ];
+      if (coachCustomId) {
+        queries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachCustomId))));
+      }
+      if (coachName) {
+        queries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachName', '==', coachName))));
+        queries.push(getDocs(query(collection(db, 'clients'), where('trainerName', '==', coachName))));
+        queries.push(getDocs(query(collection(db, 'clients'), where('coach', '==', coachName))));
+      }
+
+      const [
+        sessionsSnap1,
+        sessionsSnap2,
+        assignedClientsSnap,
+        assignedAssessmentsSnap,
+        ...extraClientSnaps
+      ] = await Promise.all(queries);
 
       const lastMap: Record<string, string> = {};
       const sessionDocs = [...sessionsSnap1.docs, ...sessionsSnap2.docs];
@@ -93,31 +114,61 @@ export default function CoachClients({
       });
       setLastSessionMap(lastMap);
 
-      const clientIdSet = new Set<string>();
+      const directClientMap = new Map<string, Client>();
+      [assignedClientsSnap, ...extraClientSnaps].forEach(snap => {
+        snap?.docs?.forEach((d: any) => {
+          directClientMap.set(d.id, { ...d.data(), id: d.id } as Client);
+        });
+      });
+
+      // Also scan active clients for PT packages where trainerName / coachName / coachId matches this coach
+      try {
+        const activeSnap = await getDocs(query(collection(db, 'clients'), where('status', '==', 'Active')));
+        activeSnap.docs.forEach(d => {
+          if (directClientMap.has(d.id)) return;
+          const c = { ...d.data(), id: d.id } as Client;
+          const matchesProfile =
+            c.assignedCoachId === coachId ||
+            (coachCustomId && c.assignedCoachId === coachCustomId) ||
+            (coachNameLower && (
+              (c.assignedCoachName || '').toLowerCase() === coachNameLower ||
+              String((c as any).trainerName || '').toLowerCase() === coachNameLower ||
+              String((c as any).coach || '').toLowerCase() === coachNameLower ||
+              (c.staffAssignments?.coach?.staffName || '').toLowerCase() === coachNameLower
+            ));
+          const matchesPkg = (c.packages || []).some(p => {
+            const pCoachName = (p.trainerName || (p as any).coachName || '').toLowerCase();
+            const pCoachId = (p as any).coachId || '';
+            return (
+              (coachNameLower && pCoachName === coachNameLower) ||
+              pCoachId === coachId ||
+              (coachCustomId && pCoachId === coachCustomId)
+            );
+          });
+          if (matchesProfile || matchesPkg) {
+            directClientMap.set(d.id, c);
+          }
+        });
+      } catch {}
+
+      const clientIdSet = new Set<string>(directClientMap.keys());
       sessionDocs.forEach(d => {
         const cid = d.data().clientId as string;
         if (cid) clientIdSet.add(cid);
       });
-      assignedClientsSnap.docs.forEach(d => clientIdSet.add(d.id));
-      assignedAssessmentsSnap.docs.forEach(d => {
+      assignedAssessmentsSnap.docs.forEach((d: any) => {
         const cid = d.data().clientId as string;
         if (cid && cid !== 'guest') clientIdSet.add(cid);
       });
 
-      const clientIds = Array.from(clientIdSet);
-      if (clientIds.length === 0) {
-        setMyClients([]);
-        return;
-      }
-
-      const allClients: Client[] = [];
-      for (let i = 0; i < clientIds.length; i += 30) {
-        const batch = clientIds.slice(i, i + 30);
+      const missingIds = Array.from(clientIdSet).filter(id => !directClientMap.has(id));
+      for (let i = 0; i < missingIds.length; i += 30) {
+        const batch = missingIds.slice(i, i + 30);
         const clientsQ = query(collection(db, 'clients'), where('__name__', 'in', batch));
         const snap = await getDocs(clientsQ);
-        snap.docs.forEach(d => allClients.push({ ...d.data(), id: d.id } as Client));
+        snap.docs.forEach(d => directClientMap.set(d.id, { ...d.data(), id: d.id } as Client));
       }
-      setMyClients(allClients);
+      setMyClients(Array.from(directClientMap.values()));
     } catch (err) {
       console.error("Error fetching my clients:", err);
     }
