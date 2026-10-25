@@ -27,10 +27,21 @@ import {
 import { toast } from 'sonner';
 
 interface AudienceCounts {
+  droneShootList?: number;
   activeMembers: number;
   allMembers: number;
   leadsOnly: number;
   allContacts: number;
+}
+
+interface IncomingWhatsappReply {
+  id: string;
+  fromPhone: string;
+  memberName: string;
+  memberId: string;
+  memberStatus: string;
+  body: string;
+  createdAt: string;
 }
 
 interface PricingRates {
@@ -86,6 +97,7 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
 
   // Audience & Pricing state
   const [audienceCounts, setAudienceCounts] = useState<AudienceCounts>({
+    droneShootList: 194,
     activeMembers: 0,
     allMembers: 0,
     leadsOnly: 0,
@@ -101,8 +113,13 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
   // Broadcast composer state
   const [channel, setChannel] = useState<'whatsapp' | 'sms'>('whatsapp');
   const [audience, setAudience] = useState<
-    'active_members' | 'all_members' | 'leads_only' | 'all_contacts' | 'custom_list'
-  >('active_members');
+    | 'drone_shoot_list'
+    | 'active_members'
+    | 'all_members'
+    | 'leads_only'
+    | 'all_contacts'
+    | 'custom_list'
+  >(isInzan ? 'drone_shoot_list' : 'active_members');
   const [branchFilter, setBranchFilter] = useState<string>('ALL');
   const [customNumbers, setCustomNumbers] = useState('');
   const [title, setTitle] = useState('');
@@ -132,6 +149,7 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
     sampleErrors?: { phone: string; name: string; error: string }[];
   } | null>(null);
   const [history, setHistory] = useState<BroadcastHistoryItem[]>([]);
+  const [replies, setReplies] = useState<IncomingWhatsappReply[]>([]);
 
   const getAuthHeaders = useCallback(async () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -147,9 +165,10 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
     try {
       const headers = await getAuthHeaders();
       const query = branchFilter !== 'ALL' ? `?branch=${encodeURIComponent(branchFilter)}` : '';
-      const [cfgRes, histRes] = await Promise.all([
+      const [cfgRes, histRes, repRes] = await Promise.all([
         fetch(`/api/messaging/config${query}`, { headers }),
         fetch('/api/messaging/history', { headers }),
+        fetch('/api/messaging/replies', { headers }),
       ]);
 
       if (cfgRes.ok) {
@@ -178,6 +197,11 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
       if (histRes.ok) {
         const histData = await histRes.json();
         setHistory(histData.history || []);
+      }
+
+      if (repRes.ok) {
+        const repData = await repRes.json();
+        setReplies(repData.replies || []);
       }
     } catch (err) {
       console.error('[TwilioBroadcastManager] Error loading config:', err);
@@ -278,6 +302,9 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
 
   // Compute recipient count and estimated cost
   const selectedRecipientCount = React.useMemo(() => {
+    if (audience === 'drone_shoot_list') {
+      return audienceCounts.droneShootList || 194;
+    }
     if (audience === 'custom_list') {
       return customNumbers
         .split(/[\n,;]+/)
@@ -690,7 +717,7 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
                 className="h-8 text-xs gap-1.5 border-primary/30 text-primary"
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                Load &ldquo;Tomorrow&apos;s Event&rdquo; Template
+                Load &ldquo;Drone Shoot&rdquo; Template
               </Button>
             </div>
           </CardHeader>
@@ -734,6 +761,11 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
                   onChange={(e) => setAudience(e.target.value as any)}
                   className="w-full h-9 rounded-xl border border-input bg-background px-3 text-xs font-semibold"
                 >
+                  {(isInzan || (audienceCounts.droneShootList || 0) > 0) && (
+                    <option value="drone_shoot_list">
+                      Drone Shoot Selected List ({(audienceCounts.droneShootList || 194).toLocaleString()} numbers — Top 2 Test + 192 Members)
+                    </option>
+                  )}
                   <option value="active_members">
                     Active Members Only ({audienceCounts.activeMembers.toLocaleString()} numbers — Best Value)
                   </option>
@@ -939,6 +971,64 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Incoming Member Replies Inbox */}
+          <Card className="border-emerald-500/30 shadow-sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold flex items-center gap-1.5 text-emerald-500">
+                  <MessageSquare className="h-4 w-4" />
+                  Incoming Member WhatsApp Replies ({replies.length})
+                </CardTitle>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={loadConfigAndCounts}
+                  disabled={loadingConfig}
+                  className="h-7 px-2"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loadingConfig ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <CardDescription className="text-[11px]">
+                Real-time replies received on +1 (251) 325-4278 matched to INZAN Member IDs ($0.00 cost).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 max-h-[260px] overflow-y-auto">
+              {replies.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic py-4 text-center">
+                  No member WhatsApp replies received yet.
+                </p>
+              ) : (
+                replies.map((rep) => (
+                  <div
+                    key={rep.id}
+                    className="p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-xs space-y-1"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-foreground truncate">
+                        {rep.memberName}{' '}
+                        {rep.memberId && rep.memberId !== '—' ? (
+                          <span className="text-emerald-500 font-mono">(#{rep.memberId})</span>
+                        ) : null}
+                      </span>
+                      <span className="font-mono text-[11px] text-muted-foreground shrink-0">
+                        {rep.fromPhone}
+                      </span>
+                    </div>
+                    <p className="text-foreground font-medium whitespace-pre-wrap bg-background/60 p-2 rounded-lg border">
+                      {rep.body}
+                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
+                      <span>Status: {rep.memberStatus}</span>
+                      <span>{new Date(rep.createdAt).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 

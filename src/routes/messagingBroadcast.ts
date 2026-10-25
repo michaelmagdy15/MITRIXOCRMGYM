@@ -7,6 +7,7 @@ import { convertArabicNumerals } from '../utils/phoneUtils.js';
 
 export type BroadcastChannel = 'whatsapp' | 'sms';
 export type BroadcastAudience =
+  | 'drone_shoot_list'
   | 'active_members'
   | 'all_members'
   | 'leads_only'
@@ -332,13 +333,20 @@ async function collectAudienceRecipients(
 ): Promise<{
   recipients: NormalizedRecipient[];
   counts: {
+    droneShootList: number;
     activeMembers: number;
     allMembers: number;
     leadsOnly: number;
     allContacts: number;
   };
 }> {
-  const snap = await db.collection('clients').get();
+  const [snap, droneListDoc] = await Promise.all([
+    db.collection('clients').get(),
+    db.collection('secrets_config').doc('drone_shoot_list').get().catch(() => null),
+  ]);
+  const droneShootRecipients: NormalizedRecipient[] = Array.isArray(droneListDoc?.data()?.recipients)
+    ? droneListDoc!.data()!.recipients
+    : [];
 
   const activeMap = new Map<string, NormalizedRecipient>();
   const allMembersMap = new Map<string, NormalizedRecipient>();
@@ -400,7 +408,9 @@ async function collectAudienceRecipients(
   });
 
   let selectedRecipients: NormalizedRecipient[] = [];
-  if (audience === 'custom_list') {
+  if (audience === 'drone_shoot_list') {
+    selectedRecipients = droneShootRecipients;
+  } else if (audience === 'custom_list') {
     const customMap = new Map<string, NormalizedRecipient>();
     const rawTokens = String(customNumbersRaw || '')
       .split(/[\n,;]+/)
@@ -437,6 +447,7 @@ async function collectAudienceRecipients(
   return {
     recipients: selectedRecipients,
     counts: {
+      droneShootList: droneShootRecipients.length,
       activeMembers: activeMap.size,
       allMembers: allMembersMap.size,
       leadsOnly: leadsMap.size,
@@ -643,6 +654,11 @@ export function createMessagingBroadcastRouter(
         includeBrandHeader: true,
       });
 
+      const singleVarTemplates = new Set([
+        'HX2c97990b5cb922ec7a5f29d9a3c15e3f',
+        'HX3bd5f07da43f2ac87715c4819d67b125',
+      ]);
+
       const result = await sendTwilioMessage({
         accountSid: effectiveSid,
         authToken: effectiveToken,
@@ -653,10 +669,12 @@ export function createMessagingBroadcastRouter(
         body: formattedBody,
         contentSid: effectiveContentSid || undefined,
         contentVariables: effectiveContentSid
-          ? {
-              '1': ctx.callerName || 'Member',
-              '2': (message || formattedBody).trim(),
-            }
+          ? singleVarTemplates.has(effectiveContentSid)
+            ? { '1': ctx.callerName || 'there' }
+            : {
+                '1': ctx.callerName || 'there',
+                '2': (message || formattedBody).trim(),
+              }
           : undefined,
       });
 
@@ -709,6 +727,7 @@ export function createMessagingBroadcastRouter(
 
       const effectiveChannel: BroadcastChannel = channel === 'sms' ? 'sms' : 'whatsapp';
       const effectiveAudience: BroadcastAudience = [
+        'drone_shoot_list',
         'active_members',
         'all_members',
         'leads_only',
@@ -716,7 +735,7 @@ export function createMessagingBroadcastRouter(
         'custom_list',
       ].includes(audience)
         ? audience
-        : 'active_members';
+        : 'drone_shoot_list';
 
       const effectiveBrand =
         (overrideBrandName || saved.brandName || getDefaultBrandName(ctx.tenantId)).trim();
@@ -829,6 +848,11 @@ export function createMessagingBroadcastRouter(
 
             let lastRes: Awaited<ReturnType<typeof sendTwilioMessage>> | null = null;
             for (const senderFrom of candidateSenders) {
+              const singleVarTemplates = new Set([
+                'HX2c97990b5cb922ec7a5f29d9a3c15e3f',
+                'HX3bd5f07da43f2ac87715c4819d67b125',
+              ]);
+
               const sendRes = await sendTwilioMessage({
                 accountSid: saved.accountSid,
                 authToken: saved.authToken,
@@ -839,10 +863,12 @@ export function createMessagingBroadcastRouter(
                 body: personalizedBody,
                 contentSid: effectiveContentSid || undefined,
                 contentVariables: effectiveContentSid
-                  ? {
-                      '1': r.firstName || r.name || 'Member',
-                      '2': String(message).trim(),
-                    }
+                  ? singleVarTemplates.has(effectiveContentSid)
+                    ? { '1': r.firstName || r.name || 'there' }
+                    : {
+                        '1': r.firstName || r.name || 'there',
+                        '2': String(message).trim(),
+                      }
                   : undefined,
               });
               lastRes = sendRes;
@@ -947,12 +973,157 @@ export function createMessagingBroadcastRouter(
   });
 
   /**
-   * POST /api/messaging/webhook-noreply
-   * Public Twilio inbound webhook that returns an empty <Response></Response> TwiML
-   * so inbound replies to the announcement-only WhatsApp/SMS channel are silently ignored
-   * without triggering any reply message or outbound charge.
+   * GET /api/messaging/replies
+   * Fetches inbound WhatsApp/SMS replies directly from Twilio API + Firestore whatsappReplies,
+   * matching each sender phone number against the tenant's member database (Name + Member ID).
    */
-  router.post('/webhook-noreply', (_req, res) => {
+  router.get('/replies', requireAuthMiddleware, async (req, res) => {
+    try {
+      const ctx = await ensureAdminOrManager(req, res);
+      if (!ctx) return;
+
+      const saved = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
+      const clientSnap = await ctx.db.collection('clients').get();
+      const phoneToMember = new Map<
+        string,
+        { name: string; memberId: string; status: string }
+      >();
+
+      clientSnap.forEach((docSnap) => {
+        const d = docSnap.data();
+        const p =
+          normalizeBroadcastPhone(d.phone) ||
+          normalizeBroadcastPhone(d.normalized_phone) ||
+          normalizeBroadcastPhone(d.backupPhone);
+        if (p) {
+          phoneToMember.set(p, {
+            name: String(d.name || 'Member').trim(),
+            memberId: String(d.memberId ?? d.customId ?? d.code ?? '').trim(),
+            status: String(d.status || 'Active').trim(),
+          });
+        }
+      });
+
+      const repliesMap = new Map<
+        string,
+        {
+          id: string;
+          fromPhone: string;
+          memberName: string;
+          memberId: string;
+          memberStatus: string;
+          body: string;
+          createdAt: string;
+        }
+      >();
+
+      // 1. Read stored webhook replies from Firestore
+      const storedSnap = await ctx.db
+        .collection('whatsappReplies')
+        .orderBy('createdAt', 'desc')
+        .limit(100)
+        .get()
+        .catch(() => null);
+
+      if (storedSnap) {
+        storedSnap.forEach((d) => {
+          const data = d.data();
+          const normP = normalizeBroadcastPhone(data.fromPhone) || String(data.fromPhone || '');
+          const matched = phoneToMember.get(normP);
+          repliesMap.set(d.id, {
+            id: d.id,
+            fromPhone: normP,
+            memberName: matched?.name || data.profileName || 'Unknown / Guest',
+            memberId: matched?.memberId || '—',
+            memberStatus: matched?.status || '—',
+            body: String(data.body || ''),
+            createdAt: String(data.createdAt || new Date().toISOString()),
+          });
+        });
+      }
+
+      // 2. Also pull live inbound messages directly from Twilio Messages API so zero replies are ever missed
+      if (saved.accountSid && saved.authToken) {
+        const authHeader =
+          'Basic ' + Buffer.from(`${saved.accountSid}:${saved.authToken}`).toString('base64');
+        const twilioRes = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(
+            saved.accountSid
+          )}/Messages.json?PageSize=80`,
+          { headers: { Authorization: authHeader } }
+        ).catch(() => null);
+
+        if (twilioRes && twilioRes.ok) {
+          const twilioData: any = await twilioRes.json().catch(() => ({}));
+          const inboundMsgs = (twilioData.messages || []).filter(
+            (m: any) =>
+              m.direction === 'inbound' &&
+              String(m.from || '').startsWith('whatsapp:') &&
+              !String(m.body || '').includes('Your WhatsApp code:')
+          );
+          for (const m of inboundMsgs) {
+            const rawFrom = String(m.from || '').replace(/^whatsapp:/i, '');
+            const normP = normalizeBroadcastPhone(rawFrom) || rawFrom;
+            const matched = phoneToMember.get(normP);
+            repliesMap.set(m.sid, {
+              id: m.sid,
+              fromPhone: normP,
+              memberName: matched?.name || 'Member / Test Phone',
+              memberId: matched?.memberId || '—',
+              memberStatus: matched?.status || '—',
+              body: String(m.body || ''),
+              createdAt: m.date_sent
+                ? new Date(m.date_sent).toISOString()
+                : new Date().toISOString(),
+            });
+          }
+        }
+      }
+
+      const replies = Array.from(repliesMap.values()).sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt)
+      );
+
+      return res.json({ replies });
+    } catch (err: any) {
+      console.error('[API Messaging] Replies error:', err);
+      return res.status(500).json({ error: err.message || 'Failed to load incoming replies' });
+    }
+  });
+
+  /**
+   * POST /api/messaging/webhook-noreply
+   * Public Twilio inbound webhook that records the incoming member reply in Firestore
+   * and returns an empty <Response></Response> TwiML so no automated reply is sent back.
+   */
+  router.post('/webhook-noreply', async (req, res) => {
+    try {
+      const db = await getDbForRequest(req);
+      const body = req.body || {};
+      const messageSid = String(body.MessageSid || body.SmsSid || `in-${Date.now()}`);
+      const rawFrom = String(body.From || '').replace(/^whatsapp:/i, '');
+      const fromPhone = normalizeBroadcastPhone(rawFrom) || rawFrom;
+      const text = String(body.Body || '').trim();
+      const profileName = String(body.ProfileName || '').trim();
+
+      if (text) {
+        await db
+          .collection('whatsappReplies')
+          .doc(messageSid)
+          .set(
+            {
+              id: messageSid,
+              fromPhone,
+              profileName,
+              body: text,
+              createdAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+      }
+    } catch (err) {
+      console.error('[API Messaging] Webhook save warn:', err);
+    }
     res.type('text/xml').status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
   });
 
