@@ -42,6 +42,7 @@ import PricingDiscountControls, { PricingControlsState, DEFAULT_PRICING_STATE } 
 import { InzanMemberShow } from './components/InzanMemberShow';
 import { AdjustPackageDatesDialog, canOverridePackageDates } from './components/AdjustPackageDatesDialog';
 import { addAuditLog } from './services/auditService';
+import { resolveCoachAssignmentInfo, notifyCoachClientAssigned } from './services/transactionService';
 import { openClickToCallModal } from './services/clickToCallService';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
 import { canReassignMemberSalesRep } from './utils/permissions';
@@ -102,7 +103,69 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can, packages } = useAppContext();
+  const { currentUser, users, coaches, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can, packages } = useAppContext();
+
+  const availableCoaches = React.useMemo(() => {
+    const map = new Map<string, { id: string; userId?: string; coachDocId?: string; coachId?: string; name: string; branch?: string }>();
+    (coaches || []).forEach(c => {
+      if (c.active === false) return;
+      const name = (c.name || '').trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      map.set(key, {
+        id: c.userId || c.id,
+        userId: c.userId,
+        coachDocId: c.id,
+        coachId: c.coachId,
+        name,
+        branch: (c as any).branch,
+      });
+    });
+    (users || []).forEach(u => {
+      if (u.status === 'nonworking') return;
+      const role = (u.role || '').toLowerCase();
+      const dept = ((u as any).department || '').toLowerCase();
+      if (role !== 'coach' && role !== 'trainer' && role !== 'fitness_manager' && !u.isFitnessManager && dept !== 'fitness') {
+        return;
+      }
+      const name = (u.name || u.email || '').trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      const existing = map.get(key);
+      if (existing) {
+        map.set(key, {
+          ...existing,
+          id: u.id || existing.id,
+          userId: u.id || existing.userId,
+          coachId: u.coachId || existing.coachId,
+          branch: existing.branch || u.branch,
+        });
+      } else {
+        map.set(key, {
+          id: u.id,
+          userId: u.id,
+          coachId: u.coachId,
+          name,
+          branch: u.branch,
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [coaches, users]);
+
+  const isPtPackageSelection = React.useCallback((pkgName: string, categoryFilter?: string) => {
+    if (categoryFilter === 'Personal Training') return true;
+    if (!pkgName) return false;
+    if (resolvePaymentCategory(pkgName) === 'PT' || pkgName.toLowerCase().includes('pt')) return true;
+    const matchedPkg = packages.find(p => p.name === pkgName);
+    if (!matchedPkg) return false;
+    return (
+      getEffectivePackageCategory(matchedPkg) === 'Personal Training' ||
+      matchedPkg.type === 'Private' ||
+      String(matchedPkg.category || '').toLowerCase().includes('pt') ||
+      String(matchedPkg.category || '').toLowerCase().includes('personal training')
+    );
+  }, [packages]);
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => {
       const active = p.isActive !== false && p.is_active !== false && !p.archivedAt;
@@ -342,6 +405,10 @@ export default function Clients() {
       const c = clients.find(cl => cl.id === addPackageDialogClientId);
       const rep = c?.assignedTo || c?.salesRep;
       if (rep && rep !== 'unassigned') setAddPackageSalesRep(rep);
+      const existingCoach = c?.assignedCoachName || (c as any)?.trainerName || (c as any)?.coach || c?.staffAssignments?.coach?.staffName || '';
+      if (existingCoach && existingCoach !== 'unassigned') {
+        setAddPackageCoachName(existingCoach);
+      }
     }
   }, [addPackageDialogClientId, clients]);
 
@@ -467,6 +534,14 @@ export default function Clients() {
         const repId = newMemberAssignedTo !== 'unassigned' && newMemberAssignedTo ? newMemberAssignedTo : (currentUser?.id || '');
         const repName = users.find(u => u.id === repId)?.name || '';
 
+        const selectedEnrollCoach = availableCoaches.find(
+          c => c.name.toLowerCase() === (enrollCoachName || '').toLowerCase() || c.id === enrollCoachName
+        );
+        const cleanEnrollCoachName =
+          enrollCoachName && enrollCoachName !== 'unassigned'
+            ? (selectedEnrollCoach?.name || enrollCoachName)
+            : undefined;
+
         await processPaymentTransaction({
           clientId: targetClientId,
           clientName: newMemberName,
@@ -479,7 +554,8 @@ export default function Clients() {
           instapayRef: enrollPaymentMethod === 'Instapay' ? enrollInstapayRef : undefined,
           packageType: enrollPackageName,
           packageCategory: resolvePaymentCategory(enrollPackageName),
-          coachName: enrollCoachName || undefined,
+          coachId: selectedEnrollCoach?.id,
+          coachName: cleanEnrollCoachName,
           notes: enrollNotes || undefined,
           receiptSerial: enrollReceiptSerial.trim() || undefined,
           sales_rep_id: repId,
@@ -767,6 +843,13 @@ export default function Clients() {
 
     // Check if client already has an active package of this type -> treat as renewal
     const isAlreadyActive = (client.packages || []).some(p => p.status === 'Active' && p.packageName === pkg.name);
+    const selectedAddCoach = availableCoaches.find(
+      c => c.name.toLowerCase() === (addPackageCoachName || '').toLowerCase() || c.id === addPackageCoachName
+    );
+    const cleanAddCoachName =
+      addPackageCoachName && addPackageCoachName !== 'unassigned'
+        ? (selectedAddCoach?.name || addPackageCoachName)
+        : undefined;
 
     try {
       if (addPackageRecordPayment) {
@@ -793,7 +876,8 @@ export default function Clients() {
           instapayRef: addPackageMethod === 'Instapay' ? addPackageInstapayRef : undefined,
           packageType: pkg.name,
           packageCategory: resolvePaymentCategory(pkg.name),
-          coachName: addPackageCoachName || undefined,
+          coachId: selectedAddCoach?.id,
+          coachName: cleanAddCoachName,
           notes: addPackageNotes || undefined,
           sales_rep_id: repId,
           salesName: repName,
@@ -817,6 +901,11 @@ export default function Clients() {
         const endDateObj = safeAddDays(startDateObj, pkg.expiryDays);
         const nowIso = new Date().toISOString();
         const isSecondaryPkg = pkg.hierarchy === 'Secondary' || pkg.type === 'Private' || String(pkg.category || '').toLowerCase().includes('pt');
+        const resolvedCoachInfo = cleanAddCoachName
+          ? await resolveCoachAssignmentInfo(cleanAddCoachName, selectedAddCoach?.id)
+          : null;
+        const effectiveCoachId = resolvedCoachInfo?.effectiveCoachId || selectedAddCoach?.id || cleanAddCoachName;
+        const effectiveCoachName = resolvedCoachInfo?.coachName || cleanAddCoachName;
         const newPkg: ClientPackage = {
           id: Math.random().toString(36).substr(2, 9),
           packageName: pkg.name,
@@ -825,6 +914,9 @@ export default function Clients() {
           sessionsTotal: pkg.sessions,
           sessionsRemaining: pkg.sessions,
           status: 'Active',
+          trainerName: effectiveCoachName || undefined,
+          coachName: effectiveCoachName || undefined,
+          coachId: effectiveCoachId || undefined,
           createdAt: nowIso,
           createdBy: currentUser?.name || currentUser?.email || 'Staff',
           createdByName: currentUser?.name || currentUser?.email || 'Staff',
@@ -832,10 +924,42 @@ export default function Clients() {
         } as any;
         await updateClient(client.id, {
           ...(isSecondaryPkg ? { secondaryPackageType: pkg.name } : { packageType: pkg.name, membershipExpiry: endDateObj.toISOString() }),
+          ...(effectiveCoachName ? {
+            assignedCoachId: effectiveCoachId,
+            assignedCoachName: effectiveCoachName,
+            trainerName: effectiveCoachName,
+            coach: effectiveCoachName,
+            staffAssignments: {
+              ...(client.staffAssignments || {}),
+              coach: {
+                staffId: effectiveCoachId || effectiveCoachName,
+                staffName: effectiveCoachName,
+              },
+            },
+          } : {}),
           packages: [...(client.packages || []), newPkg]
         } as any);
-        await addAuditLog('CREATE', 'PACKAGE_RECORD', client.id, `Added ${isSecondaryPkg ? 'Secondary' : 'Primary'} package "${pkg.name}" by ${currentUser?.name || 'Staff'}`, currentUser?.name);
-        await addComment(client.id, `Package "${pkg.name}" added (complimentary/unpaid) by ${currentUser?.name || 'Staff'}.`, currentUser?.name);
+        if (effectiveCoachName) {
+          await notifyCoachClientAssigned({
+            coachId: effectiveCoachId,
+            coachUserId: resolvedCoachInfo?.coachUserId || selectedAddCoach?.userId,
+            coachDocId: resolvedCoachInfo?.coachDocId || selectedAddCoach?.coachDocId,
+            coachCustomId: resolvedCoachInfo?.coachCustomId || selectedAddCoach?.coachId,
+            coachName: effectiveCoachName,
+            clientId: client.id,
+            clientName: client.name,
+            memberId: client.memberId,
+            packageName: pkg.name,
+            sessionsTotal: pkg.sessions,
+            branch: client.branch,
+            assignedBy: currentUser?.name || 'Staff',
+          });
+        }
+        await addAuditLog('CREATE', 'PACKAGE_RECORD', client.id, `Added ${isSecondaryPkg ? 'Secondary' : 'Primary'} package "${pkg.name}"${effectiveCoachName ? ` (Coach: ${effectiveCoachName})` : ''} by ${currentUser?.name || 'Staff'}`, currentUser?.name);
+        await addComment(client.id, `Package "${pkg.name}" added (complimentary/unpaid)${effectiveCoachName ? ` • Assigned Coach: ${effectiveCoachName}` : ''} by ${currentUser?.name || 'Staff'}.`, currentUser?.name);
+      }
+      if (cleanAddCoachName) {
+        toast.success(`Assigned Coach ${cleanAddCoachName} notified and ${client.name} added to their clients.`);
       }
     } catch (error: any) {
       console.error("Error adding package:", error);
@@ -1667,12 +1791,26 @@ export default function Clients() {
 
     // Coach filter
     if (deferredFilterCoach && deferredFilterCoach !== 'All') {
+      const matchedCoach = availableCoaches.find(
+        c => c.id === deferredFilterCoach || c.name.toLowerCase() === deferredFilterCoach.toLowerCase()
+      );
       const coachUser = users.find(u => u.id === deferredFilterCoach);
-      const coachNameLower = coachUser?.name?.toLowerCase() || '';
+      const coachNameLower = (matchedCoach?.name || coachUser?.name || deferredFilterCoach).toLowerCase();
+      const coachIdCandidate = matchedCoach?.id || coachUser?.id || deferredFilterCoach;
       filtered = coachNameLower
         ? filtered.filter(m => {
+            if (m.assignedCoachId && (m.assignedCoachId === coachIdCandidate || m.assignedCoachId === matchedCoach?.coachDocId || m.assignedCoachId === matchedCoach?.coachId)) {
+              return true;
+            }
+            if (m.assignedCoachName && m.assignedCoachName.toLowerCase() === coachNameLower) return true;
+            if ((m as any).trainerName && String((m as any).trainerName).toLowerCase() === coachNameLower) return true;
+            if ((m as any).coach && String((m as any).coach).toLowerCase() === coachNameLower) return true;
+            if (m.staffAssignments?.coach?.staffName && m.staffAssignments.coach.staffName.toLowerCase() === coachNameLower) return true;
             if (!m.packages) return false;
-            return m.packages.some(pkg => pkg.trainerName && pkg.trainerName.toLowerCase() === coachNameLower);
+            return m.packages.some(pkg => {
+              const tName = (pkg.trainerName || (pkg as any).coachName || '').toLowerCase();
+              return tName === coachNameLower || (pkg as any).coachId === coachIdCandidate;
+            });
           })
         : [];
     }
@@ -2537,17 +2675,24 @@ export default function Clients() {
                       </div>
                     )}
 
-                    {enrollPackageName && (resolvePaymentCategory(enrollPackageName) === 'PT' || enrollPackageName.toLowerCase().includes('pt')) && (
+                    {enrollPackageName && isPtPackageSelection(enrollPackageName) && (
                       <div className="space-y-2">
                         <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Assigned Coach (PT)</Label>
-                        <Select value={enrollCoachName} onValueChange={(val) => setEnrollCoachName(val || '')}>
+                        <Select
+                          value={enrollCoachName || 'unassigned'}
+                          onValueChange={(val) => setEnrollCoachName(val === 'unassigned' ? '' : (val || ''))}
+                        >
                           <SelectTrigger className="h-11 rounded-xl bg-background/80">
-                            <SelectValue placeholder="Select Coach (optional)" />
+                            <SelectValue placeholder="Select Coach (optional)">
+                              {enrollCoachName && enrollCoachName !== 'unassigned' ? enrollCoachName : 'Select Coach (optional)'}
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">None / Unassigned</SelectItem>
-                            {users.filter(u => u.role?.toLowerCase() === 'coach' || u.role?.toLowerCase() === 'trainer').map(c => (
-                              <SelectItem key={c.id} value={c.name || c.email}>{c.name || c.email}</SelectItem>
+                            <SelectItem value="unassigned">None / Unassigned</SelectItem>
+                            {availableCoaches.map(c => (
+                              <SelectItem key={c.id} value={c.name}>
+                                {c.name}{c.branch ? ` (${c.branch})` : ''}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -2720,8 +2865,8 @@ export default function Clients() {
               onChange={(e) => setFilterCoach(e.target.value)}
             >
               <option value="All">All Coaches</option>
-              {users.filter(u => u.role?.toLowerCase() === 'coach' || u.role?.toLowerCase() === 'trainer').map(coach => (
-                <option key={coach.id} value={coach.id}>{coach.name || coach.email}</option>
+              {availableCoaches.map(coach => (
+                <option key={coach.id} value={coach.id}>{coach.name}</option>
               ))}
             </select>
           </div>
@@ -6587,17 +6732,24 @@ export default function Clients() {
 
               {/* Right Column: Coach assignment & Payment settlement */}
               <div className="space-y-4">
-                {addPackageName && (resolvePaymentCategory(addPackageName) === 'PT' || addPackageName.toLowerCase().includes('pt')) && (
+                {(addPackageName || addPkgCategoryFilter === 'Personal Training') && isPtPackageSelection(addPackageName, addPkgCategoryFilter) && (
                   <div className="space-y-1.5">
                     <Label className="text-sm font-semibold">Assigned Coach (PT)</Label>
-                    <Select value={addPackageCoachName} onValueChange={(val) => setAddPackageCoachName(val || '')}>
+                    <Select
+                      value={addPackageCoachName || 'unassigned'}
+                      onValueChange={(val) => setAddPackageCoachName(val === 'unassigned' ? '' : (val || ''))}
+                    >
                       <SelectTrigger className="h-11 rounded-xl">
-                        <SelectValue placeholder="Select Coach" />
+                        <SelectValue placeholder="Select Coach">
+                          {addPackageCoachName && addPackageCoachName !== 'unassigned' ? addPackageCoachName : 'Select Coach'}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Unassigned</SelectItem>
-                        {users.filter(u => u.role?.toLowerCase() === 'coach' || u.role?.toLowerCase() === 'trainer').map(c => (
-                          <SelectItem key={c.id} value={c.name || c.email}>{c.name || c.email}</SelectItem>
+                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                        {availableCoaches.map(c => (
+                          <SelectItem key={c.id} value={c.name}>
+                            {c.name}{c.branch ? ` (${c.branch})` : ''}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

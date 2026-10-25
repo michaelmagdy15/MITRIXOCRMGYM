@@ -551,6 +551,8 @@ export interface Client {
   typeOfClient?: string;
   salesName?: string;
   salesRep?: string;
+  assignedCoachId?: string;
+  assignedCoachName?: string;
   
   // Gamified Fitness & AI Health Profile
   gender?: Gender;
