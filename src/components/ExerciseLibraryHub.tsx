@@ -102,11 +102,11 @@ const BUILTIN_TEMPLATES: WorkoutTemplateDoc[] = [
     description: 'Planche leans, muscle-up progressions, front lever core & strict bodyweight strength.',
     isSystem: true,
     items: [
-      { name: 'Planche Lean (Floor / Parallettes)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 15, targetWeightKg: 0, notes: '15s hold per set with protracted scapulae' },
-      { name: 'Strict Bar Muscle-Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 5, targetWeightKg: 0, notes: 'Explosive pull to hip' },
-      { name: 'Tuck Front Lever Hold', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 15, targetWeightKg: 0, notes: 'Depress scapulae, locked elbows' },
-      { name: 'Handstand Push-Up (Wall-Assisted)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 8, targetWeightKg: 0 },
-      { name: 'L-Sit (Floor / Parallettes)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 20, targetWeightKg: 0, notes: '20s hold' },
+      { name: 'Lean Planche', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 15, targetWeightKg: 0, notes: '15s hold per set with protracted scapulae' },
+      { name: 'Muscle Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 5, targetWeightKg: 0, notes: 'Explosive pull to hip' },
+      { name: 'Front Lever', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 15, targetWeightKg: 0, notes: 'Depress scapulae, locked elbows' },
+      { name: 'Handstand Push-Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 8, targetWeightKg: 0 },
+      { name: 'L-Sit On Floor', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 20, targetWeightKg: 0, notes: '20s hold' },
     ],
   },
   {
@@ -130,9 +130,9 @@ const BUILTIN_TEMPLATES: WorkoutTemplateDoc[] = [
     items: [
       { name: 'Barbell Full Squat', category: 'Legs', equipment: 'Barbell', targetSets: 4, targetReps: 6, targetWeightKg: 80 },
       { name: 'Barbell Romanian Deadlift', category: 'Legs', equipment: 'Barbell', targetSets: 4, targetReps: 8, targetWeightKg: 70 },
-      { name: 'Bodyweight Pistol Squat', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 6, targetWeightKg: 0, notes: 'Each leg' },
-      { name: 'Nordic Hamstring Curl', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 6, targetWeightKg: 0 },
-      { name: 'Hanging Straight Leg Raise (Toes-to-Bar)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 12, targetWeightKg: 0 },
+      { name: 'Single Leg Squat (Pistol) Male', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 6, targetWeightKg: 0, notes: 'Each leg' },
+      { name: 'Suspended Split Squat', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 8, targetWeightKg: 0 },
+      { name: 'Vertical Leg Raise (On Parallel Bars)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 12, targetWeightKg: 0 },
     ],
   },
 ];

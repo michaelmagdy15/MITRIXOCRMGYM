@@ -105,38 +105,38 @@ const BUILTIN_WORKOUT_TEMPLATES: WorkoutTemplateRecord[] = [
     description: 'Straight-arm scapular strength, Planche progressions, Front Lever holds & L-Sit.',
     isBuiltIn: true,
     items: [
-      { name: 'Planche Lean (Floor / Parallettes)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 15, targetWeightKg: 0, notes: '15s hold per set, protract scapulae' },
-      { name: 'Tuck Planche Hold', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 10, targetWeightKg: 0, notes: '10s hold with locked elbows' },
-      { name: 'Tuck Front Lever Hold', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 12, targetWeightKg: 0, notes: 'Depress scapulae, flat torso' },
-      { name: 'Pseudo Planche Push-Up (PPPU)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 8, targetWeightKg: 0 },
-      { name: 'L-Sit Hold (Floor / Parallettes / Bars)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 15, targetWeightKg: 0, notes: '15s hold, knees locked' }
+      { name: 'Lean Planche', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 15, targetWeightKg: 0, notes: '15s hold per set, protract scapulae' },
+      { name: 'Frog Planche', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 10, targetWeightKg: 0, notes: '10s hold with locked elbows' },
+      { name: 'Front Lever', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 12, targetWeightKg: 0, notes: 'Depress scapulae, flat torso' },
+      { name: 'Full Planche Push-Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 8, targetWeightKg: 0 },
+      { name: 'L-Sit On Floor', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 15, targetWeightKg: 0, notes: '15s hold, knees locked' }
     ]
   },
   {
     id: 'builtin_cali_upper_rings',
     name: 'Calisthenics Upper & Rings',
     category: 'Calisthenics',
-    description: 'Explosive bar & ring upper body skills: Muscle-Ups, HSPU, RTO Dips & Dragon Flags.',
+    description: 'Explosive bar & ring upper body skills: Muscle-Ups, HSPU, Ring Dips & Archer Pull-Ups.',
     isBuiltIn: true,
     items: [
-      { name: 'Bar Muscle-Up (Strict / Kipping)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 5, targetWeightKg: 0 },
-      { name: 'Chest-to-Wall Handstand Push-Up (HSPU)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 6, targetWeightKg: 0 },
-      { name: 'Ring Dip (RTO Top Support)', category: 'Calisthenics', equipment: 'Bands & Rings', targetSets: 3, targetReps: 8, targetWeightKg: 0 },
-      { name: 'Archer Pull-Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 6, targetWeightKg: 0 },
-      { name: 'Dragon Flag (Full / Negatives)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 6, targetWeightKg: 0 }
+      { name: 'Muscle Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 5, targetWeightKg: 0 },
+      { name: 'Handstand Push-Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 6, targetWeightKg: 0 },
+      { name: 'Ring Dips', category: 'Calisthenics', equipment: 'Bands & Rings', targetSets: 3, targetReps: 8, targetWeightKg: 0 },
+      { name: 'Archer Pull Up', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 6, targetWeightKg: 0 },
+      { name: 'Back Lever', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 10, targetWeightKg: 0 }
     ]
   },
   {
     id: 'builtin_cali_legs',
     name: 'Calisthenics Lower Body & Mobility',
     category: 'Calisthenics',
-    description: 'Single-leg knee & hamstring mastery: Pistol Squats, Shrimp Squats & Nordic Curls.',
+    description: 'Single-leg knee & hamstring mastery: Pistol Squats, Suspended Split Squats & Leg Raises.',
     isBuiltIn: true,
     items: [
-      { name: 'Pistol Squat (Single-Leg Squat)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 6, targetWeightKg: 0 },
-      { name: 'Nordic Hamstring Curl', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 6, targetWeightKg: 0 },
-      { name: 'Shrimp Squat (Beginner / Intermediate / Advanced)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 8, targetWeightKg: 0 },
-      { name: 'Sissy Squat (Bodyweight Quad Isolation)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 10, targetWeightKg: 0 }
+      { name: 'Single Leg Squat (Pistol) Male', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 4, targetReps: 6, targetWeightKg: 0 },
+      { name: 'Kettlebell Pistol Squat', category: 'Calisthenics', equipment: 'Kettlebell', targetSets: 4, targetReps: 6, targetWeightKg: 8 },
+      { name: 'Suspended Split Squat', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 8, targetWeightKg: 0 },
+      { name: 'Vertical Leg Raise (On Parallel Bars)', category: 'Calisthenics', equipment: 'Bodyweight', targetSets: 3, targetReps: 10, targetWeightKg: 0 }
     ]
   },
   {
