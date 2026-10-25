@@ -1,0 +1,46 @@
+# EAS Build Ignore File
+# Excludes unnecessary files to reduce archive size and speed up upload times
+
+# Dependencies & build caches
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Store assets & marketing materials (not needed inside mobile bundle)
+screenshots/
+assets/**/*.psd
+assets/**/*.ai
+
+# Local development and documentation
+scripts/
+*.md
+LICENSE
+
+# Native artifacts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+.DS_Store
+
+# Metro & Debug
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Local env files
+.env*.local
+
+# Typescript
+*.tsbuildinfo
+
+# Generated native folders (managed workflow)
+/ios
+/android
