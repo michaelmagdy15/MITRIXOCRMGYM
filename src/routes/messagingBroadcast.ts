@@ -848,9 +848,14 @@ export function createMessagingBroadcastRouter(
 
             let lastRes: Awaited<ReturnType<typeof sendTwilioMessage>> | null = null;
             for (const senderFrom of candidateSenders) {
+              const zeroVarTemplates = new Set([
+                'HX2cc777de1ab815dcf6d0c674d7f6fb0f',
+                'HX79b370f66d97044b404ab6deaa63e8aa',
+              ]);
               const singleVarTemplates = new Set([
                 'HX2c97990b5cb922ec7a5f29d9a3c15e3f',
                 'HX3bd5f07da43f2ac87715c4819d67b125',
+                'HXc36d1fed61a4d61598725c9aeeb09a46',
               ]);
 
               const sendRes = await sendTwilioMessage({
@@ -863,7 +868,9 @@ export function createMessagingBroadcastRouter(
                 body: personalizedBody,
                 contentSid: effectiveContentSid || undefined,
                 contentVariables: effectiveContentSid
-                  ? singleVarTemplates.has(effectiveContentSid)
+                  ? zeroVarTemplates.has(effectiveContentSid)
+                    ? undefined
+                    : singleVarTemplates.has(effectiveContentSid)
                     ? { '1': r.firstName || r.name || 'there' }
                     : {
                         '1': r.firstName || r.name || 'there',
@@ -1207,11 +1214,115 @@ export function createMessagingBroadcastRouter(
         }
       }
 
+      // Check & auto-trigger pending auto-broadcast when Meta approves any Drone Shoot template
+      const watchRef = ctx.db.collection('secrets_config').doc('pending_auto_broadcast');
+      const watchSnap = await watchRef.get().catch(() => null);
+      let autoWatcher: any = watchSnap?.exists ? watchSnap.data() : null;
+
+      const candidateMap = new Map<string, { vars: number; name: string }>([
+        ['HX2c97990b5cb922ec7a5f29d9a3c15e3f', { vars: 1, name: 'inzan_drone_shoot_notice_v2' }],
+        ['HX3bd5f07da43f2ac87715c4819d67b125', { vars: 1, name: 'inzan_drone_shoot_notice_v1' }],
+        ['HXc36d1fed61a4d61598725c9aeeb09a46', { vars: 1, name: 'inzan_schedule_notice_oct26' }],
+        ['HX2cc777de1ab815dcf6d0c674d7f6fb0f', { vars: 0, name: 'inzan_drone_shoot_static_oct26' }],
+        ['HX79b370f66d97044b404ab6deaa63e8aa', { vars: 0, name: 'inzan_athletics_monday_oct26' }],
+      ]);
+
+      const approvedTpl = templates.find(
+        (t) => t.status === 'approved' && candidateMap.has(t.sid)
+      );
+
+      if (approvedTpl && autoWatcher?.enabled && autoWatcher?.status === 'watching') {
+        const candMeta = candidateMap.get(approvedTpl.sid)!;
+        const locked = await ctx.db
+          .runTransaction(async (tx) => {
+            const d = await tx.get(watchRef);
+            if (d.data()?.status !== 'watching') return false;
+            tx.update(watchRef, {
+              status: 'sending',
+              approvedSid: approvedTpl.sid,
+              approvedName: candMeta.name,
+              sendingStartedAt: new Date().toISOString(),
+            });
+            return true;
+          })
+          .catch(() => false);
+
+        if (locked) {
+          await ctx.db
+            .collection('secrets_config')
+            .doc('twilio')
+            .set(
+              {
+                contentSid: approvedTpl.sid,
+                updatedAt: new Date().toISOString(),
+                updatedBy: 'Auto-Approval Watcher',
+              },
+              { merge: true }
+            );
+
+          const alreadyDelivered = new Set(
+            deliverySummary.deliveredRecipients.map((r) => r.to)
+          );
+          const { recipients } = await collectAudienceRecipients(
+            ctx.db,
+            'drone_shoot_list'
+          );
+          const remaining = recipients.filter((r) => !alreadyDelivered.has(r.phone));
+
+          let sentCount = 0;
+          let failedCount = 0;
+          const BATCH_SIZE = 15;
+          for (let i = 0; i < remaining.length; i += BATCH_SIZE) {
+            const batch = remaining.slice(i, i + BATCH_SIZE);
+            await Promise.all(
+              batch.map(async (r) => {
+                const resSend = await sendTwilioMessage({
+                  accountSid: saved.accountSid,
+                  authToken: saved.authToken,
+                  to: r.phone,
+                  channel: 'whatsapp',
+                  from: saved.whatsappFrom || '+12513254278',
+                  messagingServiceSid: saved.messagingServiceSid,
+                  body: approvedTpl.body,
+                  contentSid: approvedTpl.sid,
+                  contentVariables:
+                    candMeta.vars === 1
+                      ? { '1': r.firstName || r.name || 'there' }
+                      : undefined,
+                });
+                if (resSend.ok) sentCount++;
+                else failedCount++;
+              })
+            );
+          }
+
+          const nowIso = new Date().toISOString();
+          await watchRef.set(
+            {
+              status: 'completed',
+              completedAt: nowIso,
+              sentCount,
+              failedCount,
+            },
+            { merge: true }
+          );
+          autoWatcher = {
+            ...autoWatcher,
+            status: 'completed',
+            approvedSid: approvedTpl.sid,
+            completedAt: nowIso,
+            sentCount,
+            failedCount,
+          };
+        }
+      }
+
       return res.json({
         configured: true,
         activeContentSid: saved.contentSid || '',
         templates,
         deliverySummary,
+        autoWatcher,
       });
     } catch (err: any) {
       console.error('[API Messaging] Live status error:', err);

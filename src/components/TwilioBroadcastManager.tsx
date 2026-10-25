@@ -176,6 +176,15 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
       deliveredRecipients: Array<{ to: string; status: string; dateSent: string }>;
       failedSample: Array<{ to: string; status: string; errorCode: number | null }>;
     } | null;
+    autoWatcher?: {
+      enabled?: boolean;
+      status?: string;
+      lastCheckedAt?: string;
+      completedAt?: string;
+      approvedSid?: string;
+      sentCount?: number;
+      failedCount?: number;
+    } | null;
   } | null>(null);
 
   const getAuthHeaders = useCallback(async () => {
@@ -245,6 +254,10 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
 
   useEffect(() => {
     loadConfigAndCounts();
+    const timer = setInterval(() => {
+      loadConfigAndCounts();
+    }, 60000);
+    return () => clearInterval(timer);
   }, [loadConfigAndCounts]);
 
   const handleSaveConfig = async () => {
@@ -1167,6 +1180,32 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-xs">
+                {liveStatus.autoWatcher?.enabled && (
+                  <div
+                    className={`p-2.5 rounded-lg border text-[11px] flex items-center justify-between gap-2 ${
+                      liveStatus.autoWatcher.status === 'completed'
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
+                    }`}
+                  >
+                    <div>
+                      <span className="font-bold block">
+                        {liveStatus.autoWatcher.status === 'completed'
+                          ? `✅ Auto-Sender Completed! Dispatched ${liveStatus.autoWatcher.sentCount || 0} WhatsApp messages via approved template (${liveStatus.autoWatcher.approvedSid}).`
+                          : '🤖 Automatic Approval Watcher ARMED (Polling Meta Every 60s)'}
+                      </span>
+                      {liveStatus.autoWatcher.status !== 'completed' && (
+                        <span className="text-[10px] opacity-85 block mt-0.5">
+                          Will automatically dispatch the 192 remaining Drone Shoot messages from +12513254278 (INZAN Athletics Club) the exact moment Meta approves any template.
+                        </span>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="text-[9px] font-mono shrink-0">
+                      {liveStatus.autoWatcher.status?.toUpperCase() || 'WATCHING'}
+                    </Badge>
+                  </div>
+                )}
+
                 {/* 1. Live Delivery Receipt Counters */}
                 {liveStatus.deliverySummary && (
                   <div className="space-y-2">
