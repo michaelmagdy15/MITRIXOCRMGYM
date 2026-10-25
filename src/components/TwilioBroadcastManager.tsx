@@ -106,8 +106,12 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
   const [branchFilter, setBranchFilter] = useState<string>('ALL');
   const [customNumbers, setCustomNumbers] = useState('');
   const [title, setTitle] = useState('');
-  const [message, setMessage] = useState('');
-  const [useTemplate, setUseTemplate] = useState(false);
+  const [message, setMessage] = useState(
+    isInzan
+      ? `We’re having a drone shoot at Inzan Athletics on Monday, 26/10, at 11:00 AM, and we’d love to have you be part of it!\n\nIf you’re joining, please let us know we would love to have you.\n\nIf you prefer not to be filmed for privacy reasons, no worries at all! You’re welcome to come after the shoot and continue your workout as usual.\n\nPlease let us know if you’re available to join us. We’d love to have you there!\n\n\n*Do not reply to this message for more info please call 01000061243*`
+      : ''
+  );
+  const [useTemplate, setUseTemplate] = useState(true);
   const [alsoSendInAppAndPush, setAlsoSendInAppAndPush] = useState(true);
 
   // Test message state
@@ -319,9 +323,9 @@ export default function TwilioBroadcastManager({ compact = false }: TwilioBroadc
 
   const handleLoadEventPreset = () => {
     setBrandName('INZAN Athletics');
-    setTitle('Important Event Tomorrow at INZAN Athletics');
+    setTitle('');
     setMessage(
-      `Hi {firstName}! 🙌\n\nImportant announcement from *INZAN Athletics*: We have a special club event happening tomorrow! Make sure to arrive early and bring your training gear.\n\n📍 Location: INZAN Athletics\nSee you on the floor! 💪`
+      `We’re having a drone shoot at Inzan Athletics on Monday, 26/10, at 11:00 AM, and we’d love to have you be part of it!\n\nIf you’re joining, please let us know we would love to have you.\n\nIf you prefer not to be filmed for privacy reasons, no worries at all! You’re welcome to come after the shoot and continue your workout as usual.\n\nPlease let us know if you’re available to join us. We’d love to have you there!\n\n\n*Do not reply to this message for more info please call 01000061243*`
     );
   };
 

@@ -946,5 +946,15 @@ export function createMessagingBroadcastRouter(
     }
   });
 
+  /**
+   * POST /api/messaging/webhook-noreply
+   * Public Twilio inbound webhook that returns an empty <Response></Response> TwiML
+   * so inbound replies to the announcement-only WhatsApp/SMS channel are silently ignored
+   * without triggering any reply message or outbound charge.
+   */
+  router.post('/webhook-noreply', (_req, res) => {
+    res.type('text/xml').status(200).send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+  });
+
   return router;
 }
