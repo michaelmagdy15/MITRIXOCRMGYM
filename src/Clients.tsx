@@ -2976,46 +2976,58 @@ export default function Clients() {
             />
           ) : (
             <div className="w-full h-full flex flex-col overflow-hidden bg-background">
-              {/* Header */}
-              <div className="px-6 pr-6 pt-4 pb-4 border-b bg-muted/20 flex-shrink-0">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
-                  <div className="flex items-center gap-4">
+              {/* Header — mobile: row 1 identity + close, row 2 ID/category chips; sm+: single row */}
+              <div className="px-3 sm:px-6 pt-3 sm:pt-4 pb-3 sm:pb-4 border-b bg-muted/20 flex-shrink-0">
+                <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3 w-full">
+                  <div className="flex items-center gap-2 sm:gap-4 min-w-0 w-full sm:w-auto">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => setActiveClientId(null)}
-                      className="gap-2 font-bold shadow-sm"
+                      className="gap-2 font-bold shadow-sm shrink-0 h-9 w-9 p-0 sm:h-8 sm:w-auto sm:px-3"
+                      title="Back to Members"
+                      aria-label="Back to Members"
                     >
                       <ArrowLeft className="h-4 w-4" />
-                      Back to Members
+                      <span className="hidden sm:inline">Back to Members</span>
                     </Button>
                     <div className="h-6 w-px bg-border hidden sm:block" />
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+                      <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                         <User className="h-5 w-5 text-primary" />
                       </div>
-                      <div className="text-left">
-                        <h2 className="text-lg font-bold leading-tight flex items-center gap-2">
-                          <span>{activeClient.name}</span>
-                          <span className={activeClient.status === 'Active' ? 'text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 font-semibold border border-green-500/20' : activeClient.status === 'Nearly Expired' ? 'text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-semibold border border-amber-500/20' : 'text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 font-semibold border border-red-500/20'}>
+                      <div className="text-left min-w-0 flex-1">
+                        <h2 className="text-base sm:text-lg font-bold leading-tight flex items-center gap-2 min-w-0">
+                          <span className="truncate">{activeClient.name}</span>
+                          <span className={activeClient.status === 'Active' ? 'shrink-0 text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 font-semibold border border-green-500/20' : activeClient.status === 'Nearly Expired' ? 'shrink-0 text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 font-semibold border border-amber-500/20' : 'shrink-0 text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 font-semibold border border-red-500/20'}>
                             {activeClient.status}
                           </span>
                         </h2>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground truncate">
                           {activeClient.phone} · {activeClient.branch || 'No branch'}
                         </p>
                         {(activeClient.salesName || activeClient.assignedTo) && (
-                          <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
-                            <UserPlus className="h-3 w-3" />
+                          <span className="inline-flex items-center gap-1 mt-1 max-w-full text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                            <UserPlus className="h-3 w-3 shrink-0" />
                             Sales Rep: {resolveUserDisplay(activeClient.assignedTo || activeClient.salesName, users, activeClient.salesName || 'Unassigned')}
                           </span>
                         )}
                       </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setActiveClientId(null)}
+                      className="sm:hidden h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+                      title="Close"
+                      aria-label="Close member profile"
+                    >
+                      <X className="h-5 w-5" />
+                    </Button>
                   </div>
 
                   {/* CENTER: Large Member ID / Lead ID */}
-                  <div className="flex items-center justify-center gap-2 my-1 sm:my-0 flex-wrap">
+                  <div className="flex items-center sm:justify-center gap-2 flex-wrap min-w-0">
                     <div 
                       onClick={() => {
                         const rawId = activeClient.status === 'Lead' || !activeClient.memberId
@@ -3028,19 +3040,19 @@ export default function Clients() {
                         }
                       }}
                       title="Click to copy ID"
-                      className="px-5 py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border/80 rounded-xl flex flex-col items-center sm:items-start justify-center shadow-sm"
+                      className="px-3 py-1.5 sm:px-5 sm:py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border/80 rounded-xl flex flex-col items-start justify-center shadow-sm min-w-0"
                     >
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
                         {activeClient.status === 'Lead' || !activeClient.memberId ? 'Lead ID' : 'Member ID'}
                       </span>
-                      <span className="text-xl sm:text-2xl font-black font-mono tracking-wider text-foreground">
+                      <span className="text-base sm:text-2xl font-black font-mono tracking-wide sm:tracking-wider text-foreground truncate max-w-full">
                         {activeClient.status !== 'Lead' && activeClient.memberId
                           ? (String(activeClient.memberId).startsWith('#') ? activeClient.memberId : `#${activeClient.memberId}`)
                           : `Lead #${activeClient.leadId || activeClient.redgitsId || activeClient.id || '—'}`}
                       </span>
                     </div>
                     {activeClient.status !== 'Lead' && activeClient.memberId && (activeClient.leadId || activeClient.redgitsId) && String(activeClient.leadId || activeClient.redgitsId) !== String(activeClient.memberId) && (
-                      <div className="px-3 py-1.5 bg-muted/30 border border-border/50 rounded-xl flex flex-col items-center sm:items-start justify-center">
+                      <div className="px-3 py-1.5 bg-muted/30 border border-border/50 rounded-xl flex flex-col items-start justify-center">
                         <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block">Origin Lead ID</span>
                         <span className="text-xs font-mono font-bold text-muted-foreground">
                           #{activeClient.leadId || activeClient.redgitsId}
@@ -3049,16 +3061,16 @@ export default function Clients() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
-                    <div className="text-left sm:text-right px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0">
-                      <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>
-                      <span className="text-xl sm:text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-left sm:text-right px-3 py-1.5 sm:px-4 sm:py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0">
+                      <span className="text-[9px] sm:text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">Category</span>
+                      <span className="text-base sm:text-2xl font-black text-indigo-400 tracking-tight">{getMemberCategory(activeClient)}</span>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => setActiveClientId(null)}
-                      className="h-9 w-9 text-muted-foreground hover:text-foreground"
+                      className="hidden sm:inline-flex h-9 w-9 text-muted-foreground hover:text-foreground"
                       title="Close"
                     >
                       <X className="h-5 w-5" />
@@ -3069,7 +3081,7 @@ export default function Clients() {
 
             <Tabs value={memberProfileTab} onValueChange={setMemberProfileTab} className="flex-1 flex flex-col overflow-hidden min-h-0">
               {/* Responsive wrapping tab pills — all tabs visible without horizontal cutoff */}
-              <div className="px-4 sm:px-6 py-2.5 border-b flex-shrink-0 bg-muted/10">
+              <div className="px-3 sm:px-6 py-2 sm:py-2.5 border-b flex-shrink-0 bg-muted/10">
                 <TabsList className="bg-transparent p-0 h-auto group-data-horizontal/tabs:h-auto gap-1.5 rounded-none border-none shadow-none flex flex-nowrap overflow-x-auto custom-scrollbar justify-start w-full py-1">
                   {[
                     { value: 'overview', label: isInzanTenant ? 'Overview (User Details)' : 'Overview', icon: <User className="h-3.5 w-3.5" /> },
@@ -3100,17 +3112,17 @@ export default function Clients() {
 
               <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
                 {/* ── OVERVIEW TAB (SPREAD HORIZONTALLY ACROSS FULL WIDTH) ── */}
-                <TabsContent value="overview" className="mt-0 outline-none p-5 space-y-6">
+                <TabsContent value="overview" className="mt-0 outline-none p-3 sm:p-5 space-y-4 sm:space-y-6">
                   {/* SECTION 1: MEMBER DETAILS (FULL-WIDTH HORIZONTAL SPREAD) */}
                   <div className="rounded-2xl border-2 border-border/80 bg-card shadow-sm overflow-hidden text-left">
-                    <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 border-b px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px] font-black uppercase tracking-wider bg-primary/10 text-primary border-primary/30">
+                    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 bg-muted/30 border-b px-3 sm:px-5 py-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="outline" className="shrink-0 text-[10px] font-black uppercase tracking-wider bg-primary/10 text-primary border-primary/30">
                           Section 1
                         </Badge>
-                        <p className="text-xs font-bold uppercase tracking-widest text-foreground">Member Details &amp; Profile Information</p>
+                        <p className="text-[11px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest text-foreground leading-snug">Member Details &amp; Profile Information</p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
@@ -3127,7 +3139,7 @@ export default function Clients() {
                             onClick={handleDownloadContract}
                             title="Download Contract (PDF)"
                           >
-                            <FileText className="h-3.5 w-3.5 mr-1" /> Download Contract (PDF)
+                            <FileText className="h-3.5 w-3.5 mr-1" /> <span className="sm:hidden">Contract PDF</span><span className="hidden sm:inline">Download Contract (PDF)</span>
                           </Button>
                         )}
                         {getTenantId().toLowerCase().includes('inzan') && (
@@ -3143,9 +3155,9 @@ export default function Clients() {
                       </div>
                     </div>
 
-                    <div className="p-5 space-y-5">
+                    <div className="p-3 sm:p-5 space-y-4 sm:space-y-5">
                       {/* Member Profile Photo & Webcam Capture Bar */}
-                      <div className="p-3.5 rounded-xl border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
+                      <div className="p-3 sm:p-3.5 rounded-xl border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
                         <MemberPhotoCapture
                           client={activeClient}
                           onUpdateClient={updateClient}
