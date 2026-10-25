@@ -580,7 +580,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)]" />
+        <div className="h-[calc(3.75rem+var(--safe-top))] pt-[var(--safe-top)]" />
         <main className="px-4 py-6 max-w-md mx-auto w-full">
           <MemberScreenSkeleton />
         </main>
@@ -600,7 +600,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   return (
     <div dir={isRtl ? 'rtl' : 'ltr'} className="h-screen overflow-hidden bg-background flex flex-col font-sans relative">
-      <header className="border-b border-border/60 bg-background/80 backdrop-blur-xl h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
+      <header className="border-b border-border/60 bg-background/90 backdrop-blur-xl min-h-[calc(3.75rem+var(--safe-top))] pt-[var(--safe-top)] flex items-center justify-between px-3 sm:px-6 sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div 
             className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity"
@@ -675,7 +675,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 max-w-md mx-auto w-full overscroll-contain">
+      <main className="flex-1 overflow-y-auto px-4 py-5 pb-[calc(6.5rem+var(--safe-bottom))] max-w-md mx-auto w-full overscroll-contain">
         {activeClient?.status === 'Expired' && (
           <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-semibold flex items-center justify-between shadow-sm">
             <span>Membership Expired</span>

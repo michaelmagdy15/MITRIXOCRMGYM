@@ -370,7 +370,7 @@ export default function SubscriptionCheckout() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-cairo">
       {/* Top Navbar */}
-      <header className="border-b bg-card/40 backdrop-blur-md sticky top-0 z-50 h-16 flex items-center justify-between px-6 flex-shrink-0">
+      <header className="border-b bg-card/40 backdrop-blur-md sticky top-0 z-50 min-h-[calc(3.75rem+var(--safe-top))] pt-[var(--safe-top)] flex items-center justify-between px-4 sm:px-6 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Shield className="h-6 w-6 text-primary" />
           <span className="text-lg font-logo tracking-[0.1em] uppercase text-primary font-bold">

@@ -494,14 +494,14 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       
       {/* ── LEADS PENDING BANNER ── */}
       {isLeadPending && (
-        <div className="bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-500 text-xs px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] text-center font-bold flex items-center justify-center gap-2 animate-in slide-in-from-top duration-300">
+        <div className="bg-yellow-500/10 border-b border-yellow-500/20 text-yellow-500 text-xs px-4 pb-3 pt-[calc(0.75rem+var(--safe-top))] text-center font-bold flex items-center justify-center gap-2 animate-in slide-in-from-top duration-300">
           <ShieldAlert className="h-4 w-4 shrink-0" />
           <span>Account Pending Activation. Pay at branch to unlock member features.</span>
         </div>
       )}
 
       {/* ── HEADER ── */}
-      <header className="sticky top-0 z-40 bg-background border-b px-4 h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-xl border-b px-4 min-h-[calc(3.75rem+var(--safe-top))] pt-[var(--safe-top)] flex items-center justify-between">
         <div 
           className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => setActiveTab('book')}
@@ -1869,7 +1869,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
       {/* ── BOTTOM NAV BAR (MOBILE) ── */}
       {isMobile && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-lg backdrop-blur-md bg-opacity-90">
+        <nav className="fixed bottom-0 left-0 right-0 bg-card/95 border-t z-50 flex justify-around pt-1.5 pb-[max(0.5rem,var(--safe-bottom))] shadow-lg backdrop-blur-xl">
           {[
             { 
               id: 'signin', 

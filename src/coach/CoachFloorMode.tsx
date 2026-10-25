@@ -1058,7 +1058,7 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
   return (
     <div className="space-y-4 pb-12 animate-in fade-in duration-300">
       {/* Top Navigation & Live Header */}
-      <div className="bg-card border rounded-2xl p-3.5 sm:p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 sticky top-16 z-30 backdrop-blur-md bg-opacity-95">
+      <div className="bg-card border rounded-2xl p-3.5 sm:p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 sticky top-[calc(3.75rem+var(--safe-top)+0.25rem)] z-30 backdrop-blur-md bg-opacity-95">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"

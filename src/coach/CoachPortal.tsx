@@ -127,27 +127,28 @@ export default function CoachPortal() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-sans">
-      <header className="border-b bg-card shadow-sm h-16 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-50">
-        <div className="flex items-center gap-3">
+      <header className="border-b bg-card/95 backdrop-blur-xl shadow-sm min-h-[calc(3.75rem+var(--safe-top))] pt-[var(--safe-top)] flex items-center justify-between px-3 sm:px-6 sticky top-0 z-50 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
           {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt={branding.companyName} className="h-8 w-auto object-contain" referrerPolicy="no-referrer" />
+            <img src={branding.logoUrl} alt={branding.companyName} className="h-7 sm:h-8 w-auto object-contain shrink-0" referrerPolicy="no-referrer" />
           ) : (
-            <h1 className="text-lg font-extralight tracking-[0.2em] uppercase text-primary font-logo">{branding.companyName}</h1>
+            <h1 className="text-sm sm:text-lg font-extralight tracking-[0.15em] sm:tracking-[0.2em] uppercase text-primary font-logo truncate">{branding.companyName}</h1>
           )}
-          <Badge variant="outline" className="text-[10px] font-bold tracking-widest uppercase text-primary border-primary/30">
+          <Badge variant="outline" className="hidden md:inline-flex text-[10px] font-bold tracking-widest uppercase text-primary border-primary/30 shrink-0">
             {canAccessFitnessManagerBoard && activeTab === 'triage' ? 'Fitness Manager Portal' : 'Coach Portal'}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {canAccessFitnessManagerBoard && (
             <Button
               variant={activeTab === 'triage' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setActiveTab(activeTab === 'triage' ? 'home' : 'triage')}
-              className="h-8 text-xs font-bold gap-1.5 rounded-xl border-primary/40 shadow-xs"
+              className="h-9 px-2.5 sm:px-3 text-xs font-bold gap-1.5 rounded-xl border-primary/40 shadow-xs"
             >
-              <UserCheck className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Fitness Manager</span> Triage
+              <UserCheck className="h-3.5 w-3.5 shrink-0" />
+              <span className="hidden sm:inline">Fitness Manager</span>
+              <span>Triage</span>
             </Button>
           )}
 
@@ -156,13 +157,14 @@ export default function CoachPortal() {
             variant={activeTab === 'floor' ? 'default' : 'outline'}
             size="sm"
             onClick={() => handleStartFloor()}
-            className="h-8 text-xs font-bold gap-1.5 rounded-xl border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shadow-xs"
+            className="h-9 px-2.5 sm:px-3 text-xs font-bold gap-1.5 rounded-xl border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shadow-xs"
           >
-            <Flame className="h-3.5 w-3.5 fill-current" />
-            <span className="hidden sm:inline">Live</span> Floor Mode
+            <Flame className="h-3.5 w-3.5 fill-current shrink-0" />
+            <span>Floor</span>
+            <span className="hidden sm:inline">Mode</span>
           </Button>
 
-          <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} className="h-8 w-8">
+          <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} className="h-9 w-9 rounded-xl shrink-0">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
           <div className="relative">
@@ -171,7 +173,7 @@ export default function CoachPortal() {
               size="icon"
               onClick={() => setNotifOpen(v => !v)}
               title="Notifications"
-              className="h-8 w-8 relative"
+              className="h-9 w-9 rounded-xl relative shrink-0"
             >
               <Bell className="h-4 w-4" />
               {coachNotifications.length > 0 && (
@@ -181,7 +183,7 @@ export default function CoachPortal() {
               )}
             </Button>
             {notifOpen && (
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-card border shadow-2xl z-50 overflow-hidden">
+              <div className="fixed left-3 right-3 top-[calc(4rem+var(--safe-top))] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 rounded-2xl bg-card border shadow-2xl z-50 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
                   <span className="text-xs font-extrabold uppercase tracking-wider">Coach Notifications ({coachNotifications.length})</span>
                   {coachNotifications.length > 0 && (
@@ -232,13 +234,20 @@ export default function CoachPortal() {
               <p className="text-xs font-mono text-primary">{currentUser.coachId}</p>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="h-8 w-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={logout}
+            title="Logout"
+            aria-label="Logout"
+            className="h-9 w-9 rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+          >
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-3 sm:px-4 py-6 pb-24 max-w-4xl">
+      <main className="flex-1 container mx-auto px-3 sm:px-4 py-5 pb-[calc(6.5rem+var(--safe-bottom))] max-w-4xl">
         {activeTab === 'home'     && <CoachHome onNavigate={setActiveTab} onStartFloor={handleStartFloor} />}
         {activeTab === 'triage'   && canAccessFitnessManagerBoard && <CoachFitnessManagerView />}
         {activeTab === 'classes'  && <CoachClassPortal />}
@@ -256,18 +265,18 @@ export default function CoachPortal() {
         )}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-card border-t z-50 flex justify-around py-1.5 shadow-lg backdrop-blur-md bg-opacity-90">
+      <nav className="fixed bottom-0 left-0 right-0 bg-card/95 border-t z-50 flex items-center justify-between sm:justify-around overflow-x-auto no-scrollbar pt-1.5 pb-[max(0.5rem,var(--safe-bottom))] px-1 shadow-lg backdrop-blur-xl">
         {navItems.map(({ tab, label, icon }) => {
           const isActive = activeTab === tab;
           return (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex flex-col items-center justify-center gap-1 px-3 py-1 min-w-[56px] transition-all relative ${
+              className={`flex flex-col items-center justify-center gap-0.5 flex-1 min-w-[44px] sm:min-w-[56px] px-1 py-1 transition-all relative ${
                 isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <div className="relative flex items-center justify-center w-9 h-9 rounded-xl transition-all duration-300">
+              <div className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl transition-all duration-300">
                 {isActive && (
                   <>
                     {/* Glowing background */}
@@ -280,7 +289,7 @@ export default function CoachPortal() {
                   {icon}
                 </div>
               </div>
-              <span className={`text-[9px] font-bold tracking-wide transition-all ${
+              <span className={`text-[9px] sm:text-[10px] font-bold tracking-tight truncate max-w-full transition-all ${
                 isActive ? 'text-primary font-black scale-105' : 'text-muted-foreground'
               }`}>
                 {label}

@@ -626,9 +626,8 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
   }
 
   // ── Main login view ──
-  // ── Main login view ──
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 md:p-12 font-sans relative overflow-y-auto">
+    <div className="min-h-[100dvh] bg-background flex flex-col items-center justify-center px-6 pt-[max(1.5rem,calc(var(--safe-top)+0.75rem))] pb-[max(1.5rem,calc(var(--safe-bottom)+0.75rem))] md:p-12 font-sans relative overflow-y-auto">
 
       <div className="w-full max-w-md space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* Logo */}

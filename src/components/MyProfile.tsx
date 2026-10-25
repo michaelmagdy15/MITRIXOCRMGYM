@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Camera, Lock, Eye, EyeOff, CheckCircle2, Loader2, User as UserIcon, KeyRound } from 'lucide-react';
+import { Camera, Lock, Eye, EyeOff, CheckCircle2, Loader2, User as UserIcon, KeyRound, LogOut } from 'lucide-react';
 
 // ─── Image compression ────────────────────────────────────────────────────────
 // Resizes to max 400×400 px, then iteratively lowers JPEG quality until the
@@ -64,7 +64,7 @@ async function compressImage(file: File): Promise<Blob> {
 
 
 export default function MyProfile() {
-  const { currentUser, updateMyProfile, submitPasswordResetRequest, changeMyPassword } = useAuth();
+  const { currentUser, updateMyProfile, submitPasswordResetRequest, changeMyPassword, logout } = useAuth();
 
   // ── Avatar ──────────────────────────────────────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -293,6 +293,27 @@ export default function MyProfile() {
               </p>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Sign Out Card ────────────────────────────────────────────────── */}
+      <Card className="border-destructive/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <LogOut className="h-4 w-4 text-destructive" /> Session
+          </CardTitle>
+          <CardDescription>Sign out of your account on this device.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={logout}
+            className="w-full h-11 font-bold gap-2 rounded-xl"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Log Out</span>
+          </Button>
         </CardContent>
       </Card>
 

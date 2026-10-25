@@ -58,6 +58,10 @@
 }
 
 :root {
+    --safe-top-fallback: 0px;
+    --safe-bottom-fallback: 0px;
+    --safe-top: max(env(safe-area-inset-top, 0px), var(--safe-top-fallback, 0px));
+    --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--safe-bottom-fallback, 0px));
     --background: oklch(0.98 0 0);
     --foreground: oklch(0.12 0 0);
     --card: oklch(1 0 0);
@@ -171,12 +175,21 @@
   }
 
   /* ── Mobile utilities ─────────────────────────── */
-  /* Safe area padding for iPhone notch / home bar */
+  /* Safe area padding for iPhone Dynamic Island / notch / home bar */
   .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom, 16px);
+    padding-bottom: max(12px, var(--safe-bottom, env(safe-area-inset-bottom, 16px)));
   }
   .pt-safe {
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: var(--safe-top, env(safe-area-inset-top, 0px));
+  }
+  .safe-header {
+    padding-top: var(--safe-top, env(safe-area-inset-top, 0px));
+    min-height: calc(3.75rem + var(--safe-top, env(safe-area-inset-top, 0px)));
+  }
+
+  /* Ensure Sonner toasts never render behind the Dynamic Island */
+  [data-sonner-toaster][data-y-position="top"] {
+    top: calc(var(--safe-top, env(safe-area-inset-top, 0px)) + 12px) !important;
   }
 
   /* Prevent 300ms tap delay on all interactive elements */
@@ -198,7 +211,7 @@
     z-index: 100;
     background: var(--card);
     border-top: 1px solid var(--border);
-    padding-bottom: env(safe-area-inset-bottom, 8px);
+    padding-bottom: max(8px, var(--safe-bottom, env(safe-area-inset-bottom, 8px)));
     display: flex;
     align-items: center;
     justify-content: space-around;
@@ -227,7 +240,8 @@
       right: 0 !important;
       max-width: 100vw !important;
       width: 100vw !important;
-      max-height: 92dvh !important;
+      max-height: calc(100dvh - var(--safe-top, env(safe-area-inset-top, 0px)) - 0.75rem) !important;
+      padding-bottom: max(1.25rem, var(--safe-bottom, env(safe-area-inset-bottom, 16px))) !important;
       height: auto !important;
       border-bottom-left-radius: 0 !important;
       border-bottom-right-radius: 0 !important;

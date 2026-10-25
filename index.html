@@ -10,7 +10,7 @@
     <meta http-equiv="Expires" content="0" />
     <script>
       (function() {
-        var CACHE_KEY = 'strike_clean_v9_live';
+        var CACHE_KEY = 'strike_clean_v10_live';
         if (localStorage.getItem('strike_sw_cleanup_version') !== CACHE_KEY) {
           try {
             if ('serviceWorker' in navigator) {
@@ -289,6 +289,52 @@
             'cb=' + Date.now()
           );
         }
+      })();
+
+      // Universal Dynamic Island & Mobile Safe-Area Inset Resolver (iPhone 14–18 Pro Max, iOS WebViews, PWAs & Android)
+      (function() {
+        function applyMobileSafeAreaOffsets() {
+          try {
+            var ua = navigator.userAgent || '';
+            var isIOS = /iPhone|iPod|iPad/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            var isAndroid = /Android/i.test(ua);
+            var isStandaloneOrWebView = Boolean(
+              window.navigator.standalone ||
+              (window.matchMedia && (window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches)) ||
+              window.ReactNativeWebView ||
+              /mitrixogymcrmCRM-Mobile|Strike.*Mobile|Inzan|wv|FBAN|FBAV|Instagram|WhatsApp/i.test(ua) ||
+              (isIOS && !/Version\/.*Safari\//i.test(ua))
+            );
+            var screenH = Math.max(window.screen ? window.screen.height : 0, window.innerHeight || 0);
+            var screenW = Math.min(window.screen ? window.screen.width : 9999, window.innerWidth || 9999);
+            var isPhoneWidth = (window.innerWidth || screenW) <= 480;
+
+            var topFallback = '0px';
+            var bottomFallback = '0px';
+
+            if (isIOS && isPhoneWidth) {
+              // iPhone Pro / Pro Max / Dynamic Island models (height >= 844, up to iPhone 18 Pro Max 956–968pt+)
+              if (screenH >= 844) {
+                topFallback = isStandaloneOrWebView ? '62px' : '56px';
+              } else if (screenH >= 812) {
+                topFallback = isStandaloneOrWebView ? '52px' : '48px';
+              } else {
+                topFallback = isStandaloneOrWebView ? '32px' : '24px';
+              }
+              bottomFallback = screenH >= 812 ? '28px' : '16px';
+            } else if (isAndroid && isPhoneWidth) {
+              topFallback = isStandaloneOrWebView ? '36px' : '12px';
+              bottomFallback = isStandaloneOrWebView ? '20px' : '12px';
+            }
+
+            document.documentElement.style.setProperty('--safe-top-fallback', topFallback);
+            document.documentElement.style.setProperty('--safe-bottom-fallback', bottomFallback);
+          } catch (e) {}
+        }
+
+        applyMobileSafeAreaOffsets();
+        window.addEventListener('resize', applyMobileSafeAreaOffsets, { passive: true });
+        window.addEventListener('orientationchange', applyMobileSafeAreaOffsets, { passive: true });
       })();
     </script>
   </head>

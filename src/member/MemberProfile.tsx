@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { db, storage, auth, getTenantId } from '../firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, writeBatch } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Calendar, Flame, Trophy, Camera, Loader2, Bell, Dumbbell } from 'lucide-react';
+import { Sun, Moon, ShieldCheck, UserCheck, KeyRound, CheckCircle2, AlertCircle, Users, CalendarDays, Calendar, Flame, Trophy, Camera, Loader2, Bell, Dumbbell, LogOut } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -62,7 +62,7 @@ async function compressImage(file: File): Promise<Blob> {
 }
 
 export default function MemberProfile({ client, onNavigate }: { client: Client | null; onNavigate?: (tab: string) => void }) {
-  const { currentUser, changeMyPassword } = useAuth();
+  const { currentUser, changeMyPassword, logout } = useAuth();
   const { theme, toggleTheme, themeLocked } = useTheme();
 
   // Basic Info Form State
@@ -71,13 +71,6 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (client) {
-      setName(client.name || '');
-      setPhone(client.phone || '');
-    }
-  }, [client]);
 
   // Password Form State
   const [currentPassword, setCurrentPassword] = useState('');
@@ -109,6 +102,13 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
     sessionUpdates: true,
   });
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+  useEffect(() => {
+    if (client) {
+      setName(client.name || '');
+      setPhone(client.phone || '');
+    }
+  }, [client]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -754,6 +754,30 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
               {isUpdatingPassword ? 'Updating...' : 'Change Password'}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Sign Out Card */}
+      <Card className="border border-destructive/30 bg-card shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+            <LogOut className="h-4 w-4 text-destructive shrink-0" />
+            Sign Out
+          </CardTitle>
+          <CardDescription className="text-[11px] text-muted-foreground">
+            Log out of your member portal session on this device.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={logout}
+            className="w-full h-11 font-bold gap-2 rounded-xl"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Log Out</span>
+          </Button>
         </CardContent>
       </Card>
 

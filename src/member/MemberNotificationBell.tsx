@@ -261,7 +261,7 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
       </Button>
 
       {isOpen && (
-        <div className="fixed top-[70px] left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:w-80 md:mt-2 rounded-xl border bg-card shadow-2xl z-[60] overflow-hidden animate-in fade-in-0 zoom-in-95">
+        <div className="fixed top-[calc(4rem+var(--safe-top))] left-4 right-4 w-auto md:absolute md:top-full md:left-auto md:right-0 md:w-80 md:mt-2 rounded-xl border bg-card shadow-2xl z-[60] overflow-hidden animate-in fade-in-0 zoom-in-95">
           <div className="flex items-center justify-between p-4 border-b bg-muted/30">
             <h3 className="font-bold text-sm">Notifications</h3>
             <div className="flex items-center gap-2">
