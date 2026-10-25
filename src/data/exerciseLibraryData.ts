@@ -29,7 +29,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
       "Protract scapulae strongly and lock elbows straight.",
       "Lean shoulders forward past wrists while maintaining posterior pelvic tilt.",
       "Hold for 10-20 seconds with full-body tension."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_2",
@@ -45,7 +46,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     "instructions": [
       "Place hands shoulder-width apart and rest knees on outer triceps/elbows.",
       "Shift weight forward until feet lift off the floor and balance on hands."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_3",
@@ -60,7 +62,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     "instructions": [
       "Lock elbows completely straight and place knees high near armpits/triceps.",
       "Protract shoulders and hold balance."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_4",
@@ -76,7 +79,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     "instructions": [
       "Grip floor or parallettes with locked elbows and full scapular protraction.",
       "Lean forward and tuck knees tightly to chest with hips level with shoulders."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_5",
@@ -92,7 +96,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     "instructions": [
       "From tuck planche, flatten your back and extend hips to a 90-degree angle.",
       "Keep elbows 100% locked and scapulae protracted."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_6",
@@ -107,7 +112,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From advanced tuck planche, extend one leg straight back parallel to the floor while keeping the other tucked."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_7",
@@ -123,7 +129,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Extend both legs wide in a straddle parallel to the ground with locked elbows, protracted shoulders, and glutes squeezed."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_8",
@@ -139,7 +146,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold entire body horizontal to the ground with legs together, toes pointed, elbows locked, and full protraction."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_9",
@@ -154,7 +162,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold body horizontal with wide hand placement near hip level and locked elbows."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_10",
@@ -170,7 +179,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     "instructions": [
       "Turn fingers outward/backward at hip level and lean shoulders far forward.",
       "Lower chest to floor and press back up while maintaining the forward lean and protraction at the top."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_11",
@@ -185,7 +195,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold a tuck planche on parallettes or floor, lower down with feet off the ground, and press back up to locked elbows."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_12",
@@ -200,7 +211,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From a freestanding handstand, lower slowly into a bent-arm planche (90-degree hold) and press back up to handstand."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_13",
@@ -215,7 +227,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "With locked arms, press smoothly from a planche position up into a freestanding handstand."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/gw9PqGk.gif"
   },
   {
     "id": "cali_14",
@@ -229,7 +242,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hang from bar with straight arms, then depress and retract shoulder blades to lift body slightly without bending elbows."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/HjdqmZa.gif"
   },
   {
     "id": "cali_15",
@@ -244,7 +258,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hang underneath a low bar or rings with body straight and pull chest to the bar."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/HjdqmZa.gif"
   },
   {
     "id": "cali_16",
@@ -259,7 +274,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hang from bar or rings, tuck knees to chest, and pull torso horizontal to the ground with straight locked arms."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_17",
@@ -274,7 +290,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From tuck front lever, flatten the spine and push knees out to 90 degrees at the hips while keeping arms straight."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_18",
@@ -289,7 +306,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Extend one leg completely straight in line with the torso while keeping the other leg tucked."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_19",
@@ -304,7 +322,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold body completely horizontal under the bar with legs straddled wide and arms locked straight."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_20",
@@ -320,7 +339,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold body horizontal and rigid under the bar with legs together, toes pointed, and elbows locked."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_21",
@@ -334,7 +354,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "With straight locked arms, raise body from dead hang through horizontal front lever to inverted hang and lower under control."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_22",
@@ -348,7 +369,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From top of a pull-up, lean back and lock arms out into a horizontal front lever, pause, then pull back to chin-over-bar."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_23",
@@ -363,7 +385,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Maintain a horizontal front lever body line and row waist/hips up to the bar."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_24",
@@ -378,7 +401,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Pull from a full front lever until hips/abdomen touch the bar while staying horizontal."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/hbY9wqG.gif"
   },
   {
     "id": "cali_25",
@@ -393,7 +417,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Use a wide grip and pull toward one hand while keeping the opposite assisting arm completely straight."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/72BC5Za.gif"
   },
   {
     "id": "cali_26",
@@ -408,7 +433,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Pull chin above the bar and slide horizontally from left hand to right hand while staying above the bar."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/72BC5Za.gif"
   },
   {
     "id": "cali_27",
@@ -422,7 +448,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Pull explosively from dead hang so lower chest or upper abs strike the bar."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/HjdqmZa.gif"
   },
   {
     "id": "cali_28",
@@ -436,7 +463,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Generate hollow-body snap to pull the bar all the way down to hip/waist level for muscle-up training."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/HjdqmZa.gif"
   },
   {
     "id": "cali_29",
@@ -451,7 +479,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold legs straight out at 90 degrees (L-Sit) throughout the entire pull-up range of motion."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/HjdqmZa.gif"
   },
   {
     "id": "cali_30",
@@ -465,7 +494,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Grip the bar with working hand and hold a lower towel or resistance band with the assisting hand."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/72BC5Za.gif"
   },
   {
     "id": "cali_31",
@@ -480,7 +510,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From a dead hang on one arm, depress shoulder and pull chin cleanly over the bar without twisting."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/72BC5Za.gif"
   },
   {
     "id": "cali_32",
@@ -495,7 +526,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hang from rings or bar, tuck knees through arms into a full rotation to stretch shoulders, then pull back through."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/GaSzzuh.gif"
   },
   {
     "id": "cali_33",
@@ -510,7 +542,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lower from inverted hang with tucked knees into a horizontal face-down hold with straight arms."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/GaSzzuh.gif"
   },
   {
     "id": "cali_34",
@@ -525,7 +558,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Flatten back and extend hips to 90 degrees in the horizontal back lever position."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/GaSzzuh.gif"
   },
   {
     "id": "cali_35",
@@ -540,7 +574,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold body horizontal face-down with legs straddled wide and elbows locked straight."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/GaSzzuh.gif"
   },
   {
     "id": "cali_36",
@@ -556,7 +591,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold body completely horizontal face-down with legs together, glutes engaged, and elbows locked."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/GaSzzuh.gif"
   },
   {
     "id": "cali_37",
@@ -571,7 +607,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From a supinated German hang behind the bar, curl the body up until hips sit atop the bar."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/GaSzzuh.gif"
   },
   {
     "id": "cali_38",
@@ -585,7 +622,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Support body with bar behind the hips/back, lower down beneath the bar, and press back up."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/LQFOrMn.gif"
   },
   {
     "id": "cali_39",
@@ -599,7 +637,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "On parallel bars, dip down, shift back onto forearms/elbows on the bars, then roll forward and press up."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/O2K9Vb5.gif"
   },
   {
     "id": "cali_40",
@@ -613,7 +652,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "On parallel bars, keep body vertical without leaning forward and press up using pure triceps extension."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/LQFOrMn.gif"
   },
   {
     "id": "cali_41",
@@ -628,7 +668,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Pull explosively over the bar with minimal kip, transition chest over bar, and lock out straight bar dip."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/yJUHKTn.gif"
   },
   {
     "id": "cali_42",
@@ -643,7 +684,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Use a deep false grip over the bar to pull and transition slowly without momentum."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/yJUHKTn.gif"
   },
   {
     "id": "cali_43",
@@ -658,7 +700,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Maintain an L-Sit throughout a strict false-grip muscle-up."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/yJUHKTn.gif"
   },
   {
     "id": "cali_44",
@@ -673,7 +716,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold false grip on gymnastic rings, pull rings to sternum, transition smoothly into bottom of ring dip, and press to RTO support."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/yJUHKTn.gif"
   },
   {
     "id": "cali_45",
@@ -687,7 +731,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Wrap wrists over the rings or bar so knuckles face the ceiling and perform dead hangs or strict pull-ups."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/HjdqmZa.gif"
   },
   {
     "id": "cali_46",
@@ -702,7 +747,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lock elbows atop gymnastic rings, depress shoulders, and turn rings outward 45-90 degrees."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/O2K9Vb5.gif"
   },
   {
     "id": "cali_47",
@@ -716,7 +762,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lower into a ring dip while pushing the rings wide apart to horizontal elbow level, then press back to support."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/O2K9Vb5.gif"
   },
   {
     "id": "cali_48",
@@ -731,7 +778,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Perform push-ups on low gymnastic rings and turn the rings outward (RTO) at the top of every rep."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/O2K9Vb5.gif"
   },
   {
     "id": "cali_49",
@@ -746,7 +794,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lower toward one ring while extending the opposite arm straight out to the side on the other ring."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/13TpY4H.gif"
   },
   {
     "id": "cali_50",
@@ -761,7 +810,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "With straight or slightly bent arms on low rings, open arms wide into a fly and squeeze chest to bring rings together."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/lBDjFxJ.gif"
   },
   {
     "id": "cali_51",
@@ -775,7 +825,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lower forward through the rings with elbows behind torso, then curl body back up using biceps."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/0br45wL.gif"
   },
   {
     "id": "cali_52",
@@ -789,7 +840,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold low rings in a plank, bend elbows to lower forehead between rings, and extend triceps to lock out."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/x6KpKpq.gif"
   },
   {
     "id": "cali_53",
@@ -804,7 +856,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lean back holding rings and pull hands toward forehead while externally rotating shoulders."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/lBDjFxJ.gif"
   },
   {
     "id": "cali_54",
@@ -818,7 +871,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From knees or feet, extend arms overhead on low rings into a long hollow-body stretch and pull back."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/lBDjFxJ.gif"
   },
   {
     "id": "cali_55",
@@ -833,7 +887,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Suspend body upright between rings with both arms extended straight out horizontally at 90 degrees."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/lBDjFxJ.gif"
   },
   {
     "id": "cali_56",
@@ -848,7 +903,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From support atop a single horizontal bar, lower chest to the bar and press back up to lockout."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/O2K9Vb5.gif"
   },
   {
     "id": "cali_57",
@@ -863,7 +919,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Walk feet up the wall facing it until nose and toes touch the wall in a hollow straight-line handstand."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_58",
@@ -879,7 +936,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Kick up into a stacked straight-line handstand and balance using finger pressure and shoulder elevation."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_59",
@@ -893,7 +951,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hinge hips high into an inverted V, lower top of head forward between hands (tripod), and press back up."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/sVvXT5J.gif"
   },
   {
     "id": "cali_60",
@@ -907,7 +966,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Place feet on a box or bench with torso vertical, lower head forward to floor, and press back up."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/sVvXT5J.gif"
   },
   {
     "id": "cali_61",
@@ -922,7 +982,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "In a wall handstand, lower head to floor under control and press back to full overhead lockout."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_62",
@@ -937,7 +998,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Perform handstand push-ups on parallettes so shoulders descend all the way to hand level."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_63",
@@ -952,7 +1014,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Balance a freestanding handstand, lower down until head nears the floor, and press back to handstand without wall support."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_64",
@@ -967,7 +1030,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "With locked arms, shift shoulders forward and float legs (pike or straddle) smoothly up into a handstand."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_65",
@@ -981,7 +1045,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From frog stand or low tripod, press hips overhead and extend arms into a handstand."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_66",
@@ -996,7 +1061,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "In a wall or freestanding handstand, shift weight onto one arm and tap the opposite shoulder alternating sides."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_67",
@@ -1011,7 +1077,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Walk forward under control on your hands while maintaining core tension."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_68",
@@ -1026,7 +1093,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "In a straddle or straight handstand, shift hips over the supporting shoulder and lighten/lift the non-working hand."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/rQxwMxO.gif"
   },
   {
     "id": "cali_69",
@@ -1041,7 +1109,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Rest torso on bent elbows tucked into the abs and extend body horizontally parallel to the floor."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/lBDjFxJ.gif"
   },
   {
     "id": "cali_70",
@@ -1056,7 +1125,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Grip vertical pole or stall bars (top hand pulling, bottom hand pushing) and hold body sideways with knees tucked."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/KtRomty.gif"
   },
   {
     "id": "cali_71",
@@ -1071,7 +1141,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold body sideways on vertical pole with legs straddled wide to reduce lever length."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/KtRomty.gif"
   },
   {
     "id": "cali_72",
@@ -1087,7 +1158,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold body straight and horizontal sideways off a vertical pole with legs together."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/KtRomty.gif"
   },
   {
     "id": "cali_73",
@@ -1102,7 +1174,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lie on a bench gripping behind your head, raise entire rigid body onto upper shoulders, and lower slowly without bending hips."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/KtRomty.gif"
   },
   {
     "id": "cali_74",
@@ -1116,7 +1189,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lower slowly from the vertical shoulder-stand position keeping hips straight."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/KtRomty.gif"
   },
   {
     "id": "cali_75",
@@ -1129,7 +1203,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Press lower back flat into the floor with arms and straight legs extended slightly off the ground."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/KtRomty.gif"
   },
   {
     "id": "cali_76",
@@ -1142,7 +1217,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Maintain a rigid banana-shaped hollow body and rock gently forward and backward."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/KtRomty.gif"
   },
   {
     "id": "cali_77",
@@ -1156,7 +1232,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Lie prone and lift arms, chest, and straight legs off the floor in a tight posterior chain arch."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/PSlvNMs.gif"
   },
   {
     "id": "cali_78",
@@ -1170,7 +1247,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Depress shoulders with locked arms and hold straight legs out horizontally at 90 degrees."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/O2K9Vb5.gif"
   },
   {
     "id": "cali_79",
@@ -1185,7 +1263,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold an L-Sit while stabilizing unstable gymnastic rings."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/UpWmA5E.gif"
   },
   {
     "id": "cali_80",
@@ -1200,7 +1279,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From an L-Sit, lean shoulders slightly back and compress straight legs upward into a sharp V angle."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/UpWmA5E.gif"
   },
   {
     "id": "cali_81",
@@ -1215,7 +1295,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "With fingers pointing backward, push hips forward and lift legs past vertical toward horizontal above the torso."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/UpWmA5E.gif"
   },
   {
     "id": "cali_82",
@@ -1229,7 +1310,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From a dead hang, raise straight legs with zero swing until toes touch the bar between your hands."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/UpWmA5E.gif"
   },
   {
     "id": "cali_83",
@@ -1243,7 +1325,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Raise legs to the bar and rotate them side-to-side like windshield wipers under control."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/UpWmA5E.gif"
   },
   {
     "id": "cali_84",
@@ -1258,7 +1341,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "From standing on your feet, roll the ab wheel all the way out to a full plank and pull back to standing."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/KtRomty.gif"
   },
   {
     "id": "cali_85",
@@ -1273,7 +1357,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Extend one leg straight in front and squat all the way down (hamstring to calf) on the standing leg, then stand up."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/H6ybluc.gif"
   },
   {
     "id": "cali_86",
@@ -1287,7 +1372,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Perform a single-leg pistol squat using light assistance from a ring, pole, or box target."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/H6ybluc.gif"
   },
   {
     "id": "cali_87",
@@ -1301,7 +1387,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Hold rear foot behind your glutes and squat on the front leg until the rear knee kisses the floor."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/H6ybluc.gif"
   },
   {
     "id": "cali_88",
@@ -1316,7 +1403,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Thread the non-working leg behind the standing leg and perform a deep single-leg squat."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/H6ybluc.gif"
   },
   {
     "id": "cali_89",
@@ -1331,7 +1419,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Anchor ankles securely, keep hips extended straight, lower torso slowly toward the floor, and curl back up using hamstrings."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/17lJ1kr.gif"
   },
   {
     "id": "cali_90",
@@ -1344,7 +1433,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Kneel tall with hips extended, lean straight back from the knees as far as controllable, and drive back up using quads."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/17lJ1kr.gif"
   },
   {
     "id": "cali_91",
@@ -1358,7 +1448,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Rise onto toes, push knees forward while leaning torso back in one straight line from knees to shoulders."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/H6ybluc.gif"
   },
   {
     "id": "cali_92",
@@ -1373,7 +1464,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Take a wide stance and squat deeply onto one leg while keeping the other leg completely straight with toes pointed up."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/H6ybluc.gif"
   },
   {
     "id": "cali_93",
@@ -1386,7 +1478,8 @@ export const FULL_EXERCISE_CATALOG: ExerciseCatalogItem[] = [
     ],
     "instructions": [
       "Sit in a pike on the floor, place hands beside knees, and lift straight legs off the floor for reps or holds."
-    ]
+    ],
+    "gifUrl": "https://static.exercisedb.dev/media/sVvXT5J.gif"
   },
   {
     "id": "trmte8s",

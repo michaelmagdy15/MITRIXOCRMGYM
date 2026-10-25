@@ -31,14 +31,16 @@ import MemberWallet from './MemberWallet';
 import MemberBadges from './MemberBadges';
 import MemberRewards from './MemberRewards';
 import MemberBodyTracker from './MemberBodyTracker';
+import ExerciseLibraryHub from '../components/ExerciseLibraryHub';
 import { MemberScreenSkeleton } from './components/Skeleton';
 
 
-type MemberTab = 'home' | 'booking' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'nutrition' | 'profile';
+type MemberTab = 'home' | 'booking' | 'workouts' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'nutrition' | 'profile';
 
 const NAV_ITEMS: { tab: MemberTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Pass',       icon: <QrCode className="h-5 w-5" /> },
   { tab: 'booking',  label: 'Bookings',   icon: <Calendar className="h-5 w-5" /> },
+  { tab: 'workouts', label: 'Workouts',   icon: <Dumbbell className="h-5 w-5" /> },
   { tab: 'juicebar', label: 'Juice Bar',  icon: <Globe className="h-5 w-5" /> },
   { tab: 'wallet',   label: 'Wallet',     icon: <Coins className="h-5 w-5" /> },
   { tab: 'locker',   label: 'Locker',     icon: <Lock className="h-5 w-5" /> },
@@ -108,6 +110,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     const arLabels: Record<MemberTab, string> = {
       home: 'بطاقتي',
       booking: 'الحجوزات',
+      workouts: 'التمارين',
       juicebar: 'الكافيتريا',
       wallet: 'المحفظة',
       locker: 'الخزنة',
@@ -264,6 +267,8 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       if (features.operations !== false) setActiveTab('invites');
     } else if (target === 'nutrition') {
       if (features.nutrition !== false || isInzan) setActiveTab('nutrition');
+    } else if (target === 'workouts') {
+      setActiveTab('workouts');
     }
   };
 
@@ -675,7 +680,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-5 pb-[calc(6.5rem+var(--safe-bottom))] max-w-md mx-auto w-full overscroll-contain">
+      <main className={`flex-1 overflow-y-auto px-4 py-5 pb-[calc(6.5rem+var(--safe-bottom))] mx-auto w-full overscroll-contain ${activeTab === 'workouts' ? 'max-w-5xl' : 'max-w-md'}`}>
         {activeClient?.status === 'Expired' && (
           <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-semibold flex items-center justify-between shadow-sm">
             <span>Membership Expired</span>
@@ -739,6 +744,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
           </div>
         )}
 
+        {activeTab === 'workouts' && <ExerciseLibraryHub mode="member" memberClient={activeClient} />}
         {activeTab === 'juicebar' && <MemberJuiceBar client={activeClient} />}
         {activeTab === 'wallet' && <MemberWallet client={activeClient} />}
         {activeTab === 'locker' && <MemberLocker client={activeClient} />}

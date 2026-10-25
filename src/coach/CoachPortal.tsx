@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign, Flame, UserCheck, Bell, Check } from 'lucide-react';
+import { Home, Calendar, Users, Dumbbell, User, LogOut, Sun, Moon, DollarSign, Flame, UserCheck, Bell, Check, BookOpen } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { db, getTenantId } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
@@ -17,15 +17,17 @@ import CoachClassPortal from './CoachClassPortal';
 import CoachEarnings from './CoachEarnings';
 import CoachFloorMode from './CoachFloorMode';
 import CoachFitnessManagerView from './CoachFitnessManagerView';
+import ExerciseLibraryHub from '../components/ExerciseLibraryHub';
 import { Client, Session } from '../types';
 
-export type CoachTab = 'home' | 'triage' | 'classes' | 'schedule' | 'members' | 'sessions' | 'earnings' | 'profile' | 'floor';
+export type CoachTab = 'home' | 'triage' | 'classes' | 'schedule' | 'members' | 'sessions' | 'library' | 'earnings' | 'profile' | 'floor';
 
 const BASE_NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'home',     label: 'Home',     icon: <Home className="h-5 w-5" /> },
   { tab: 'classes',  label: 'Classes',  icon: <Flame className="h-5 w-5" /> },
   { tab: 'schedule', label: 'Schedule', icon: <Calendar className="h-5 w-5" /> },
   { tab: 'members',  label: 'Members',  icon: <Users className="h-5 w-5" /> },
+  { tab: 'library',  label: 'Library',  icon: <BookOpen className="h-5 w-5" /> },
   { tab: 'sessions', label: 'Sessions', icon: <Dumbbell className="h-5 w-5" /> },
   { tab: 'earnings', label: 'Earnings', icon: <DollarSign className="h-5 w-5" /> },
   { tab: 'profile',  label: 'Profile',  icon: <User className="h-5 w-5" /> },
@@ -247,12 +249,13 @@ export default function CoachPortal() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-3 sm:px-4 py-5 pb-[calc(6.5rem+var(--safe-bottom))] max-w-4xl">
+      <main className="flex-1 container mx-auto px-3 sm:px-4 py-5 pb-[calc(6.5rem+var(--safe-bottom))] max-w-6xl">
         {activeTab === 'home'     && <CoachHome onNavigate={setActiveTab} onStartFloor={handleStartFloor} />}
         {activeTab === 'triage'   && canAccessFitnessManagerBoard && <CoachFitnessManagerView />}
         {activeTab === 'classes'  && <CoachClassPortal />}
         {activeTab === 'schedule' && <CoachSchedule onStartFloor={handleStartFloor} />}
         {activeTab === 'members'  && <CoachClients onStartFloor={handleStartFloor} />}
+        {activeTab === 'library'  && <ExerciseLibraryHub mode="staff" onStartFloorWithClient={(c) => handleStartFloor(c)} />}
         {activeTab === 'sessions' && <CoachSessions />}
         {activeTab === 'earnings' && <CoachEarnings />}
         {activeTab === 'profile'  && <CoachProfile />}

@@ -37,8 +37,9 @@ import UnconfirmedMemberships from './UnconfirmedMemberships';
 import Bookings from './Bookings';
 import NutritionModule from './NutritionModule';
 import { ClassManager } from './components/ClassManager';
+import ExerciseLibraryHub from './components/ExerciseLibraryHub';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList, Bell } from 'lucide-react';
+import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList, Bell, Dumbbell } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -706,6 +707,12 @@ function AppContent() {
       icon: Activity,
       show: (features.nutrition === true || isInzan) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'coach')
     },
+    {
+      id: 'workout-library',
+      label: 'Workout Library',
+      icon: Dumbbell,
+      show: true
+    },
     { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: (features.tasks !== false) && canAny(['tasks.view', 'tasks.manage_templates', 'tasks.assign']) },
     {
       id: 'payments',
@@ -793,7 +800,7 @@ function AppContent() {
   ];
 
   const getNavSection = (id: string): string => {
-    if (['dashboard', 'notifications', 'attendance', 'calendar', 'class-manager', 'operations', 'call-center', 'lost-and-found', 'complaints'].includes(id)) {
+    if (['dashboard', 'notifications', 'attendance', 'calendar', 'class-manager', 'workout-library', 'operations', 'call-center', 'lost-and-found', 'complaints'].includes(id)) {
       return 'OPERATIONS';
     }
     if (['clients', 'leads', 'nutrition', 'tasks'].includes(id)) {
@@ -1379,6 +1386,10 @@ function AppContent() {
                 <NutritionModule />
               </TabsContent>
             )}
+
+            <TabsContent value="workout-library" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+              <ExerciseLibraryHub mode="staff" />
+            </TabsContent>
 
             <TabsContent value="tasks" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <Tasks />
