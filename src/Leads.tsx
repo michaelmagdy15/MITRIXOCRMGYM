@@ -408,6 +408,15 @@ export default function Leads() {
     // Tab filtering
     switch (deferredActiveTab) {
       case 'unassigned': filtered = filtered.filter(l => !l.assignedTo); break;
+      case 'referrals':
+        filtered = filtered.filter(l =>
+          String(l.source || '') === 'Referral' ||
+          String(l.comeFromType || '') === 'Referral' ||
+          Boolean((l as any).referredByClientId) ||
+          Boolean((l as any).invitedByClientId) ||
+          Boolean(l.referredBy)
+        );
+        break;
       case 'instagram': filtered = filtered.filter(l => l.source === 'Instagram'); break;
       case 'whatsapp': filtered = filtered.filter(l => l.source === 'WhatsApp'); break;
       case 'walkin': filtered = filtered.filter(l => l.source === 'Walk-in'); break;
@@ -2595,6 +2604,9 @@ export default function Leads() {
           <TabsList className="flex w-max sm:w-full bg-muted/50 rounded-lg p-1 justify-start sm:justify-center mb-4">
             <TabsTrigger value="unassigned" className="px-4 text-xs sm:text-sm text-amber-600 font-bold dark:text-amber-500">{t('leads.tabs.unassigned')}</TabsTrigger>
             <TabsTrigger value="all" className="px-4 text-xs sm:text-sm">{t('leads.tabs.all')}</TabsTrigger>
+            <TabsTrigger value="referrals" className="px-4 text-xs sm:text-sm text-purple-600 font-bold dark:text-purple-400">
+              Referrals ({allLeads.filter(l => String(l.source || '') === 'Referral' || String(l.comeFromType || '') === 'Referral' || Boolean((l as any).referredByClientId) || Boolean((l as any).invitedByClientId) || Boolean(l.referredBy)).length})
+            </TabsTrigger>
             <TabsTrigger value="instagram" className="px-4 text-xs sm:text-sm">{t('leads.tabs.instagram')}</TabsTrigger>
             <TabsTrigger value="whatsapp" className="px-4 text-xs sm:text-sm">{t('leads.tabs.whatsapp')}</TabsTrigger>
             <TabsTrigger value="walkin" className="px-4 text-xs sm:text-sm">{t('leads.tabs.walk_in')}</TabsTrigger>
@@ -2605,6 +2617,91 @@ export default function Leads() {
           </TabsList>
         </div>
         
+        {activeTab === 'referrals' && (() => {
+          const allReferralRecords = clients.filter(
+            (c) =>
+              String(c.source || '') === 'Referral' ||
+              String(c.comeFromType || '') === 'Referral' ||
+              Boolean((c as any).referredByClientId) ||
+              Boolean((c as any).invitedByClientId) ||
+              Boolean(c.referredBy)
+          );
+          const convertedReferralMembers = allReferralRecords.filter(
+            (c) =>
+              c.stage === 'Converted' ||
+              c.status === 'Active' ||
+              Boolean(c.packageType && c.packageType !== 'None') ||
+              Boolean(c.packages && c.packages.length > 0)
+          );
+          const byReferrerMap = new Map<string, { name: string; memberId?: string; total: number; converted: number }>();
+          for (const rc of allReferralRecords) {
+            const refId = String((rc as any).referredByClientId || (rc as any).invitedByClientId || rc.referredBy || '').trim();
+            const hostMember = clients.find(
+              (m) => m.id === refId || (m.memberId && m.memberId === refId) || (m.name && m.name.toLowerCase() === refId.toLowerCase())
+            );
+            const key = hostMember?.id || refId || (rc as any).referredByName || 'Unknown Referrer';
+            const displayName = hostMember?.name || (rc as any).referredByName || rc.referredBy || 'Member Referral';
+            const entry = byReferrerMap.get(key) || { name: displayName, memberId: hostMember?.memberId, total: 0, converted: 0 };
+            entry.total += 1;
+            const isConv =
+              rc.stage === 'Converted' ||
+              rc.status === 'Active' ||
+              Boolean(rc.packageType && rc.packageType !== 'None') ||
+              Boolean(rc.packages && rc.packages.length > 0);
+            if (isConv) entry.converted += 1;
+            byReferrerMap.set(key, entry);
+          }
+          const topReferrers = Array.from(byReferrerMap.values()).sort((a, b) => b.total - a.total);
+          const totalRef = allReferralRecords.length;
+          const totalConv = convertedReferralMembers.length;
+          const convRate = totalRef > 0 ? Math.round((totalConv / totalRef) * 100) : 0;
+
+          return (
+            <div className="mb-4 p-4 rounded-2xl border border-purple-500/30 bg-purple-500/5 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                    🤝 Member Referrals &amp; Conversion Tracker
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Tracks how many friends were referred by each member and how many became active gym members.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="text-xs font-bold bg-background border-purple-500/30 text-purple-600 dark:text-purple-400 px-3 py-1">
+                    {totalRef} Total Referred
+                  </Badge>
+                  <Badge variant="outline" className="text-xs font-bold bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300 px-3 py-1">
+                    ✅ {totalConv} Became Members ({convRate}%)
+                  </Badge>
+                  <Badge variant="outline" className="text-xs font-bold bg-amber-500/10 border-amber-500/30 text-amber-600 px-3 py-1">
+                    ⏳ {Math.max(0, totalRef - totalConv)} In Lead Pipeline
+                  </Badge>
+                </div>
+              </div>
+              {topReferrers.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-purple-500/20">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    By Referring Member:
+                  </span>
+                  {topReferrers.slice(0, 8).map((r, idx) => (
+                    <Badge
+                      key={idx}
+                      variant="outline"
+                      className="text-[11px] font-semibold bg-background/90 border-border px-2.5 py-0.5"
+                    >
+                      {r.name}{r.memberId ? ` (#${r.memberId})` : ''}:{' '}
+                      <strong className="text-purple-600 dark:text-purple-400 ml-1">{r.total} Referred</strong>
+                      {' → '}
+                      <strong className="text-emerald-600 dark:text-emerald-400">{r.converted} Became Member{r.converted === 1 ? '' : 's'}</strong>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <Card>
           <CardContent className="p-0">
             {renderLeadsTable(paginatedLeads)}

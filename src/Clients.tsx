@@ -52,6 +52,7 @@ import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistory
 import { MemberGuestInvitationsTab } from './components/member/MemberGuestInvitationsTab';
 import { MemberDocumentUploader } from './components/member/MemberDocumentUploader';
 import { MemberBenefitsWallet } from './components/member/MemberBenefitsWallet';
+import { MemberPhotoCapture } from './components/member/MemberPhotoCapture';
 import MemberBodyTracker from './member/MemberBodyTracker';
 import { buildWhatsAppPaymentReceiptUrl, buildWhatsAppRenewalReminderUrl } from './utils/whatsappTemplates';
 import { PhoneInput } from './components/ui/PhoneInput';
@@ -160,10 +161,13 @@ export default function Clients() {
   const updateClientPackages = (newPkgs: ClientPackage[]) => {
     if (!activeClient) return;
     
-    const activePkg = newPkgs.find(p => p.status === 'Active');
+    const activePkg =
+      newPkgs.find(p => p.status === 'Active') ||
+      newPkgs.find(p => p.status === 'Hold') ||
+      newPkgs[0];
     const updates: any = {
       packages: newPkgs,
-      sessionsRemaining: activePkg ? (activePkg.sessionsRemaining !== undefined ? activePkg.sessionsRemaining : 0) : 0,
+      sessionsRemaining: activePkg ? (activePkg.sessionsRemaining !== undefined ? activePkg.sessionsRemaining : 'unlimited') : 0,
     };
 
     if (activePkg) {
@@ -171,8 +175,6 @@ export default function Clients() {
       if (activePkg.startDate) updates.startDate = activePkg.startDate;
       updates.membershipExpiry = activePkg.endDate || '';
     } else {
-      // No active package: clear top-level package-derived fields so the outer
-      // list view doesn't keep showing stale values after an edit.
       updates.packageType = '';
       updates.startDate = '';
       updates.membershipExpiry = '';
@@ -919,121 +921,302 @@ export default function Clients() {
     }
   };
 
-  const handleFreezePackage = async () => {
+  const handleFreezePackage = async (overridePkgIdOrName?: string, overrideDays?: number) => {
     if (!activeClient) return;
-    if (!freezePackageId) {
-      alert("Please select a package to freeze.");
-      return;
-    }
-    if (!freezeStartDate || !freezeEndDate) {
-      alert("Please select freeze start and end dates.");
+    const rawC = activeClient as any;
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    const basePackages: ClientPackage[] =
+      activeClient.packages && activeClient.packages.length > 0
+        ? activeClient.packages.map((p, idx) => ({
+            ...p,
+            id: p.id || `pkg-${idx}`,
+          }))
+        : activeClient.packageType
+          ? [
+              {
+                id: 'primary-0',
+                packageName: activeClient.packageType,
+                status: (activeClient.status === 'Hold' ? 'Hold' : 'Active') as any,
+                startDate: activeClient.startDate || rawC.joinDate || todayIso,
+                endDate: activeClient.membershipExpiry || '',
+                sessionsRemaining: typeof activeClient.sessionsRemaining === 'number' ? activeClient.sessionsRemaining : 365,
+                sessionsTotal: 365,
+                freezeDaysUsed: Number(rawC.freezeDaysUsed || 0),
+              } as ClientPackage,
+            ]
+          : [];
+
+    if (basePackages.length === 0) {
+      toast.error('This member has no active package to freeze.');
       return;
     }
 
-    const packagesCopy = [...(activeClient.packages || [])];
-    const pkgIdx = packagesCopy.findIndex(p => p.id === freezePackageId);
+    const targetSelector = overridePkgIdOrName || freezePackageId;
+    let pkgIdx = targetSelector
+      ? basePackages.findIndex(
+          (p, idx) =>
+            p.id === targetSelector ||
+            p.packageName === targetSelector ||
+            `pkg-${idx}` === targetSelector
+        )
+      : -1;
     if (pkgIdx === -1) {
-      alert("Selected package not found.");
+      pkgIdx = basePackages.findIndex((p) => p.status === 'Active');
+    }
+    if (pkgIdx === -1) pkgIdx = 0;
+
+    const pkg = basePackages[pkgIdx];
+    if (!pkg) {
+      toast.error('Selected package not found.');
+      return;
+    }
+
+    const effStart = freezeStartDate || todayIso;
+    const effEnd =
+      overrideDays && overrideDays > 0
+        ? new Date(new Date(effStart).getTime() + overrideDays * 86400000).toISOString().slice(0, 10)
+        : freezeEndDate;
+
+    if (!effStart || !effEnd) {
+      toast.error('Please select freeze start and end dates (or pick a preset duration).');
+      return;
+    }
+
+    const requestedFreezeDays = Math.max(
+      1,
+      Math.round((new Date(effEnd).getTime() - new Date(effStart).getTime()) / 86400000)
+    );
+    if (new Date(effEnd).getTime() <= new Date(effStart).getTime()) {
+      toast.error('Freeze End Date must be after Freeze Start Date.');
       return;
     }
 
     try {
-      const pkg = packagesCopy[pkgIdx];
-      if (!pkg) {
-        alert("Selected package not found.");
-        return;
-      }
-
-      const requestedFreezeDays = Math.round(
-        (new Date(freezeEndDate).getTime() - new Date(freezeStartDate).getTime()) / 86400000
+      const systemPkg = packages.find(
+        (p) => (p.name || '').trim().toLowerCase() === (pkg.packageName || '').trim().toLowerCase()
       );
-      const systemPkg = packages.find(p => p.name === pkg.packageName);
-      const allowanceDays = Number(systemPkg?.freezeAllowanceDays ?? systemPkg?.benefits?.freezeAllowanceDays ?? 0);
-      const hasFreezeRules = isTenantInzan() && !!systemPkg && allowanceDays > 0;
-      if (hasFreezeRules) {
-        const freezeCheck = validateFreezeDurationLimits(systemPkg, requestedFreezeDays, pkg.freezeDaysUsed || 0);
-        if (!freezeCheck.allowed) {
-          alert(freezeCheck.reason || 'Freeze request exceeds this package\'s freeze limits.');
-          return;
+      const pb = (pkg as any).benefits || {};
+      const cb = rawC.benefits || {};
+      let allowanceDays = Number(
+        systemPkg?.freezeAllowanceDays ??
+          systemPkg?.benefits?.freezeAllowanceDays ??
+          pb.freezeAllowanceDays ??
+          cb.freezeAllowanceDays ??
+          rawC.freezeAllowanceDays ??
+          0
+      );
+      if (allowanceDays === 0) {
+        const lowerName = String(pkg.packageName || '').toLowerCase();
+        if (lowerName.includes('365') || lowerName.includes('12') || lowerName.includes('annual') || (lowerName.includes('year') && !lowerName.includes('half'))) {
+          allowanceDays = 30;
+        } else if (lowerName.includes('180') || lowerName.includes('half') || lowerName.includes('6') || lowerName.includes('semester')) {
+          allowanceDays = 15;
+        } else if (lowerName.includes('90') || lowerName.includes('quarter') || lowerName.includes('3')) {
+          allowanceDays = 7;
         }
       }
 
+      const prevUsed = Number(pkg.freezeDaysUsed ?? rawC.freezeDaysUsed ?? cb.freezeDaysUsed ?? 0);
+      const isAdminUser = isManagerOrSama || currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'manager';
+
+      if (!isAdminUser && allowanceDays > 0 && prevUsed + requestedFreezeDays > allowanceDays) {
+        toast.error(
+          `Cannot freeze for ${requestedFreezeDays} days — only ${Math.max(0, allowanceDays - prevUsed)} of ${allowanceDays} freeze days remaining.`
+        );
+        return;
+      }
+
+      const nextFreezeUsed = prevUsed + requestedFreezeDays;
+      const effTotalAllowance = Math.max(allowanceDays, nextFreezeUsed);
+      const nextFreezeRem = Math.max(0, effTotalAllowance - nextFreezeUsed);
+
+      const extendIsoByDays = (dateStr?: string) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        return new Date(d.getTime() + requestedFreezeDays * 86400000).toISOString().slice(0, 10);
+      };
+
+      const preservedStartDate = pkg.startDate || activeClient.startDate || todayIso;
+      const extendedPkgEndDate = extendIsoByDays(pkg.endDate || activeClient.membershipExpiry) || pkg.endDate || '';
+      const extendedClientExpiry = extendIsoByDays(activeClient.membershipExpiry || pkg.endDate) || activeClient.membershipExpiry || '';
+      const holdReasonStr = `${freezeType} Freeze (${requestedFreezeDays}d): ${freezeReason || 'Paused by staff'}`;
+
+      const packagesCopy = [...basePackages];
       packagesCopy[pkgIdx] = {
         ...pkg,
+        id: pkg.id || `pkg-${pkgIdx}`,
         status: 'Hold',
         isOnHold: true,
-        holdReason: `${freezeType} Freeze: ${freezeReason || 'No details provided'}`,
+        holdReason: holdReasonStr,
         holdDate: new Date().toISOString(),
-        freezeDaysUsed: (pkg.freezeDaysUsed || 0) + Math.max(0, requestedFreezeDays),
-        startDate: freezeStartDate,
-        endDate: freezeEndDate
-      };
+        freezeStartDate: effStart,
+        freezeEndDate: effEnd,
+        freezeDaysUsed: nextFreezeUsed,
+        startDate: preservedStartDate,
+        ...(extendedPkgEndDate ? { endDate: extendedPkgEndDate } : {}),
+        benefits: {
+          ...pb,
+          freezeAllowanceDays: effTotalAllowance,
+          freezeDaysUsed: nextFreezeUsed,
+        },
+      } as any;
 
       await updateClient(activeClient.id, {
         status: 'Hold',
-        packages: packagesCopy
-      });
+        isFrozen: true,
+        freezeStartDate: effStart,
+        freezeEndDate: effEnd,
+        freezeReason: holdReasonStr,
+        freezeAllowanceDays: effTotalAllowance,
+        freezeDaysUsed: nextFreezeUsed,
+        freezeDaysRemaining: nextFreezeRem,
+        freezeCoins: nextFreezeRem,
+        ...(extendedClientExpiry ? { membershipExpiry: extendedClientExpiry } : {}),
+        benefits: {
+          ...cb,
+          freezeAllowanceDays: effTotalAllowance,
+          freezeDaysUsed: nextFreezeUsed,
+        },
+        packages: packagesCopy,
+      } as any);
 
-      // Log audit event
       await addDoc(collection(db, 'auditLogs'), {
         action: 'UPDATE',
         entityType: 'client',
         entityId: activeClient.id,
-        details: `Placed package "${pkg.packageName}" on Hold (${freezeType} Freeze) from ${freezeStartDate} to ${freezeEndDate}.`,
+        details: `Placed package "${pkg.packageName}" on Hold (${freezeType} Freeze, ${requestedFreezeDays} days: ${effStart} → ${effEnd}). Expiry extended to ${extendedPkgEndDate || 'N/A'}. Remaining freeze allowance: ${nextFreezeRem}/${effTotalAllowance}d.`,
         timestamp: new Date().toISOString(),
         userId: currentUser?.id || 'staff',
-        userName: currentUser?.name || 'Staff'
+        userName: currentUser?.name || 'Staff',
       });
 
-      alert("Package frozen successfully.");
+      toast.success(`Package "${pkg.packageName}" frozen for ${requestedFreezeDays} days (${effStart} → ${effEnd})! Expiry extended.`);
       setFreezeReason('');
       setFreezeEndDate('');
       setFreezePackageId('');
       loadClientDetails(activeClient.id);
     } catch (error) {
-      console.error("Package freeze error:", error);
-      alert("Failed to freeze package.");
+      console.error('Package freeze error:', error);
+      toast.error('Failed to freeze package.');
     }
   };
 
-  const handleUnfreezePackage = async (pkgId: string) => {
+  const handleUnfreezePackage = async (pkgId?: string) => {
     if (!activeClient) return;
-    const packagesCopy = [...(activeClient.packages || [])];
-    const pkgIdx = packagesCopy.findIndex(p => p.id === pkgId);
-    if (pkgIdx === -1) return;
+    const rawC = activeClient as any;
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const nowIso = new Date().toISOString();
+
+    const basePackages: ClientPackage[] =
+      activeClient.packages && activeClient.packages.length > 0
+        ? activeClient.packages.map((p, idx) => ({
+            ...p,
+            id: p.id || `pkg-${idx}`,
+          }))
+        : activeClient.packageType
+          ? [
+              {
+                id: 'primary-0',
+                packageName: activeClient.packageType,
+                status: 'Hold',
+                isOnHold: true,
+                startDate: activeClient.startDate || todayIso,
+                endDate: activeClient.membershipExpiry || '',
+                sessionsRemaining: activeClient.sessionsRemaining ?? 'unlimited',
+                sessionsTotal: 'unlimited',
+              } as any,
+            ]
+          : [];
+
+    let pkgIdx = pkgId
+      ? basePackages.findIndex(
+          (p, idx) => p.id === pkgId || p.packageName === pkgId || `pkg-${idx}` === pkgId
+        )
+      : -1;
+    if (pkgIdx === -1) {
+      pkgIdx = basePackages.findIndex((p) => p.status === 'Hold' || p.isOnHold);
+    }
+    if (pkgIdx === -1 && basePackages.length > 0) pkgIdx = 0;
 
     try {
-      const pkg = packagesCopy[pkgIdx];
-      if (!pkg) return;
-      packagesCopy[pkgIdx] = {
-        ...pkg,
-        status: 'Active',
-        isOnHold: false,
-        holdReason: '',
-        holdDate: ''
+      const pkg = basePackages[pkgIdx];
+      const prevFreezeEnd = (pkg as any)?.freezeEndDate || rawC.freezeEndDate;
+      const unusedDays =
+        prevFreezeEnd && new Date(prevFreezeEnd).getTime() > Date.now()
+          ? Math.max(0, Math.floor((new Date(prevFreezeEnd).getTime() - Date.now()) / 86400000))
+          : 0;
+
+      const prevUsed = Number(pkg?.freezeDaysUsed ?? rawC.freezeDaysUsed ?? rawC.benefits?.freezeDaysUsed ?? 0);
+      const nextUsed = Math.max(0, prevUsed - unusedDays);
+      const totalAllowance = Number(rawC.freezeAllowanceDays ?? rawC.benefits?.freezeAllowanceDays ?? 0);
+      const prevRem = Number(rawC.freezeDaysRemaining ?? rawC.freezeCoins ?? Math.max(0, totalAllowance - prevUsed));
+      const nextRem = totalAllowance > 0 ? Math.min(totalAllowance, prevRem + unusedDays) : prevRem + unusedDays;
+
+      const subtractDaysFromIso = (dateStr?: string, dCount = 0) => {
+        if (!dateStr || dCount <= 0) return dateStr || '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        return new Date(d.getTime() - dCount * 86400000).toISOString().slice(0, 10);
       };
+
+      const packagesCopy = [...basePackages];
+      if (pkg) {
+        const adjustedEnd =
+          pkg.endDate && unusedDays > 0 ? subtractDaysFromIso(pkg.endDate, unusedDays) : pkg.endDate;
+        packagesCopy[pkgIdx] = {
+          ...pkg,
+          status: 'Active',
+          isOnHold: false,
+          holdReason: '',
+          holdDate: '',
+          freezeEndDate: todayIso,
+          freezeDaysUsed: nextUsed,
+          ...(adjustedEnd ? { endDate: adjustedEnd } : {}),
+          unfrozenAt: nowIso,
+          unfrozenBy: currentUser?.name || 'Staff',
+        } as any;
+      }
+
+      const nextClientExpiry =
+        activeClient.membershipExpiry && unusedDays > 0
+          ? subtractDaysFromIso(activeClient.membershipExpiry, unusedDays)
+          : activeClient.membershipExpiry;
 
       await updateClient(activeClient.id, {
         status: 'Active',
-        packages: packagesCopy
-      });
+        isFrozen: false,
+        freezeEndDate: todayIso,
+        freezeReason: '',
+        freezeDaysUsed: nextUsed,
+        freezeDaysRemaining: nextRem,
+        freezeCoins: nextRem,
+        ...(nextClientExpiry ? { membershipExpiry: nextClientExpiry } : {}),
+        benefits: {
+          ...(rawC.benefits || {}),
+          freezeDaysUsed: nextUsed,
+        },
+        ...(packagesCopy.length > 0 ? { packages: packagesCopy } : {}),
+      } as any);
 
-      // Log audit event
       await addDoc(collection(db, 'auditLogs'), {
         action: 'UPDATE',
         entityType: 'client',
         entityId: activeClient.id,
-        details: `Resumed/unfroze package "${pkg.packageName}". Status set back to Active.`,
-        timestamp: new Date().toISOString(),
+        details: `Resumed/unfroze package "${pkg?.packageName || activeClient.packageType}". Status set back to Active.${unusedDays > 0 ? ` (${unusedDays} unused freeze days refunded)` : ''}`,
+        timestamp: nowIso,
         userId: currentUser?.id || 'staff',
-        userName: currentUser?.name || 'Staff'
+        userName: currentUser?.name || 'Staff',
       });
 
-      alert("Package unfrozen successfully.");
+      toast.success(
+        `Package "${pkg?.packageName || activeClient.packageType}" unfrozen! Status is now Active.${unusedDays > 0 ? ` (${unusedDays}d refunded)` : ''}`
+      );
       loadClientDetails(activeClient.id);
     } catch (error) {
-      console.error("Package unfreeze error:", error);
-      alert("Failed to unfreeze package.");
+      console.error('Package unfreeze error:', error);
+      toast.error('Failed to unfreeze package.');
     }
   };
 
@@ -2854,6 +3037,25 @@ export default function Clients() {
                     </div>
 
                     <div className="p-5 space-y-5">
+                      {/* Member Profile Photo & Webcam Capture Bar */}
+                      <div className="p-3.5 rounded-xl border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
+                        <MemberPhotoCapture
+                          client={activeClient}
+                          onUpdateClient={updateClient}
+                          size="lg"
+                          showMissingAlert={true}
+                          staffName={currentUser?.name || currentUser?.email || 'Staff'}
+                        />
+                        <div className="text-right hidden sm:block">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                            Member Verification Photo
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Displayed automatically on the Check-in Desk when scanning QR or Member ID
+                          </span>
+                        </div>
+                      </div>
+
                       {/* Horizontal 4-Column Core Fields Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         <div className="space-y-1">
@@ -3337,21 +3539,29 @@ export default function Clients() {
                                 ? differenceInDays(toValidDate(primaryPkg.endDate)!, new Date())
                                 : null;
 
+                            const isAdminUser =
+                              isManagerOrSama ||
+                              currentUser?.role === 'admin' ||
+                              currentUser?.role === 'super_admin' ||
+                              currentUser?.role === 'manager';
+
                             return (
                               <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div>
                                     <span className="text-[10px] font-bold uppercase tracking-wider text-primary block">
-                                      Primary &amp; Secondary Packages (Read-Only on Overview)
+                                      Primary &amp; Secondary Packages {isAdminUser ? '(Admin Quick-Change Enabled)' : '(Read-Only on Overview)'}
                                     </span>
                                     <span className="text-[11px] text-muted-foreground">
-                                      Packages are locked from random profile edits (&lt;24h creation lock enforced in Packages tab).
+                                      {isAdminUser
+                                        ? 'As a CRM Admin, you can change any member package below or in the Packages & Invites tab at any time.'
+                                        : 'Packages are locked from random profile edits (<24h creation lock enforced in Packages tab).'}
                                     </span>
                                   </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                  <div className="p-3 rounded-lg border bg-background space-y-1">
+                                  <div className="p-3 rounded-lg border bg-background space-y-1.5">
                                     <div className="flex items-center justify-between gap-1">
                                       <Badge className="bg-emerald-600 text-white text-[9px] font-bold uppercase">Primary Package</Badge>
                                       {daysRem !== null && (
@@ -3361,6 +3571,66 @@ export default function Clients() {
                                       )}
                                     </div>
                                     <p className="text-xs font-black text-foreground truncate">{primaryPkg?.packageName || activeClient.packageType || 'No Primary Package'}</p>
+                                    {isAdminUser && (
+                                      <div className="pt-1">
+                                        <Select
+                                          value={primaryPkg?.packageName || activeClient.packageType || ''}
+                                          onValueChange={(val) => {
+                                            if (!val) return;
+                                            const sysPkg = packages.find((p) => p.name === val);
+                                            const staffName = currentUser?.name || currentUser?.email || 'Admin';
+                                            const nowIso = new Date().toISOString();
+                                            const baseStart = primaryPkg?.startDate || activeClient.startDate || nowIso.slice(0, 10);
+                                            const nextEnd = sysPkg ? safeIsoDate(safeAddDays(baseStart, sysPkg.expiryDays)) : (primaryPkg?.endDate || activeClient.membershipExpiry || '');
+                                            const nextSessions = sysPkg?.sessions ?? primaryPkg?.sessionsRemaining ?? 'unlimited';
+                                            const updatedPkgs = allPkgs.length > 0
+                                              ? allPkgs.map((p, idx) =>
+                                                  p === primaryPkg || idx === 0
+                                                    ? {
+                                                        ...p,
+                                                        id: p.id || `pkg-${idx}`,
+                                                        packageName: val,
+                                                        startDate: baseStart,
+                                                        endDate: nextEnd,
+                                                        sessionsTotal: nextSessions,
+                                                        sessionsRemaining: nextSessions,
+                                                        lastModifiedBy: staffName,
+                                                        lastModifiedAt: nowIso,
+                                                      }
+                                                    : p
+                                                )
+                                              : [
+                                                  {
+                                                    id: 'primary-0',
+                                                    packageName: val,
+                                                    status: 'Active' as const,
+                                                    startDate: baseStart,
+                                                    endDate: nextEnd,
+                                                    sessionsTotal: nextSessions,
+                                                    sessionsRemaining: nextSessions,
+                                                    createdAt: nowIso,
+                                                    createdBy: staffName,
+                                                    createdByName: staffName,
+                                                  },
+                                                ];
+                                            updateClientPackages(updatedPkgs);
+                                            void addAuditLog('UPDATE', 'PACKAGE_RECORD', activeClient.id, `Admin changed primary package to "${val}" for ${activeClient.name}`, staffName);
+                                            toast.success(`Primary package changed to "${val}"`);
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-7 text-[11px] bg-muted/30">
+                                            <SelectValue placeholder="Change Primary Package..." />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {visiblePackages.map((p) => (
+                                              <SelectItem key={p.id} value={p.name} className="text-xs">
+                                                {p.name} ({p.price.toLocaleString()} LE)
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    )}
                                     <p className="text-[10px] text-muted-foreground font-mono">
                                       {primaryPkg?.startDate ? safeFormatDate(primaryPkg.startDate, 'dd MMM yyyy') : '—'} → {primaryPkg?.endDate ? safeFormatDate(primaryPkg.endDate, 'dd MMM yyyy') : '—'}
                                     </p>
@@ -3777,7 +4047,25 @@ export default function Clients() {
                         </div>
 
                         <div className="p-5 space-y-5">
-                          {((activeClient.packages || []).length > 0 ? activeClient.packages! : []).map((pkg, idx) => {
+                          {(() => {
+                            const resolvedClientPackages: ClientPackage[] =
+                              activeClient.packages && activeClient.packages.length > 0
+                                ? activeClient.packages.map((p, i) => ({ ...p, id: p.id || `pkg-${i}` }))
+                                : activeClient.packageType
+                                  ? [
+                                      {
+                                        id: 'primary-0',
+                                        packageName: activeClient.packageType,
+                                        status: (activeClient.status === 'Hold' ? 'Hold' : activeClient.status === 'Expired' ? 'Expired' : 'Active') as any,
+                                        startDate: activeClient.startDate || (activeClient as any).joinDate || new Date().toISOString().slice(0, 10),
+                                        endDate: activeClient.membershipExpiry || '',
+                                        sessionsRemaining: typeof activeClient.sessionsRemaining === 'number' ? activeClient.sessionsRemaining : 365,
+                                        sessionsTotal: 365,
+                                        freezeDaysUsed: Number((activeClient as any).freezeDaysUsed || 0),
+                                      } as ClientPackage,
+                                    ]
+                                  : [];
+                            return resolvedClientPackages.map((pkg, idx) => {
                       const pkgNorm = String(pkg.packageName || activeClient.packageType || '').trim().toLowerCase();
                       const catMatch = packages.find(cp => (cp.name || '').trim().toLowerCase() === pkgNorm || cp.id === (pkg as any).packageId) as any;
                       const rawC = activeClient as any;
@@ -3799,7 +4087,12 @@ export default function Clients() {
                       const ageHours = createdDate ? (Date.now() - createdDate.getTime()) / (1000 * 60 * 60) : 999;
                       const isWithin24h = ageHours >= 0 && ageHours <= 24;
                       const isFinanceConfirmed = Boolean((pkg as any).financeConfirmed);
-                      const canSameDayEdit = isWithin24h && !isFinanceConfirmed;
+                      const isAdminUser =
+                        isManagerOrSama ||
+                        currentUser?.role === 'admin' ||
+                        currentUser?.role === 'super_admin' ||
+                        currentUser?.role === 'manager';
+                      const canSameDayEdit = isAdminUser || (isWithin24h && !isFinanceConfirmed);
                       const hoursLeft = isWithin24h ? Math.max(1, Math.ceil(24 - ageHours)) : 0;
 
                       const isSecondaryPkg =
@@ -3830,7 +4123,11 @@ export default function Clients() {
                               <Badge variant={pkg.status === 'Active' ? 'default' : 'secondary'} className="text-[10px] font-bold">
                                 #{idx + 1} • {pkg.status}
                               </Badge>
-                              {canSameDayEdit ? (
+                              {isAdminUser ? (
+                                <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30 font-bold">
+                                  👑 Admin Edit Unlocked (CRM Admin can change package anytime)
+                                </Badge>
+                              ) : canSameDayEdit ? (
                                 <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-bold">
                                   🔓 Same-Day Edit Open ({hoursLeft}h left • Unconfirmed by Accounting)
                                 </Badge>
@@ -3854,13 +4151,13 @@ export default function Clients() {
                             </span>
                             {(pkg as any).lastModifiedBy && (
                               <span>
-                                Last Edited (&lt;24h): <strong className="text-foreground">{(pkg as any).lastModifiedBy}</strong>
+                                Last Edited: <strong className="text-foreground">{(pkg as any).lastModifiedBy}</strong>
                                 {(pkg as any).lastModifiedAt ? ` (${safeFormatDate((pkg as any).lastModifiedAt, 'dd MMM HH:mm')})` : ''}
                               </span>
                             )}
                           </div>
 
-                          {/* Same-Day Editable Fields (Locked when !canSameDayEdit) */}
+                          {/* Same-Day / Admin Editable Fields (Locked when !canSameDayEdit) */}
                           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                             <div>
                               <Label className="text-[10px] uppercase text-muted-foreground font-bold">Package Type (Searchable)</Label>
@@ -3881,23 +4178,26 @@ export default function Clients() {
                                 onValueChange={(val) => {
                                   if (!val || !canSameDayEdit) return;
                                   const sysPkg = packages.find((p) => p.name === val);
-                                  const updated = [...(activeClient.packages || [])];
+                                  const updated = [...resolvedClientPackages];
                                   const cur = updated[idx];
                                   if (!cur) return;
                                   const prevName = cur.packageName;
                                   const nowIso = new Date().toISOString();
                                   const staffName = currentUser?.name || currentUser?.email || 'Staff';
+                                  const nextSessions = sysPkg?.sessions ?? cur.sessionsRemaining ?? 'unlimited';
                                   updated[idx] = {
                                     ...cur,
+                                    id: cur.id || `pkg-${idx}`,
                                     packageName: val,
-                                    sessionsTotal: sysPkg?.sessions,
-                                    sessionsRemaining: sysPkg?.sessions,
+                                    sessionsTotal: nextSessions,
+                                    sessionsRemaining: nextSessions,
                                     endDate: sysPkg && cur.startDate ? safeIsoDate(safeAddDays(cur.startDate, sysPkg.expiryDays)) : cur.endDate,
                                     lastModifiedBy: staffName,
                                     lastModifiedAt: nowIso,
                                   } as any;
                                   updateClientPackages(updated);
-                                  void addAuditLog('UPDATE', 'PACKAGE_RECORD', activeClient.id, `Same-day (<24h) package change from "${prevName}" to "${val}" by ${staffName}`, staffName);
+                                  void addAuditLog('UPDATE', 'PACKAGE_RECORD', activeClient.id, `Package changed from "${prevName}" to "${val}" by ${staffName}`, staffName);
+                                  toast.success(`Package updated to "${val}"`);
                                 }}
                               >
                                 <SelectTrigger className="h-8 text-xs bg-muted/30 mt-1">
@@ -3923,7 +4223,7 @@ export default function Clients() {
                                 value={pkg.startDate ? safeFormatDate(pkg.startDate, 'yyyy-MM-dd', '') : ''}
                                 onChange={(e) => {
                                   if (!canSameDayEdit) return;
-                                  const updated = [...(activeClient.packages || [])];
+                                  const updated = [...resolvedClientPackages];
                                   const cur = updated[idx];
                                   if (!cur) return;
                                   const sysPkg = packages.find((p) => p.name === cur.packageName);
@@ -3932,6 +4232,7 @@ export default function Clients() {
                                   const staffName = currentUser?.name || currentUser?.email || 'Staff';
                                   updated[idx] = {
                                     ...cur,
+                                    id: cur.id || `pkg-${idx}`,
                                     startDate: ns,
                                     endDate: sysPkg && ns ? safeIsoDate(safeAddDays(ns, sysPkg.expiryDays)) : cur.endDate,
                                     lastModifiedBy: staffName,
@@ -3950,7 +4251,7 @@ export default function Clients() {
                                 value={pkg.endDate ? safeFormatDate(pkg.endDate, 'yyyy-MM-dd', '') : ''}
                                 onChange={(e) => {
                                   if (!canSameDayEdit) return;
-                                  const updated = [...(activeClient.packages || [])];
+                                  const updated = [...resolvedClientPackages];
                                   const cur = updated[idx];
                                   if (!cur) return;
                                   const val = e.target.value;
@@ -3958,6 +4259,7 @@ export default function Clients() {
                                   const staffName = currentUser?.name || currentUser?.email || 'Staff';
                                   updated[idx] = {
                                     ...cur,
+                                    id: cur.id || `pkg-${idx}`,
                                     endDate: ns,
                                     lastModifiedBy: staffName,
                                     lastModifiedAt: new Date().toISOString(),
@@ -3975,13 +4277,14 @@ export default function Clients() {
                                 value={pkg.sessionsRemaining ?? ''}
                                 onChange={(e) => {
                                   if (!canSameDayEdit) return;
-                                  const updated = [...(activeClient.packages || [])];
+                                  const updated = [...resolvedClientPackages];
                                   const cur = updated[idx];
                                   if (!cur) return;
                                   const newVal = parseInt(e.target.value) || 0;
                                   const staffName = currentUser?.name || currentUser?.email || 'Staff';
                                   updated[idx] = {
                                     ...cur,
+                                    id: cur.id || `pkg-${idx}`,
                                     sessionsRemaining: newVal,
                                     lastModifiedBy: staffName,
                                     lastModifiedAt: new Date().toISOString(),
@@ -4063,7 +4366,7 @@ export default function Clients() {
                                         return;
                                       }
                                       const nowIso = new Date().toISOString();
-                                      const remainingPkgs = (activeClient.packages || []).filter((_, i) => i !== idx);
+                                      const remainingPkgs = resolvedClientPackages.filter((_, i) => i !== idx);
                                       const targetPkgs = [
                                         {
                                           ...pkg,
@@ -4103,7 +4406,7 @@ export default function Clients() {
                             </div>
                           )}
 
-                          {/* Per-Package Actions: Upgrade, Renew, Transfer, Confirm Accounting, Admin Override */}
+                          {/* Per-Package Actions: Upgrade, Renew, Freeze/Unfreeze, Transfer, Confirm Accounting, Admin Override */}
                           <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
                             <Button
                               variant="outline"
@@ -4130,6 +4433,28 @@ export default function Clients() {
                             >
                               <RefreshCw className="h-3 w-3 mr-1" /> Renew This Package
                             </Button>
+                            {pkg.status === 'Hold' || pkg.isOnHold ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 border-amber-500/40 font-bold"
+                                onClick={() => handleUnfreezePackage(pkg.id || pkg.packageName)}
+                              >
+                                Resume / Unfreeze Package
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/20 border-cyan-500/40 font-bold"
+                                onClick={() => {
+                                  setFreezePackageId(pkg.id || pkg.packageName);
+                                  setMemberProfileTab('freeze');
+                                }}
+                              >
+                                ❄️ Freeze Package
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
@@ -4147,12 +4472,13 @@ export default function Clients() {
                                 size="sm"
                                 className="h-7 text-xs text-muted-foreground hover:text-foreground ml-auto"
                                 onClick={() => {
-                                  const updated = [...(activeClient.packages || [])];
+                                  const updated = [...resolvedClientPackages];
                                   const cur = updated[idx];
                                   if (!cur) return;
                                   const nextState = !isFinanceConfirmed;
                                   updated[idx] = {
                                     ...cur,
+                                    id: cur.id || `pkg-${idx}`,
                                     financeConfirmed: nextState,
                                     financeConfirmedAt: nextState ? new Date().toISOString() : null,
                                     financeConfirmedBy: nextState ? (currentUser?.name || 'Finance') : null,
@@ -4185,7 +4511,8 @@ export default function Clients() {
                           </div>
                         </div>
                       );
-                    })}
+                    });
+                          })()}
 
                     {/* ── CONSOLIDATED INVITATIONS (QUOTA) & UNLIMITED REFERRALS SECTION ── */}
                     <div className="pt-4 border-t space-y-4">
@@ -4217,22 +4544,98 @@ export default function Clients() {
                           );
                         })()}
 
-                        {/* Card 2: Unlimited Member Referrals (+ Add Referral) */}
+                        {/* Card 2: Unlimited Member Referrals (+ Conversion Tracking & Add Referral) */}
                         {(() => {
                           const memberReferrals: any[] = Array.isArray((activeClient as any).referrals) ? (activeClient as any).referrals : [];
+                          const referredClients = clients.filter(
+                            (c) =>
+                              c.id !== activeClient.id &&
+                              ((c as any).referredByClientId === activeClient.id ||
+                                (c as any).invitedByClientId === activeClient.id ||
+                                (c.referredBy &&
+                                  (c.referredBy === activeClient.id ||
+                                    c.referredBy === activeClient.memberId ||
+                                    c.referredBy.toLowerCase() === (activeClient.name || '').toLowerCase())))
+                          );
+                          const convertedMembers = referredClients.filter(
+                            (c) =>
+                              c.stage === 'Converted' ||
+                              c.status === 'Active' ||
+                              Boolean(c.packageType && c.packageType !== 'None') ||
+                              Boolean(c.packages && c.packages.length > 0)
+                          );
+                          const totalReferredCount = Math.max(memberReferrals.length, referredClients.length);
+                          const convertedCount = convertedMembers.length;
+                          const inPipelineCount = Math.max(0, totalReferredCount - convertedCount);
+
                           return (
                             <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-2.5">
-                              <div className="flex items-center justify-between">
+                              <div className="flex items-center justify-between flex-wrap gap-1.5">
                                 <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                                   <Users className="h-3.5 w-3.5" /> Unlimited Member Referrals
                                 </span>
-                                <Badge className="bg-emerald-600 text-white text-[10px] font-bold">
-                                  ∞ Unlimited ({memberReferrals.length} Referred)
-                                </Badge>
+                                <div className="flex items-center gap-1.5">
+                                  <Badge className="bg-emerald-600 text-white text-[10px] font-bold">
+                                    {totalReferredCount} Referred
+                                  </Badge>
+                                  <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                                    ✅ {convertedCount} Became Member{convertedCount === 1 ? '' : 's'}
+                                  </Badge>
+                                </div>
                               </div>
-                              <p className="text-[11px] text-muted-foreground">
-                                Submit unlimited friend/family referral leads for Sales follow-up without deducting any guest pass quota.
-                              </p>
+
+                              {/* 3 Referral Conversion KPI Tiles */}
+                              <div className="grid grid-cols-3 gap-2 pt-1">
+                                <div className="p-2 rounded-lg border bg-background/80 text-center">
+                                  <span className="text-[9px] font-bold uppercase text-muted-foreground block">Total Referred</span>
+                                  <span className="text-sm font-black text-foreground">{totalReferredCount}</span>
+                                </div>
+                                <div className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-center">
+                                  <span className="text-[9px] font-bold uppercase text-emerald-700 dark:text-emerald-300 block">Became Members</span>
+                                  <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{convertedCount}</span>
+                                </div>
+                                <div className="p-2 rounded-lg border bg-background/80 text-center">
+                                  <span className="text-[9px] font-bold uppercase text-muted-foreground block">In Lead Pipeline</span>
+                                  <span className="text-sm font-black text-amber-600 dark:text-amber-400">{inPipelineCount}</span>
+                                </div>
+                              </div>
+
+                              {/* Referred People List with Conversion Status */}
+                              {referredClients.length > 0 && (
+                                <div className="max-h-28 overflow-y-auto space-y-1 pt-1">
+                                  {referredClients.map((rc) => {
+                                    const isConverted =
+                                      rc.stage === 'Converted' ||
+                                      rc.status === 'Active' ||
+                                      Boolean(rc.packageType && rc.packageType !== 'None') ||
+                                      Boolean(rc.packages && rc.packages.length > 0);
+                                    return (
+                                      <div
+                                        key={rc.id}
+                                        className="flex items-center justify-between gap-2 px-2.5 py-1 rounded-md border bg-background/90 text-[11px]"
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={() => setActiveClientId(rc.id)}
+                                          className="font-bold text-foreground hover:text-primary hover:underline truncate text-left"
+                                        >
+                                          {rc.name} <span className="text-muted-foreground font-mono font-normal">({rc.phone})</span>
+                                        </button>
+                                        <Badge
+                                          variant="outline"
+                                          className={`text-[9px] h-4 px-1.5 shrink-0 font-bold ${
+                                            isConverted
+                                              ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                              : 'border-amber-500/40 bg-amber-500/10 text-amber-600'
+                                          }`}
+                                        >
+                                          {isConverted ? `✅ Member (${rc.packageType || 'Active'})` : `⏳ Lead (${rc.stage || 'New'})`}
+                                        </Badge>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
 
                               {showQuickReferralForm ? (
                                 <div className="space-y-2 pt-2 border-t border-emerald-500/20">
@@ -4964,94 +5367,230 @@ export default function Clients() {
 
                 {/* ── FREEZE TAB ── */}
                 <TabsContent value="freeze" className="mt-0 outline-none p-5 text-left space-y-6">
-                  {/* Frozen Packages list */}
                   {(() => {
-                    const frozenPkgs = (activeClient.packages || []).filter((p) => p.status === 'Hold' || p.isOnHold);
+                    const rawC = activeClient as any;
+                    const resolvedPkgs: ClientPackage[] =
+                      activeClient.packages && activeClient.packages.length > 0
+                        ? activeClient.packages.map((p, i) => ({ ...p, id: p.id || `pkg-${i}` }))
+                        : activeClient.packageType
+                          ? [
+                              {
+                                id: 'primary-0',
+                                packageName: activeClient.packageType,
+                                status: (activeClient.status === 'Hold' || rawC.isFrozen ? 'Hold' : 'Active') as any,
+                                isOnHold: activeClient.status === 'Hold' || Boolean(rawC.isFrozen),
+                                holdReason: rawC.freezeReason || 'Frozen membership',
+                                startDate: activeClient.startDate || rawC.joinDate || new Date().toISOString().slice(0, 10),
+                                endDate: activeClient.membershipExpiry || '',
+                                freezeDaysUsed: Number(rawC.freezeDaysUsed || 0),
+                              },
+                            ]
+                          : [];
 
-                    if (frozenPkgs.length > 0) {
-                      return (
-                        <div className="p-4 rounded-xl border border-amber-200 bg-amber-500/10 space-y-3">
-                          <div className="flex items-center gap-2 text-amber-600">
-                            <AlertTriangle className="h-5 w-5" />
-                            <p className="text-sm font-bold">Currently Frozen Packages</p>
-                          </div>
-                          {frozenPkgs.map((pkg) => (
-                            <div key={pkg.id} className="bg-background p-3 rounded-lg border flex items-center justify-between gap-4">
-                              <div>
-                                <p className="text-sm font-bold text-foreground">{pkg.packageName}</p>
-                                <p className="text-xs text-muted-foreground">{pkg.holdReason || 'Frozen package'}</p>
-                              </div>
-                              <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => handleUnfreezePackage(pkg.id)}>
-                                Resume / Unfreeze
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      );
+                    const frozenPkgs = resolvedPkgs.filter((p) => p.status === 'Hold' || p.isOnHold);
+                    const activePkgs = resolvedPkgs.filter((p) => p.status === 'Active' && !p.isOnHold);
+                    const targetPkg =
+                      activePkgs.find((p) => p.id === freezePackageId || p.packageName === freezePackageId) ||
+                      activePkgs[0] ||
+                      resolvedPkgs[0];
+
+                    const catPkg = packages.find(
+                      (cp) => (cp.name || '').trim().toLowerCase() === String(targetPkg?.packageName || activeClient.packageType || '').trim().toLowerCase()
+                    );
+                    let freezeAllowanceTotal = Number(
+                      rawC.freezeAllowanceDays ??
+                        (targetPkg as any)?.benefits?.freezeAllowanceDays ??
+                        rawC.benefits?.freezeAllowanceDays ??
+                        catPkg?.benefits?.freezeAllowanceDays ??
+                        catPkg?.freezeAllowanceDays ??
+                        0
+                    );
+                    if (freezeAllowanceTotal === 0) {
+                      const lowerPkg = String(targetPkg?.packageName || activeClient.packageType || '').toLowerCase();
+                      if (lowerPkg.includes('365') || lowerPkg.includes('12') || lowerPkg.includes('annual') || (lowerPkg.includes('year') && !lowerPkg.includes('half'))) {
+                        freezeAllowanceTotal = 30;
+                      } else if (lowerPkg.includes('180') || lowerPkg.includes('half') || lowerPkg.includes('6') || lowerPkg.includes('semester')) {
+                        freezeAllowanceTotal = 15;
+                      } else if (lowerPkg.includes('90') || lowerPkg.includes('quarter') || lowerPkg.includes('3')) {
+                        freezeAllowanceTotal = 7;
+                      }
                     }
-                    return null;
-                  })()}
+                    const freezeUsed = Number(
+                      targetPkg?.freezeDaysUsed ??
+                        rawC.freezeDaysUsed ??
+                        rawC.benefits?.freezeDaysUsed ??
+                        0
+                    );
+                    const freezeRem = Number(
+                      rawC.freezeDaysRemaining ??
+                        rawC.freezeCoins ??
+                        Math.max(0, freezeAllowanceTotal - freezeUsed)
+                    );
+                    const effFreezeTotal = Math.max(freezeAllowanceTotal, freezeUsed + freezeRem);
 
-                  {/* Freeze form */}
-                  <div className="p-4 rounded-xl border bg-muted/20 space-y-4">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Pause Package / Freeze Membership</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-muted-foreground">Select Active Package</Label>
-                        <select
-                          className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                          value={freezePackageId}
-                          onChange={(e) => setFreezePackageId(e.target.value)}
-                        >
-                          <option value="">Select a package</option>
-                          {(activeClient.packages || [])
-                            .filter((p) => p.status === 'Active')
-                            .map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.packageName}
-                              </option>
+                    return (
+                      <>
+                        {/* Freeze Allowance Balance Banner */}
+                        <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/10 flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-extrabold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
+                              ❄️ Freeze Allowance Balance
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Freezing pauses the membership and automatically extends the package expiry date by the frozen days.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="font-mono text-xs font-black bg-background border-cyan-500/40 text-cyan-600 dark:text-cyan-400 px-3 py-1">
+                              {freezeRem} / {effFreezeTotal} Days Remaining ({freezeUsed}d Used)
+                            </Badge>
+                          </div>
+                        </div>
+
+                        {/* Currently Frozen Packages list */}
+                        {frozenPkgs.length > 0 && (
+                          <div className="p-4 rounded-xl border border-amber-200 bg-amber-500/10 space-y-3">
+                            <div className="flex items-center gap-2 text-amber-600">
+                              <AlertTriangle className="h-5 w-5" />
+                              <p className="text-sm font-bold">Currently Frozen Packages (On Hold)</p>
+                            </div>
+                            {frozenPkgs.map((pkg, idx) => (
+                              <div key={pkg.id || idx} className="bg-background p-3 rounded-lg border flex flex-wrap items-center justify-between gap-4">
+                                <div>
+                                  <p className="text-sm font-bold text-foreground">{pkg.packageName}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {pkg.holdReason || rawC.freezeReason || 'Frozen package'}
+                                    {(pkg as any).freezeStartDate || rawC.freezeStartDate
+                                      ? ` • ${(pkg as any).freezeStartDate || rawC.freezeStartDate} → ${(pkg as any).freezeEndDate || rawC.freezeEndDate || '—'}`
+                                      : ''}
+                                  </p>
+                                  {pkg.endDate && (
+                                    <p className="text-[11px] font-mono text-emerald-600 mt-0.5">
+                                      Extended Package Expiry: {String(pkg.endDate).slice(0, 10)}
+                                    </p>
+                                  )}
+                                </div>
+                                <Button
+                                  size="sm"
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                                  onClick={() => handleUnfreezePackage(pkg.id || pkg.packageName)}
+                                >
+                                  Resume / Unfreeze Now
+                                </Button>
+                              </div>
                             ))}
-                        </select>
-                      </div>
+                          </div>
+                        )}
 
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-muted-foreground">Freeze Type</Label>
-                        <select
-                          className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                          value={freezeType}
-                          onChange={(e) => setFreezeType(e.target.value as any)}
-                        >
-                          <option value="Normal">Normal Freeze</option>
-                          <option value="Back Freeze">Back Freeze (Retroactive)</option>
-                          <option value="Medical">Medical Emergency Freeze</option>
-                        </select>
-                      </div>
+                        {/* Freeze form */}
+                        <div className="p-4 rounded-xl border bg-muted/20 space-y-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                              Pause Package / Freeze Membership
+                            </p>
+                            {/* Quick Preset Duration Buttons */}
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold uppercase text-muted-foreground mr-1">Quick Duration:</span>
+                              {[3, 7, 14, 30].map((dPreset) => (
+                                <Button
+                                  key={dPreset}
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2.5 text-xs font-bold border-cyan-500/40 text-cyan-600 hover:bg-cyan-500/15"
+                                  onClick={() => {
+                                    const baseStart = freezeStartDate || new Date().toISOString().slice(0, 10);
+                                    setFreezeStartDate(baseStart);
+                                    const nextEnd = new Date(new Date(baseStart).getTime() + dPreset * 86400000)
+                                      .toISOString()
+                                      .slice(0, 10);
+                                    setFreezeEndDate(nextEnd);
+                                    if (!freezePackageId && targetPkg) {
+                                      setFreezePackageId(targetPkg.id || targetPkg.packageName);
+                                    }
+                                  }}
+                                >
+                                  +{dPreset} Days
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
 
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-muted-foreground">Start Date</Label>
-                        <Input type="date" className="h-9" value={freezeStartDate} onChange={(e) => setFreezeStartDate(e.target.value)} />
-                      </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-muted-foreground">Select Active Package</Label>
+                              <select
+                                className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                value={freezePackageId || targetPkg?.id || targetPkg?.packageName || ''}
+                                onChange={(e) => setFreezePackageId(e.target.value)}
+                              >
+                                {activePkgs.length === 0 ? (
+                                  <option value="">No active packages available to freeze</option>
+                                ) : (
+                                  activePkgs.map((p, idx) => (
+                                    <option key={p.id || idx} value={p.id || p.packageName}>
+                                      {p.packageName} {p.endDate ? `(Expires: ${String(p.endDate).slice(0, 10)})` : ''}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                            </div>
 
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-muted-foreground">End Date</Label>
-                        <Input type="date" className="h-9" value={freezeEndDate} onChange={(e) => setFreezeEndDate(e.target.value)} />
-                      </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-muted-foreground">Freeze Type</Label>
+                              <select
+                                className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                value={freezeType}
+                                onChange={(e) => setFreezeType(e.target.value as any)}
+                              >
+                                <option value="Normal">Normal Freeze</option>
+                                <option value="Back Freeze">Back Freeze (Retroactive)</option>
+                                <option value="Medical">Medical Emergency Freeze</option>
+                              </select>
+                            </div>
 
-                      <div className="space-y-1 col-span-2">
-                        <Label className="text-xs font-semibold text-muted-foreground">Freeze Reason / Notes</Label>
-                        <Input
-                          type="text"
-                          className="h-9 bg-background"
-                          value={freezeReason}
-                          onChange={(e) => setFreezeReason(e.target.value)}
-                          placeholder="e.g. Travel, Retroactive freeze details, Medical notes"
-                        />
-                      </div>
-                    </div>
-                    <Button className="w-full text-xs font-bold" onClick={handleFreezePackage}>
-                      Submit Freeze Request
-                    </Button>
-                  </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-muted-foreground">Freeze Start Date</Label>
+                              <Input
+                                type="date"
+                                className="h-9"
+                                value={freezeStartDate}
+                                onChange={(e) => setFreezeStartDate(e.target.value)}
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold text-muted-foreground">Freeze End Date (Resume Date)</Label>
+                              <Input
+                                type="date"
+                                className="h-9"
+                                value={freezeEndDate}
+                                onChange={(e) => setFreezeEndDate(e.target.value)}
+                              />
+                            </div>
+
+                            <div className="space-y-1 md:col-span-2">
+                              <Label className="text-xs font-semibold text-muted-foreground">Freeze Reason / Notes</Label>
+                              <Input
+                                type="text"
+                                className="h-9 bg-background"
+                                value={freezeReason}
+                                onChange={(e) => setFreezeReason(e.target.value)}
+                                placeholder="e.g. Travel, Retroactive freeze details, Medical notes"
+                              />
+                            </div>
+                          </div>
+                          <Button
+                            className="w-full text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white"
+                            disabled={activePkgs.length === 0}
+                            onClick={() => handleFreezePackage(freezePackageId || targetPkg?.id || targetPkg?.packageName)}
+                          >
+                            ❄️ Confirm Freeze &amp; Extend Package Expiry
+                          </Button>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </TabsContent>
 
                 {/* ── DOCUMENTS TAB ── */}

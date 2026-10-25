@@ -86,6 +86,7 @@ import {
   createGuestInvitationWithProfile,
   activatePendingGuestInvite,
 } from './services/guestReferralService';
+import { MemberPhotoCapture } from './components/member/MemberPhotoCapture';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const {
@@ -930,23 +931,55 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       const todayStr = nowIso.slice(0, 10);
 
       if (action === 'unfreeze') {
+        const prevFreezeEnd = m.freezeEndDate || (m.packages || []).find((p: any) => p.status === 'Hold' || p.isOnHold)?.freezeEndDate;
+        const unusedDays =
+          prevFreezeEnd && new Date(prevFreezeEnd).getTime() > Date.now()
+            ? Math.max(0, Math.floor((new Date(prevFreezeEnd).getTime() - Date.now()) / 86400000))
+            : 0;
+        const prevUsed = Number(m.freezeDaysUsed ?? m.benefits?.freezeDaysUsed ?? Math.max(0, freezeTot - freezeRem));
+        const nextUsed = Math.max(0, prevUsed - unusedDays);
+        const nextRem = freezeTot > 0 ? Math.min(freezeTot, freezeRem + unusedDays) : freezeRem + unusedDays;
+
+        const subtractDaysFromIso = (dateStr?: string, dCount = 0) => {
+          if (!dateStr || dCount <= 0) return dateStr || '';
+          const d = new Date(dateStr);
+          if (isNaN(d.getTime())) return dateStr;
+          return new Date(d.getTime() - dCount * 86400000).toISOString().slice(0, 10);
+        };
+
         const updatedPackages = (m.packages || []).map((pkg: any) =>
           pkg.status === 'Hold' || pkg.isOnHold
             ? {
                 ...pkg,
                 status: 'Active',
                 isOnHold: false,
-                holdReason: undefined,
+                holdReason: '',
+                freezeEndDate: todayStr,
+                freezeDaysUsed: nextUsed,
+                ...(pkg.endDate && unusedDays > 0 ? { endDate: subtractDaysFromIso(pkg.endDate, unusedDays) } : {}),
                 unfrozenAt: nowIso,
                 unfrozenBy: staffName,
               }
             : pkg
         );
 
+        const nextExpiry = m.membershipExpiry && unusedDays > 0
+          ? subtractDaysFromIso(m.membershipExpiry, unusedDays)
+          : m.membershipExpiry;
+
         const updates: Record<string, any> = {
           status: 'Active',
           isFrozen: false,
           freezeEndDate: todayStr,
+          freezeReason: '',
+          freezeDaysUsed: nextUsed,
+          freezeDaysRemaining: nextRem,
+          freezeCoins: nextRem,
+          ...(nextExpiry ? { membershipExpiry: nextExpiry } : {}),
+          benefits: {
+            ...(m.benefits || {}),
+            freezeDaysUsed: nextUsed,
+          },
           ...(updatedPackages.length > 0 ? { packages: updatedPackages } : {}),
         };
 
@@ -955,14 +988,16 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           'UPDATE',
           'CLIENT',
           lastScannedMember.id,
-          `Unfroze membership from Check-in Window for ${lastScannedMember.name}`,
+          `Unfroze membership from Check-in Window for ${lastScannedMember.name}${unusedDays > 0 ? ` (${unusedDays} unused freeze days refunded)` : ''}`,
           staffName
         );
         const nextMember = { ...lastScannedMember, ...updates };
         setLastScannedMember(nextMember);
         setGatekeeperEval(evaluateCheckinGatekeeper(nextMember, payments || []));
         setIsQuickFreezeOpen(false);
-        setSuccessMessage(`Membership unfrozen for ${lastScannedMember.name} — Status is now Active!`);
+        setSuccessMessage(
+          `Membership unfrozen for ${lastScannedMember.name} — Status is now Active!${unusedDays > 0 ? ` (${unusedDays}d refunded)` : ''}`
+        );
         toast.success(`Membership unfrozen for ${lastScannedMember.name}`);
       } else {
         const daysToFreeze = Math.max(1, Number(quickFreezeDays) || 7);
@@ -972,7 +1007,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           return;
         }
 
-        const nextFreezeRem = Math.max(0, freezeRem - daysToFreeze);
+        const nextFreezeRem = Math.max(0, (freezeRem || daysToFreeze) - daysToFreeze);
         const prevFreezeUsed = Number(m.freezeDaysUsed ?? m.benefits?.freezeDaysUsed ?? Math.max(0, freezeTot - freezeRem));
         const nextFreezeUsed = prevFreezeUsed + daysToFreeze;
         const effFreezeTot = Math.max(freezeTot, nextFreezeRem + nextFreezeUsed);
@@ -980,29 +1015,48 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         const reasonStr = quickFreezeReason.trim() || `Frozen ${daysToFreeze}d from Check-in Desk by ${staffName}`;
 
         const addDaysToIso = (dateStr?: string) => {
-          if (!dateStr) return undefined;
+          if (!dateStr) return '';
           const d = new Date(dateStr);
           if (isNaN(d.getTime())) return dateStr;
           return new Date(d.getTime() + daysToFreeze * 86400000).toISOString().slice(0, 10);
         };
 
-        const nextMembershipExpiry = addDaysToIso(m.membershipExpiry);
+        const basePackages = Array.isArray(m.packages) && m.packages.length > 0
+          ? m.packages
+          : m.packageType
+            ? [
+                {
+                  id: 'primary-0',
+                  packageName: m.packageType,
+                  status: 'Active',
+                  startDate: m.startDate || m.joinDate || todayStr,
+                  endDate: m.membershipExpiry || '',
+                  sessionsRemaining: m.sessionsRemaining ?? 'unlimited',
+                  sessionsTotal: 'unlimited',
+                },
+              ]
+            : [];
+
+        const nextMembershipExpiry = addDaysToIso(m.membershipExpiry || basePackages[0]?.endDate);
         let frozePrimary = false;
-        const updatedPackages = (m.packages || []).map((pkg: any, idx: number) => {
+        const updatedPackages = basePackages.map((pkg: any, idx: number) => {
           const isTarget =
             pkg.packageName === selectedPackageName ||
             (!frozePrimary && (pkg.status === 'Active' || idx === 0));
           if (isTarget && !frozePrimary) {
             frozePrimary = true;
+            const nextPkgEnd = addDaysToIso(pkg.endDate || m.membershipExpiry) || pkg.endDate || nextMembershipExpiry || '';
             return {
               ...pkg,
+              id: pkg.id || `pkg-${idx}`,
               status: 'Hold',
               isOnHold: true,
               holdReason: reasonStr,
+              holdDate: nowIso,
               freezeStartDate: todayStr,
               freezeEndDate: freezeEndStr,
               freezeDaysUsed: nextFreezeUsed,
-              endDate: addDaysToIso(pkg.endDate) || pkg.endDate,
+              ...(nextPkgEnd ? { endDate: nextPkgEnd } : {}),
               benefits: {
                 ...(pkg.benefits || {}),
                 freezeAllowanceDays: effFreezeTot,
@@ -1051,8 +1105,9 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         toast.success(`Froze ${lastScannedMember.name} for ${daysToFreeze} days!`);
       }
     } catch (err: any) {
+      console.error('[CheckinFreeze] Error:', err);
       setError(err instanceof Error ? err.message : `Failed to ${action} membership`);
-      toast.error(`Failed to ${action} membership`);
+      toast.error(err instanceof Error ? err.message : `Failed to ${action} membership`);
     } finally {
       setIsCheckinActionBusy(false);
     }
@@ -1065,12 +1120,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     try {
       const updatedPackages = (lastScannedMember.packages || []).map((pkg: any) =>
         pkg.status === 'Hold' || pkg.isOnHold
-          ? { ...pkg, status: 'Active', isOnHold: false, holdReason: undefined }
+          ? { ...pkg, status: 'Active', isOnHold: false, holdReason: '' }
           : pkg
       );
       const updates = {
         status: 'Active' as const,
         isFrozen: false,
+        freezeReason: '',
         packages: updatedPackages,
       };
       await updateClient(lastScannedMember.id, updates);
@@ -1501,7 +1557,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   };
 
   return (
-    <div className="space-y-4 max-w-4xl mx-auto px-1 sm:px-0">
+    <div className="space-y-4 max-w-6xl mx-auto px-1 sm:px-0">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 no-print">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{isInzan ? 'Check-in Desk' : t('attendance.title')}</h2>
@@ -1599,47 +1655,61 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 no-print">
-        {/* Scanner Section */}
-        <Card className="lg:col-span-7 overflow-hidden border-2 border-primary/10 shadow-lg">
-          <CardHeader className="bg-primary/5 border-b">
-            <CardTitle className="flex items-center text-primary text-lg">
-              <Scan className="me-2 h-5 w-5" />
-              {t('attendance.live_scanner')}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start no-print">
+        {/* Scanner Section (Compact — No Excessive Negative Space) */}
+        <Card className="lg:col-span-5 overflow-hidden border-2 border-primary/10 shadow-lg">
+          <CardHeader className="bg-primary/5 border-b py-3 px-4">
+            <CardTitle className="flex items-center justify-between text-primary text-base">
+              <span className="flex items-center">
+                <Scan className="me-2 h-4 w-4" />
+                {t('attendance.live_scanner')}
+              </span>
+              {!isScanning && (
+                <Button
+                  size="sm"
+                  className="h-7 px-3 text-xs font-bold"
+                  onClick={() => setIsScanning(true)}
+                >
+                  <Camera className="h-3.5 w-3.5 me-1.5" />
+                  {t('attendance.start_camera')}
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0 relative bg-black min-h-[300px] sm:min-h-[380px] flex items-center justify-center overflow-hidden">
+          <CardContent className="p-0 relative bg-black flex items-center justify-center overflow-hidden">
             {isScanning ? (
-              <>
+              <div className="relative w-full">
                 <div
                   id="qr-reader"
-                  className="w-full min-h-[300px] sm:min-h-[380px]"
+                  className="w-full max-h-[220px] min-h-[190px]"
                 />
                 <Button
                   variant="destructive"
                   size="sm"
-                  className="absolute bottom-4 right-4 z-10 shadow-lg"
+                  className="absolute bottom-3 right-3 z-10 h-7 text-xs shadow-lg"
                   onClick={() => setIsScanning(false)}
                 >
                   {t('common.cancel')}
                 </Button>
-              </>
+              </div>
             ) : (
-              <div className="flex flex-col items-center justify-center text-white space-y-4 p-6 sm:p-8 text-center w-full h-full min-h-[300px] sm:min-h-[380px]">
-                <div className="bg-white/10 p-5 sm:p-6 rounded-full animate-pulse">
-                  <Camera className="h-10 w-10 sm:h-12 sm:w-12" />
-                </div>
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-bold">{t('attendance.ready_to_scan')}</h3>
-                  <p className="text-white/60 text-xs sm:text-sm max-w-[280px] mt-2 mx-auto">
-                    {(window as any).ReactNativeWebView 
-                      ? 'Uses native device camera for faster scanning.' 
-                      : t('attendance.point_camera')}
-                  </p>
+              <div className="flex items-center justify-between gap-3 text-white px-4 py-3.5 w-full bg-zinc-950/90">
+                <div className="flex items-center gap-3 text-left">
+                  <div className="bg-white/10 p-2.5 rounded-full shrink-0">
+                    <Camera className="h-5 w-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold leading-tight">{t('attendance.ready_to_scan')}</h3>
+                    <p className="text-white/60 text-[11px] mt-0.5 leading-snug">
+                      {(window as any).ReactNativeWebView
+                        ? 'Uses native device camera for faster scanning.'
+                        : t('attendance.point_camera')}
+                    </p>
+                  </div>
                 </div>
                 <Button
-                  size="lg"
-                  className="bg-white text-black hover:bg-white/90 font-bold px-8 mt-2"
+                  size="sm"
+                  className="bg-white text-black hover:bg-white/90 font-bold h-8 px-4 text-xs shrink-0"
                   onClick={() => setIsScanning(true)}
                 >
                   {t('attendance.start_camera')}
@@ -1648,7 +1718,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             )}
           </CardContent>
           
-          <div className="bg-muted/30 p-6 border-t space-y-3">
+          <div className="bg-muted/30 p-4 border-t space-y-3">
             {/* 4-Mode Lookup Selector (Member ID, Universal QR, Invitation ID, Service Member ID) */}
             {isInzan && !isKiosk && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
@@ -1668,14 +1738,14 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                         setLookupMode(mode.id);
                         manualInputRef.current?.focus();
                       }}
-                      className={`flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                      className={`flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
                         active
                           ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                           : 'bg-background text-muted-foreground border-border hover:border-primary/40'
                       }`}
                     >
-                      <Icon className="h-3.5 w-3.5" />
-                      {mode.label}
+                      <Icon className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{mode.label}</span>
                     </button>
                   );
                 })}
@@ -1702,14 +1772,14 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       ? 'Enter Invitation Serial or Guest Phone...'
                       : t('attendance.enter_member_id')
                   }
-                  className="bg-background h-11"
+                  className="bg-background h-10"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleScanSuccess(e.currentTarget.value);
                   }}
                 />
                 <Button 
                   variant="secondary" 
-                  className="h-11 px-6 font-bold"
+                  className="h-10 px-5 font-bold"
                   onClick={(e) => {
                     const input = e.currentTarget.previousElementSibling as HTMLInputElement;
                     handleScanSuccess(input.value);
@@ -1726,7 +1796,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         </Card>
 
         {/* Member Info / Result Section */}
-        <div className="lg:col-span-5 space-y-6">
+        <div className="lg:col-span-7 space-y-4">
           {error && (
             <div className="bg-red-600 border-2 border-red-700 text-white p-4 rounded-xl flex items-start gap-3 shadow-lg animate-in fade-in slide-in-from-top-2">
               <AlertCircle className="h-5 w-5 mt-0.5 shrink-0" />
@@ -1749,19 +1819,35 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
           {lastScannedMember ? (
             <Card className="border-2 border-green-500/20 shadow-xl animate-in zoom-in-95 duration-200">
-              <CardHeader className="pb-2">
-                <Badge
-                  className={`w-fit mb-2 ${
-                    gatekeeperEval && !gatekeeperEval.allowed
-                      ? 'bg-destructive hover:bg-destructive/90'
-                      : 'bg-green-500 hover:bg-green-600'
-                  }`}
-                >
-                  {gatekeeperEval && !gatekeeperEval.allowed
-                    ? `Blocked: ${gatekeeperEval.denialReasonCode}`
-                    : t('attendance.scan_successful')}
-                </Badge>
-                <CardTitle className="text-2xl">{lastScannedMember.name}</CardTitle>
+              <CardHeader className="pb-2 space-y-2.5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <Badge
+                      className={`w-fit mb-1.5 ${
+                        gatekeeperEval && !gatekeeperEval.allowed
+                          ? 'bg-destructive hover:bg-destructive/90'
+                          : 'bg-green-500 hover:bg-green-600'
+                      }`}
+                    >
+                      {gatekeeperEval && !gatekeeperEval.allowed
+                        ? `Blocked: ${gatekeeperEval.denialReasonCode}`
+                        : t('attendance.scan_successful')}
+                    </Badge>
+                    <CardTitle className="text-2xl">{lastScannedMember.name}</CardTitle>
+                  </div>
+                </div>
+                {!isKiosk && (
+                  <MemberPhotoCapture
+                    client={lastScannedMember}
+                    onUpdateClient={updateClient}
+                    onPhotoSaved={(url) =>
+                      setLastScannedMember((prev: any) => (prev ? { ...prev, photoURL: url } : prev))
+                    }
+                    size="md"
+                    showMissingAlert={true}
+                    staffName={currentUser?.name || currentUser?.email || 'Reception'}
+                  />
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Stage 1: Multi-Package Selector */}
@@ -1871,26 +1957,32 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                 {(() => {
                   const m = lastScannedMember as any;
                   const allClientPkgs: any[] = Array.isArray(m.packages) ? m.packages : [];
+                  const isSecondaryLike = (p: any) => {
+                    const nm = String(p?.packageName || '').toLowerCase();
+                    return (
+                      p?.hierarchy === 'Secondary' ||
+                      nm.includes('pt') ||
+                      nm.includes('private') ||
+                      nm.includes('complimentary') ||
+                      nm.includes('session')
+                    );
+                  };
                   const primaryPkg =
-                    allClientPkgs.find((p) => p.packageName === selectedPackageName) ||
-                    allClientPkgs.find((p) => p.status === 'Active' && p.hierarchy !== 'Secondary') ||
+                    allClientPkgs.find((p) => (p.status === 'Active' || p.status === 'Hold') && !isSecondaryLike(p)) ||
+                    allClientPkgs.find((p) => !isSecondaryLike(p)) ||
                     allClientPkgs[0] ||
                     null;
                   const secondaryPkg =
                     allClientPkgs.find(
-                      (p) =>
-                        p !== primaryPkg &&
-                        (p.status === 'Active' || p.status === 'Hold') &&
-                        (p.hierarchy === 'Secondary' ||
-                          String(p.packageName || '').toLowerCase().includes('pt') ||
-                          String(p.packageName || '').toLowerCase().includes('private') ||
-                          String(p.packageName || '').toLowerCase().includes('complimentary'))
-                    ) || null;
+                      (p) => p !== primaryPkg && (p.status === 'Active' || p.status === 'Hold') && isSecondaryLike(p)
+                    ) ||
+                    allClientPkgs.find((p) => p !== primaryPkg) ||
+                    null;
 
                   const resolvedPkgName =
-                    selectedPackageName ||
                     primaryPkg?.packageName ||
                     m.primaryPackageName ||
+                    selectedPackageName ||
                     m.packageType ||
                     '—';
                   const catPkg = (packages || []).find(
@@ -1940,14 +2032,20 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                     primaryPkg?.status === 'Hold' ||
                     Boolean(primaryPkg?.isOnHold);
 
+                  // Parse "(3 Sessions" from Secondary Package name if sessionsTotal wasn't explicitly set
+                  const secNameMatch = String(secondaryPkg?.packageName || '').match(/(\d+)\s*session/i);
+                  const parsedSecSessions = secNameMatch ? parseInt(secNameMatch[1] || '0', 10) : 0;
+
                   const secPaidTot = Number(
                     m.paidPtSessionsTotal ??
-                      (typeof secondaryPkg?.sessionsTotal === 'number' ? secondaryPkg.sessionsTotal : 0) ??
+                      (typeof secondaryPkg?.sessionsTotal === 'number' && secondaryPkg.sessionsTotal > 0
+                        ? secondaryPkg.sessionsTotal
+                        : parsedSecSessions) ??
                       0
                   );
                   const secPaidRem = Number(
                     m.paidPtSessionsRemaining ??
-                      (typeof secondaryPkg?.sessionsRemaining === 'number'
+                      (typeof secondaryPkg?.sessionsRemaining === 'number' && secondaryPkg.sessionsRemaining < 300
                         ? secondaryPkg.sessionsRemaining
                         : Math.max(0, secPaidTot - Number(m.paidPtSessionsUsed ?? 0)))
                   );
@@ -2395,6 +2493,48 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                             </div>
                           </div>
                         )}
+
+                        {/* Member Referral & Conversion Counter Strip */}
+                        {(() => {
+                          const referredPeople = clients.filter(
+                            (c) =>
+                              c.id !== lastScannedMember.id &&
+                              ((c as any).referredByClientId === lastScannedMember.id ||
+                                (c as any).invitedByClientId === lastScannedMember.id ||
+                                (c.referredBy &&
+                                  (c.referredBy === lastScannedMember.id ||
+                                    c.referredBy.toLowerCase() === (lastScannedMember.name || '').toLowerCase())))
+                          );
+                          const localRefs: any[] = Array.isArray((lastScannedMember as any).referrals)
+                            ? (lastScannedMember as any).referrals
+                            : [];
+                          const totalReferredCount = Math.max(referredPeople.length, localRefs.length);
+                          const convertedMembersCount = referredPeople.filter(
+                            (c) =>
+                              c.stage === 'Won' ||
+                              c.stage === 'Converted' ||
+                              (c.status === 'Active' &&
+                                ((Array.isArray(c.packages) && c.packages.length > 0) ||
+                                  (c.packageType && c.packageType !== 'Unknown')))
+                          ).length;
+
+                          return (
+                            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-background border border-purple-500/25 text-xs">
+                              <span className="font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                                <Users className="h-3.5 w-3.5" />
+                                Member Referrals:
+                              </span>
+                              <div className="flex items-center gap-2 font-mono text-[11px]">
+                                <Badge variant="secondary" className="text-[10px] font-bold">
+                                  {totalReferredCount} Referred
+                                </Badge>
+                                <Badge className="bg-emerald-600 text-white text-[10px] font-bold">
+                                  {convertedMembersCount} Became Member{convertedMembersCount === 1 ? '' : 's'}
+                                </Badge>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
