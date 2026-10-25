@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAppContext } from './context';
-import { useCoaches } from './hooks/useCoaches';
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -21,9 +21,9 @@ import PayoutCalculator from './components/PayoutCalculator';
 import { FitnessAssessmentQueue } from './components/FitnessAssessmentQueue';
 
 export default function Coaches() {
-  const { currentUser, canAccessSettings, ptPackageRecords, clients, payments, users, features } = useAppContext();
+  const { currentUser, canAccessSettings, ptPackageRecords, clients, payments, users, features, coaches, addCoach, updateCoach, deleteCoach, createPortalAccountForCoach } = useAppContext();
   const isInzan = getTenantId() === 'inzanathletics' || features?.fitnessAssessmentQueue === true || features?.commercialGymWorkspaces === true || currentUser?.department === 'Fitness';
-  const { coaches, addCoach, updateCoach, deleteCoach, createPortalAccountForCoach } = useCoaches();
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);

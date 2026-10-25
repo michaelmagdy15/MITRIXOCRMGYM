@@ -27,7 +27,7 @@ export const useUserTargets = (currentUser: User | null) => {
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.role]);
 
   const updateUserTarget = async (userId: string, month: string, targetAmount: number, ptTarget?: number, classesTarget?: number, membershipsTarget?: number) => {
     if (!currentUser) return;

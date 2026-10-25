@@ -161,10 +161,10 @@ export default function Debtors() {
       const q = searchTerm.toLowerCase();
 
       // Search filters
-      const rawClientName = client?.name || d.client_name || '';
-      const clientPhone = (client?.phone || '').toLowerCase();
-      const clientMemberId = (client?.memberId || '').toLowerCase();
-      const packageName = (d.packageType || '').toLowerCase();
+      const rawClientName = String(client?.name || d.client_name || '');
+      const clientPhone = String(client?.phone || '').toLowerCase();
+      const clientMemberId = String(client?.memberId || '').toLowerCase();
+      const packageName = String(d.packageType || '').toLowerCase();
       
       const matchesSearch = !searchTerm || 
         matchesFuzzyNameSearch(rawClientName, q) || 

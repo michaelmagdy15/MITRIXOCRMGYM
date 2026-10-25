@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useAppContext } from '../context';
-import { useCoaches } from '../hooks/useCoaches';
-import { usePackages } from '../hooks/usePackages';
+
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -24,10 +24,10 @@ export default function RenewalPipeline() {
     currentUser,
     addPayment,
     users,
-    branding
+    branding, coaches, packages
   } = useAppContext();
-  const { coaches } = useCoaches();
-  const { packages } = usePackages();
+
+
   const activePackages = useMemo(() => packages.filter(p => p.isActive !== false && p.is_active !== false && !p.archivedAt), [packages]);
 
   // Dialog states

@@ -2,7 +2,6 @@ import React, { useState, useDeferredValue, useRef } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import { ASSIGNABLE_ROLES, toCanonical } from './constants';
-import { usePackages } from './hooks/usePackages';
 import { useOperationId } from './hooks/useOperationId';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -103,8 +102,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can } = useAppContext();
-  const { packages } = usePackages();
+  const { currentUser, users, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can, packages } = useAppContext();
   const visiblePackages = React.useMemo(() => {
     return packages.filter(p => {
       const active = p.isActive !== false && p.is_active !== false && !p.archivedAt;
@@ -245,7 +243,7 @@ export default function Clients() {
       setShowQuickReferralForm(false);
       setTransferPkgIdx(null);
       setPkgSelectSearch('');
-      const client = clients.find(c => c.id === activeClientId);
+      const client = (allClients || clients).find(c => c.id === activeClientId) || clients.find(c => c.id === activeClientId);
       if (client) {
         setMemberFeedbackDraft(
           String((client as any).memberFeedback || (client as any).stickyNote || (client as any).receptionNote || (client as any).notes || '')
@@ -256,7 +254,9 @@ export default function Clients() {
         }
       }
     }
-  }, [activeClientId, clients, packages]);
+    // Only reset profile tab/editing state and fetch subcollections when switching to a different member
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeClientId]);
 
   const [isNewMemberOpen, setIsNewMemberOpen] = useState(false);
   const [isRecalculateConfirmOpen, setIsRecalculateConfirmOpen] = useState(false);
@@ -3354,13 +3354,13 @@ export default function Clients() {
 
                           {/* Detected unlinked siblings sharing phone/parentId */}
                           {(() => {
-                            const rawPhone = (activeClient.phone || '').replace(/[^0-9]/g, '').slice(-9);
-                            const rawParentPhone = ((activeClient as any).parentPhone || '').replace(/[^0-9]/g, '').slice(-9);
+                            const rawPhone = String(activeClient.phone || '').replace(/[^0-9]/g, '').slice(-9);
+                            const rawParentPhone = String((activeClient as any).parentPhone || '').replace(/[^0-9]/g, '').slice(-9);
                             const unlinkedSiblings = clients.filter(c => {
                               if (c.id === activeClient.id) return false;
                               if ((activeClient.linkedClientIds || []).includes(c.id)) return false;
-                              const cPhone = (c.phone || '').replace(/[^0-9]/g, '').slice(-9);
-                              const cParentPhone = ((c as any).parentPhone || '').replace(/[^0-9]/g, '').slice(-9);
+                              const cPhone = String(c.phone || '').replace(/[^0-9]/g, '').slice(-9);
+                              const cParentPhone = String((c as any).parentPhone || '').replace(/[^0-9]/g, '').slice(-9);
                               if (rawPhone.length >= 8 && (cPhone === rawPhone || cParentPhone === rawPhone)) return true;
                               if (rawParentPhone.length >= 8 && (cPhone === rawParentPhone || cParentPhone === rawParentPhone)) return true;
                               if ((activeClient as any).parentId && (c as any).parentId === (activeClient as any).parentId) return true;
@@ -3567,7 +3567,7 @@ export default function Clients() {
                                 <CheckCircle className="h-3.5 w-3.5" /> Portal Active
                               </p>
                               <p className="text-[10px] text-muted-foreground font-mono select-all cursor-pointer" title="Click to copy email">
-                                (Email: member-{activeClient.memberId?.toLowerCase()}@mitrixogymcrm-member.local)
+                                (Email: member-{String(activeClient.memberId || '').toLowerCase()}@mitrixogymcrm-member.local)
                               </p>
                             </div>
                           ) : (
@@ -4475,8 +4475,8 @@ export default function Clients() {
                                         c.id !== activeClient.id && (
                                           String(c.memberId || '').toLowerCase() === qTerm ||
                                           String(c.id).toLowerCase() === qTerm ||
-                                          (c.phone && c.phone.replace(/\D/g, '').includes(qTerm.replace(/\D/g, '')) && qTerm.replace(/\D/g, '').length >= 6) ||
-                                          (c.name && c.name.toLowerCase() === qTerm)
+                                          (c.phone != null && String(c.phone).replace(/\D/g, '').includes(qTerm.replace(/\D/g, '')) && qTerm.replace(/\D/g, '').length >= 6) ||
+                                          (c.name != null && String(c.name).toLowerCase() === qTerm)
                                         )
                                       );
                                       if (!targetClient) {

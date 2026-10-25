@@ -61,7 +61,7 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
     });
     
     return () => unsub();
-  }, [currentUser, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
   const recordAttendance = async (clientId: string, branch: Branch) => {
     if (!currentUser) return;

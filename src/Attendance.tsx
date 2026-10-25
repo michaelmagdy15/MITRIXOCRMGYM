@@ -402,12 +402,12 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       const q = rosterSearch.toLowerCase().trim();
       result = result.filter(item => 
         matchesFuzzyNameSearch(item.name, q) ||
-        String(item.memberId).toLowerCase().includes(q) ||
-        item.phone.includes(q) ||
-        item.slot.toLowerCase().includes(q) ||
-        (item.sessionDate && item.sessionDate.includes(q)) ||
-        (item.branch && item.branch.toLowerCase().includes(q)) ||
-        (item.packageType && item.packageType.toLowerCase().includes(q))
+        String(item.memberId || '').toLowerCase().includes(q) ||
+        String(item.phone || '').includes(q) ||
+        String(item.slot || '').toLowerCase().includes(q) ||
+        (item.sessionDate && String(item.sessionDate).includes(q)) ||
+        (item.branch && String(item.branch).toLowerCase().includes(q)) ||
+        (item.packageType && String(item.packageType).toLowerCase().includes(q))
       );
     }
 
@@ -3324,7 +3324,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   .filter(c => {
                     if (!quickAddSearch.trim()) return true;
                     const q = quickAddSearch.toLowerCase();
-                    return c.name.toLowerCase().includes(q) || (c.phone || '').includes(q) || String(c.memberId || '').includes(q);
+                    return String(c.name || '').toLowerCase().includes(q) || String(c.phone || '').includes(q) || String(c.memberId || '').toLowerCase().includes(q);
                   })
                   .slice(0, 30)
                   .map(c => {

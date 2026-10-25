@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { db } from '../firebase';
+import { useAppContext } from '../context';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Client } from '../types';
 import {
@@ -103,7 +104,7 @@ export default function InzanLockerConsole() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
-  const [clients, setClients] = useState<Client[]>([]);
+  const { clients } = useAppContext();
 
   // Lockers tab filters & drawer
   const [searchQuery, setSearchQuery] = useState('');
@@ -290,29 +291,20 @@ export default function InzanLockerConsole() {
   useEffect(() => {
     loadOverview(false);
     const interval = window.setInterval(() => {
-      loadOverview(true);
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        loadOverview(true);
+      }
     }, 15000);
     return () => window.clearInterval(interval);
   }, [loadOverview]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setTick((t) => t + 1), 10000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  // 3. Load CRM Clients so we can display and assign CRM members to lockers
-  useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, 'clients'),
-      (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Client));
-        setClients(list);
-      },
-      (err) => {
-        console.warn('[InzanLockerConsole] Could not load clients:', err);
+    const timer = window.setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        setTick((t) => t + 1);
       }
-    );
-    return () => unsub();
+    }, 10000);
+    return () => window.clearInterval(timer);
   }, []);
 
   // Map CRM clients by id, memberId, and normalized name for instant lookup
@@ -425,9 +417,9 @@ export default function InzanLockerConsole() {
     return clients
       .filter(
         (c) =>
-          (c.name || '').toLowerCase().includes(q) ||
+          String(c.name || '').toLowerCase().includes(q) ||
           String(c.memberId || '').toLowerCase().includes(q) ||
-          (c.phone || '').includes(q)
+          String(c.phone || '').includes(q)
       )
       .slice(0, 30);
   }, [clients, drawerMemberSearch]);
@@ -438,9 +430,9 @@ export default function InzanLockerConsole() {
     return clients
       .filter(
         (c) =>
-          (c.name || '').toLowerCase().includes(q) ||
+          String(c.name || '').toLowerCase().includes(q) ||
           String(c.memberId || '').toLowerCase().includes(q) ||
-          (c.phone || '').includes(q)
+          String(c.phone || '').includes(q)
       )
       .slice(0, 25);
   }, [clients, qrClientSearch]);

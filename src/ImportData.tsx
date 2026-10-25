@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useAppContext } from './context';
-import { usePackages } from './hooks/usePackages';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -21,9 +21,9 @@ interface ImportDataProps {
 }
 
 export default function ImportData({ type }: ImportDataProps) {
-  const { bulkAddPayments, currentUser, users, addClient, bulkAddClients, addImportBatch, branding } = useAppContext();
+  const { bulkAddPayments, currentUser, users, addClient, bulkAddClients, addImportBatch, branding, packages } = useAppContext();
   const isInzanTenant = isTenantInzan(branding?.companyName);
-  const { packages } = usePackages();
+
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);

@@ -43,7 +43,7 @@ export const useTasks = () => {
     });
 
     return () => unsub();
-  }, [currentUser, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
   const visibleTasks = useMemo(() => {
     if (!currentUser) return [];

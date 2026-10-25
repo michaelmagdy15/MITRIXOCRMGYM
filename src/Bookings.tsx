@@ -860,9 +860,9 @@ export default function Bookings() {
       // Search Query
       if (classSearchQuery.trim()) {
         const q = classSearchQuery.toLowerCase().trim();
-        const matchesName = (b.memberName || '').toLowerCase().includes(q);
-        const matchesPhone = (b.memberPhone || '').includes(q);
-        const matchesMemberId = (b.memberId || '').toLowerCase().includes(q);
+        const matchesName = String(b.memberName || '').toLowerCase().includes(q);
+        const matchesPhone = String(b.memberPhone || '').includes(q);
+        const matchesMemberId = String(b.memberId || '').toLowerCase().includes(q);
         const matchesClass = (b.className || '').toLowerCase().includes(q);
         const matchesBranch = (b.branch || '').toLowerCase().includes(q);
         const matchesCoach = (b.coachName || '').toLowerCase().includes(q);

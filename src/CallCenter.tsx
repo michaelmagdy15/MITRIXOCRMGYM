@@ -9,7 +9,7 @@ import { useAppContext } from './context';
 import { useSettings } from './contexts/SettingsContext';
 import { useLanguage } from './contexts/LanguageContext';
 import { db, auth, getTenantId } from './firebase';
-import { collection, query, onSnapshot, orderBy, getDocs, setDoc, doc } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, limit, getDocs, setDoc, doc } from 'firebase/firestore';
 import { Client, CallCenterLog } from './types';
 import { downloadFile } from './utils/download';
 import { openClickToCallModal } from './services/clickToCallService';
@@ -169,7 +169,7 @@ export default function CallCenter() {
   /* ── Fetch tenant call logs ── */
   const fetchCallLogs = useCallback(async () => {
     try {
-      const snap = await getDocs(query(collection(db, 'callCenterLog')));
+      const snap = await getDocs(query(collection(db, 'callCenterLog'), limit(500)));
       const logs = snap.docs.map((d) => ({ ...d.data(), id: d.id } as CallCenterLog));
       // Sort by createdAt desc locally (if missing index)
       logs.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
@@ -186,8 +186,8 @@ export default function CallCenter() {
 
   useEffect(() => {
     if (!isInzan) return;
-    const refreshLogs = () => { void fetchCallLogs(); };
-    const intervalId = window.setInterval(refreshLogs, 60_000);
+    const refreshLogs = () => { if (typeof document === 'undefined' || document.visibilityState === 'visible') void fetchCallLogs(); };
+    const intervalId = window.setInterval(refreshLogs, 120_000);
     window.addEventListener('focus', refreshLogs);
     return () => {
       window.clearInterval(intervalId);
@@ -286,7 +286,7 @@ export default function CallCenter() {
     }
     const term = searchById.trim().toLowerCase();
     const results = clients.filter(
-      (c) => c.memberId?.toLowerCase() === term || c.id.toLowerCase() === term,
+      (c) => String(c.memberId || '').toLowerCase() === term || String(c.id || '').toLowerCase() === term,
     );
     if (results.length === 1) {
       setSelectedClient(results[0] ?? null);
@@ -312,8 +312,8 @@ export default function CallCenter() {
     const results = clients
       .filter(
         (c) =>
-          c.name?.toLowerCase().includes(term) ||
-          c.phone?.toLowerCase().includes(term),
+          String(c.name || '').toLowerCase().includes(term) ||
+          String(c.phone || '').toLowerCase().includes(term),
       )
       .slice(0, 5);
     if (results.length > 0) {

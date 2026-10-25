@@ -45,6 +45,8 @@ import {
   PermissionTemplate
 } from './types';
 import { cleanData } from './utils';
+import { scoreNameMatch } from './utils/fuzzyNameSearch';
+import { matchesPhoneSearch } from './utils/phoneUtils';
 import { hasPermission, getEffectiveUserPermissions } from './utils/permissions';
 import { 
   subscribePermissionTemplates, 
@@ -72,6 +74,7 @@ export interface AppContextType {
   allTasks: Task[];
   packages: Package[];
   loadingPackages: boolean;
+  packagesError: string | null;
   coaches: Coach[];
   importBatches: ImportBatch[];
   userTargets: UserSalesTarget[];
@@ -103,11 +106,13 @@ export interface AppContextType {
   deleteTask: (id: string) => Promise<void>;
   addPackage: (pkg: Omit<Package, 'id'>) => Promise<void>;
   updatePackage: (id: string, updates: Partial<Package>) => Promise<void>;
-  deletePackage: (id: string) => Promise<void>;
+  togglePackageHold: (id: string, holdState: boolean) => Promise<void>;
+  deletePackage: (id: string, reason?: string) => Promise<void>;
   restorePackage: (id: string) => Promise<void>;
   addCoach: (coach: Omit<Coach, 'id'>) => Promise<void>;
   updateCoach: (id: string, updates: Partial<Coach>) => Promise<void>;
   deleteCoach: (id: string) => Promise<void>;
+  createPortalAccountForCoach: (coach: Coach) => Promise<{ success: boolean; user?: User; error?: string }>;
   addImportBatch: (batch: Omit<ImportBatch, 'id'>) => Promise<string>;
   rollbackImport: (batchId: string) => Promise<void>;
   isAuthReady: boolean;
@@ -224,8 +229,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const { 
     packages, 
     loading: loadingPackages, 
+    error: packagesError,
     addPackage, 
     updatePackage, 
+    togglePackageHold,
     deletePackage,
     restorePackage,
     recalculateAllPackages
@@ -235,7 +242,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     coaches, 
     addCoach, 
     updateCoach, 
-    deleteCoach 
+    deleteCoach,
+    createPortalAccountForCoach
   } = useCoaches();
 
   const { 
@@ -268,7 +276,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPermissionTemplates(templates);
     });
     return () => unsubscribe();
-  }, [isAuthReady, currentUser]);
+  }, [isAuthReady, currentUser?.id, currentUser?.role]);
 
   const permissionTemplatesMap = useMemo(() => {
     const map: Record<string, PermissionTemplate> = {};
@@ -421,11 +429,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const visibleClients = useMemo(() => {
     if (!currentUser) return [];
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
+      const cleanId = q.replace(/^#/, '');
       return clients.filter(c => 
-        c.name.toLowerCase().includes(q) || 
-        c.phone.includes(q) || 
-        (c.memberId && c.memberId.includes(q))
+        String(c.name || '').toLowerCase().includes(q) || 
+        scoreNameMatch(c.name, q).matched ||
+        String(c.phone || '').toLowerCase().includes(q) || 
+        matchesPhoneSearch(c.phone, q) ||
+        matchesPhoneSearch((c as any).parentPhone, q) ||
+        (c.memberId != null && String(c.memberId).toLowerCase().includes(cleanId)) ||
+        (c.leadId != null && String(c.leadId).toLowerCase().includes(cleanId))
       );
     }
     let filtered = clients;
@@ -572,6 +585,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     allTasks,
     packages,
     loadingPackages,
+    packagesError,
     coaches,
     importBatches,
     userTargets,
@@ -603,11 +617,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteTask,
     addPackage,
     updatePackage,
+    togglePackageHold,
     deletePackage,
     restorePackage,
     addCoach,
     updateCoach,
     deleteCoach,
+    createPortalAccountForCoach,
     addImportBatch,
     rollbackImport,
     isAuthReady,

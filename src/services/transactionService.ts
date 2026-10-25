@@ -1,4 +1,4 @@
-import { runTransaction, doc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
+import { runTransaction, doc, collection, query, where, getDocs, setDoc, addDoc } from 'firebase/firestore';
 import { db, getTenantId } from '../firebase';
 import { cleanData } from '../utils';
 import { Payment, Package } from '../types';
@@ -44,6 +44,7 @@ export interface PaymentTransactionParams {
 
   packageType: string;
   packageCategory: PaymentCategory;
+  coachId?: string;
   coachName?: string;
   notes?: string;
   receiptSerial?: string;
@@ -79,6 +80,162 @@ export interface PaymentTransactionParams {
   secondaryTenderAmount?: number;
   /** Idempotency key. If a payment already exists with this key, the transaction is skipped. */
   operationId?: string;
+}
+
+export interface ResolvedCoachAssignment {
+  coachUserId?: string;
+  coachDocId?: string;
+  coachCustomId?: string;
+  coachName: string;
+  effectiveCoachId: string;
+}
+
+export async function resolveCoachAssignmentInfo(
+  coachNameInput?: string,
+  coachIdInput?: string
+): Promise<ResolvedCoachAssignment | null> {
+  const cleanName = (coachNameInput || '').trim();
+  const cleanId = (coachIdInput || '').trim();
+  if ((!cleanName || cleanName.toLowerCase() === 'unassigned') && (!cleanId || cleanId.toLowerCase() === 'unassigned')) {
+    return null;
+  }
+
+  let coachUserId: string | undefined;
+  let coachDocId: string | undefined;
+  let coachCustomId: string | undefined;
+  let resolvedName = cleanName && cleanName.toLowerCase() !== 'unassigned' ? cleanName : '';
+
+  try {
+    const [coachesSnap, usersSnap] = await Promise.all([
+      getDocs(collection(db, 'coaches')),
+      getDocs(query(collection(db, 'users'), where('role', 'in', ['coach', 'trainer', 'fitness_manager']))),
+    ]);
+
+    const nameLower = resolvedName.toLowerCase();
+
+    for (const d of coachesSnap.docs) {
+      const data = d.data() as any;
+      const cName = String(data.name || '').trim();
+      const matchesId = cleanId && (d.id === cleanId || data.userId === cleanId || data.coachId === cleanId);
+      const matchesName = nameLower && cName.toLowerCase() === nameLower;
+      if (matchesId || matchesName) {
+        coachDocId = d.id;
+        if (data.userId) coachUserId = data.userId;
+        if (data.coachId) coachCustomId = data.coachId;
+        if (cName && !resolvedName) resolvedName = cName;
+        break;
+      }
+    }
+
+    for (const d of usersSnap.docs) {
+      const data = d.data() as any;
+      const uId = String(data.id || d.id).trim();
+      const uName = String(data.name || data.email || '').trim();
+      const matchesId =
+        (cleanId && (uId === cleanId || d.id === cleanId || data.coachId === cleanId)) ||
+        (coachUserId && (uId === coachUserId || d.id === coachUserId));
+      const matchesName = (resolvedName && uName.toLowerCase() === resolvedName.toLowerCase()) || (nameLower && uName.toLowerCase() === nameLower);
+      if (matchesId || matchesName) {
+        coachUserId = uId || d.id;
+        if (data.coachId && !coachCustomId) coachCustomId = data.coachId;
+        if (uName && !resolvedName) resolvedName = uName;
+        break;
+      }
+    }
+  } catch (err) {
+    console.warn('[resolveCoachAssignmentInfo] Could not query coaches/users for coach resolution:', err);
+  }
+
+  if (!resolvedName && cleanId) {
+    resolvedName = cleanId;
+  }
+  if (!resolvedName) return null;
+
+  const effectiveCoachId = coachUserId || coachDocId || (cleanId && cleanId.toLowerCase() !== 'unassigned' ? cleanId : resolvedName);
+  return {
+    coachUserId,
+    coachDocId,
+    coachCustomId,
+    coachName: resolvedName,
+    effectiveCoachId,
+  };
+}
+
+export async function notifyCoachClientAssigned(params: {
+  coachId?: string;
+  coachUserId?: string;
+  coachDocId?: string;
+  coachCustomId?: string;
+  coachName: string;
+  clientId: string;
+  clientName: string;
+  memberId?: string;
+  packageName?: string;
+  sessionsTotal?: number | string;
+  branch?: string;
+  assignedBy?: string;
+}): Promise<void> {
+  if (!params.coachName || params.coachName.toLowerCase() === 'unassigned') return;
+  const nowIso = new Date().toISOString();
+  const recipientUid = params.coachUserId || params.coachId || params.coachDocId || '';
+  const pkgLabel = params.packageName || 'Personal Training Package';
+  const sessionsSuffix =
+    params.sessionsTotal !== undefined && params.sessionsTotal !== '' && params.sessionsTotal !== 0
+      ? ` (${params.sessionsTotal} sessions)`
+      : '';
+  const title = `🏋️ New PT Client Assigned: ${params.clientName}`;
+  const body = `${params.clientName}${params.memberId ? ` (#${params.memberId})` : ''} has been assigned to you for "${pkgLabel}"${sessionsSuffix}${params.assignedBy ? ` by ${params.assignedBy}` : ''}.`;
+
+  try {
+    await addDoc(
+      collection(db, 'notifications'),
+      cleanData({
+        type: 'coach_client_assigned',
+        recipientUid,
+        recipientId: recipientUid,
+        coachId: recipientUid || params.coachDocId || params.coachName,
+        coachDocId: params.coachDocId || undefined,
+        coachCustomId: params.coachCustomId || undefined,
+        coachName: params.coachName,
+        clientId: params.clientId,
+        clientName: params.clientName,
+        memberId: params.memberId || undefined,
+        packageName: pkgLabel,
+        sessionsTotal: params.sessionsTotal,
+        branch: params.branch || undefined,
+        title,
+        body,
+        description: body,
+        message: body,
+        read: false,
+        assignedBy: params.assignedBy || 'Staff',
+        createdAt: nowIso,
+        tenantId: getTenantId(),
+      })
+    );
+  } catch (err) {
+    console.warn('[notifyCoachClientAssigned] Failed to write coach notification document:', err);
+  }
+
+  if (recipientUid && typeof window !== 'undefined' && 'fetch' in window) {
+    try {
+      await fetch('/api/proxy-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: recipientUid,
+          title,
+          body,
+          data: {
+            type: 'coach_client_assigned',
+            clientId: params.clientId,
+            clientName: params.clientName,
+            packageName: pkgLabel,
+          },
+        }),
+      }).catch(() => {});
+    } catch {}
+  }
 }
 
 export const processPaymentTransaction = async (params: PaymentTransactionParams): Promise<void> => {

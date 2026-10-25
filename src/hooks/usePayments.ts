@@ -40,7 +40,7 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
 
 

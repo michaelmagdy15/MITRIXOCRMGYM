@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDoc,
+  limit,
   onSnapshot,
   query,
   setDoc,
@@ -368,7 +369,8 @@ export function subscribeToIncomingCallRequests(
   const qCallRequests = query(
     collection(db, 'callRequests'),
     where('salespersonId', '==', salespersonId),
-    where('status', '==', 'pending')
+    where('status', '==', 'pending'),
+    limit(10)
   );
 
   const unsub1 = onSnapshot(
@@ -401,7 +403,8 @@ export function subscribeToIncomingCallRequests(
   const qNotifications = query(
     collection(db, 'notifications'),
     where('recipientUid', '==', salespersonId),
-    where('read', '==', false)
+    where('read', '==', false),
+    limit(50)
   );
 
   const unsub2 = onSnapshot(

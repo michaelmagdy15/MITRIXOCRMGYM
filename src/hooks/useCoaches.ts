@@ -23,7 +23,7 @@ export const useCoaches = () => {
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
   const generateCoachId = async (): Promise<string> => {
     const counterRef = doc(db, 'counters', 'coaches');

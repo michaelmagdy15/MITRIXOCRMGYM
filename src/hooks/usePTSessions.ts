@@ -30,7 +30,7 @@ export const usePTSessions = (currentUser: User | null, clients: Client[]) => {
       }
     );
     return () => unsub();
-  }, [currentUser, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
   const addPTPackageRecord = async (session: Omit<PTPackageRecord, 'id'>) => {
     try {

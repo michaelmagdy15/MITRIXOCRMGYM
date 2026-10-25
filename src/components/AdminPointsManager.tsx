@@ -56,12 +56,12 @@ export default function AdminPointsManager() {
       const results = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as any))
         .filter((c: any) =>
-          (c.name || '').toLowerCase().includes(term) ||
-          (c.memberId || '').toLowerCase().includes(term) ||
-          (c.phone || '').includes(term)
+          String(c.name || '').toLowerCase().includes(term) ||
+          String(c.memberId || '').toLowerCase().includes(term) ||
+          String(c.phone || '').includes(term)
         )
         .slice(0, 10)
-        .map((c: any) => ({ id: c.id, name: c.name, memberId: c.memberId || 'N/A', phone: c.phone || '' }));
+        .map((c: any) => ({ id: c.id, name: String(c.name || ''), memberId: c.memberId != null ? String(c.memberId) : 'N/A', phone: String(c.phone || '') }));
       setSearchResults(results);
     } catch (err) {
       console.error('Search failed:', err);

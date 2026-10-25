@@ -1214,9 +1214,9 @@ export default function CalendarView() {
                 .filter(c => {
                   const q = rosterSearchQuery.toLowerCase();
                   return (
-                    (c.name || '').toLowerCase().includes(q) ||
+                    String(c.name || '').toLowerCase().includes(q) ||
                     String(c.memberId || '').toLowerCase().includes(q) ||
-                    (c.phone || '').toLowerCase().includes(q)
+                    String(c.phone || '').toLowerCase().includes(q)
                   );
                 })
                 .slice(0, 8)

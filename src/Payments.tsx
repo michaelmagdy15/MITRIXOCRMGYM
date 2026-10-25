@@ -1315,7 +1315,7 @@ export default function Payments() {
         byPortalUserId.set(c.portalUserId, c);
       }
       if (c.phone) {
-        const digits = c.phone.replace(/\D/g, '').slice(-10);
+        const digits = String(c.phone).replace(/\D/g, '').slice(-10);
         if (digits.length >= 8) byPhone.set(digits, c);
       }
     }
@@ -1391,8 +1391,8 @@ export default function Payments() {
         const term = deferredSearchTerm.toLowerCase();
         const clientName = client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '';
         const matchesName = matchesFuzzyNameSearch(clientName, term);
-        const matchesId = client?.memberId?.toString().includes(term) || ((payment as any).memberId?.toString().includes(term));
-        const matchesPhone = client?.phone?.includes(term);
+        const matchesId = String(client?.memberId || '').toLowerCase().includes(term) || String((payment as any).memberId || '').toLowerCase().includes(term);
+        const matchesPhone = String(client?.phone || '').includes(term);
         const matchesAmount = payment.amount.toString().includes(term);
         const matchesRef = payment.instapayRef?.toLowerCase().includes(term);
 

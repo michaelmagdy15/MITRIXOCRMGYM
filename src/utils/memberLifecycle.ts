@@ -256,6 +256,11 @@ export function resolveLatestMemberNote(client: Partial<Client>): ResolvedMember
   return candidates[0]!;
 }
 
+const memberGlobalStatusCache = new WeakMap<
+  object,
+  { cacheKey: string; result: MemberGlobalStatusEvaluation }
+>();
+
 /**
  * Deterministic Global Member Status & Package Evaluation Rule.
  *
@@ -272,6 +277,14 @@ export function computeMemberGlobalStatus(
 ): MemberGlobalStatusEvaluation {
   const todayStr = referenceDate.toISOString().slice(0, 10);
   const rawPackages = Array.isArray(client.packages) ? client.packages : [];
+  const cacheKey = `${todayStr}|${client.updatedAt || ''}|${client.status || ''}|${client.membershipExpiry || ''}|${client.sessionsRemaining ?? ''}|${rawPackages.length}|${client.comments?.length ?? 0}|${client.interactions?.length ?? 0}`;
+  if (client && typeof client === 'object') {
+    const cached = memberGlobalStatusCache.get(client);
+    if (cached && cached.cacheKey === cacheKey) {
+      return cached.result;
+    }
+  }
+
   const validPackages = rawPackages.filter((p) => p && !isPackageCancelledOrVoid(p));
 
   const clientStatusNorm = String(client.status || '').trim().toLowerCase();
@@ -436,7 +449,7 @@ export function computeMemberGlobalStatus(
     globalStatus = 'GUEST';
   }
 
-  return {
+  const evalResult: MemberGlobalStatusEvaluation = {
     globalStatus,
     hasActiveOrUpcomingPackage,
     hasActiveRenewal,
@@ -449,6 +462,11 @@ export function computeMemberGlobalStatus(
     totalValidPackages: validPackages.length,
     lastNote,
   };
+
+  if (client && typeof client === 'object') {
+    memberGlobalStatusCache.set(client, { cacheKey, result: evalResult });
+  }
+  return evalResult;
 }
 
 /**

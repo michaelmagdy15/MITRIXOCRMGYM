@@ -1113,9 +1113,9 @@ export default function NutritionModule() {
                   {clients
                     .filter(
                       (c) =>
-                        c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
-                        (c.phone && c.phone.includes(clientSearchQuery)) ||
-                        (c.memberId && c.memberId.toLowerCase().includes(clientSearchQuery.toLowerCase()))
+                        String(c.name || '').toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
+                        (c.phone != null && String(c.phone).includes(clientSearchQuery)) ||
+                        (c.memberId != null && String(c.memberId).toLowerCase().includes(clientSearchQuery.toLowerCase()))
                     )
                     .slice(0, 8)
                     .map((c) => (
@@ -1819,8 +1819,9 @@ export default function NutritionModule() {
                       {clients
                         .filter(
                           (c) =>
-                            c.name.toLowerCase().includes(bookingClientSearch.toLowerCase()) ||
-                            (c.phone && c.phone.includes(bookingClientSearch))
+                            String(c.name || '').toLowerCase().includes(bookingClientSearch.toLowerCase()) ||
+                            (c.phone != null && String(c.phone).includes(bookingClientSearch)) ||
+                            (c.memberId != null && String(c.memberId).toLowerCase().includes(bookingClientSearch.toLowerCase()))
                         )
                         .slice(0, 6)
                         .map((c) => (

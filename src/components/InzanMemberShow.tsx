@@ -23,7 +23,7 @@ import { safeFormatDate, safeGetAge, toValidDate } from '../utils/dateUtils';
 import { Textarea } from '@/components/ui/textarea';
 import { db, storage } from '../firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { collection, query, where, onSnapshot, addDoc, orderBy, getDocs, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, orderBy, limit, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { SalesTransferLog, TrainerTransferLog } from '../types';
 import { toast } from 'sonner';
 import { MessageSquare, ArrowRightLeft, Heart, Stethoscope, Clock, Palette, ArrowLeft, Gift, Sparkles, ShieldCheck, Edit3, RefreshCw, UserPlus } from 'lucide-react';
@@ -225,7 +225,7 @@ export function InzanMemberShow({
     } finally {
       if (!silent) setIsLoadingLocker(false);
     }
-  }, [client.id]);
+  }, [client.id, activeTab]);
 
   React.useEffect(() => {
     setIssuedPinOverride(null);
@@ -691,8 +691,8 @@ export function InzanMemberShow({
         c.id !== client.id && (
           String(c.memberId || '').toLowerCase() === qTerm ||
           String(c.id).toLowerCase() === qTerm ||
-          (c.phone && c.phone.replace(/\D/g, '').includes(qTerm.replace(/\D/g, '')) && qTerm.replace(/\D/g, '').length >= 6) ||
-          (c.name && c.name.toLowerCase() === qTerm)
+          (c.phone != null && String(c.phone).replace(/\D/g, '').includes(qTerm.replace(/\D/g, '')) && qTerm.replace(/\D/g, '').length >= 6) ||
+          (c.name != null && String(c.name).toLowerCase() === qTerm)
         )
       );
       if (!targetClient) {
@@ -793,7 +793,7 @@ export function InzanMemberShow({
   // Fetch attendance_history subcollection (includes all 84,000+ RedGITS historical & live check-ins)
   React.useEffect(() => {
     if (!client?.id) return;
-    const qAtt = query(collection(db, 'clients', client.id, 'attendance_history'));
+    const qAtt = query(collection(db, 'clients', client.id, 'attendance_history'), limit(250));
     const unsubAtt = onSnapshot(qAtt, snap => {
       setSubcolAttendances(snap.docs.map(d => {
         const data = d.data();
@@ -811,25 +811,25 @@ export function InzanMemberShow({
       }));
     }, () => setSubcolAttendances([]));
     return unsubAtt;
-  }, [client.id]);
+  }, [client.id, activeTab]);
 
   // Fetch sales transfer logs
   React.useEffect(() => {
-    const q = query(collection(db, 'salesTransferLogs'), where('clientId', '==', client.id), orderBy('createdAt', 'desc'));
+    if (activeTab !== 'transfers') return; const q = query(collection(db, 'salesTransferLogs'), where('clientId', '==', client.id), orderBy('createdAt', 'desc'), limit(50));
     const unsub = onSnapshot(q, snap => {
       setSalesTransfers(snap.docs.map(d => ({ id: d.id, ...d.data() } as SalesTransferLog)));
     }, () => setSalesTransfers([]));
     return unsub;
-  }, [client.id]);
+  }, [client.id, activeTab]);
 
   // Fetch trainer transfer logs
   React.useEffect(() => {
-    const q2 = query(collection(db, 'trainerTransferLogs'), where('clientId', '==', client.id), orderBy('createdAt', 'desc'));
+    if (activeTab !== 'transfers') return; const q2 = query(collection(db, 'trainerTransferLogs'), where('clientId', '==', client.id), orderBy('createdAt', 'desc'), limit(50));
     const unsub2 = onSnapshot(q2, snap => {
       setTrainerTransfers(snap.docs.map(d => ({ id: d.id, ...d.data() } as TrainerTransferLog)));
     }, () => setTrainerTransfers([]));
     return unsub2;
-  }, [client.id]);
+  }, [client.id, activeTab]);
 
   // Calculate unpaid
   const unpaidAmount = payments.filter(p => p.clientId === client.id && !p.deleted_at).reduce((sum, p) => sum + (p.amount - p.amount_paid), 0);

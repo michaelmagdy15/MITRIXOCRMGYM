@@ -97,6 +97,10 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fullClients = useMemo(() => {
     return baseClients.map(c => ({
       ...c,
+      name: c.name != null ? String(c.name) : '',
+      phone: c.phone != null ? String(c.phone) : '',
+      memberId: c.memberId != null && c.memberId !== '' ? String(c.memberId) : undefined,
+      leadId: c.leadId != null && c.leadId !== '' ? String(c.leadId) : undefined,
       comments: allComments[c.id] || []
     })) as Client[];
   }, [baseClients, allComments]);
@@ -188,9 +192,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(c => {
-        const hasMemberId = 'memberId' in c && c.memberId?.toLowerCase().includes(q);
-        return c.name.toLowerCase().includes(q) || 
-               c.phone.includes(q) || 
+        const hasMemberId = 'memberId' in c && String(c.memberId || '').toLowerCase().includes(q);
+        return String(c.name || '').toLowerCase().includes(q) || 
+               String(c.phone || '').includes(q) || 
                hasMemberId;
       });
     }

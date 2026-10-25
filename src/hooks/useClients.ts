@@ -143,6 +143,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       .filter(c => !c.isDeleted)
       .map(c => ({
         ...c,
+        name: c.name != null ? String(c.name) : '',
+        phone: c.phone != null ? String(c.phone) : '',
+        memberId: c.memberId != null && c.memberId !== '' ? String(c.memberId) : undefined,
+        leadId: c.leadId != null && c.leadId !== '' ? String(c.leadId) : undefined,
         comments: Array.isArray((c as any).comments) ? (c as any).comments : [],
         interactions: Array.isArray((c as any).interactions) ? (c as any).interactions : [],
       })) as Client[];
@@ -180,15 +184,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     );
 
     return () => unsubClients();
-  }, [currentUser, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
   const [loadingExpired, setLoadingExpired] = useState(false);
   const [expiredLoaded, setExpiredLoaded] = useState(false);
 
-
-
   const fetchExpiredMembers = useCallback(async () => {
-
     if (expiredLoaded || loadingExpired) return;
     setLoadingExpired(true);
     try {
@@ -196,11 +197,11 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         collection(db, 'clients'),
         where('status', 'in', ['Expired', 'expired'])
       );
-      const isInzan = getTenantId() === 'inzanathletics';
-      const cacheKey = 'inzan_expired_sync_ts_v2';
+      const tenantKey = getTenantId() || 'default';
+      const cacheKey = `expired_sync_ts_v2_${tenantKey}`;
       const lastSync = Number(localStorage.getItem(cacheKey) || '0');
       const twelveHoursMs = 12 * 60 * 60 * 1000;
-      if (isInzan && Date.now() - lastSync < twelveHoursMs) {
+      if (Date.now() - lastSync < twelveHoursMs) {
         try {
           const { getDocsFromCache } = await import('firebase/firestore');
           const cachedSnap = await getDocsFromCache(q);
@@ -217,7 +218,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       setExpiredMembersList(
         snap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
       );
-      if (isInzan && !snap.empty) {
+      if (!snap.empty) {
         localStorage.setItem(cacheKey, String(Date.now()));
       }
       setExpiredLoaded(true);
@@ -228,17 +229,19 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     }
   }, [expiredLoaded, loadingExpired]);
 
-
-  // Automatically fetch expired members in the background once active members have loaded,
-  // ensuring all gym members are immediately searchable everywhere (payments, attendance, search bars).
+  // Defer background fetch of expired members slightly after initial render so initial page load is instant
   useEffect(() => {
-    if (!currentUser || effectiveRole === 'client') return;
+    if (!currentUser?.id || effectiveRole === 'client') return undefined;
     if (!loading && membersList.length > 0 && !expiredLoaded && !loadingExpired) {
-      fetchExpiredMembers();
+      const timer = setTimeout(() => {
+        fetchExpiredMembers();
+      }, 2000);
+      return () => clearTimeout(timer);
     }
-  }, [currentUser, effectiveRole, loading, membersList.length, expiredLoaded, loadingExpired, fetchExpiredMembers]);
+    return undefined;
+  }, [currentUser?.id, effectiveRole, loading, membersList.length, expiredLoaded, loadingExpired, fetchExpiredMembers]);
 
-  // Trigger expired fetch if a search query is entered (so search results find expired members)
+  // Trigger expired fetch immediately if a search query is entered (so search results find expired members)
   useEffect(() => {
     if (searchTerm && searchTerm.trim().length >= 2 && !expiredLoaded && !loadingExpired) {
       fetchExpiredMembers();
@@ -247,7 +250,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
   // 2. Active Leads Snapshot Listener (New, Trial, Follow Up) - status == 'Lead' & stage in ['New', 'Trial', 'Follow Up']
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser?.id) return;
     if (effectiveRole === 'client' || effectiveRole === 'coach') return;
 
 
@@ -268,7 +271,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     );
 
     return () => unsubLeads();
-  }, [currentUser, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
   // 3. On-demand search query for historical/lost leads
   useEffect(() => {
@@ -311,15 +314,29 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           } catch {}
         }
 
-        // Query by memberId or leadId exact match
-        const qMemberId = query(collection(db, 'clients'), where('memberId', '==', term));
+        // Query by memberId or leadId exact match (supports both string and numeric IDs in Firestore)
+        const cleanIdTerm = term.replace(/^#/, '').trim();
+        const qMemberId = query(collection(db, 'clients'), where('memberId', '==', cleanIdTerm));
         const memberIdSnap = await getDocs(qMemberId);
         if (active) memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
 
+        if (/^\d+$/.test(cleanIdTerm)) {
+          try {
+            const qMemberIdNum = query(collection(db, 'clients'), where('memberId', '==', Number(cleanIdTerm)));
+            const memberIdNumSnap = await getDocs(qMemberIdNum);
+            if (active) memberIdNumSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          } catch {}
+        }
+
         try {
-          const qLeadId = query(collection(db, 'clients'), where('leadId', '==', term));
+          const qLeadId = query(collection(db, 'clients'), where('leadId', '==', cleanIdTerm));
           const leadIdSnap = await getDocs(qLeadId);
           if (active) leadIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          if (/^\d+$/.test(cleanIdTerm)) {
+            const qLeadIdNum = query(collection(db, 'clients'), where('leadId', '==', Number(cleanIdTerm)));
+            const leadIdNumSnap = await getDocs(qLeadIdNum);
+            if (active) leadIdNumSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          }
         } catch {}
 
         // Query by name prefix match (capitalized prefix logic)
@@ -351,7 +368,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       active = false;
       clearTimeout(delayDebounce);
     };
-  }, [currentUser, effectiveRole, searchTerm]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole, searchTerm]);
 
   const fetchClientDetails = async (clientId: string) => {
     try {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAppContext } from './context';
 import { useAuth } from './contexts/AuthContext';
-import { useTasks } from './hooks/useTasks';
+
 import { useLanguage } from './contexts/LanguageContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,9 +17,9 @@ import { Badge } from '@/components/ui/badge';
 
 export default function Tasks() {
   const { t } = useLanguage();
-  const { users, clients } = useAppContext();
+  const { users, clients, tasks, addTask, updateTask, deleteTask } = useAppContext();
   const { currentUser } = useAuth();
-  const { tasks, addTask, updateTask, deleteTask } = useTasks();
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);

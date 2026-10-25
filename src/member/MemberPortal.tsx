@@ -361,7 +361,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
               );
               const limitedSnap = await getDocs(limitedQ);
               const matched = limitedSnap.docs.find(d => {
-                const cPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+                const cPhone = String(d.data().phone || '').replace(/\D/g, '').slice(-9);
                 return cPhone && cPhone === cleanPhone;
               });
               if (matched && active) {

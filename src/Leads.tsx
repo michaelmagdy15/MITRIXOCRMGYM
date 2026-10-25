@@ -457,7 +457,7 @@ export default function Leads() {
         const commentInfo = getLatestCommentInfo(l);
         return (
           matchesFuzzyNameSearch(l.name, term) || 
-          (l.phone || '').includes(term) ||
+          String(l.phone || '').includes(term) ||
           String(l.leadId || l.redgitsId || '').toLowerCase().includes(term) ||
           matchesFuzzyNameSearch(l.salesName, term) ||
           matchesFuzzyNameSearch(l.salesRep, term) ||

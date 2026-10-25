@@ -357,7 +357,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               try {
                 const allUsersSnap = await getDocs(collection(db, 'users'));
                 const phoneMatch = allUsersSnap.docs.find(d => {
-                  const uPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+                  const uPhone = String(d.data().phone || '').replace(/\D/g, '').slice(-9);
                   return uPhone && uPhone === phoneDigits;
                 });
                 if (phoneMatch) {
@@ -369,7 +369,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   if (pData.clientRecordId) clientRecordId = pData.clientRecordId;
                   const batch = writeBatch(db);
                   allUsersSnap.docs.filter(d => {
-                    const uPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+                    const uPhone = String(d.data().phone || '').replace(/\D/g, '').slice(-9);
                     return uPhone && uPhone === phoneDigits && d.id !== userId;
                   }).forEach(d => batch.delete(d.ref));
                   await batch.commit();
@@ -379,7 +379,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (role === 'client' && !clientRecordId) {
                   const allClientsSnap = await getDocs(collection(db, 'clients'));
                   const clientMatch = allClientsSnap.docs.find(d => {
-                    const cPhone = (d.data().phone || '').replace(/\D/g, '').slice(-9);
+                    const cPhone = String(d.data().phone || '').replace(/\D/g, '').slice(-9);
                     return cPhone && cPhone === phoneDigits;
                   });
                   if (clientMatch) {
@@ -494,30 +494,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // Presence heartbeat
+  // Presence heartbeat (throttled to 5 min and only while tab is visible to reduce write/read churn)
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser?.id) return;
     const updatePresence = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       try {
         await updateDoc(doc(db, 'users', currentUser.id), { lastSeen: new Date().toISOString() });
       } catch { /* silent */ }
     };
     updatePresence();
-    const interval = setInterval(updatePresence, 2 * 60 * 1000);
+    const interval = setInterval(updatePresence, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [currentUser?.id]);
 
   // Users listener
   useEffect(() => {
-    if (!currentUser || currentUser.role === 'client') return;
+    if (!currentUser?.id || currentUser.role === 'client') return;
 
     // Do not subscribe to these CRM listeners when running in Platform Super Admin mode
     const isSuperAdminMode = window.location.hostname.startsWith('superadmin.') || 
                              window.location.pathname === '/superadmin';
     if (isSuperAdminMode) return;
 
-    const usersRef = collection(db, 'users');
-    const unsubscribe = onSnapshot(usersRef, (snapshot) => {
+    const staffRoles = ['crm_admin', 'super_admin', 'admin', 'manager', 'fitness_manager', 'rep', 'coach', 'trainer'];
+    const usersQuery = query(collection(db, 'users'), where('role', 'in', staffRoles));
+    let lastUsersSig = '';
+
+    const unsubscribe = onSnapshot(usersQuery, (snapshot) => {
       const allFetched = snapshot.docs.map(docSnap => {
         const raw = docSnap.data();
         const hasStoredId = 'id' in raw && raw.id !== undefined && raw.id !== null && raw.id !== '';
@@ -535,8 +539,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       });
       const staffUsers = allFetched.filter(u => 
-        ['crm_admin', 'super_admin', 'admin', 'manager', 'fitness_manager', 'rep'].includes(u.role)
+        ['crm_admin', 'super_admin', 'admin', 'manager', 'fitness_manager', 'rep', 'coach', 'trainer'].includes(u.role)
       );
+
+      // Avoid re-rendering the entire CRM when only notification state or sub-minute presence changes
+      const nextSig = staffUsers
+        .map(u => {
+          const seenBucket = u.lastSeen ? Math.floor((Date.parse(u.lastSeen) || 0) / (5 * 60 * 1000)) : 0;
+          return `${u.id}:${u.name}:${u.email}:${u.role}:${u.branch || ''}:${((u as any).allowedBranches || []).join(',')}:${u.department || ''}:${u.isPending}:${u._hasStoredId}:${(u as any).showInRotator ?? ''}:${u.permissionTemplateId || ''}:${JSON.stringify((u as any).permissions || {})}:${seenBucket}`;
+        })
+        .sort()
+        .join('|');
+
+      if (nextSig === lastUsersSig) return;
+      lastUsersSig = nextSig;
 
       const allUsersData = staffUsers.map(d => {
         const { _hasStoredId, ...user } = d;
@@ -557,7 +573,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.role]);
 
   // Pending accounts + password reset requests listeners (admin/manager only)
   useEffect(() => {

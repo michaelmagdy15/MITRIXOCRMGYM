@@ -326,9 +326,9 @@ export default function CoachClients({
 
   const filtered = displayedList.filter(c => {
     const matchesSearch =
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      (c.phone || '').includes(search) ||
-      (c.memberId || '').toLowerCase().includes(search.toLowerCase());
+      String(c.name || '').toLowerCase().includes(search.toLowerCase()) ||
+      String(c.phone || '').includes(search) ||
+      String(c.memberId || '').toLowerCase().includes(search.toLowerCase());
     if (!matchesSearch) return false;
 
     if (quickFilter === 'low-balance') {

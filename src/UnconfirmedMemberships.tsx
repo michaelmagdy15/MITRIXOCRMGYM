@@ -126,9 +126,9 @@ export default function UnconfirmedMemberships() {
     return allPendingItems.filter(item => {
       const q = searchTerm.toLowerCase();
 
-      const rawMemberName = item.client.name || '';
-      const memberId = (item.client.memberId || '').toLowerCase();
-      const packageName = (item.pkg.packageName || '').toLowerCase();
+      const rawMemberName = String(item.client.name || '');
+      const memberId = String(item.client.memberId || '').toLowerCase();
+      const packageName = String(item.pkg.packageName || '').toLowerCase();
 
       const matchesSearch = !searchTerm ||
         matchesFuzzyNameSearch(rawMemberName, q) ||

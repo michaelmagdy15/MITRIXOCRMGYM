@@ -25,7 +25,7 @@ export const useImportBatches = (currentUser: User | null, clients: Client[], pa
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.role]);
 
   const addImportBatch = async (batch: Omit<ImportBatch, 'id'>): Promise<string> => {
     try {

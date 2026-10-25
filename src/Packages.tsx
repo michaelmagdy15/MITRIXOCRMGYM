@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useAppContext } from './context';
-import { usePackages } from './hooks/usePackages';
 import { usePackageCategories } from './hooks/usePackageCategories';
 import { PackageCategoryManagerDialog } from './components/packages/PackageCategoryManagerDialog';
 import PackageBenefitsFormSection, { PackageEnhancementsState, DEFAULT_PACKAGE_ENHANCEMENTS } from './components/packages/PackageBenefitsFormSection';
@@ -48,8 +47,7 @@ export const STANDARD_PACKAGE_CATEGORIES = [
 export const PACKAGE_CATEGORIES = INZAN_PACKAGE_CATEGORIES;
 
 export default function Packages() {
-  const { currentUser, branches, features } = useAppContext();
-  const { packages, addPackage, updatePackage, togglePackageHold, deletePackage, restorePackage } = usePackages();
+  const { currentUser, branches, features, packages, addPackage, updatePackage, togglePackageHold, deletePackage, restorePackage } = useAppContext();
   const { categoryNames } = usePackageCategories();
   const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
   const availableCategories = isInzan ? INZAN_PACKAGE_CATEGORIES : STANDARD_PACKAGE_CATEGORIES;

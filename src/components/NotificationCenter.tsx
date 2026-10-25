@@ -531,13 +531,46 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     setNotifications([...userNotifications, ...systemNotifications, ...generated]);
   }, [sourceClients, tasks, pendingBookings, systemNotifications, userNotifications]);
 
+  // Fast O(1) lookup maps for notification reconstruction
+  const sourceClientByIdMap = useMemo(() => {
+    const map = new Map<string, typeof sourceClients[0]>();
+    for (const c of sourceClients) {
+      if (c.id) map.set(c.id, c);
+    }
+    return map;
+  }, [sourceClients]);
+
+  const sourceTaskByIdMap = useMemo(() => {
+    const map = new Map<string, typeof sourceTasks[0]>();
+    for (const t of sourceTasks) {
+      if (t.id) map.set(t.id, t);
+    }
+    return map;
+  }, [sourceTasks]);
+
+  const bookingByIdMap = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const b of allBookings) {
+      if (b.id) map.set(b.id, b);
+    }
+    return map;
+  }, [allBookings]);
+
+  const liveNotifByIdMap = useMemo(() => {
+    const map = new Map<string, AppNotification>();
+    for (const n of notifications) {
+      if (n.id) map.set(n.id, n);
+    }
+    return map;
+  }, [notifications]);
+
   // Helper to reconstruct a legacy dismissed notification ID that wasn't saved with full metadata yet
   const reconstructFromLegacyId = useCallback(
     (id: string): DismissedNotificationRecord | null => {
       const nowIso = new Date().toISOString();
 
       // 1. Check current notifications list first
-      const liveMatch = notifications.find((n) => n.id === id);
+      const liveMatch = liveNotifByIdMap.get(id);
       if (liveMatch) {
         return {
           id: liveMatch.id,
@@ -558,7 +591,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         const parts = id.split('_');
         const yearStr = parts[parts.length - 1];
         const clientId = parts.slice(1, parts.length - 1).join('_');
-        const client = sourceClients.find((c) => c.id === clientId);
+        const client = sourceClientByIdMap.get(clientId);
         if (client) {
           const dob = client.dateOfBirth ? safeParseDate(client.dateOfBirth) : new Date();
           const bdayDate = new Date(Number(yearStr) || new Date().getFullYear(), dob.getMonth(), dob.getDate());
@@ -582,7 +615,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         const isoMatch = rest.match(/_(\d{4}-\d{2}-\d{2}.*)$/);
         const clientId = isoMatch ? rest.slice(0, rest.length - isoMatch[0].length) : rest;
         const dateIso = isoMatch ? isoMatch[1] : nowIso;
-        const client = sourceClients.find((c) => c.id === clientId);
+        const client = sourceClientByIdMap.get(clientId);
         const contactDate = safeParseDate(dateIso);
         const daysPassed = Math.max(7, differenceInDays(startOfDay(new Date()), startOfDay(contactDate)));
         return {
@@ -606,7 +639,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         const isoMatch = rest.match(/_(\d{4}-\d{2}-\d{2}.*)$/);
         const clientId = isoMatch ? rest.slice(0, rest.length - isoMatch[0].length) : rest;
         const dateIso = isoMatch ? isoMatch[1] : nowIso;
-        const client = sourceClients.find((c) => c.id === clientId);
+        const client = sourceClientByIdMap.get(clientId);
         const expDate = safeParseDate(dateIso);
         return {
           id,
@@ -629,7 +662,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         const isoMatch = rest.match(/_(\d{4}-\d{2}-\d{2}.*)$/);
         const taskId = isoMatch ? rest.slice(0, rest.length - isoMatch[0].length) : rest;
         const dateIso = isoMatch ? isoMatch[1] : nowIso;
-        const task = sourceTasks.find((t) => t.id === taskId);
+        const task = sourceTaskByIdMap.get(taskId);
         const dueDate = safeParseDate(dateIso);
         return {
           id,
@@ -647,7 +680,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       // 6. Booking request: booking_req_<bookingId>
       if (id.startsWith('booking_req_')) {
         const bookingId = id.slice('booking_req_'.length);
-        const booking = allBookings.find((b) => b.id === bookingId);
+        const booking = bookingByIdMap.get(bookingId);
         if (booking) {
           const itemsList = Array.isArray(booking.items)
             ? booking.items
@@ -672,10 +705,15 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
       return null;
     },
-    [notifications, sourceClients, sourceTasks, allBookings]
+    [liveNotifByIdMap, sourceClientByIdMap, sourceTaskByIdMap, bookingByIdMap]
   );
 
-  // Backfill any dismissed IDs that don't yet have full history records in historyMap
+  const attemptedBackfillIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    attemptedBackfillIdsRef.current.clear();
+  }, [currentUser?.id]);
+
+  // Backfill any dismissed IDs that don't yet have full history records in historyMap (once per ID per session)
   useEffect(() => {
     if (!currentUser?.id) return;
     if (sourceClients.length === 0 && notifications.length === 0) return;
@@ -683,8 +721,11 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     let addedAny = false;
     const updatedMap = new Map(historyMap);
 
-    dismissedIds.forEach((id) => {
-      if (!updatedMap.has(id)) {
+    // Only attempt backfill for up to the most recent 500 dismissed IDs to match the 500-item history cap
+    const recentDismissedIds = Array.from(dismissedIds).slice(-500);
+    recentDismissedIds.forEach((id) => {
+      if (!updatedMap.has(id) && !attemptedBackfillIdsRef.current.has(id)) {
+        attemptedBackfillIdsRef.current.add(id);
         const reconstructed = reconstructFromLegacyId(id);
         if (reconstructed) {
           updatedMap.set(id, reconstructed);
@@ -697,7 +738,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     systemNotifications.forEach((sysNotif) => {
       const wasReadByUser =
         (sysNotif.readBy || []).includes(currentUser.id) && !restoredSystemIds.has(sysNotif.id);
-      if (wasReadByUser && !updatedMap.has(sysNotif.id)) {
+      if (wasReadByUser && !updatedMap.has(sysNotif.id) && !attemptedBackfillIdsRef.current.has(sysNotif.id)) {
+        attemptedBackfillIdsRef.current.add(sysNotif.id);
         updatedMap.set(sysNotif.id, {
           id: sysNotif.id,
           type: sysNotif.type,
@@ -716,7 +758,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     if (addedAny) {
       setHistoryMap(updatedMap);
-      const historyArray = Array.from(updatedMap.values()).slice(0, 500);
+      const historyArray = Array.from(updatedMap.values()).slice(-500);
       localStorage.setItem(`crm_notifications_history_${currentUser.id}`, JSON.stringify(historyArray));
       updateUser(currentUser.id, { dismissedNotificationHistory: historyArray }).catch((err) => {
         console.error('Failed to backfill dismissed notification history:', err);
