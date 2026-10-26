@@ -207,6 +207,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               try { await updateDoc(userDocRef, { phone: firebaseUser.phoneNumber }); } catch { /* ignore */ }
             }
 
+            // Self-heal coach / fitness_manager users if role, name, or coachId was missing on users/{uid}
+            if (!userData.role || userData.name === 'Member' || userData.name === 'New User' || (!userData.coachId && (userData.role === 'coach' || userData.role === 'fitness_manager'))) {
+              try {
+                const coachSnapByUid = await getDocs(query(collection(db, 'coaches'), where('userId', '==', userId), limit(1)));
+                let matchedCoachDoc: any = !coachSnapByUid.empty ? coachSnapByUid.docs[0] : null;
+                if (!matchedCoachDoc && firebaseUser.email) {
+                  const coachSnapByEmail = await getDocs(query(collection(db, 'coaches'), where('email', '==', firebaseUser.email.toLowerCase()), limit(1)));
+                  if (!coachSnapByEmail.empty) matchedCoachDoc = coachSnapByEmail.docs[0];
+                }
+                if (matchedCoachDoc) {
+                  const cData = matchedCoachDoc.data();
+                  const isFM = Boolean(cData.isFitnessManager || userData.isFitnessManager || userData.role === 'fitness_manager');
+                  const nextRole: UserRole = isFM ? 'fitness_manager' : (userData.role && userData.role !== 'client' ? userData.role : 'coach');
+                  const nextName = (cData.name && cData.name !== 'Member' && cData.name !== 'New User') ? cData.name : (userData.name || 'Coach');
+                  const nextCoachId = cData.coachId || userData.coachId;
+                  const healUpdates: Record<string, any> = {
+                    role: nextRole,
+                    isFitnessManager: isFM,
+                    name: nextName,
+                    ...(nextCoachId ? { coachId: nextCoachId } : {}),
+                    ...(firebaseUser.email && !userData.email ? { email: firebaseUser.email.toLowerCase() } : {}),
+                  };
+                  userData = { ...userData, ...healUpdates };
+                  try { await updateDoc(userDocRef, healUpdates); } catch { /* ignore */ }
+                }
+              } catch (coachHealErr) {
+                console.warn('Could not self-heal coach profile on login:', coachHealErr);
+              }
+            }
+
             // Auto-link client record if missing clientRecordId
             if (userData.role === 'client' && !userData.clientRecordId) {
               try {

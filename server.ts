@@ -921,8 +921,28 @@ async function startServer() {
 
       const targetDoc = targetUserId ? await db.collection("users").doc(targetUserId).get() : null;
       const targetData = targetDoc?.exists ? targetDoc.data() : null;
-      const targetEmail = String(targetData?.email || fallbackEmail || "").trim().toLowerCase();
-      const targetName = String(targetData?.name || fallbackName || "").trim() || targetEmail.split("@")[0] || "Member";
+
+      // Also check coaches collection if targetUserId is a coach's userId
+      let linkedCoachData: any = null;
+      if (targetUserId) {
+        try {
+          const coachSnap = await db.collection("coaches").where("userId", "==", targetUserId).limit(1).get();
+          if (!coachSnap.empty) {
+            linkedCoachData = coachSnap.docs[0]!.data();
+          }
+        } catch {}
+      }
+
+      const targetEmail = String(targetData?.email || linkedCoachData?.email || fallbackEmail || "").trim().toLowerCase();
+      const targetName =
+        String(
+          (targetData?.name && targetData.name !== "Member" ? targetData.name : "") ||
+          linkedCoachData?.name ||
+          fallbackName ||
+          ""
+        ).trim() ||
+        targetEmail.split("@")[0] ||
+        "User";
 
       let effectiveUid = targetUserId || "";
 
@@ -989,12 +1009,23 @@ async function startServer() {
         }
       } else {
         // Update Firestore user document to flag mustChangePassword and mark activated
+        const preservedRole =
+          targetData?.role ||
+          (linkedCoachData
+            ? linkedCoachData.isFitnessManager
+              ? "fitness_manager"
+              : "coach"
+            : clientId || memberId
+            ? "client"
+            : undefined);
         await db.collection("users").doc(effectiveUid).set(
           {
             id: effectiveUid,
             ...(targetEmail ? { email: targetEmail } : {}),
             ...(targetName ? { name: targetName } : {}),
-            ...(clientId || memberId ? { role: "client" } : {}),
+            ...(preservedRole ? { role: preservedRole } : {}),
+            ...(linkedCoachData?.isFitnessManager ? { isFitnessManager: true } : {}),
+            ...(linkedCoachData?.coachId ? { coachId: linkedCoachData.coachId } : {}),
             ...(memberId ? { clientRecordId: String(memberId) } : {}),
             ...(clientId ? { clientDocId: String(clientId) } : {}),
             ...(phone ? { phone: String(phone) } : {}),
