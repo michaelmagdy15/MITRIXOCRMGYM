@@ -71,7 +71,7 @@ import InzanDailyRevenueSummary from './components/dashboard/InzanDailyRevenueSu
 import { RetentionRadarCard } from './components/dashboard/RetentionRadarCard';
 import { isTenantInzan } from './utils/inzanOrg';
 import { getTenantId } from './firebase';
-import { getRevenueScopeForUser, isPaymentInRevenueScope } from './utils/permissions';
+import { getRevenueScopeForUser, isPaymentInRevenueScope, isFrontDeskUser } from './utils/permissions';
 
 function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], renderItem: (item: any) => React.ReactNode, itemsPerPage?: number }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -234,6 +234,7 @@ export default function Dashboard() {
   // receive the full dataset when canViewGlobalDashboard is true. For reps, they only see their own.
   const allClients = contextClients;
   const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
+  const hideFinancialTargetsForFrontDesk = isFrontDeskUser(currentUser);
   const revenueScope = React.useMemo(() => getRevenueScopeForUser(currentUser), [currentUser]);
   const allPayments = React.useMemo(() => {
     if (!isInzan || revenueScope === 'all') return contextPayments;
@@ -970,7 +971,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {canViewGlobalDashboard ? (
+      {canViewGlobalDashboard && !hideFinancialTargetsForFrontDesk ? (
         <div className="flex flex-wrap items-center gap-3 bg-muted/30 p-3 rounded-lg border border-border/50">
           <Users className="h-5 w-5 text-muted-foreground shrink-0" />
           <div className="flex-1 min-w-0">
@@ -1032,8 +1033,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-2 lg:grid-cols-5">
-        {currentUser?.role === 'admin' ? (
+      <div className={`grid grid-cols-2 gap-3 md:grid-cols-2 ${hideFinancialTargetsForFrontDesk ? 'lg:grid-cols-4' : 'lg:grid-cols-5'}`}>
+        {!hideFinancialTargetsForFrontDesk && (currentUser?.role === 'admin' ? (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{t('dashboard.total_payments')}</CardTitle>
@@ -1169,7 +1170,7 @@ export default function Dashboard() {
             </CardContent>
             )}
           </Card>
-        )}
+        ))}
         
         <Card {...statCardProps('leads')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -1314,7 +1315,7 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      {canViewGlobalDashboard && (
+      {canViewGlobalDashboard && !hideFinancialTargetsForFrontDesk && (
         <InzanDailyRevenueSummary payments={payments} users={users} />
       )}
 
@@ -1614,7 +1615,7 @@ export default function Dashboard() {
   </div>
 
       {/* ── Team Charts (managers see global, reps see personal) ── */}
-      {canViewGlobalDashboard ? (
+      {!hideFinancialTargetsForFrontDesk && (canViewGlobalDashboard ? (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold tracking-tight">{t('dashboard.team_analytics')}</h2>
 
@@ -1850,7 +1851,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-      )}
+      ))}
 
       {features?.frozenMembers === true && (
         <div id="frozen-members-section" className="mt-8 space-y-4">

@@ -104,7 +104,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, coaches, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can, packages } = useAppContext();
+  const { currentUser, users, coaches, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, resetClientPortalPassword, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can, packages } = useAppContext();
 
   const availableCoaches = React.useMemo(() => {
     const map = new Map<string, { id: string; userId?: string; coachDocId?: string; coachId?: string; name: string; branch?: string }>();
@@ -274,6 +274,7 @@ export default function Clients() {
     setIsDetailsLoading(false);
   };
   const [isActivatingPortal, setIsActivatingPortal] = useState<string | null>(null);
+  const [isResettingPortalPassword, setIsResettingPortalPassword] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
@@ -3868,48 +3869,75 @@ export default function Clients() {
 
                       {/* Portal Access Control */}
                       <div className="border-t pt-3 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <Label className="text-[10px] font-bold uppercase tracking-wider text-primary">Portal Access</Label>
                           {activeClient.portalUserId ? (
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
                                 <CheckCircle className="h-3.5 w-3.5" /> Portal Active
                               </p>
-                              <p className="text-[10px] text-muted-foreground font-mono select-all cursor-pointer" title="Click to copy email">
-                                (Email: member-{String(activeClient.memberId || '').toLowerCase()}@mitrixogymcrm-member.local)
+                              <p className="text-[10px] text-muted-foreground font-mono select-all cursor-pointer" title="Click to copy login info">
+                                (Login ID: #{activeClient.memberId || activeClient.id} · Default Pass: 12345678)
                               </p>
                             </div>
                           ) : (
-                            <p className="text-xs text-muted-foreground">No portal access enabled yet.</p>
+                            <p className="text-xs text-muted-foreground">
+                              No portal access enabled yet (Login ID: #{activeClient.memberId || activeClient.id} · Default Pass: 12345678).
+                            </p>
                           )}
                         </div>
 
-                        {!activeClient.portalUserId &&
-                          (activeClient.memberId ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!activeClient.portalUserId && (
                             <Button
                               size="sm"
                               variant="outline"
                               className="text-xs font-bold text-primary border-primary/20 hover:border-primary/40"
-                              disabled={isActivatingPortal === activeClient.id}
+                              disabled={isActivatingPortal === activeClient.id || isResettingPortalPassword === activeClient.id}
                               onClick={async () => {
-                                if (window.confirm(`Enable portal access for ${activeClient.name}?`)) {
-                                  setIsActivatingPortal(activeClient.id);
-                                  try {
-                                    await createClientAccount(activeClient.id, activeClient.memberId!, activeClient.name, activeClient.phone);
-                                    alert('Portal access enabled! Default password is: 12345678');
-                                  } catch (err: any) {
-                                    alert('Failed to enable portal access: ' + err.message);
-                                  } finally {
-                                    setIsActivatingPortal(null);
-                                  }
+                                const effMemberId = String(activeClient.memberId || activeClient.id).replace(/^#/, '');
+                                setIsActivatingPortal(activeClient.id);
+                                try {
+                                  await createClientAccount(activeClient.id, effMemberId, activeClient.name, activeClient.phone);
+                                  toast.success(`Portal access enabled for ${activeClient.name}! Login ID: #${effMemberId} | Default password: 12345678`);
+                                } catch (err: any) {
+                                  toast.error('Failed to enable portal access: ' + err.message);
+                                } finally {
+                                  setIsActivatingPortal(null);
                                 }
                               }}
                             >
                               {isActivatingPortal === activeClient.id ? 'Activating...' : 'Enable Access'}
                             </Button>
-                          ) : (
-                            <p className="text-[10px] text-amber-500 font-semibold italic">Requires a Member ID to enable access</p>
-                          ))}
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10 gap-1"
+                            disabled={isResettingPortalPassword === activeClient.id || isActivatingPortal === activeClient.id}
+                            onClick={async () => {
+                              const effMemberId = String(activeClient.memberId || activeClient.id).replace(/^#/, '');
+                              setIsResettingPortalPassword(activeClient.id);
+                              try {
+                                await resetClientPortalPassword(
+                                  activeClient.id,
+                                  effMemberId,
+                                  activeClient.name,
+                                  activeClient.portalUserId,
+                                  activeClient.phone
+                                );
+                                toast.success(`Portal password reset to 12345678 for ${activeClient.name} (Login ID: #${effMemberId})`);
+                              } catch (err: any) {
+                                toast.error('Failed to reset portal password: ' + err.message);
+                              } finally {
+                                setIsResettingPortalPassword(null);
+                              }
+                            }}
+                          >
+                            <RotateCcw className={`h-3 w-3 ${isResettingPortalPassword === activeClient.id ? 'animate-spin' : ''}`} />
+                            {isResettingPortalPassword === activeClient.id ? 'Resetting...' : 'Reset Password (12345678)'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>

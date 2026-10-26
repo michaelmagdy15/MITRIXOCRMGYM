@@ -882,11 +882,11 @@ async function startServer() {
 
   // Tenant-level endpoint to force-reset another user's password
   app.post("/api/tenant/reset-user-password", requireAuth, async (req, res) => {
-    const { targetUserId } = req.body;
+    const { targetUserId, email: fallbackEmail, name: fallbackName, clientId, memberId, phone } = req.body;
     const DEFAULT_PASSWORD = '12345678';
 
-    if (!targetUserId) {
-      return res.status(400).json({ error: "Missing required field: targetUserId" });
+    if (!targetUserId && !fallbackEmail) {
+      return res.status(400).json({ error: "Missing required field: targetUserId or email" });
     }
 
     try {
@@ -898,23 +898,38 @@ async function startServer() {
       const callerDoc = await db.collection("users").doc(callerUid).get();
       const callerRole = callerDoc.data()?.role || "";
 
-      const ADMIN_ROLES = ["admin", "super_admin", "crm_admin", "manager"];
+      const ADMIN_ROLES = [
+        "admin",
+        "super_admin",
+        "crm_admin",
+        "manager",
+        "front_desk",
+        "receptionist",
+        "sales_manager",
+        "fitness_manager",
+        "general_manager",
+        "ceo",
+        "rep",
+      ];
       if (!ADMIN_ROLES.includes(callerRole?.toLowerCase())) {
-        return res.status(403).json({ error: "Forbidden: Only admins can reset user passwords." });
+        return res.status(403).json({ error: "Forbidden: Insufficient permissions to reset user passwords." });
       }
 
       if (targetUserId === callerUid) {
         return res.status(400).json({ error: "You cannot force-reset your own password." });
       }
 
-      const targetDoc = await db.collection("users").doc(targetUserId).get();
-      const targetData = targetDoc.exists ? targetDoc.data() : null;
-      const targetEmail = String(targetData?.email || "").trim().toLowerCase();
-      const targetName = String(targetData?.name || "").trim() || targetEmail.split("@")[0] || "Staff User";
+      const targetDoc = targetUserId ? await db.collection("users").doc(targetUserId).get() : null;
+      const targetData = targetDoc?.exists ? targetDoc.data() : null;
+      const targetEmail = String(targetData?.email || fallbackEmail || "").trim().toLowerCase();
+      const targetName = String(targetData?.name || fallbackName || "").trim() || targetEmail.split("@")[0] || "Member";
 
-      let effectiveUid = targetUserId;
+      let effectiveUid = targetUserId || "";
 
       try {
+        if (!targetUserId) {
+          throw { code: "auth/user-not-found" };
+        }
         // Reset the password in Firebase Auth using Admin SDK (and keep email/displayName synced if present)
         await admin.auth().updateUser(targetUserId, {
           password: DEFAULT_PASSWORD,
@@ -944,7 +959,7 @@ async function startServer() {
         } catch (emailErr: any) {
           if (emailErr?.code === "auth/user-not-found") {
             const createdRecord = await admin.auth().createUser({
-              uid: targetUserId,
+              ...(targetUserId ? { uid: targetUserId } : {}),
               email: targetEmail,
               password: DEFAULT_PASSWORD,
               displayName: targetName,
@@ -969,12 +984,20 @@ async function startServer() {
           },
           { merge: true }
         );
-        await db.collection("users").doc(targetUserId).delete();
+        if (targetUserId) {
+          await db.collection("users").doc(targetUserId).delete();
+        }
       } else {
         // Update Firestore user document to flag mustChangePassword and mark activated
-        await db.collection("users").doc(targetUserId).set(
+        await db.collection("users").doc(effectiveUid).set(
           {
-            id: targetUserId,
+            id: effectiveUid,
+            ...(targetEmail ? { email: targetEmail } : {}),
+            ...(targetName ? { name: targetName } : {}),
+            ...(clientId || memberId ? { role: "client" } : {}),
+            ...(memberId ? { clientRecordId: String(memberId) } : {}),
+            ...(clientId ? { clientDocId: String(clientId) } : {}),
+            ...(phone ? { phone: String(phone) } : {}),
             mustChangePassword: true,
             isPending: false,
             authActivated: true,
@@ -984,7 +1007,17 @@ async function startServer() {
         );
       }
 
-      console.log(`[Server] Force reset password / activation executed for ${targetUserId} -> ${effectiveUid}.`);
+      if (clientId) {
+        await db.collection("clients").doc(String(clientId)).set(
+          {
+            portalUserId: effectiveUid,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        );
+      }
+
+      console.log(`[Server] Force reset password / activation executed for ${targetUserId || targetEmail} -> ${effectiveUid}.`);
       return res.json({ success: true, uid: effectiveUid, message: 'Password has been reset to "12345678".' });
     } catch (error) {
       console.error("[Server] Tenant password reset error:", error);
@@ -1008,9 +1041,21 @@ async function startServer() {
       const callerDoc = await db.collection("users").doc(callerUid).get();
       const callerRole = callerDoc.data()?.role || "";
 
-      const ADMIN_ROLES = ["admin", "super_admin", "crm_admin", "manager"];
+      const ADMIN_ROLES = [
+        "admin",
+        "super_admin",
+        "crm_admin",
+        "manager",
+        "front_desk",
+        "receptionist",
+        "sales_manager",
+        "fitness_manager",
+        "general_manager",
+        "ceo",
+        "rep",
+      ];
       if (!ADMIN_ROLES.includes(callerRole?.toLowerCase())) {
-        return res.status(403).json({ error: "Forbidden: Only admins can create users." });
+        return res.status(403).json({ error: "Forbidden: Staff permissions required to create portal accounts." });
       }
 
       // Check if user already exists first to prevent duplicate accounts

@@ -39,6 +39,7 @@ import { MemberGuestInvitationsTab } from './member/MemberGuestInvitationsTab';
 import { createMemberReferralWithProfile } from '../services/guestReferralService';
 import { MemberDocumentUploader } from './member/MemberDocumentUploader';
 import { isFieldLockedForUser, sanitizeMemberProfileUpdates } from '../utils/memberProfileLocking';
+import { useAppContext } from '../context';
 import {
   fetchMemberLockerStatus,
   memberClaimLocker,
@@ -100,7 +101,10 @@ export function InzanMemberShow({
   setRenewPkgName,
   setRenewStartDate
 }: InzanMemberShowProps) {
+  const { createClientAccount, resetClientPortalPassword } = useAppContext();
   const [activeTab, setActiveTab] = useState<TabType>('member_data');
+  const [isActivatingPortal, setIsActivatingPortal] = useState(false);
+  const [isResettingPortalPassword, setIsResettingPortalPassword] = useState(false);
   const memberReferrals: any[] = Array.isArray((client as any).referrals) ? (client as any).referrals : [];
   const canAdjustDates = canOverridePackageDates(currentUser);
   const [adjustPkgId, setAdjustPkgId] = useState<string | null>(null);
@@ -1419,6 +1423,63 @@ export function InzanMemberShow({
             >
               Staff Whatsapp
             </Button>
+
+            {!client.portalUserId && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isActivatingPortal || isResettingPortalPassword}
+                onClick={async () => {
+                  const effMemberId = String(client.memberId || client.id).replace(/^#/, '');
+                  setIsActivatingPortal(true);
+                  try {
+                    const { uid } = await createClientAccount(client.id, effMemberId, client.name, client.phone);
+                    await onUpdateClient(client.id, { portalUserId: uid });
+                    toast.success(`Portal enabled for ${client.name}! Login ID: #${effMemberId} | Default Pass: 12345678`);
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed to enable member portal');
+                  } finally {
+                    setIsActivatingPortal(false);
+                  }
+                }}
+                className="h-8 bg-emerald-600 hover:bg-emerald-700 border-emerald-500 text-white font-bold text-xs gap-1.5"
+              >
+                <Unlock className="h-3.5 w-3.5" />
+                {isActivatingPortal ? 'Activating...' : 'Enable Portal'}
+              </Button>
+            )}
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isResettingPortalPassword || isActivatingPortal}
+              onClick={async () => {
+                const effMemberId = String(client.memberId || client.id).replace(/^#/, '');
+                setIsResettingPortalPassword(true);
+                try {
+                  const { uid } = await resetClientPortalPassword(
+                    client.id,
+                    effMemberId,
+                    client.name,
+                    client.portalUserId,
+                    client.phone
+                  );
+                  if (!client.portalUserId && uid) {
+                    await onUpdateClient(client.id, { portalUserId: uid });
+                  }
+                  toast.success(`Portal password reset to 12345678 for ${client.name} (Login ID: #${effMemberId})`);
+                } catch (err: any) {
+                  toast.error(err?.message || 'Failed to reset member password');
+                } finally {
+                  setIsResettingPortalPassword(false);
+                }
+              }}
+              className="h-8 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold text-xs gap-1.5"
+              title="Reset member portal password to 12345678"
+            >
+              <Key className="h-3.5 w-3.5" />
+              {isResettingPortalPassword ? 'Resetting...' : 'Reset Pass (12345678)'}
+            </Button>
           </div>
         </div>
 
@@ -1503,6 +1564,98 @@ export function InzanMemberShow({
                 <div className="border border-border rounded-xl p-4 bg-muted/20 text-center flex flex-col justify-center items-center">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Redgits Member ID</span>
                   <span className="text-3xl font-black text-rose-500 tracking-wider mt-1">{client.memberId || '—'}</span>
+                </div>
+
+                {/* Member Portal Access & Password Reset Card */}
+                <div className="border border-indigo-500/30 rounded-xl p-3.5 bg-indigo-500/5 space-y-2.5 text-left">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
+                      Member Portal Access
+                    </span>
+                    {client.portalUserId ? (
+                      <Badge className="bg-emerald-600 text-white text-[10px] h-4 px-1.5 font-bold">
+                        Active
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-bold border-amber-500/40 text-amber-600">
+                        Not Activated
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-[11px] font-mono text-muted-foreground space-y-0.5">
+                    <div>
+                      Login ID: <strong className="text-foreground">#{client.memberId || client.id}</strong>
+                    </div>
+                    {client.phone ? (
+                      <div>
+                        Phone: <strong className="text-foreground">{client.phone}</strong>
+                      </div>
+                    ) : null}
+                    <div>
+                      Default Pass: <strong className="text-foreground">12345678</strong>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    {!client.portalUserId && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isActivatingPortal || isResettingPortalPassword}
+                        onClick={async () => {
+                          const effMemberId = String(client.memberId || client.id).replace(/^#/, '');
+                          setIsActivatingPortal(true);
+                          try {
+                            const { uid } = await createClientAccount(client.id, effMemberId, client.name, client.phone);
+                            await onUpdateClient(client.id, { portalUserId: uid });
+                            toast.success(
+                              `Member Portal enabled for ${client.name}! Login ID: #${effMemberId} | Default Password: 12345678`
+                            );
+                          } catch (err: any) {
+                            toast.error(err?.message || 'Failed to enable member portal');
+                          } finally {
+                            setIsActivatingPortal(false);
+                          }
+                        }}
+                        className="w-full h-7 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+                      >
+                        <Unlock className="h-3.5 w-3.5" />
+                        {isActivatingPortal ? 'Activating...' : 'Enable Portal Access'}
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isResettingPortalPassword || isActivatingPortal}
+                      onClick={async () => {
+                        const effMemberId = String(client.memberId || client.id).replace(/^#/, '');
+                        setIsResettingPortalPassword(true);
+                        try {
+                          const { uid } = await resetClientPortalPassword(
+                            client.id,
+                            effMemberId,
+                            client.name,
+                            client.portalUserId,
+                            client.phone
+                          );
+                          if (!client.portalUserId && uid) {
+                            await onUpdateClient(client.id, { portalUserId: uid });
+                          }
+                          toast.success(
+                            `Portal password reset to 12345678 for ${client.name} (Login ID: #${effMemberId})`
+                          );
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Failed to reset member password');
+                        } finally {
+                          setIsResettingPortalPassword(false);
+                        }
+                      }}
+                      className="w-full h-7 text-xs font-bold border-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/10 gap-1.5"
+                    >
+                      <Key className="h-3.5 w-3.5" />
+                      {isResettingPortalPassword ? 'Resetting...' : 'Reset Password (12345678)'}
+                    </Button>
+                  </div>
                 </div>
               </div>
 

@@ -90,3 +90,42 @@ export async function executeStockMovement(
     return movementData;
   });
 }
+
+export async function recordInventoryMovement(
+  firestoreDbOrParams: any,
+  maybeParams?: {
+    productId: string;
+    type: MovementType;
+    quantity?: number;
+    quantityChange?: number;
+    unitCost?: number;
+    reason?: string;
+    referenceId?: string;
+    recordedBy: string;
+    recordedByName: string;
+  }
+): Promise<InventoryMovement> {
+  const isFirstArgDb = Boolean(maybeParams && maybeParams.productId);
+  const rawParams = isFirstArgDb ? maybeParams! : (firestoreDbOrParams as NonNullable<typeof maybeParams>);
+  const targetDb = isFirstArgDb ? firestoreDbOrParams : db;
+  const qty = Number(rawParams.quantityChange ?? rawParams.quantity ?? 0);
+  const signedChange =
+    rawParams.type === 'RECEIVE'
+      ? Math.abs(qty)
+      : rawParams.type === 'SALE' || rawParams.type === 'DAMAGE' || rawParams.type === 'ADJUSTMENT'
+      ? -Math.abs(qty)
+      : qty;
+
+  return executeStockMovement(
+    {
+      productId: rawParams.productId,
+      type: rawParams.type,
+      quantityChange: signedChange,
+      reason: rawParams.reason,
+      referenceId: rawParams.referenceId,
+      recordedBy: rawParams.recordedBy,
+      recordedByName: rawParams.recordedByName,
+    },
+    targetDb
+  );
+}

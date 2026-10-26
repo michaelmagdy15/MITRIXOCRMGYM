@@ -153,6 +153,7 @@ export interface AppContextType {
   processPaymentTransaction: (params: PaymentTransactionParams) => Promise<void>;
   fetchClientDetails: (clientId: string) => Promise<{ comments: CRMComment[]; interactions: InteractionLog[] }>;
   createClientAccount: (clientId: string, memberId: string, clientName: string, phone?: string) => Promise<{ uid: string }>;
+  resetClientPortalPassword: (clientId: string, memberId: string, clientName: string, portalUserId?: string, phone?: string) => Promise<{ uid: string }>;
   permissionTemplates: PermissionTemplate[];
   createPermissionTemplate: (template: Omit<PermissionTemplate, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>;
   updatePermissionTemplate: (id: string, updates: Partial<PermissionTemplate>) => Promise<void>;
@@ -177,7 +178,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateUser, 
     deleteUser, 
     inviteUser,
-    createClientAccount
+    createClientAccount,
+    resetClientPortalPassword
   } = useAuth();
 
   const { 
@@ -682,6 +684,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     processPaymentTransaction,
     fetchClientDetails,
     createClientAccount,
+    resetClientPortalPassword,
     permissionTemplates,
     createPermissionTemplate,
     updatePermissionTemplate,

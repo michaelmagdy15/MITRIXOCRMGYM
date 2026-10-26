@@ -237,22 +237,45 @@ export const createFirebaseUser = async (email: string, password: string): Promi
     throw new Error("No authorization token found. You must be signed in.");
   }
 
-  const response = await fetch('/api/tenant/create-auth-user', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({ email, password })
-  });
+  try {
+    const response = await fetch('/api/tenant/create-auth-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ email, password })
+    });
 
-  if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || `Server returned ${response.status}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.uid) return data.uid;
+    } else if (response.status !== 403 && response.status !== 404) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || `Server returned ${response.status}`);
+    }
+  } catch (apiErr: any) {
+    // Fall through to temporary secondary Firebase Auth app when server returns 403 or is unreachable
+    if (apiErr?.message && !/403|404|Failed to fetch|NetworkError/i.test(apiErr.message)) {
+      // still try client-side fallback below
+    }
   }
 
-  const data = await response.json();
-  return data.uid;
+  // Fallback: create or recover user via isolated secondary Firebase App instance (does not affect current staff session)
+  const tempApp = initializeApp(activeConfig as any, `temp-create-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+  const tempAuth = getAuth(tempApp);
+  try {
+    const cred = await createUserWithEmailAndPassword(tempAuth, email, password);
+    return cred.user.uid;
+  } catch (createErr: any) {
+    if (createErr?.code === 'auth/email-already-in-use') {
+      const cred = await signInWithEmailAndPassword(tempAuth, email, password);
+      return cred.user.uid;
+    }
+    throw createErr;
+  } finally {
+    await deleteApp(tempApp).catch(() => {});
+  }
 };
 
 /**

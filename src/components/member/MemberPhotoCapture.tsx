@@ -12,7 +12,8 @@ export interface MemberPhotoCaptureProps {
   client: Client;
   onUpdateClient: (id: string, updates: Partial<Client>) => Promise<void>;
   onPhotoSaved?: (photoURL: string) => void;
-  size?: 'sm' | 'md' | 'lg';
+  onPhotoClick?: () => void;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   showMissingAlert?: boolean;
   staffName?: string;
 }
@@ -21,6 +22,7 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
   client,
   onUpdateClient,
   onPhotoSaved,
+  onPhotoClick,
   size = 'md',
   showMissingAlert = false,
   staffName = 'Staff',
@@ -212,18 +214,28 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
   };
 
   const avatarDims =
-    size === 'lg' ? 'h-20 w-20' : size === 'sm' ? 'h-12 w-12' : 'h-16 w-16';
+    size === 'xl'
+      ? 'h-32 w-32 sm:h-36 sm:w-36'
+      : size === 'lg'
+      ? 'h-20 w-20'
+      : size === 'sm'
+      ? 'h-12 w-12'
+      : 'h-16 w-16';
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
         {/* Avatar Preview */}
         <div
+          onClick={onPhotoClick}
+          title={onPhotoClick ? `Click to open ${client.name}'s account` : undefined}
           className={`relative ${avatarDims} rounded-2xl overflow-hidden border-2 ${
             currentPhoto
               ? 'border-emerald-500/50 bg-muted'
               : 'border-dashed border-amber-500/60 bg-amber-500/10'
-          } flex items-center justify-center shrink-0 shadow-sm`}
+          } flex items-center justify-center shrink-0 shadow-sm ${
+            onPhotoClick ? 'cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all' : ''
+          }`}
         >
           {currentPhoto ? (
             <img
@@ -233,7 +245,7 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
               onError={() => setImgLoadFailed(true)}
             />
           ) : (
-            <User className="h-7 w-7 text-amber-500/80" />
+            <User className={`${size === 'xl' ? 'h-14 w-14' : 'h-7 w-7'} text-amber-500/80`} />
           )}
         </div>
 

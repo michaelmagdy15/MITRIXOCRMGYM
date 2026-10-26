@@ -106,12 +106,16 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     packages,
     addClient,
     updateClient,
+    createClientAccount,
+    resetClientPortalPassword,
     attendances,
     recordAttendance,
   } = useAppContext();
   const isInzan = getTenantId() === 'inzanathletics' || features?.shiftHandover === true || features?.commercialGymWorkspaces === true;
   const [isShiftHandoverOpen, setIsShiftHandoverOpen] = useState(false);
   const [isTurnstileConfigOpen, setIsTurnstileConfigOpen] = useState(false);
+  const [isActivatingMemberPortal, setIsActivatingMemberPortal] = useState(false);
+  const [isResettingMemberPassword, setIsResettingMemberPassword] = useState(false);
   const [turnstileEval, setTurnstileEval] = useState<TurnstileGateDecision | null>(null);
   const [turnstileConfig, setTurnstileConfig] = useState<TurnstileHardwareConfig>(() => {
     try {
@@ -1333,8 +1337,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         return;
       }
 
-      if (evaluation.hasMultiplePackages || evaluation.hasOverdueDebt || evaluation.stickyNote || lookupMode === 'invitation_id') {
-        // Hold member card open so reception sees the debt / sticky note / package choice / guest invite and confirms
+      if (lookupMode === 'invitation_id') {
+        // Hold member card open so reception can enter guest invitation details and confirm
         return;
       }
 
@@ -1345,6 +1349,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
           triggerTurnstileRelay(turnstileConfig, turnstileAccess, member).catch(() => {});
         }
         setSuccessMessage(t('attendance.attendance_recorded').replace('{name}', member.name));
+        toast.success(`Checked in ${member.name} (#${member.memberId || member.id})`);
         setTimeout(() => {
           setSuccessMessage(null);
         }, 4000);
@@ -1863,6 +1868,72 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               <p className="text-[10px] text-muted-foreground italic ml-1">
                 {t('attendance.hint')}
               </p>
+
+              {/* Large Member Photo & Quick Profile Card Directly Under Manual ID Input */}
+              {!isKiosk && lastScannedMember && (
+                <div className="mt-3 pt-3 border-t border-border/70 flex flex-col items-center text-center gap-2.5 bg-background/80 rounded-xl p-3.5 shadow-sm">
+                  {(() => {
+                    const m = lastScannedMember as any;
+                    const rawPhoto = String(m.photoURL || m.photoUrl || m.avatar || '').trim();
+                    const isBrokenRoot = /\/uploads\/?$/i.test(rawPhoto);
+                    const fallbackRgId =
+                      m.redgitsId ||
+                      (m.id && String(m.id).startsWith('redgits-') ? String(m.id).replace(/^redgits-/, '') : '');
+                    const displayPhoto =
+                      rawPhoto && !isBrokenRoot
+                        ? rawPhoto
+                        : fallbackRgId && /^\d+$/.test(String(fallbackRgId))
+                        ? `https://inzan.redgits.com/uploads/members/${fallbackRgId}-cam.jpg`
+                        : '';
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('clients');
+                          setActiveClientId(lastScannedMember.id);
+                        }}
+                        title={`Click to open ${lastScannedMember.name}'s full member profile`}
+                        className="group relative h-44 w-44 sm:h-52 sm:w-52 rounded-2xl overflow-hidden border-2 border-primary/50 bg-muted flex items-center justify-center shadow-md hover:ring-4 hover:ring-primary/30 transition-all cursor-pointer"
+                      >
+                        {displayPhoto ? (
+                          <img
+                            src={displayPhoto}
+                            alt={lastScannedMember.name}
+                            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <User className="h-20 w-20 text-muted-foreground/50" />
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white py-1.5 px-2 text-[11px] font-bold flex items-center justify-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                          <span>Open Account</span>
+                        </div>
+                      </button>
+                    );
+                  })()}
+                  <div className="space-y-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('clients');
+                        setActiveClientId(lastScannedMember.id);
+                      }}
+                      className="text-lg font-black text-primary hover:underline flex items-center justify-center gap-1.5 cursor-pointer"
+                      title="Click to open member account"
+                    >
+                      <span>{lastScannedMember.name}</span>
+                      <ExternalLink className="h-4 w-4 shrink-0" />
+                    </button>
+                    <p className="text-xs font-mono font-bold text-muted-foreground">
+                      {lastScannedMember.memberId ? `#${lastScannedMember.memberId}` : lastScannedMember.id}
+                      {lastScannedMember.phone ? ` · ${lastScannedMember.phone}` : ''}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </Card>
@@ -1905,8 +1976,36 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                         ? `Blocked: ${gatekeeperEval.denialReasonCode}`
                         : t('attendance.scan_successful')}
                     </Badge>
-                    <CardTitle className="text-2xl">{lastScannedMember.name}</CardTitle>
+                    <CardTitle className="text-2xl">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('clients');
+                          setActiveClientId(lastScannedMember.id);
+                        }}
+                        className="text-left hover:text-primary hover:underline inline-flex items-center gap-2 cursor-pointer transition-colors"
+                        title={`Click to open ${lastScannedMember.name}'s account`}
+                      >
+                        <span>{lastScannedMember.name}</span>
+                        <ExternalLink className="h-4 w-4 text-primary shrink-0" />
+                      </button>
+                    </CardTitle>
                   </div>
+                  {!isKiosk && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setActiveTab('clients');
+                        setActiveClientId(lastScannedMember.id);
+                      }}
+                      className="h-8 text-xs font-bold gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Open Account
+                    </Button>
+                  )}
                 </div>
                 {!isKiosk && (
                   <MemberPhotoCapture
@@ -1915,10 +2014,109 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                     onPhotoSaved={(url) =>
                       setLastScannedMember((prev: any) => (prev ? { ...prev, photoURL: url } : prev))
                     }
-                    size="md"
+                    onPhotoClick={() => {
+                      setActiveTab('clients');
+                      setActiveClientId(lastScannedMember.id);
+                    }}
+                    size="xl"
                     showMissingAlert={true}
                     staffName={currentUser?.name || currentUser?.email || 'Reception'}
                   />
+                )}
+                {/* Member Portal Status & 1-Click Front Desk Activation + Password Reset */}
+                {!isKiosk && (
+                  <div className="p-2.5 rounded-xl border border-indigo-500/30 bg-indigo-500/5 flex flex-wrap items-center justify-between gap-2">
+                    <div className="space-y-0.5 text-left">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                          Member App / Portal
+                        </span>
+                        {lastScannedMember.portalUserId ? (
+                          <Badge className="bg-emerald-600 text-white text-[10px] h-4 px-1.5 font-bold">
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-bold border-amber-500/40 text-amber-600">
+                            Not Activated
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-mono text-muted-foreground">
+                        Login ID: <strong className="text-foreground">#{lastScannedMember.memberId || lastScannedMember.id}</strong>
+                        {lastScannedMember.phone ? (
+                          <> · Phone: <strong className="text-foreground">{lastScannedMember.phone}</strong></>
+                        ) : null}
+                        {' '}· Default Pass: <strong className="text-foreground">12345678</strong>
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {!lastScannedMember.portalUserId && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={isActivatingMemberPortal || isResettingMemberPassword}
+                          onClick={async () => {
+                            const effMemberId = String(lastScannedMember.memberId || lastScannedMember.id).replace(/^#/, '');
+                            setIsActivatingMemberPortal(true);
+                            try {
+                              const { uid } = await createClientAccount(
+                                lastScannedMember.id,
+                                effMemberId,
+                                lastScannedMember.name,
+                                lastScannedMember.phone
+                              );
+                              setLastScannedMember((prev: any) => (prev ? { ...prev, portalUserId: uid } : prev));
+                              toast.success(
+                                `Member Portal activated for ${lastScannedMember.name}! Login ID: #${effMemberId} | Default Password: 12345678`
+                              );
+                            } catch (err: any) {
+                              console.error('Failed to activate member portal:', err);
+                              toast.error(err?.message || 'Failed to activate member portal');
+                            } finally {
+                              setIsActivatingMemberPortal(false);
+                            }
+                          }}
+                          className="h-7 px-3 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+                        >
+                          <Unlock className="h-3.5 w-3.5" />
+                          {isActivatingMemberPortal ? 'Activating...' : 'Activate Member Portal'}
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isResettingMemberPassword || isActivatingMemberPortal}
+                        onClick={async () => {
+                          const effMemberId = String(lastScannedMember.memberId || lastScannedMember.id).replace(/^#/, '');
+                          setIsResettingMemberPassword(true);
+                          try {
+                            const { uid } = await resetClientPortalPassword(
+                              lastScannedMember.id,
+                              effMemberId,
+                              lastScannedMember.name,
+                              lastScannedMember.portalUserId,
+                              lastScannedMember.phone
+                            );
+                            setLastScannedMember((prev: any) => (prev ? { ...prev, portalUserId: uid } : prev));
+                            toast.success(
+                              `Portal password reset to 12345678 for ${lastScannedMember.name} (Login ID: #${effMemberId})`
+                            );
+                          } catch (err: any) {
+                            console.error('Failed to reset member portal password:', err);
+                            toast.error(err?.message || 'Failed to reset member portal password');
+                          } finally {
+                            setIsResettingMemberPassword(false);
+                          }
+                        }}
+                        className="h-7 px-2.5 text-xs font-bold border-indigo-500/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/10 gap-1"
+                        title="Reset member portal password to 12345678"
+                      >
+                        <RotateCcw className={`h-3 w-3 ${isResettingMemberPassword ? 'animate-spin' : ''}`} />
+                        {isResettingMemberPassword ? 'Resetting...' : 'Reset Password (12345678)'}
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </CardHeader>
               <CardContent className="space-y-4">

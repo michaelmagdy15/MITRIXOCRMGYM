@@ -46,6 +46,7 @@ interface AuthContextType {
   activatePendingUser: (pendingDocId: string, email: string, role: UserRole, name: string) => Promise<void>;
   createCoachAccount: (name: string, email: string, branch?: string) => Promise<{ uid: string; coachId: string }>;
   createClientAccount: (clientId: string, memberId: string, clientName: string, phone?: string) => Promise<{ uid: string }>;
+  resetClientPortalPassword: (clientId: string, memberId: string, clientName: string, portalUserId?: string, phone?: string) => Promise<{ uid: string }>;
   submitSignUpRequest: (name: string, email: string, role: UserRole, message?: string) => Promise<void>;
   registerFreeUser: (email: string, password: string, profileData: any) => Promise<string>;
   activateFromPending: (clientId: string, updates?: Partial<Client>) => Promise<void>;
@@ -808,22 +809,82 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const createClientAccount = async (clientId: string, memberId: string, clientName: string, phone?: string) => {
-    const email = getMemberEmail(memberId);
+    const cleanMemberId = String(memberId || clientId).replace(/^#/, '').trim();
+    const email = getMemberEmail(cleanMemberId);
     const uid = await createFirebaseUser(email, '12345678');
     const newUser: User = {
       id: uid,
       name: clientName,
       email,
       role: 'client',
-      clientRecordId: memberId,
+      clientRecordId: cleanMemberId,
       clientDocId: clientId,
-      phone,
+      ...(phone ? { phone } : {}),
       mustChangePassword: true,
     };
-    await setDoc(doc(db, 'users', uid), newUser);
+    await setDoc(doc(db, 'users', uid), newUser, { merge: true });
     // Update the client record to flag portal access
     await updateDoc(doc(db, 'clients', clientId), { portalUserId: uid });
     return { uid };
+  };
+
+  const resetClientPortalPassword = async (
+    clientId: string,
+    memberId: string,
+    clientName: string,
+    portalUserId?: string,
+    phone?: string
+  ): Promise<{ uid: string }> => {
+    const cleanMemberId = String(memberId || clientId).replace(/^#/, '').trim();
+    const email = getMemberEmail(cleanMemberId);
+    const token = await auth.currentUser?.getIdToken();
+
+    if (token) {
+      try {
+        const res = await fetch('/api/tenant/reset-user-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            targetUserId: portalUserId || undefined,
+            email,
+            name: clientName,
+            clientId,
+            memberId: cleanMemberId,
+            phone,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const resolvedUid = data?.uid || portalUserId;
+          if (resolvedUid) {
+            await setDoc(
+              doc(db, 'users', resolvedUid),
+              {
+                id: resolvedUid,
+                name: clientName,
+                email,
+                role: 'client',
+                clientRecordId: cleanMemberId,
+                clientDocId: clientId,
+                ...(phone ? { phone } : {}),
+                mustChangePassword: true,
+              },
+              { merge: true }
+            );
+            await updateDoc(doc(db, 'clients', clientId), { portalUserId: resolvedUid });
+            return { uid: resolvedUid };
+          }
+        }
+      } catch (err) {
+        console.warn('[Auth] Server reset-user-password fallback:', err);
+      }
+    }
+
+    // Fallback: create or recover the member portal account with default password '12345678'
+    return createClientAccount(clientId, cleanMemberId, clientName, phone);
   };
 
   const submitSignUpRequest = async (name: string, email: string, role: UserRole, message?: string) => {
@@ -1223,6 +1284,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     inviteUser,
     createCoachAccount,
     createClientAccount,
+    resetClientPortalPassword,
     activatePendingUser,
     submitSignUpRequest,
     registerFreeUser,

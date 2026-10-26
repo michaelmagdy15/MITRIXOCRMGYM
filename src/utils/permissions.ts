@@ -840,6 +840,8 @@ export const DEFAULT_SYSTEM_TEMPLATES: Omit<PermissionTemplate, 'id' | 'createdA
       'members.view_contact_info': true,
       'members.log_interactions': true,
       'members.assign_rfid': true,
+      'members.create_portal_account': true,
+      'members.reset_password': true,
       'attendance.view': true,
       'attendance.checkin': true,
       'attendance.checkin_guests': true,
@@ -1162,6 +1164,8 @@ export function hasPermission(
             'members.view',
             'members.view_all_branches',
             'members.view_contact_info',
+            'members.create_portal_account',
+            'members.reset_password',
             'attendance.view',
             'attendance.checkin',
             'attendance.checkin_guests',
@@ -1197,6 +1201,8 @@ export function hasPermission(
       'members.view_contact_info',
       'members.log_interactions',
       'members.assign_rfid',
+      'members.create_portal_account',
+      'members.reset_password',
       'attendance.view',
       'attendance.checkin',
       'attendance.checkin_guests',
@@ -1437,6 +1443,7 @@ export function isGeneralManagerOrCEO(user: User | null | undefined): boolean {
  */
 export function isFrontDeskUser(user: User | null | undefined): boolean {
   if (!user) return false;
+  if (['super_admin', 'crm_admin', 'admin'].includes(user.role)) return false;
   const title = (user.jobTitle || '').trim().toLowerCase();
   const dept = (user.department || '').trim().toLowerCase();
   const tmpl = (user.permissionTemplateId || '').trim().toLowerCase();
