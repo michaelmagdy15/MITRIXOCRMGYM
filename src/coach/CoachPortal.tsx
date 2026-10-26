@@ -132,7 +132,7 @@ export default function CoachPortal() {
       <header className="border-b bg-card/95 backdrop-blur-xl shadow-sm min-h-[calc(3.75rem+var(--safe-top))] pt-[var(--safe-top)] flex items-center justify-between px-3 sm:px-6 sticky top-0 z-50 gap-2">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
           {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt={branding.companyName} className="h-7 sm:h-8 w-auto object-contain shrink-0" referrerPolicy="no-referrer" />
+            <img src={branding.logoUrl} alt={branding.companyName} className={`h-7 sm:h-8 w-auto object-contain shrink-0 ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`} referrerPolicy="no-referrer" />
           ) : (
             <h1 className="text-sm sm:text-lg font-extralight tracking-[0.15em] sm:tracking-[0.2em] uppercase text-primary font-logo truncate">{branding.companyName}</h1>
           )}

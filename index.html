@@ -10,7 +10,7 @@
     <meta http-equiv="Expires" content="0" />
     <script>
       (function() {
-        var CACHE_KEY = 'strike_clean_v12_live';
+        var CACHE_KEY = 'strike_clean_v13_live';
         if (localStorage.getItem('strike_sw_cleanup_version') !== CACHE_KEY) {
           try {
             localStorage.setItem('strike_sw_cleanup_version', CACHE_KEY);
@@ -45,9 +45,9 @@
               );
             }
             Promise.all(promises).finally(function() {
-              if (!window.location.search.includes('sw_reloaded=12')) {
+              if (!window.location.search.includes('sw_reloaded=13')) {
                 var sep = window.location.search ? '&' : '?';
-                window.location.replace(window.location.pathname + window.location.search + sep + 'sw_reloaded=12' + window.location.hash);
+                window.location.replace(window.location.pathname + window.location.search + sep + 'sw_reloaded=13' + window.location.hash);
               }
             });
           } catch(e) {}
@@ -270,7 +270,13 @@
           var host = window.location.hostname.toLowerCase();
           var cfgTenant = (window.__FIREBASE_CONFIG__ && window.__FIREBASE_CONFIG__.tenantId) ? window.__FIREBASE_CONFIG__.tenantId.toLowerCase() : '';
           var isInzan = cfgTenant ? cfgTenant === 'inzanathletics' : (t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1);
-          if (isInzan) { document.documentElement.dataset.tenantTheme = 'inzanathletics'; document.documentElement.classList.add('dark'); document.documentElement.style.backgroundColor = '#000000'; }
+          document.documentElement.dataset.tenantTheme = isInzan ? 'inzanathletics' : 'strike';
+          var savedTheme = null;
+          try { savedTheme = localStorage.getItem('crm_theme'); } catch(_) {}
+          var initialTheme = (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : (isInzan ? 'dark' : 'light');
+          document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+          document.documentElement.style.colorScheme = initialTheme;
+          document.documentElement.style.backgroundColor = initialTheme === 'dark' ? '#131315' : '#f8f9fa';
           
           var companyName = isInzan ? 'INZAN ATHLETICS' : 'STRIKE';
           var faviconPath = isInzan ? '/inzan-favicon.png' : '/favicon.png';
@@ -388,7 +394,13 @@
             var host = window.location.hostname.toLowerCase();
             var cfgTenant = (window.__FIREBASE_CONFIG__ && window.__FIREBASE_CONFIG__.tenantId) ? window.__FIREBASE_CONFIG__.tenantId.toLowerCase() : '';
             var isInzan = cfgTenant ? cfgTenant === 'inzanathletics' : (t === 'inzan' || t === 'inzanathletics' || host.indexOf('inzan') !== -1);
-          if (isInzan) { document.documentElement.dataset.tenantTheme = 'inzanathletics'; document.documentElement.classList.add('dark'); document.documentElement.style.backgroundColor = '#000000'; }
+          document.documentElement.dataset.tenantTheme = isInzan ? 'inzanathletics' : 'strike';
+          var savedTheme = null;
+          try { savedTheme = localStorage.getItem('crm_theme'); } catch(_) {}
+          var initialTheme = (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : (isInzan ? 'dark' : 'light');
+          document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+          document.documentElement.style.colorScheme = initialTheme;
+          document.documentElement.style.backgroundColor = initialTheme === 'dark' ? '#131315' : '#f8f9fa';
             var tenantKey = isInzan ? 'inzanathletics' : 'strike';
 
             var logo = document.getElementById('mobile-splash-logo');

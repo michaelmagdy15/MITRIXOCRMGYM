@@ -431,10 +431,10 @@ export default function ClubOperations() {
             </div>
 
             {/* Quick Add Locker Form */}
-            <Card className="border bg-zinc-950/20 p-4 rounded-xl flex-1 max-w-md">
+            <Card className="border bg-muted/30 dark:bg-zinc-950/20 p-4 rounded-xl flex-1 max-w-md">
               <form onSubmit={handleAddLocker} className="flex gap-3 items-end">
                 <div className="space-y-1.5 flex-1">
-                  <Label htmlFor="lockNum" className="text-[10px] font-bold text-zinc-400 uppercase">Locker Number</Label>
+                  <Label htmlFor="lockNum" className="text-[10px] font-bold text-muted-foreground uppercase">Locker Number</Label>
                   <Input
                     id="lockNum"
                     type="text"
@@ -446,7 +446,7 @@ export default function ClubOperations() {
                   />
                 </div>
                 <div className="space-y-1.5 flex-1">
-                  <Label htmlFor="lockBranch" className="text-[10px] font-bold text-zinc-400 uppercase">Branch</Label>
+                  <Label htmlFor="lockBranch" className="text-[10px] font-bold text-muted-foreground uppercase">Branch</Label>
                   <Select value={newLockerBranch} onValueChange={(val) => setNewLockerBranch(val || '')}>
                     <SelectTrigger id="lockBranch" className="h-8 text-xs bg-background">
                       <SelectValue />
@@ -471,20 +471,20 @@ export default function ClubOperations() {
               <Card key={locker.id} className="border bg-card/45 relative group overflow-hidden">
                 <CardContent className="p-3 text-center space-y-2">
                   <div className="flex justify-between items-start">
-                    <span className="text-[8px] text-zinc-500 uppercase tracking-widest font-bold font-mono">{locker.branch.substring(0, 4)}</span>
-                    <Badge className={`text-[8px] px-1 py-px rounded-full font-bold ${locker.status === 'Available' ? 'bg-emerald-500/10 text-emerald-400' : locker.status === 'Assigned' ? 'bg-blue-500/10 text-blue-400' : 'bg-red-500/10 text-red-400'}`}>
+                    <span className="text-[8px] text-muted-foreground uppercase tracking-widest font-bold font-mono">{locker.branch.substring(0, 4)}</span>
+                    <Badge className={`text-[8px] px-1 py-px rounded-full font-bold ${locker.status === 'Available' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : locker.status === 'Assigned' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'}`}>
                       {locker.status}
                     </Badge>
                   </div>
                   <div>
                     <span className="text-xl font-extrabold text-foreground tracking-tight block">{locker.number}</span>
-                    <span className="text-[9px] text-zinc-500 font-mono font-semibold flex items-center justify-center gap-0.5 mt-0.5">
+                    <span className="text-[9px] text-muted-foreground font-mono font-semibold flex items-center justify-center gap-0.5 mt-0.5">
                       <Key className="h-2.5 w-2.5 text-primary" /> PIN: {locker.code || '----'}
                     </span>
                   </div>
 
                   {locker.status === 'Assigned' && (
-                    <div className="text-[9px] text-zinc-400 font-semibold truncate leading-tight pt-1 border-t border-white/5">
+                    <div className="text-[9px] text-muted-foreground font-semibold truncate leading-tight pt-1 border-t border-border/50">
                       👤 {locker.assignedToName}
                     </div>
                   )}
@@ -495,7 +495,7 @@ export default function ClubOperations() {
                       size="icon"
                       variant="ghost"
                       title="Edit Lock PIN"
-                      className="h-6 w-6 rounded-md hover:bg-zinc-900 text-zinc-400 hover:text-white"
+                      className="h-6 w-6 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
                       onClick={() => {
                         setEditingLockerPin(locker);
                         setNewLockerPin(locker.code || '');
@@ -508,7 +508,7 @@ export default function ClubOperations() {
                         size="icon"
                         variant="ghost"
                         title="Release Locker"
-                        className="h-6 w-6 rounded-md hover:bg-zinc-900 text-destructive"
+                        className="h-6 w-6 rounded-md hover:bg-muted text-destructive"
                         onClick={() => releaseLocker(locker)}
                       >
                         <RefreshCw className="h-3 w-3" />
@@ -518,7 +518,7 @@ export default function ClubOperations() {
                         size="icon"
                         variant="ghost"
                         title={locker.status === 'Maintenance' ? 'Put Available' : 'Put Under Maintenance'}
-                        className="h-6 w-6 rounded-md hover:bg-zinc-900 text-zinc-400"
+                        className="h-6 w-6 rounded-md hover:bg-muted text-muted-foreground"
                         onClick={() => changeLockerStatus(locker.id, locker.status === 'Maintenance' ? 'Available' : 'Maintenance')}
                       >
                         <XCircle className="h-3 w-3" />
@@ -558,13 +558,13 @@ export default function ClubOperations() {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
               </div>
             ) : filteredGuests.length > 0 ? (
-              <div className="divide-y divide-zinc-800">
+              <div className="divide-y divide-border">
                 {filteredGuests.map(invite => (
                   <div key={invite.id} className="flex justify-between items-center py-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <strong className="text-xs font-bold text-foreground">{invite.guestName}</strong>
-                        <Badge className={`text-[8px] px-1.5 py-px rounded-full font-bold ${invite.status === 'Attended' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500'}`} variant="outline">
+                        <Badge className={`text-[8px] px-1.5 py-px rounded-full font-bold ${invite.status === 'Attended' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-500'}`} variant="outline">
                           {invite.status === 'Attended' ? 'Checked In' : 'Pending Check-In'}
                         </Badge>
                       </div>
@@ -576,7 +576,7 @@ export default function ClubOperations() {
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <strong className="font-mono text-xs tracking-wider text-primary bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
+                      <strong className="font-mono text-xs tracking-wider text-primary bg-muted dark:bg-zinc-950 px-2 py-1 rounded border border-border">
                         {invite.inviteCode}
                       </strong>
                       {invite.status === 'Pending' && (

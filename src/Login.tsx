@@ -989,13 +989,13 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
 
       {/* ── Multi-profile Family Account Selector ("Who is training today?") ── */}
       <Dialog open={showProfileSelector} onOpenChange={(open) => { if (!open) setShowProfileSelector(false); }}>
-        <DialogContent className="max-w-md p-6 bg-zinc-950 border border-zinc-800 text-white rounded-2xl shadow-2xl">
+        <DialogContent className="max-w-md p-6 bg-card border border-border text-card-foreground rounded-2xl shadow-2xl">
           <DialogHeader className="text-center space-y-2 pb-2">
             <div className="mx-auto w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500">
               <Users className="w-6 h-6" />
             </div>
             <DialogTitle className="text-xl font-bold tracking-tight">Who is training today?</DialogTitle>
-            <DialogDescription className="text-xs text-zinc-400">
+            <DialogDescription className="text-xs text-muted-foreground">
               Multiple student profiles are linked to this phone number. Select the profile to continue:
             </DialogDescription>
           </DialogHeader>
@@ -1007,10 +1007,10 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                 type="button"
                 disabled={isLoading}
                 onClick={() => handleSelectFamilyProfile(profile)}
-                className="w-full text-left p-3.5 rounded-xl border border-zinc-800/80 bg-zinc-900/60 hover:bg-zinc-800 hover:border-rose-500/50 transition-all flex items-center justify-between group cursor-pointer"
+                className="w-full text-left p-3.5 rounded-xl border border-border bg-muted/40 hover:bg-muted hover:border-rose-500/50 transition-all flex items-center justify-between group cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-300 font-bold border border-zinc-700 overflow-hidden shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-foreground font-bold border border-border overflow-hidden shrink-0">
                     {profile.photoUrl ? (
                       <img src={profile.photoUrl} alt={profile.name} className="w-full h-full object-cover" />
                     ) : (
@@ -1018,25 +1018,25 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
                     )}
                   </div>
                   <div>
-                    <div className="font-semibold text-sm text-zinc-100 group-hover:text-rose-400 transition-colors">
+                    <div className="font-semibold text-sm text-foreground group-hover:text-rose-500 transition-colors">
                       {profile.name}
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
                         {profile.category || 'Member'}
                       </span>
                       {profile.branch && (
-                        <span className="text-[10px] text-zinc-400">
+                        <span className="text-[10px] text-muted-foreground">
                           • {profile.branch}
                         </span>
                       )}
-                      <span className="text-[10px] text-zinc-500 font-mono">
+                      <span className="text-[10px] text-muted-foreground font-mono">
                         ({profile.memberId})
                       </span>
                     </div>
                   </div>
                 </div>
-                <span className="text-xs text-zinc-500 group-hover:text-rose-400 font-medium shrink-0 ml-2">
+                <span className="text-xs text-muted-foreground group-hover:text-rose-500 font-medium shrink-0 ml-2">
                   {isLoading ? 'Loading...' : 'Select →'}
                 </span>
               </button>
@@ -1046,7 +1046,7 @@ export default function Login({ onSwitchToMemberStore, isSuperAdmin = false }: L
             <Button
               type="button"
               variant="outline"
-              className="w-full border-zinc-800 hover:bg-zinc-900 text-zinc-300"
+              className="w-full"
               onClick={() => setShowProfileSelector(false)}
             >
               Cancel

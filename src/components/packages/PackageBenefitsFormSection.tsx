@@ -80,22 +80,22 @@ export function PackageBenefitsFormSection({
   };
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 overflow-hidden transition-all">
+    <div className="rounded-xl border border-border bg-muted/20 dark:bg-zinc-900/60 overflow-hidden transition-all">
       {/* Header / Collapsible Toggle */}
       <button
         type="button"
         onClick={() => setIsExpanded((prev) => !prev)}
-        className="w-full flex items-center justify-between px-4 py-3.5 bg-zinc-900/90 hover:bg-zinc-800/80 transition-colors text-left border-b border-zinc-800/80"
+        className="w-full flex items-center justify-between px-4 py-3.5 bg-muted/60 dark:bg-zinc-900/90 hover:bg-muted dark:hover:bg-zinc-800/80 transition-colors text-left border-b border-border"
       >
         <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h4 className="text-sm font-semibold text-zinc-100">
+            <h4 className="text-sm font-semibold text-foreground">
               Package Hierarchy, Benefits & Rules
             </h4>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-muted-foreground">
               Configure membership tier prerequisites, freeze policies, complimentary perks, time windows & sales attribution
             </p>
           </div>
@@ -104,8 +104,8 @@ export function PackageBenefitsFormSection({
           <span
             className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${
               value.hierarchy === 'Primary'
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
             }`}
           >
             {value.hierarchy}
@@ -113,16 +113,16 @@ export function PackageBenefitsFormSection({
           <span
             className={`text-[11px] font-medium px-2 py-0.5 rounded-full border ${
               value.status === 'Active'
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
             }`}
           >
             {value.status === 'Active' ? 'Active' : 'On Hold'}
           </span>
           {isExpanded ? (
-            <ChevronUp className="w-4 h-4 text-zinc-400" />
+            <ChevronUp className="w-4 h-4 text-muted-foreground" />
           ) : (
-            <ChevronDown className="w-4 h-4 text-zinc-400" />
+            <ChevronDown className="w-4 h-4 text-muted-foreground" />
           )}
         </div>
       </button>
@@ -130,16 +130,16 @@ export function PackageBenefitsFormSection({
       {isExpanded && (
         <div className="p-4 space-y-5">
           {/* 1. Package Hierarchy & Status */}
-          <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/50 p-3.5 space-y-3.5">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300">
-              <Layers className="w-3.5 h-3.5 text-amber-400" />
+          <div className="rounded-lg border border-border bg-card dark:bg-zinc-950/50 p-3.5 space-y-3.5">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+              <Layers className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
               <span>Package Hierarchy & Status</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {/* Hierarchy Selector */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-zinc-300">
+                <label className="block text-xs font-medium text-foreground">
                   Package Hierarchy
                 </label>
                 <div className="grid grid-cols-1 gap-2">
@@ -148,8 +148,8 @@ export function PackageBenefitsFormSection({
                     onClick={() => updateField('hierarchy', 'Primary')}
                     className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
                       value.hierarchy === 'Primary'
-                        ? 'border-emerald-500/60 bg-emerald-500/10 text-zinc-100'
-                        : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                        ? 'border-emerald-500/60 bg-emerald-500/10 text-foreground'
+                        : 'border-border bg-muted/40 dark:bg-zinc-900/60 text-muted-foreground hover:border-foreground/30'
                     }`}
                   >
                     <input
@@ -160,10 +160,10 @@ export function PackageBenefitsFormSection({
                       className="mt-0.5 accent-emerald-500"
                     />
                     <div className="text-xs">
-                      <div className="font-semibold text-zinc-100">
+                      <div className="font-semibold text-foreground">
                         Primary Package (Base Membership)
                       </div>
-                      <div className="text-[11px] text-zinc-400 mt-0.5">
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
                         Standalone gym membership; unlocks eligibility for Secondary add-on packages.
                       </div>
                     </div>
@@ -174,8 +174,8 @@ export function PackageBenefitsFormSection({
                     onClick={() => updateField('hierarchy', 'Secondary')}
                     className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
                       value.hierarchy === 'Secondary'
-                        ? 'border-blue-500/60 bg-blue-500/10 text-zinc-100'
-                        : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                        ? 'border-blue-500/60 bg-blue-500/10 text-foreground'
+                        : 'border-border bg-muted/40 dark:bg-zinc-900/60 text-muted-foreground hover:border-foreground/30'
                     }`}
                   >
                     <input
@@ -186,10 +186,10 @@ export function PackageBenefitsFormSection({
                       className="mt-0.5 accent-blue-500"
                     />
                     <div className="text-xs">
-                      <div className="font-semibold text-zinc-100">
+                      <div className="font-semibold text-foreground">
                         Secondary Package (Requires Active Primary Package)
                       </div>
-                      <div className="text-[11px] text-zinc-400 mt-0.5">
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
                         Add-on service (e.g., PT, Nutrition, Classes). Member must hold a valid Primary package.
                       </div>
                     </div>
@@ -199,7 +199,7 @@ export function PackageBenefitsFormSection({
 
               {/* Status Selector */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-zinc-300">
+                <label className="block text-xs font-medium text-foreground">
                   Availability Status
                 </label>
                 <div className="grid grid-cols-1 gap-2">
@@ -208,20 +208,20 @@ export function PackageBenefitsFormSection({
                     onClick={() => updateField('status', 'Active')}
                     className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
                       value.status === 'Active'
-                        ? 'border-emerald-500/60 bg-emerald-500/10 text-zinc-100'
-                        : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                        ? 'border-emerald-500/60 bg-emerald-500/10 text-foreground'
+                        : 'border-border bg-muted/40 dark:bg-zinc-900/60 text-muted-foreground hover:border-foreground/30'
                     }`}
                   >
                     <CheckCircle2
                       className={`w-4 h-4 mt-0.5 shrink-0 ${
-                        value.status === 'Active' ? 'text-emerald-400' : 'text-zinc-500'
+                        value.status === 'Active' ? 'text-emerald-500 dark:text-emerald-400' : 'text-muted-foreground'
                       }`}
                     />
                     <div className="text-xs">
-                      <div className="font-semibold text-zinc-100">
+                      <div className="font-semibold text-foreground">
                         Active (Available for sale)
                       </div>
-                      <div className="text-[11px] text-zinc-400 mt-0.5">
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
                         Selectable in new signups, renewals, and POS checkout flows.
                       </div>
                     </div>
@@ -232,20 +232,20 @@ export function PackageBenefitsFormSection({
                     onClick={() => updateField('status', 'Hold')}
                     className={`flex items-start gap-2.5 p-2.5 rounded-lg border text-left transition-all ${
                       value.status === 'Hold'
-                        ? 'border-amber-500/60 bg-amber-500/10 text-zinc-100'
-                        : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:border-zinc-700'
+                        ? 'border-amber-500/60 bg-amber-500/10 text-foreground'
+                        : 'border-border bg-muted/40 dark:bg-zinc-900/60 text-muted-foreground hover:border-foreground/30'
                     }`}
                   >
                     <PauseCircle
                       className={`w-4 h-4 mt-0.5 shrink-0 ${
-                        value.status === 'Hold' ? 'text-amber-400' : 'text-zinc-500'
+                        value.status === 'Hold' ? 'text-amber-500 dark:text-amber-400' : 'text-muted-foreground'
                       }`}
                     />
                     <div className="text-xs">
-                      <div className="font-semibold text-zinc-100">
+                      <div className="font-semibold text-foreground">
                         On Hold (Paused)
                       </div>
-                      <div className="text-[11px] text-zinc-400 mt-0.5">
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
                         Temporarily paused for new sales while keeping existing subscriptions intact.
                       </div>
                     </div>
@@ -255,8 +255,8 @@ export function PackageBenefitsFormSection({
             </div>
 
             {/* Prerequisite Info Banner */}
-            <div className="flex items-start gap-2 rounded-lg bg-zinc-900/90 border border-zinc-800 px-3 py-2 text-[11px] text-zinc-400">
-              <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2 rounded-lg bg-muted/60 dark:bg-zinc-900/90 border border-border px-3 py-2 text-[11px] text-muted-foreground">
+              <Info className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0 mt-0.5" />
               <span>
                 {value.hierarchy === 'Secondary'
                   ? 'Prerequisite Rule: Staff and self-service checkouts will verify that the member has an active, non-expired Primary Package before allowing purchase of this Secondary Package.'
@@ -266,20 +266,20 @@ export function PackageBenefitsFormSection({
           </div>
 
           {/* 2. Package Benefits & Freeze Rules */}
-          <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/50 p-3.5 space-y-3.5">
+          <div className="rounded-lg border border-border bg-card dark:bg-zinc-950/50 p-3.5 space-y-3.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300">
-                <Gift className="w-3.5 h-3.5 text-emerald-400" />
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+                <Gift className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
                 <span>Package Benefits & Freeze Rules</span>
               </div>
-              <span className="text-[11px] text-zinc-500">Set to 0 if not included</span>
+              <span className="text-[11px] text-muted-foreground">Set to 0 if not included</span>
             </div>
 
             {/* Perks Row */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
-                <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-300">
-                  <Dumbbell className="w-3.5 h-3.5 text-amber-400" />
+                <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Dumbbell className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
                   <span>Free PT Sessions</span>
                 </label>
                 <input
@@ -287,15 +287,15 @@ export function PackageBenefitsFormSection({
                   min={0}
                   value={value.freePtSessions}
                   onChange={(e) => handleNumberChange('freePtSessions', e.target.value, 0)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-amber-500 focus:outline-none"
                   placeholder="0"
                 />
-                <p className="text-[11px] text-zinc-500">Complimentary 1-on-1 PT quota</p>
+                <p className="text-[11px] text-muted-foreground">Complimentary 1-on-1 PT quota</p>
               </div>
 
               <div className="space-y-1">
-                <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-300">
-                  <Users className="w-3.5 h-3.5 text-blue-400" />
+                <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Users className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
                   <span>Guest Invitations</span>
                 </label>
                 <input
@@ -303,15 +303,15 @@ export function PackageBenefitsFormSection({
                   min={0}
                   value={value.guestInvitations}
                   onChange={(e) => handleNumberChange('guestInvitations', e.target.value, 0)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-amber-500 focus:outline-none"
                   placeholder="0"
                 />
-                <p className="text-[11px] text-zinc-500">Free day-passes for guests</p>
+                <p className="text-[11px] text-muted-foreground">Free day-passes for guests</p>
               </div>
 
               <div className="space-y-1">
-                <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-300">
-                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                   <span>Free Trials for Paid Classes</span>
                 </label>
                 <input
@@ -319,18 +319,18 @@ export function PackageBenefitsFormSection({
                   min={0}
                   value={value.freeClassTrials}
                   onChange={(e) => handleNumberChange('freeClassTrials', e.target.value, 0)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-amber-500 focus:outline-none"
                   placeholder="0"
                 />
-                <p className="text-[11px] text-zinc-500">Complimentary paid class entries</p>
+                <p className="text-[11px] text-muted-foreground">Complimentary paid class entries</p>
               </div>
             </div>
 
             {/* Freeze Allowance Row */}
-            <div className="pt-2 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="pt-2 border-t border-border grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
-                <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-300">
-                  <Snowflake className="w-3.5 h-3.5 text-cyan-400" />
+                <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  <Snowflake className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
                   <span>Total Freezing Allowance (Days)</span>
                 </label>
                 <input
@@ -338,14 +338,14 @@ export function PackageBenefitsFormSection({
                   min={0}
                   value={value.freezeAllowanceDays}
                   onChange={(e) => handleNumberChange('freezeAllowanceDays', e.target.value, 0)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-cyan-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-cyan-500 focus:outline-none"
                   placeholder="0"
                 />
-                <p className="text-[11px] text-zinc-500">Max cumulative freeze days allowed</p>
+                <p className="text-[11px] text-muted-foreground">Max cumulative freeze days allowed</p>
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-zinc-300">
+                <label className="block text-xs font-medium text-foreground">
                   Min Freeze Duration (Days)
                 </label>
                 <input
@@ -353,14 +353,14 @@ export function PackageBenefitsFormSection({
                   min={1}
                   value={value.minFreezeDays}
                   onChange={(e) => handleNumberChange('minFreezeDays', e.target.value, 1)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-cyan-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-cyan-500 focus:outline-none"
                   placeholder="7"
                 />
-                <p className="text-[11px] text-zinc-500">Shortest single freeze request</p>
+                <p className="text-[11px] text-muted-foreground">Shortest single freeze request</p>
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-zinc-300">
+                <label className="block text-xs font-medium text-foreground">
                   Max Freeze Duration (Days)
                 </label>
                 <input
@@ -368,33 +368,33 @@ export function PackageBenefitsFormSection({
                   min={1}
                   value={value.maxFreezeDays}
                   onChange={(e) => handleNumberChange('maxFreezeDays', e.target.value, 1)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-cyan-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-cyan-500 focus:outline-none"
                   placeholder="30"
                 />
-                <p className="text-[11px] text-zinc-500">Longest single freeze request</p>
+                <p className="text-[11px] text-muted-foreground">Longest single freeze request</p>
               </div>
             </div>
           </div>
 
           {/* 3. Time-Based Package Restriction */}
-          <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/50 p-3.5 space-y-3">
+          <div className="rounded-lg border border-border bg-card dark:bg-zinc-950/50 p-3.5 space-y-3">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2.5 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={value.isTimeRestricted}
                   onChange={(e) => updateField('isTimeRestricted', e.target.checked)}
-                  className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 accent-amber-500"
+                  className="w-4 h-4 rounded border-border bg-background dark:bg-zinc-900 accent-amber-500"
                 />
                 <div className="flex items-center gap-2">
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-200">
+                  <Clock className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-foreground">
                     Time-Restricted Package (e.g. Morning Package)
                   </span>
                 </div>
               </label>
               {value.isTimeRestricted && (
-                <span className="text-[11px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
+                <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full">
                   {value.allowedStartTime || '06:00'} – {value.allowedEndTime || '14:00'}
                 </span>
               )}
@@ -403,44 +403,44 @@ export function PackageBenefitsFormSection({
             {value.isTimeRestricted && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-zinc-300">
+                  <label className="block text-xs font-medium text-foreground">
                     Allowed Start Time
                   </label>
                   <input
                     type="time"
                     value={value.allowedStartTime || '06:00'}
                     onChange={(e) => updateField('allowedStartTime', e.target.value)}
-                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-amber-500 focus:outline-none"
                   />
-                  <p className="text-[11px] text-zinc-500">Earliest check-in time allowed</p>
+                  <p className="text-[11px] text-muted-foreground">Earliest check-in time allowed</p>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-xs font-medium text-zinc-300">
+                  <label className="block text-xs font-medium text-foreground">
                     Allowed End Time
                   </label>
                   <input
                     type="time"
                     value={value.allowedEndTime || '14:00'}
                     onChange={(e) => updateField('allowedEndTime', e.target.value)}
-                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-amber-500 focus:outline-none"
                   />
-                  <p className="text-[11px] text-zinc-500">Latest check-in time allowed</p>
+                  <p className="text-[11px] text-muted-foreground">Latest check-in time allowed</p>
                 </div>
               </div>
             )}
           </div>
 
           {/* 4. Target Attribution */}
-          <div className="rounded-lg border border-zinc-800/90 bg-zinc-950/50 p-3.5 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-300">
-              <Target className="w-3.5 h-3.5 text-rose-400" />
+          <div className="rounded-lg border border-border bg-card dark:bg-zinc-950/50 p-3.5 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-foreground">
+              <Target className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
               <span>Target Attribution</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-zinc-300">
+                <label className="block text-xs font-medium text-foreground">
                   Target Team / Role
                 </label>
                 <select
@@ -448,7 +448,7 @@ export function PackageBenefitsFormSection({
                   onChange={(e) =>
                     updateField('targetTeam', e.target.value as PackageTargetTeam)
                   }
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-amber-500 focus:outline-none"
                 >
                   {TARGET_TEAMS.map((team) => (
                     <option key={team.value} value={team.value}>
@@ -456,26 +456,26 @@ export function PackageBenefitsFormSection({
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-zinc-500">
+                <p className="text-[11px] text-muted-foreground">
                   {TARGET_TEAMS.find((t) => t.value === value.targetTeam)?.description ||
                     'Department credited for revenue when this package is sold'}
                 </p>
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-zinc-300">
+                <label className="block text-xs font-medium text-foreground">
                   Package Target Value (LE){' '}
-                  <span className="text-zinc-500 font-normal">(Optional)</span>
+                  <span className="text-muted-foreground font-normal">(Optional)</span>
                 </label>
                 <input
                   type="number"
                   min={0}
                   value={value.targetAmount}
                   onChange={(e) => handleNumberChange('targetAmount', e.target.value, 0)}
-                  className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border bg-background dark:bg-zinc-900 px-3 py-2 text-sm text-foreground focus:border-amber-500 focus:outline-none"
                   placeholder="0"
                 />
-                <p className="text-[11px] text-zinc-500">
+                <p className="text-[11px] text-muted-foreground">
                   Monthly revenue or quota target benchmark for this package (0 = use package price)
                 </p>
               </div>

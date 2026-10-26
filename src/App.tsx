@@ -920,7 +920,7 @@ function AppContent() {
                 <img 
                   src={branding.logoUrl} 
                   alt={branding.companyName} 
-                  className="h-8 w-auto object-contain"
+                  className={`h-8 w-auto object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                   referrerPolicy="no-referrer"
                 />
               ) : (
@@ -941,7 +941,7 @@ function AppContent() {
                 <img 
                   src={branding.logoUrl} 
                   alt="Logo" 
-                  className="h-8 w-8 object-contain"
+                  className={`h-8 w-8 object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                   referrerPolicy="no-referrer"
                 />
               </div>
@@ -972,7 +972,7 @@ function AppContent() {
                         className={`flex items-center rounded-xl transition-all duration-200 text-left w-full h-11 px-3 relative border active:scale-[0.98] ${
                           isActive 
                             ? 'bg-primary text-primary-foreground font-semibold shadow-md border-primary ring-1 ring-primary/40' 
-                            : 'bg-neutral-800/60 hover:bg-neutral-700/80 text-neutral-300 hover:text-white border-neutral-700/40'
+                            : 'bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border-border/60 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/80 dark:text-zinc-300 dark:hover:text-white dark:border-zinc-800/60'
                         } ${isSidebarCollapsed ? 'justify-center' : ''}`}
                         title={isSidebarCollapsed ? item.label : undefined}
                       >
@@ -1083,7 +1083,7 @@ function AppContent() {
                 <img 
                   src={branding.logoUrl} 
                   alt={branding.companyName} 
-                  className="h-8 w-auto object-contain"
+                  className={`h-8 w-auto object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                   referrerPolicy="no-referrer"
                 />
               ) : (
@@ -1120,7 +1120,7 @@ function AppContent() {
                         className={`flex items-center gap-3 rounded-xl transition-all duration-200 text-left w-full h-11 px-3 border active:scale-[0.98] ${
                           isActive 
                             ? 'bg-primary text-primary-foreground font-semibold shadow-md border-primary ring-1 ring-primary/40' 
-                            : 'bg-neutral-800/60 hover:bg-neutral-700/80 text-neutral-300 hover:text-white border-neutral-700/40'
+                            : 'bg-muted/60 hover:bg-muted text-foreground/80 hover:text-foreground border-border/60 dark:bg-zinc-900/60 dark:hover:bg-zinc-800/80 dark:text-zinc-300 dark:hover:text-white dark:border-zinc-800/60'
                         }`}
                       >
                         <Icon className="h-5 w-5 flex-shrink-0" />
@@ -1215,7 +1215,7 @@ function AppContent() {
                   <img 
                     src={branding.logoUrl} 
                     alt={branding.companyName} 
-                    className="h-8 w-auto object-contain"
+                    className={`h-8 w-auto object-contain ${branding.logoUrl.includes('_white') ? '' : 'dark:brightness-0 dark:invert'}`}
                     referrerPolicy="no-referrer"
                   />
                 ) : (
@@ -1264,7 +1264,7 @@ function AppContent() {
               )}
             </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-4 ms-auto">
+            <div className="flex items-center space-x-2 sm:space-x-3 ms-auto">
               {isInzan && ['manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser.role) && (
                 <RedgitsLiveSyncDialog variant="header" />
               )}
@@ -1278,6 +1278,18 @@ function AppContent() {
                   <Search className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
               </div>
+
+              {/* Quick Theme Toggle (Header) */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                disabled={themeLocked}
+                title={theme === 'dark' ? t('common.light_mode') : t('common.dark_mode')}
+                className="h-9 w-9 text-muted-foreground hover:text-foreground"
+              >
+                {theme === 'dark' ? <Sun className="h-4 w-4 sm:h-5 sm:w-5" /> : <Moon className="h-4 w-4 sm:h-5 sm:w-5" />}
+              </Button>
 
               {/* Notification Center */}
               <NotificationCenter />

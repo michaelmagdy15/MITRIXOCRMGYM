@@ -243,22 +243,22 @@ export default function MemberInvites({ client }: { client: Client | null }) {
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
                   <UserCheck className="h-4 w-4" /> Guest Pass & Lead Profile Created!
                 </div>
-                <div className="flex justify-between items-center bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+                <div className="flex justify-between items-center bg-card dark:bg-zinc-950 p-3 rounded-xl border border-border">
                   <div>
-                    <span className="text-[10px] text-zinc-500 font-bold block uppercase tracking-wider">RECEPTION INVITE CODE</span>
-                    <strong className="text-xl font-mono tracking-widest text-white">{generatedCode}</strong>
+                    <span className="text-[10px] text-muted-foreground font-bold block uppercase tracking-wider">RECEPTION INVITE CODE</span>
+                    <strong className="text-xl font-mono tracking-widest text-foreground">{generatedCode}</strong>
                   </div>
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
                     onClick={() => handleCopyCode(generatedCode, 'new-invite')}
-                    className="h-8 w-8 text-zinc-400 hover:text-white"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   >
-                    {copiedCodeId === 'new-invite' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                    {copiedCodeId === 'new-invite' ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="text-[10px] text-zinc-400 leading-normal">
+                <p className="text-[10px] text-muted-foreground leading-normal">
                   Share this code with your guest. They must give this code and show their National ID to Reception to confirm & activate the guest invite upon arrival.
                 </p>
               </div>
@@ -311,21 +311,21 @@ export default function MemberInvites({ client }: { client: Client | null }) {
                         Phone: {invite.guestPhone}
                         {invite.guestNationalId ? ` • National ID: ${invite.guestNationalId}` : ''}
                       </p>
-                      <p className="text-[9px] text-zinc-500 font-mono">
+                      <p className="text-[9px] text-muted-foreground font-mono">
                         Created: {dateObj.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
                       </p>
                     </div>
 
                     {/* Invite Code Box */}
                     <div className="flex flex-col items-end gap-1.5 shrink-0">
-                      <div className="bg-zinc-950 px-2.5 py-1.5 rounded-lg border border-zinc-800 flex items-center gap-2">
+                      <div className="bg-muted/60 dark:bg-zinc-950 px-2.5 py-1.5 rounded-lg border border-border flex items-center gap-2">
                         <span className="font-mono text-xs font-bold tracking-wider text-primary">{invite.inviteCode}</span>
                         <button
                           type="button"
                           onClick={() => handleCopyCode(invite.inviteCode, invite.id)}
-                          className="text-zinc-500 hover:text-zinc-300"
+                          className="text-muted-foreground hover:text-foreground"
                         >
-                          {copiedCodeId === invite.id ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                          {copiedCodeId === invite.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
                         </button>
                       </div>
                     </div>

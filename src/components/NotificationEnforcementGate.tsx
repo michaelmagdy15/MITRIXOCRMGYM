@@ -211,10 +211,10 @@ export function NotificationEnforcementGate() {
 
   // Persistent Top Bar on Desktop Browsers (or minimized mobile state) until granted
   return (
-    <div className="w-full bg-gradient-to-r from-emerald-950/90 via-zinc-900 to-emerald-950/90 border-b border-emerald-500/30 px-3 py-2 text-xs text-white flex flex-wrap items-center justify-between gap-2 z-50">
+    <div className="w-full bg-gradient-to-r from-emerald-50 via-white to-emerald-50 dark:from-emerald-950/90 dark:via-zinc-900 dark:to-emerald-950/90 border-b border-emerald-500/30 px-3 py-2 text-xs text-emerald-950 dark:text-white flex flex-wrap items-center justify-between gap-2 z-50">
       <div className="flex items-center gap-2 min-w-0">
-        <span className="h-6 w-6 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
-          <BellRing className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+        <span className="h-6 w-6 rounded-full bg-emerald-500/15 dark:bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+          <BellRing className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
         </span>
         <span className="font-semibold truncate">
           {iosNeedsHomeScreen
@@ -243,7 +243,7 @@ export function NotificationEnforcementGate() {
             playBrowserNotificationPing('default');
             toast.success('Notification sound ping tested & active!');
           }}
-          className="h-7 px-2.5 text-[11px] border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-200 rounded-lg gap-1"
+          className="h-7 px-2.5 text-[11px] border-emerald-600/30 dark:border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 rounded-lg gap-1"
         >
           <Volume2 className="h-3 w-3" />
           Test Ping

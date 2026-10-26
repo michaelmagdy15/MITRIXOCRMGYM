@@ -376,12 +376,12 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                           {/* Controls */}
                           <div className="flex items-center gap-2 shrink-0">
                             {qtyInCart > 0 ? (
-                              <div className="flex items-center gap-1.5 border bg-zinc-950/50 rounded-lg p-0.5">
+                              <div className="flex items-center gap-1.5 border bg-muted/60 dark:bg-zinc-950/50 rounded-lg p-0.5">
                                 <Button
                                   type="button"
                                   size="icon"
                                   variant="ghost"
-                                  className="h-6 w-6 rounded-md hover:bg-zinc-900"
+                                  className="h-6 w-6 rounded-md hover:bg-muted dark:hover:bg-zinc-900"
                                   onClick={() => updateCartQty(item.id, -1)}
                                 >
                                   <Minus className="h-3 w-3" />
@@ -393,7 +393,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                                   type="button"
                                   size="icon"
                                   variant="ghost"
-                                  className="h-6 w-6 rounded-md hover:bg-zinc-900"
+                                  className="h-6 w-6 rounded-md hover:bg-muted dark:hover:bg-zinc-900"
                                   onClick={() => updateCartQty(item.id, 1)}
                                 >
                                   <Plus className="h-3 w-3" />
@@ -415,7 +415,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
 
                         {/* Add-ons selector when item is in cart and supports add-ons */}
                         {qtyInCart > 0 && item.supportsAddons && (
-                          <div className="pt-2 border-t border-white/5 space-y-1">
+                          <div className="pt-2 border-t border-border/50 space-y-1">
                             <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                               <Sparkles className="h-2.5 w-2.5 text-primary" /> Customize Add-ons:
                             </span>
@@ -452,7 +452,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
 
       {/* Shopping Cart Summary Card */}
       {cartTotal > 0 && (
-        <Card className="border-primary/30 bg-zinc-950/80 shadow-xl relative group overflow-hidden sticky bottom-4 z-20">
+        <Card className="border-primary/30 bg-card/95 dark:bg-zinc-950/80 shadow-xl relative group overflow-hidden sticky bottom-4 z-20">
           <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl" />
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold flex items-center justify-between">
@@ -472,7 +472,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
           <CardContent className="space-y-4">
             <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
               {cartItemsList.map(({ item, qty, addons, unitPrice, subtotal }) => (
-                <div key={item!.id} className="flex justify-between items-center text-xs border-b border-white/5 pb-1.5">
+                <div key={item!.id} className="flex justify-between items-center text-xs border-b border-border/50 pb-1.5">
                   <div className="space-y-0.5">
                     <span className="font-semibold">{item!.name}</span>
                     {addons.length > 0 && (
@@ -480,7 +480,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                         + {addons.map(a => `${a.name} (${a.price} LE)`).join(', ')}
                       </span>
                     )}
-                    <span className="text-[10px] text-zinc-400 font-mono block">
+                    <span className="text-[10px] text-muted-foreground font-mono block">
                       {qty} x {t('payments.currency_le')} {unitPrice}
                     </span>
                   </div>
@@ -492,9 +492,9 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
             <form onSubmit={handlePlaceOrder} className="space-y-4 pt-1">
               <div className="grid grid-cols-2 gap-3 items-end">
                 <div className="space-y-1">
-                  <Label htmlFor="pickupTime" className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Pickup Timing</Label>
+                  <Label htmlFor="pickupTime" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pickup Timing</Label>
                   <Select value={pickupTime} onValueChange={(val) => setPickupTime(val || '')} required>
-                    <SelectTrigger id="pickupTime" className="bg-background h-8 text-xs font-bold border-zinc-800">
+                    <SelectTrigger id="pickupTime" className="bg-background h-8 text-xs font-bold border-border">
                       <SelectValue placeholder="Pickup schedule" />
                     </SelectTrigger>
                     <SelectContent>
@@ -507,8 +507,8 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                   </Select>
                 </div>
                 <div className="text-right pb-1">
-                  <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Total Amount</span>
-                  <strong className="text-lg font-mono font-extrabold text-white">
+                  <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Total Amount</span>
+                  <strong className="text-lg font-mono font-extrabold text-foreground">
                     {paymentMethod === 'points'
                       ? `${Math.ceil(cartTotal / 10)} PTS`
                       : `${t('payments.currency_le')} ${cartTotal}`}
@@ -518,15 +518,15 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
 
               {/* Payment Method Selector (Counter / Wallet Cash Balance / Gym Points) */}
               <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Payment Method</Label>
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payment Method</Label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod('counter')}
                     className={`p-2 rounded-xl border text-left transition-all ${
                       paymentMethod === 'counter'
-                        ? 'bg-primary/20 border-primary text-white'
-                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                        ? 'bg-primary/20 border-primary text-foreground'
+                        : 'bg-muted/40 dark:bg-zinc-900/60 border-border text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     <p className="text-[10px] font-extrabold">Pay at Counter</p>
@@ -537,8 +537,8 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                     onClick={() => setPaymentMethod('wallet_cash')}
                     className={`p-2 rounded-xl border text-left transition-all ${
                       paymentMethod === 'wallet_cash'
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-muted/40 dark:bg-zinc-900/60 border-border text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     <p className="text-[10px] font-extrabold flex items-center gap-1">
@@ -553,8 +553,8 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                     onClick={() => setPaymentMethod('points')}
                     className={`p-2 rounded-xl border text-left transition-all ${
                       paymentMethod === 'points'
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
-                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-700 dark:text-amber-300'
+                        : 'bg-muted/40 dark:bg-zinc-900/60 border-border text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     <p className="text-[10px] font-extrabold flex items-center gap-1">

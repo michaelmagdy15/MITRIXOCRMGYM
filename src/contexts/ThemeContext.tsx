@@ -25,13 +25,20 @@ function getInitialTheme(): Theme {
     return stored;
   }
 
-  // Fall back to light mode as platform default
+  // Default to dark for Inzan Athletics, light for Strike & standard tenants
+  const tid = (tenantId || '').toLowerCase();
+  if (tid.includes('inzan')) {
+    return 'dark';
+  }
   return 'light';
 }
 
 function applyTheme(theme: Theme) {
-  document.documentElement.dataset.tenantTheme = tenantId;
+  const tid = (tenantId || '').toLowerCase();
+  document.documentElement.dataset.tenantTheme = tid.includes('inzan') ? 'inzanathletics' : 'strike';
   document.documentElement.classList.toggle('dark', theme === 'dark');
+  document.documentElement.style.colorScheme = theme;
+  document.documentElement.style.backgroundColor = theme === 'dark' ? '#131315' : '#f8f9fa';
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY, theme);
   }
