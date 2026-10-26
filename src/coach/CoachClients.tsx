@@ -511,21 +511,19 @@ export default function CoachClients({
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold">{client.name}</p>
-                        {isInzan && (
-                          paidPtRemaining > 0 ? (
-                            <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                              Paid PT: {paidPtRemaining} left
-                            </Badge>
-                          ) : freePtRemaining > 0 ? (
-                            <Badge variant="outline" className="text-[10px] font-bold border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                              Free PT: {freePtRemaining} left
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] font-bold border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                              No Active PT Package • Awaiting Payment
-                            </Badge>
-                          )
-                        )}
+                        {paidPtRemaining > 0 ? (
+                          <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                            Paid PT: {paidPtRemaining} left
+                          </Badge>
+                        ) : freePtRemaining > 0 ? (
+                          <Badge variant="outline" className="text-[10px] font-bold border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                            Free PT: {freePtRemaining} left
+                          </Badge>
+                        ) : isInzan ? (
+                          <Badge variant="outline" className="text-[10px] font-bold border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                            No Active PT Package • Awaiting Payment
+                          </Badge>
+                        ) : null}
                         {isLowBalance && (
                           <Badge
                             variant="outline"

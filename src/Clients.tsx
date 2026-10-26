@@ -1427,24 +1427,22 @@ export default function Clients() {
       await updateClient(activeClient.id, { packages: updatedSourcePkgs });
       await updateClient(recipient.id, { packages: recipientPkgs, status: 'Active' });
 
-      const parsedFee = isInzanTenant && transferFee ? Math.max(0, parseFloat(transferFee) || 0) : 0;
+      const parsedFee = transferFee ? Math.max(0, parseFloat(transferFee) || 0) : 0;
 
-      if (isInzanTenant) {
-        await addDoc(collection(db, 'transfers'), {
-          fromClientId: activeClient.id,
-          fromClientName: activeClient.name,
-          fromMemberId: activeClient.memberId || '',
-          toClientId: recipient.id,
-          toClientName: recipient.name,
-          toMemberId: recipient.memberId || '',
-          packageName: transferPkg.packageName,
-          sessionsTransferred: transferPkg.sessionsRemaining ?? 0,
-          transferFee: parsedFee,
-          branch: activeClient.branch || recipient.branch || '',
-          createdBy: currentUser?.name || 'Staff',
-          date: new Date().toISOString(),
-        });
-      }
+      await addDoc(collection(db, 'transfers'), {
+        fromClientId: activeClient.id,
+        fromClientName: activeClient.name,
+        fromMemberId: activeClient.memberId || '',
+        toClientId: recipient.id,
+        toClientName: recipient.name,
+        toMemberId: recipient.memberId || '',
+        packageName: transferPkg.packageName,
+        sessionsTransferred: transferPkg.sessionsRemaining ?? 0,
+        transferFee: parsedFee,
+        branch: activeClient.branch || recipient.branch || '',
+        createdBy: currentUser?.name || 'Staff',
+        date: new Date().toISOString(),
+      });
 
       // Log audit events
       await addDoc(collection(db, 'auditLogs'), {
@@ -2471,7 +2469,7 @@ export default function Clients() {
                     onChange={(val) => setNewMemberPhone(val)} 
                   />
                   {(() => {
-                    if (!isInzanTenant || !newMemberPhone || newMemberPhone.replace(/\D/g, '').length < 7) return null;
+                    if (!newMemberPhone || newMemberPhone.replace(/\D/g, '').length < 7) return null;
                     const simMatches = checkPhoneSimilarityForCandidate(newMemberPhone, clients);
                     if (simMatches.length === 0) return null;
                     return (
@@ -2479,7 +2477,7 @@ export default function Clients() {
                         <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400">
                           <AlertTriangle className="h-4 w-4 shrink-0" />
                           <span>
-                            {`RedGITS 7-Digit Phone Similarity Alert (${simMatches.length})`}
+                            {`7-Digit Phone Similarity Alert (${simMatches.length})`}
                           </span>
                         </div>
                         <div className="space-y-1 max-h-28 overflow-y-auto">
@@ -3229,13 +3227,13 @@ export default function Clients() {
               <div className="px-3 sm:px-6 py-2 sm:py-2.5 border-b flex-shrink-0 bg-muted/10">
                 <TabsList className="bg-transparent p-0 h-auto group-data-horizontal/tabs:h-auto gap-1.5 rounded-none border-none shadow-none flex flex-nowrap overflow-x-auto custom-scrollbar justify-start w-full py-1">
                   {[
-                    { value: 'overview', label: isInzanTenant ? 'Overview (User Details)' : 'Overview', icon: <User className="h-3.5 w-3.5" /> },
-                    ...(isInzanTenant ? [{ value: 'packages', label: `Packages & Invites (${(activeClient.packages || []).length || 1})`, icon: <Gift className="h-3.5 w-3.5" /> }] : []),
+                    { value: 'overview', label: 'Overview (User Details)', icon: <User className="h-3.5 w-3.5" /> },
+                    { value: 'packages', label: `Packages & Invites (${(activeClient.packages || []).length || 1})`, icon: <Gift className="h-3.5 w-3.5" /> },
                     { value: 'benefits', label: 'Member Benefits', icon: <CheckCircle className="h-3.5 w-3.5" /> },
                     { value: 'attendance-history', label: 'Attendance & Session History', icon: <History className="h-3.5 w-3.5" /> },
                     { value: 'activity', label: 'Activity', icon: <MessageSquare className="h-3.5 w-3.5" /> },
                     { value: 'history', label: 'History', icon: <FileText className="h-3.5 w-3.5" /> },
-                    ...(!isInzanTenant ? [{ value: 'referrals', label: 'Referrals', icon: <Users className="h-3.5 w-3.5" /> }] : []),
+                    { value: 'referrals', label: 'Referrals', icon: <Users className="h-3.5 w-3.5" /> },
                     { value: 'inbody', label: 'InBody', icon: <Activity className="h-3.5 w-3.5" /> },
                     { value: 'audit-logs', label: 'Audit Logs', icon: <Activity className="h-3.5 w-3.5" /> },
                     { value: 'points', label: 'Points', icon: <Gift className="h-3.5 w-3.5" /> },
@@ -3287,16 +3285,14 @@ export default function Clients() {
                             <FileText className="h-3.5 w-3.5 mr-1" /> <span className="sm:hidden">Contract PDF</span><span className="hidden sm:inline">Download Contract (PDF)</span>
                           </Button>
                         )}
-                        {getTenantId().toLowerCase().includes('inzan') && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-xs font-semibold px-3"
-                            onClick={() => setIsEditing(!isEditing)}
-                          >
-                            {isEditing ? 'Cancel' : 'Edit'}
-                          </Button>
-                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs font-semibold px-3"
+                          onClick={() => setIsEditing(!isEditing)}
+                        >
+                          {isEditing ? 'Cancel' : 'Edit'}
+                        </Button>
                       </div>
                     </div>
 
@@ -3770,421 +3766,277 @@ export default function Clients() {
                         >
                           <CheckCircle className="h-3.5 w-3.5" /> View Member Benefits →
                         </Button>
-                        {isInzanTenant && (
-                          <Button
-                            size="sm"
-                            onClick={() => setMemberProfileTab('packages')}
-                            className="h-7 text-xs font-bold gap-1"
-                          >
-                            Manage Packages &amp; Invites →
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          onClick={() => setMemberProfileTab('packages')}
+                          className="h-7 text-xs font-bold gap-1"
+                        >
+                          Manage Packages &amp; Invites →
+                        </Button>
                       </div>
                     </div>
 
                     <div className="p-5">
-                      {isInzanTenant ? (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                          {/* Read-Only Primary & Secondary Package Summary Card */}
-                          {(() => {
-                            const rawC = activeClient as any;
-                            const allPkgs: any[] = Array.isArray(activeClient.packages) ? activeClient.packages : [];
-                            const isSecPkg = (p: any) => {
-                              const n = String(p?.packageName || '').toLowerCase();
-                              const cat = String(p?.category || '').toLowerCase();
-                              return p?.hierarchy === 'Secondary' || cat.includes('pt') || cat.includes('personal training') || n.includes('pt') || n.includes('private') || n.includes('sgf') || n.includes('nutrition') || n.includes('physio');
-                            };
-                            const primaryPkg = allPkgs.find(p => !isSecPkg(p) && p.status === 'Active') || allPkgs.find(p => !isSecPkg(p)) || allPkgs[0] || ({ packageName: activeClient.packageType, startDate: activeClient.startDate, endDate: activeClient.membershipExpiry, createdAt: activeClient.createdAt, createdBy: rawC.createdByName || rawC.salesName } as any);
-                            const secondaryPkgs = allPkgs.filter(p => p !== primaryPkg && isSecPkg(p));
-                            const secondaryLabel = secondaryPkgs[0]?.packageName || rawC.secondaryPackageType || null;
-                            const daysRem = typeof rawC.daysRemaining === 'number'
-                              ? rawC.daysRemaining
-                              : primaryPkg?.endDate && toValidDate(primaryPkg.endDate)
-                                ? differenceInDays(toValidDate(primaryPkg.endDate)!, new Date())
-                                : null;
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+                        {/* Read-Only Primary & Secondary Package Summary Card */}
+                        {(() => {
+                          const rawC = activeClient as any;
+                          const allPkgs: any[] = Array.isArray(activeClient.packages) ? activeClient.packages : [];
+                          const isSecPkg = (p: any) => {
+                            const n = String(p?.packageName || '').toLowerCase();
+                            const cat = String(p?.category || '').toLowerCase();
+                            return p?.hierarchy === 'Secondary' || cat.includes('pt') || cat.includes('personal training') || n.includes('pt') || n.includes('private') || n.includes('sgf') || n.includes('nutrition') || n.includes('physio');
+                          };
+                          const primaryPkg = allPkgs.find(p => !isSecPkg(p) && p.status === 'Active') || allPkgs.find(p => !isSecPkg(p)) || allPkgs[0] || ({ packageName: activeClient.packageType, startDate: activeClient.startDate, endDate: activeClient.membershipExpiry, createdAt: activeClient.createdAt, createdBy: rawC.createdByName || rawC.salesName } as any);
+                          const secondaryPkgs = allPkgs.filter(p => p !== primaryPkg && isSecPkg(p));
+                          const secondaryLabel = secondaryPkgs[0]?.packageName || rawC.secondaryPackageType || null;
+                          const daysRem = typeof rawC.daysRemaining === 'number'
+                            ? rawC.daysRemaining
+                            : primaryPkg?.endDate && toValidDate(primaryPkg.endDate)
+                              ? differenceInDays(toValidDate(primaryPkg.endDate)!, new Date())
+                              : null;
 
-                            const isAdminUser =
-                              isManagerOrSama ||
-                              currentUser?.role === 'admin' ||
-                              currentUser?.role === 'super_admin' ||
-                              currentUser?.role === 'manager';
+                          const isAdminUser =
+                            isManagerOrSama ||
+                            currentUser?.role === 'admin' ||
+                            currentUser?.role === 'super_admin' ||
+                            currentUser?.role === 'manager';
 
-                            return (
-                              <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <div>
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary block">
-                                      Primary &amp; Secondary Packages {isAdminUser ? '(Admin Quick-Change Enabled)' : '(Read-Only on Overview)'}
-                                    </span>
-                                    <span className="text-[11px] text-muted-foreground">
-                                      {isAdminUser
-                                        ? 'As a CRM Admin, you can change any member package below or in the Packages & Invites tab at any time.'
-                                        : 'Packages are locked from random profile edits (<24h creation lock enforced in Packages tab).'}
-                                    </span>
-                                  </div>
+                          return (
+                            <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary block">
+                                    Primary &amp; Secondary Packages {isAdminUser ? '(Admin Quick-Change Enabled)' : '(Read-Only on Overview)'}
+                                  </span>
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {isAdminUser
+                                      ? 'As a CRM Admin, you can change any member package below or in the Packages & Invites tab at any time.'
+                                      : 'Packages are locked from random profile edits (<24h creation lock enforced in Packages tab).'}
+                                  </span>
                                 </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                  <div className="p-3 rounded-lg border bg-background space-y-1.5">
-                                    <div className="flex items-center justify-between gap-1">
-                                      <Badge className="bg-emerald-600 text-white text-[9px] font-bold uppercase">Primary Package</Badge>
-                                      {daysRem !== null && (
-                                        <Badge variant="outline" className={`text-[10px] font-mono font-bold ${daysRem <= 0 ? 'text-rose-600 border-rose-500/30' : daysRem <= 7 ? 'text-amber-600 border-amber-500/30' : 'text-emerald-600 border-emerald-500/30'}`}>
-                                          {daysRem > 0 ? `${daysRem}d left to renew` : 'Expired'}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    <p className="text-xs font-black text-foreground truncate">{primaryPkg?.packageName || activeClient.packageType || 'No Primary Package'}</p>
-                                    {isAdminUser && (
-                                      <div className="pt-1">
-                                        <Select
-                                          value={primaryPkg?.packageName || activeClient.packageType || ''}
-                                          onValueChange={(val) => {
-                                            if (!val) return;
-                                            const sysPkg = packages.find((p) => p.name === val);
-                                            const staffName = currentUser?.name || currentUser?.email || 'Admin';
-                                            const nowIso = new Date().toISOString();
-                                            const baseStart = primaryPkg?.startDate || activeClient.startDate || nowIso.slice(0, 10);
-                                            const nextEnd = sysPkg ? safeIsoDate(safeAddDays(baseStart, sysPkg.expiryDays)) : (primaryPkg?.endDate || activeClient.membershipExpiry || '');
-                                            const nextSessions = sysPkg?.sessions ?? primaryPkg?.sessionsRemaining ?? 'unlimited';
-                                            const updatedPkgs = allPkgs.length > 0
-                                              ? allPkgs.map((p, idx) =>
-                                                  p === primaryPkg || idx === 0
-                                                    ? {
-                                                        ...p,
-                                                        id: p.id || `pkg-${idx}`,
-                                                        packageName: val,
-                                                        startDate: baseStart,
-                                                        endDate: nextEnd,
-                                                        sessionsTotal: nextSessions,
-                                                        sessionsRemaining: nextSessions,
-                                                        lastModifiedBy: staffName,
-                                                        lastModifiedAt: nowIso,
-                                                      }
-                                                    : p
-                                                )
-                                              : [
-                                                  {
-                                                    id: 'primary-0',
-                                                    packageName: val,
-                                                    status: 'Active' as const,
-                                                    startDate: baseStart,
-                                                    endDate: nextEnd,
-                                                    sessionsTotal: nextSessions,
-                                                    sessionsRemaining: nextSessions,
-                                                    createdAt: nowIso,
-                                                    createdBy: staffName,
-                                                    createdByName: staffName,
-                                                  },
-                                                ];
-                                            updateClientPackages(updatedPkgs);
-                                            void addAuditLog('UPDATE', 'PACKAGE_RECORD', activeClient.id, `Admin changed primary package to "${val}" for ${activeClient.name}`, staffName);
-                                            toast.success(`Primary package changed to "${val}"`);
-                                          }}
-                                        >
-                                          <SelectTrigger className="h-7 text-[11px] bg-muted/30">
-                                            <SelectValue placeholder="Change Primary Package..." />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {visiblePackages.map((p) => (
-                                              <SelectItem key={p.id} value={p.name} className="text-xs">
-                                                {p.name} ({p.price.toLocaleString()} LE)
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
-                                      </div>
-                                    )}
-                                    <p className="text-[10px] text-muted-foreground font-mono">
-                                      {primaryPkg?.startDate ? safeFormatDate(primaryPkg.startDate, 'dd MMM yyyy') : '—'} → {primaryPkg?.endDate ? safeFormatDate(primaryPkg.endDate, 'dd MMM yyyy') : '—'}
-                                    </p>
-                                    <p className="text-[10px] text-muted-foreground">
-                                      Created By: <strong className="text-foreground">{primaryPkg?.createdByName || primaryPkg?.createdBy || rawC.createdByName || rawC.salesName || 'System'}</strong>
-                                      {' • '}
-                                      {primaryPkg?.createdAt ? safeFormatDate(primaryPkg.createdAt, 'dd MMM yyyy HH:mm') : 'Imported'}
-                                    </p>
-                                  </div>
-
-                                  <div className="p-3 rounded-lg border bg-background space-y-1">
-                                    <div className="flex items-center justify-between gap-1">
-                                      <Badge variant="outline" className="border-purple-500/40 text-purple-600 dark:text-purple-400 text-[9px] font-bold uppercase">
-                                        Secondary Package {secondaryPkgs.length > 1 ? `(${secondaryPkgs.length})` : ''}
-                                      </Badge>
-                                      {Number(rawC.paidPtSessionsRemaining || 0) > 0 && (
-                                        <Badge variant="outline" className="text-[10px] font-mono font-bold text-purple-600 border-purple-500/30">
-                                          {rawC.paidPtSessionsRemaining} PT left
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    {secondaryLabel ? (
-                                      <>
-                                        <p className="text-xs font-black text-foreground truncate">{secondaryLabel}</p>
-                                        <p className="text-[10px] text-muted-foreground font-mono">
-                                          {secondaryPkgs[0]?.startDate ? safeFormatDate(secondaryPkgs[0].startDate, 'dd MMM yyyy') : 'Active Add-On'}
-                                          {secondaryPkgs[0]?.endDate ? ` → ${safeFormatDate(secondaryPkgs[0].endDate, 'dd MMM yyyy')}` : ''}
-                                        </p>
-                                        <p className="text-[10px] text-muted-foreground">
-                                          Created By: <strong className="text-foreground">{secondaryPkgs[0]?.createdByName || secondaryPkgs[0]?.createdBy || rawC.salesName || 'Staff'}</strong>
-                                          {' • '}
-                                          {secondaryPkgs[0]?.createdAt ? safeFormatDate(secondaryPkgs[0].createdAt, 'dd MMM yyyy HH:mm') : 'Recorded'}
-                                        </p>
-                                      </>
-                                    ) : (
-                                      <p className="text-xs text-muted-foreground italic py-2">No active secondary package assigned.</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })()}
-
-                          {/* Member Feedback & Front-Desk Notes Box (Editable by Any Staff Member) */}
-                          <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2.5">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                                  <MessageSquare className="h-3.5 w-3.5" /> Member Feedback &amp; Front-Desk Notes
-                                </span>
-                                <p className="text-[11px] text-muted-foreground">
-                                  Any staff member can update member feedback here at any time without unlocking profile fields.
-                                </p>
-                              </div>
-                              {(activeClient as any).feedbackUpdatedBy && (
-                                <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600">
-                                  By {(activeClient as any).feedbackUpdatedBy}
-                                </Badge>
-                              )}
-                            </div>
-                            <Textarea
-                              value={memberFeedbackDraft}
-                              onChange={(e) => setMemberFeedbackDraft(e.target.value)}
-                              placeholder="Write member feedback, training preferences, medical notes, or front-desk reminders..."
-                              className="text-xs bg-background min-h-[85px]"
-                            />
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-[10px] text-muted-foreground">
-                                {(activeClient as any).feedbackUpdatedAt
-                                  ? `Last updated: ${safeFormatDate((activeClient as any).feedbackUpdatedAt, 'dd MMM yyyy HH:mm')}`
-                                  : 'Visible on member profile & reception check-in'}
-                              </span>
-                              <Button
-                                size="sm"
-                                disabled={isSavingFeedback}
-                                className="h-8 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white"
-                                onClick={async () => {
-                                  setIsSavingFeedback(true);
-                                  try {
-                                    const nowIso = new Date().toISOString();
-                                    const staffName = currentUser?.name || currentUser?.email || 'Staff';
-                                    const trimmed = memberFeedbackDraft.trim();
-                                    await updateClient(activeClient.id, {
-                                      memberFeedback: trimmed,
-                                      stickyNote: trimmed,
-                                      receptionNote: trimmed,
-                                      notes: trimmed,
-                                      feedbackUpdatedAt: nowIso,
-                                      feedbackUpdatedBy: staffName,
-                                    } as any);
-                                    if (trimmed) {
-                                      await addComment(activeClient.id, `[Member Feedback] ${trimmed}`, staffName);
-                                    }
-                                    await addAuditLog('UPDATE', 'CLIENT', activeClient.id, `Updated member feedback for ${activeClient.name}`, staffName);
-                                    toast.success('Member feedback saved!');
-                                  } catch (err) {
-                                    console.error(err);
-                                    toast.error('Failed to save member feedback.');
-                                  } finally {
-                                    setIsSavingFeedback(false);
-                                  }
-                                }}
-                              >
-                                {isSavingFeedback ? 'Saving...' : 'Save Feedback'}
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Current Package</p>
-                            <div className="flex gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-[10px] bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-200"
-                                onClick={() => {
-                                  setUpgradeDialogClientId(activeClient.id);
-                                  setUpgradePkgName('');
-                                  setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd'));
-                                }}
-                              >
-                                <ArrowUpDown className="h-3 w-3 mr-1" /> Upgrade
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-[10px] bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200"
-                                onClick={() => {
-                                  setRenewDialogClientId(activeClient.id);
-                                  setRenewPkgName('');
-                                  setRenewStartDate(format(new Date(), 'yyyy-MM-dd'));
-                                }}
-                              >
-                                <RefreshCw className="h-3 w-3 mr-1" /> Renew
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-[10px] bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200 font-bold"
-                                onClick={() => {
-                                  setAddPackageDialogClientId(activeClient.id);
-                                  setAddPackageName('');
-                                  setAddPackageStartDate(format(new Date(), 'yyyy-MM-dd'));
-                                  setAddPackageAmount('');
-                                  setAddPackageMethod('Cash');
-                                  setAddPackageRecordPayment(true);
-                                }}
-                              >
-                                <Plus className="h-3 w-3 mr-1" /> Add Package
-                              </Button>
-                            </div>
-                          </div>
-                          {(activeClient.packages || []).length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              {(activeClient.packages || []).map((pkg, idx) => (
-                                <div key={pkg.id} className="p-3 bg-background rounded-lg border text-xs space-y-2">
-                                  <Select
-                                    value={pkg.packageName}
-                                    onValueChange={(val) => {
-                                      if (!val) return;
-                                      const sysPkg = packages.find((p) => p.name === val);
-                                      const updated = [...(activeClient.packages || [])];
-                                      const cur = updated[idx];
-                                      if (!cur) return;
-                                      updated[idx] = {
-                                        ...cur,
-                                        packageName: val,
-                                        sessionsTotal: sysPkg?.sessions,
-                                        sessionsRemaining: sysPkg?.sessions,
-                                        endDate: sysPkg && cur.startDate ? safeIsoDate(safeAddDays(cur.startDate, sysPkg.expiryDays)) : cur.endDate,
-                                      };
-                                      updateClientPackages(updated);
+                                <div className="flex flex-wrap gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-200"
+                                    onClick={() => {
+                                      setUpgradeDialogClientId(activeClient.id);
+                                      setUpgradePkgName('');
+                                      setUpgradeStartDate(format(new Date(), 'yyyy-MM-dd'));
                                     }}
                                   >
-                                    <SelectTrigger className="h-7 text-xs bg-muted/30">
-                                      <SelectValue placeholder="Select package" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {visiblePackages.map((p) => (
-                                        <SelectItem key={p.id} value={p.name} className="text-xs">
-                                          {p.name}
-                                        </SelectItem>
-                                      ))}
-                                      <SelectItem value="Custom" className="text-xs">
-                                        Custom
-                                      </SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                    <div>
-                                      <p className="text-[9px] text-muted-foreground uppercase mb-0.5">Start</p>
-                                      <Input
-                                        type="date"
-                                        className="h-7 text-[10px] px-1 font-mono bg-background"
-                                        value={pkg.startDate ? safeFormatDate(pkg.startDate, 'yyyy-MM-dd', '') : ''}
-                                        onChange={(e) => {
-                                          const updated = [...(activeClient.packages || [])];
-                                          const cur = updated[idx];
-                                          if (!cur) return;
-                                          const sysPkg = packages.find((p) => p.name === cur.packageName);
-                                          const val = e.target.value;
-                                          const ns = val ? safeIsoDate(val) : '';
-                                          updated[idx] = {
-                                            ...cur,
-                                            startDate: ns,
-                                            endDate: sysPkg && ns ? safeIsoDate(safeAddDays(ns, sysPkg.expiryDays)) : cur.endDate,
-                                          };
-                                          updateClientPackages(updated);
-                                        }}
-                                      />
-                                    </div>
-                                    <div>
-                                      <p className="text-[9px] text-muted-foreground uppercase mb-0.5">Expiry</p>
-                                      <Input
-                                        type="date"
-                                        className="h-7 text-[10px] px-1 font-mono bg-background"
-                                        value={pkg.endDate ? safeFormatDate(pkg.endDate, 'yyyy-MM-dd', '') : ''}
-                                        onChange={(e) => {
-                                          const updated = [...(activeClient.packages || [])];
-                                          const cur = updated[idx];
-                                          if (!cur) return;
-                                          const val = e.target.value;
-                                          const ns = val ? safeIsoDate(val) : '';
-                                          updated[idx] = { ...cur, endDate: ns };
-                                          updateClientPackages(updated);
-                                        }}
-                                      />
-                                    </div>
-                                    <div>
-                                      <p className="text-[9px] text-muted-foreground uppercase mb-0.5">Remaining</p>
-                                      <Input
-                                        type="number"
-                                        className="h-7 text-[10px] px-1 font-mono bg-background"
-                                        value={pkg.sessionsRemaining ?? ''}
-                                        onChange={(e) => {
-                                          const updated = [...(activeClient.packages || [])];
-                                          const cur = updated[idx];
-                                          if (!cur) return;
-                                          const newVal = parseInt(e.target.value) || 0;
-                                          updated[idx] = { ...cur, sessionsRemaining: newVal };
-                                          const updates = {
-                                            packages: updated,
-                                            ...(cur.status === 'Active' ? { sessionsRemaining: newVal } : {})
-                                          };
-                                          updateClient(activeClient.id, updates);
-                                        }}
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-1">
-                                    <Select
-                                      value={pkg.status}
-                                      onValueChange={(val: any) => {
-                                        if (!val) return;
-                                        const updated = [...(activeClient.packages || [])];
-                                        const cur = updated[idx];
-                                        if (!cur) return;
-                                        updated[idx] = { ...cur, status: val };
-                                        updateClientPackages(updated);
-                                      }}
-                                    >
-                                      <SelectTrigger className="h-7 text-xs flex-1 bg-background">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="Active" className="text-xs">Active</SelectItem>
-                                        <SelectItem value="Expired" className="text-xs">Expired</SelectItem>
-                                        <SelectItem value="Cancelled" className="text-xs">Cancelled</SelectItem>
-                                        <SelectItem value="Hold" className="text-xs">Hold</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-destructive shrink-0"
-                                      onClick={() => updateClientPackages((activeClient.packages || []).filter((_, i) => i !== idx))}
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                  </div>
+                                    <ArrowUpDown className="h-3 w-3 mr-1" /> Upgrade
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200"
+                                    onClick={() => {
+                                      setRenewDialogClientId(activeClient.id);
+                                      setRenewPkgName('');
+                                      setRenewStartDate(format(new Date(), 'yyyy-MM-dd'));
+                                    }}
+                                  >
+                                    <RefreshCw className="h-3 w-3 mr-1" /> Renew
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-[10px] bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-200 font-bold"
+                                    onClick={() => {
+                                      setAddPackageDialogClientId(activeClient.id);
+                                      setAddPackageName('');
+                                      setAddPackageStartDate(format(new Date(), 'yyyy-MM-dd'));
+                                      setAddPackageAmount('');
+                                      setAddPackageMethod('Cash');
+                                      setAddPackageRecordPayment(true);
+                                    }}
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" /> Add Package
+                                  </Button>
                                 </div>
-                              ))}
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div className="p-3 rounded-lg border bg-background space-y-1.5">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <Badge className="bg-emerald-600 text-white text-[9px] font-bold uppercase">Primary Package</Badge>
+                                    {daysRem !== null && (
+                                      <Badge variant="outline" className={`text-[10px] font-mono font-bold ${daysRem <= 0 ? 'text-rose-600 border-rose-500/30' : daysRem <= 7 ? 'text-amber-600 border-amber-500/30' : 'text-emerald-600 border-emerald-500/30'}`}>
+                                        {daysRem > 0 ? `${daysRem}d left to renew` : 'Expired'}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-xs font-black text-foreground truncate">{primaryPkg?.packageName || activeClient.packageType || 'No Primary Package'}</p>
+                                  {isAdminUser && (
+                                    <div className="pt-1">
+                                      <Select
+                                        value={primaryPkg?.packageName || activeClient.packageType || ''}
+                                        onValueChange={(val) => {
+                                          if (!val) return;
+                                          const sysPkg = packages.find((p) => p.name === val);
+                                          const staffName = currentUser?.name || currentUser?.email || 'Admin';
+                                          const nowIso = new Date().toISOString();
+                                          const baseStart = primaryPkg?.startDate || activeClient.startDate || nowIso.slice(0, 10);
+                                          const nextEnd = sysPkg ? safeIsoDate(safeAddDays(baseStart, sysPkg.expiryDays)) : (primaryPkg?.endDate || activeClient.membershipExpiry || '');
+                                          const nextSessions = sysPkg?.sessions ?? primaryPkg?.sessionsRemaining ?? 'unlimited';
+                                          const updatedPkgs = allPkgs.length > 0
+                                            ? allPkgs.map((p, idx) =>
+                                                p === primaryPkg || idx === 0
+                                                  ? {
+                                                      ...p,
+                                                      id: p.id || `pkg-${idx}`,
+                                                      packageName: val,
+                                                      startDate: baseStart,
+                                                      endDate: nextEnd,
+                                                      sessionsTotal: nextSessions,
+                                                      sessionsRemaining: nextSessions,
+                                                      lastModifiedBy: staffName,
+                                                      lastModifiedAt: nowIso,
+                                                    }
+                                                  : p
+                                              )
+                                            : [
+                                                {
+                                                  id: 'primary-0',
+                                                  packageName: val,
+                                                  status: 'Active' as const,
+                                                  startDate: baseStart,
+                                                  endDate: nextEnd,
+                                                  sessionsTotal: nextSessions,
+                                                  sessionsRemaining: nextSessions,
+                                                  createdAt: nowIso,
+                                                  createdBy: staffName,
+                                                  createdByName: staffName,
+                                                },
+                                              ];
+                                          updateClientPackages(updatedPkgs);
+                                          void addAuditLog('UPDATE', 'PACKAGE_RECORD', activeClient.id, `Admin changed primary package to "${val}" for ${activeClient.name}`, staffName);
+                                          toast.success(`Primary package changed to "${val}"`);
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-7 text-[11px] bg-muted/30">
+                                          <SelectValue placeholder="Change Primary Package..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {visiblePackages.map((p) => (
+                                            <SelectItem key={p.id} value={p.name} className="text-xs">
+                                              {p.name} ({p.price.toLocaleString()} LE)
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  )}
+                                  <p className="text-[10px] text-muted-foreground font-mono">
+                                    {primaryPkg?.startDate ? safeFormatDate(primaryPkg.startDate, 'dd MMM yyyy') : '—'} → {primaryPkg?.endDate ? safeFormatDate(primaryPkg.endDate, 'dd MMM yyyy') : '—'}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Created By: <strong className="text-foreground">{primaryPkg?.createdByName || primaryPkg?.createdBy || rawC.createdByName || rawC.salesName || 'System'}</strong>
+                                    {' • '}
+                                    {primaryPkg?.createdAt ? safeFormatDate(primaryPkg.createdAt, 'dd MMM yyyy HH:mm') : 'Imported'}
+                                  </p>
+                                </div>
+
+                                <div className="p-3 rounded-lg border bg-background space-y-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <Badge variant="outline" className="border-purple-500/40 text-purple-600 dark:text-purple-400 text-[9px] font-bold uppercase">
+                                      Secondary Package {secondaryPkgs.length > 1 ? `(${secondaryPkgs.length})` : ''}
+                                    </Badge>
+                                    {Number(rawC.paidPtSessionsRemaining || 0) > 0 && (
+                                      <Badge variant="outline" className="text-[10px] font-mono font-bold text-purple-600 border-purple-500/30">
+                                        {rawC.paidPtSessionsRemaining} PT left
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {secondaryLabel ? (
+                                    <>
+                                      <p className="text-xs font-black text-foreground truncate">{secondaryLabel}</p>
+                                      <p className="text-[10px] text-muted-foreground font-mono">
+                                        {secondaryPkgs[0]?.startDate ? safeFormatDate(secondaryPkgs[0].startDate, 'dd MMM yyyy') : 'Active Add-On'}
+                                        {secondaryPkgs[0]?.endDate ? ` → ${safeFormatDate(secondaryPkgs[0].endDate, 'dd MMM yyyy')}` : ''}
+                                      </p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        Created By: <strong className="text-foreground">{secondaryPkgs[0]?.createdByName || secondaryPkgs[0]?.createdBy || rawC.salesName || 'Staff'}</strong>
+                                        {' • '}
+                                        {secondaryPkgs[0]?.createdAt ? safeFormatDate(secondaryPkgs[0].createdAt, 'dd MMM yyyy HH:mm') : 'Recorded'}
+                                      </p>
+                                    </>
+                                  ) : (
+                                    <p className="text-xs text-muted-foreground italic py-2">No active secondary package assigned.</p>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          ) : (
-                            <p className="text-xs text-muted-foreground text-center py-4">No package found. Click "+ Add" to assign one.</p>
-                          )}
+                          );
+                        })()}
+
+                        {/* Member Feedback & Front-Desk Notes Box (Editable by Any Staff Member) */}
+                        <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                                <MessageSquare className="h-3.5 w-3.5" /> Member Feedback &amp; Front-Desk Notes
+                              </span>
+                              <p className="text-[11px] text-muted-foreground">
+                                Any staff member can update member feedback here at any time without unlocking profile fields.
+                              </p>
+                            </div>
+                            {(activeClient as any).feedbackUpdatedBy && (
+                              <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600">
+                                By {(activeClient as any).feedbackUpdatedBy}
+                              </Badge>
+                            )}
+                          </div>
+                          <Textarea
+                            value={memberFeedbackDraft}
+                            onChange={(e) => setMemberFeedbackDraft(e.target.value)}
+                            placeholder="Write member feedback, training preferences, medical notes, or front-desk reminders..."
+                            className="text-xs bg-background min-h-[85px]"
+                          />
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] text-muted-foreground">
+                              {(activeClient as any).feedbackUpdatedAt
+                                ? `Last updated: ${safeFormatDate((activeClient as any).feedbackUpdatedAt, 'dd MMM yyyy HH:mm')}`
+                                : 'Visible on member profile & reception check-in'}
+                            </span>
+                            <Button
+                              size="sm"
+                              disabled={isSavingFeedback}
+                              className="h-8 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white"
+                              onClick={async () => {
+                                setIsSavingFeedback(true);
+                                try {
+                                  const nowIso = new Date().toISOString();
+                                  const staffName = currentUser?.name || currentUser?.email || 'Staff';
+                                  const trimmed = memberFeedbackDraft.trim();
+                                  await updateClient(activeClient.id, {
+                                    memberFeedback: trimmed,
+                                    stickyNote: trimmed,
+                                    receptionNote: trimmed,
+                                    notes: trimmed,
+                                    feedbackUpdatedAt: nowIso,
+                                    feedbackUpdatedBy: staffName,
+                                  } as any);
+                                  if (trimmed) {
+                                    await addComment(activeClient.id, `[Member Feedback] ${trimmed}`, staffName);
+                                  }
+                                  await addAuditLog('UPDATE', 'CLIENT', activeClient.id, `Updated member feedback for ${activeClient.name}`, staffName);
+                                  toast.success('Member feedback saved!');
+                                } catch (err) {
+                                  console.error(err);
+                                  toast.error('Failed to save member feedback.');
+                                } finally {
+                                  setIsSavingFeedback(false);
+                                }
+                              }}
+                            >
+                              {isSavingFeedback ? 'Saving...' : 'Save Feedback'}
+                            </Button>
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </TabsContent>
@@ -4207,16 +4059,14 @@ export default function Clients() {
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        {isInzanTenant && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs font-bold"
-                            onClick={() => setMemberProfileTab('packages')}
-                          >
-                            Manage Packages &amp; Invites →
-                          </Button>
-                        )}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs font-bold"
+                          onClick={() => setMemberProfileTab('packages')}
+                        >
+                          Manage Packages &amp; Invites →
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -4238,9 +4088,8 @@ export default function Clients() {
                   </div>
                 </TabsContent>
 
-                {/* ── INZAN PACKAGES & INVITES TAB (2 DISTINCT VISUAL SECTIONS) ── */}
-                {isInzanTenant && (
-                  <TabsContent value="packages" className="mt-0 outline-none p-5 space-y-6 text-left">
+                {/* ── PACKAGES & INVITES TAB (2 DISTINCT VISUAL SECTIONS) ── */}
+                <TabsContent value="packages" className="mt-0 outline-none p-5 space-y-6 text-left">
                     {/* Top Section Switcher Bar */}
                     <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/30 p-2 rounded-xl border border-border/80">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -5020,8 +4869,7 @@ export default function Clients() {
                         </div>
                       </div>
                     )}
-                  </TabsContent>
-                )}
+                </TabsContent>
 
                 {/* ── ACTIVITY TAB ── */}
                 <TabsContent value="activity" className="mt-0 outline-none p-5 text-left">
@@ -5185,8 +5033,8 @@ export default function Clients() {
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3">Package</TableHead>
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3">Start</TableHead>
                                   <TableHead className="text-[10px] uppercase py-2.5 px-3">Expires</TableHead>
-                                  {isTenantInzan() && <TableHead className="text-[10px] uppercase py-2.5 px-3">Created Date</TableHead>}
-                                  {isTenantInzan() && <TableHead className="text-[10px] uppercase py-2.5 px-3">Created By</TableHead>}
+                                  <TableHead className="text-[10px] uppercase py-2.5 px-3">Created Date</TableHead>
+                                  <TableHead className="text-[10px] uppercase py-2.5 px-3">Created By</TableHead>
                                     <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Sessions</TableHead>
                                     <TableHead className="text-[10px] uppercase py-2.5 px-3 text-center">Status</TableHead>
                                     <TableHead className="text-[10px] uppercase py-2.5 px-3 text-right">Actions</TableHead>
@@ -5206,8 +5054,8 @@ export default function Clients() {
                                           <TableCell className="py-2.5 px-3 text-xs font-medium">{pkg.packageName || '—'}</TableCell>
                                           <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.startDate, 'dd MMM yyyy')}</TableCell>
                                           <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.endDate, 'dd MMM yyyy')}</TableCell>
-                                          {isTenantInzan() && <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.createdAt || pkg.startDate, 'dd MMM yyyy')}</TableCell>}
-                                          {isTenantInzan() && <TableCell className="py-2.5 px-3 text-xs">{pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}</TableCell>}
+                                          <TableCell className="py-2.5 px-3 text-xs">{safeFormatDate(pkg.createdAt || pkg.startDate, 'dd MMM yyyy')}</TableCell>
+                                          <TableCell className="py-2.5 px-3 text-xs">{pkg.createdByName || pkg.createdBy || pkg.salesRepName || 'System'}</TableCell>
                                           <TableCell className="py-2.5 px-3 text-xs text-center">
                                             {(pkg.sessionsRemaining as any) === 'unlimited' ? '∞' : typeof pkg.sessionsRemaining === 'number' ? `${pkg.sessionsRemaining} / ${pkg.sessionsTotal ?? '?'}` : '—'}
                                           </TableCell>
@@ -5971,19 +5819,17 @@ export default function Clients() {
                         </select>
                       </div>
 
-                      {isInzanTenant && (
-                        <div className="space-y-1 md:col-span-2">
-                          <Label className="text-xs font-semibold text-muted-foreground">Transfer Fee (EGP — Optional, Logged to Transfer Report)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            className="h-9 bg-background"
-                            placeholder="0.00"
-                            value={transferFee}
-                            onChange={(e) => setTransferFee(e.target.value)}
-                          />
-                        </div>
-                      )}
+                      <div className="space-y-1 md:col-span-2">
+                        <Label className="text-xs font-semibold text-muted-foreground">Transfer Fee (EGP — Optional, Logged to Transfer Report)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          className="h-9 bg-background"
+                          placeholder="0.00"
+                          value={transferFee}
+                          onChange={(e) => setTransferFee(e.target.value)}
+                        />
+                      </div>
                     </div>
                     <Button className="w-full text-xs font-bold" onClick={handleTransferPackage}>
                       Execute Package Transfer

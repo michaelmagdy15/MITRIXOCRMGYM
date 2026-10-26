@@ -78,7 +78,7 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
       const activeNames = Array.from(new Set(
         (client.packages || []).filter(p => p.status === 'Active' && p.packageName).map(p => p.packageName)
       )).slice(0, 10);
-      if (isTenantInzan() && activeNames.length > 0) {
+      if (activeNames.length > 0) {
         const pkgSnap = await getDocs(query(collection(db, 'packages'), where('name', 'in', activeNames)));
         const defsByName = new Map<string, Package>();
         pkgSnap.docs.forEach(d => {

@@ -2403,7 +2403,7 @@ export default function Leads() {
                     onChange={(val) => setNewLeadPhone(val)} 
                   />
                   {(() => {
-                    if (!isInzan || !newLeadPhone || newLeadPhone.replace(/\D/g, '').length < 7) return null;
+                    if (!newLeadPhone || newLeadPhone.replace(/\D/g, '').length < 7) return null;
                     const simMatches = checkPhoneSimilarityForCandidate(newLeadPhone, clients);
                     if (simMatches.length === 0) return null;
                     return (
@@ -2411,7 +2411,7 @@ export default function Leads() {
                         <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400">
                           <AlertCircle className="h-4 w-4 shrink-0" />
                           <span>
-                            {`RedGITS 7-Digit Phone Similarity Alert (${simMatches.length})`}
+                            {`7-Digit Phone Similarity Alert (${simMatches.length})`}
                           </span>
                         </div>
                         <div className="space-y-1 max-h-28 overflow-y-auto">

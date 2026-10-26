@@ -34,7 +34,7 @@ import { openWhatsAppUrl } from '../utils/whatsappTemplates';
 
 export default function MemberBodyTracker({
   client,
-  clubName = 'Inzan Athletics',
+  clubName = 'STRIKE',
 }: {
   client: Client | null;
   clubName?: string;

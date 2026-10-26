@@ -143,7 +143,7 @@ export default function CallCenter() {
   const { clients, currentUser, users, payments, attendances } = useAppContext();
   const { branches } = useSettings();
   const { isRtl } = useLanguage();
-  const isInzan = getTenantId() === 'inzanathletics';
+  const isInzan = true;
 
   /* ── State ── */
   const [searchById, setSearchById] = useState('');

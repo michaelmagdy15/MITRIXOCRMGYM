@@ -44,7 +44,7 @@ export default function CoachPortal() {
   }, [branding?.companyName]);
 
   const canAccessFitnessManagerBoard = useMemo(() => {
-    if (!isInzan || !currentUser) return false;
+    if (!currentUser) return false;
     const roleStr = String(currentUser.role || '').toLowerCase();
     const nameStr = String(currentUser.name || '').toLowerCase();
     const specStr = String((currentUser as any).specialty || (currentUser as any).department || '').toLowerCase();

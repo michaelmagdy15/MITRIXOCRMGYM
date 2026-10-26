@@ -452,7 +452,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
             return `${dateStr}T${endH}:${String(m).padStart(2, '0')}:00`;
           })();
 
-      const location = s.branch || s.location || branding?.companyName || 'Inzan Athletics';
+      const location = s.branch || s.location || branding?.companyName || 'STRIKE';
       return {
         title: isClass
           ? `${s.name || s.title || 'Group Class'}${s.instructor ? ` with ${s.instructor}` : ''}`
@@ -474,7 +474,8 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
         toast.error('No upcoming bookings with a valid date to export');
         return;
       }
-      downloadICS(`inzan-upcoming-${format(new Date(), 'yyyy-MM-dd')}`, ics);
+      const slug = (branding?.companyName || 'gym').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      downloadICS(`${slug}-upcoming-${format(new Date(), 'yyyy-MM-dd')}`, ics);
       toast.success(`${upcomingCalendarEvents.length} upcoming booking${upcomingCalendarEvents.length === 1 ? '' : 's'} exported`);
     } catch (err) {
       console.error('Failed to export upcoming bookings:', err);

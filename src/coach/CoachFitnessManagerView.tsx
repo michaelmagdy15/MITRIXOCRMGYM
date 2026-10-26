@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { collection, onSnapshot, doc, updateDoc, addDoc, getDocs } from 'firebase/firestore';
 import { Assessment, Client, User } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,8 @@ import { openWhatsAppChat } from '../utils/whatsappTemplates';
 
 export default function CoachFitnessManagerView() {
   const { currentUser } = useAuth();
+  const { branding } = useSettings();
+  const clubLabel = branding?.companyName || 'STRIKE';
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [coaches, setCoaches] = useState<User[]>([]);
   const [clientsMap, setClientsMap] = useState<Record<string, Client>>({});
@@ -65,7 +68,7 @@ export default function CoachFitnessManagerView() {
               email: data.email || '',
               role: 'coach',
               coachId: data.coachId || d.id,
-              branch: data.branch || 'Inzan Athletics',
+              branch: data.branch || clubLabel,
             });
           }
         });
@@ -78,7 +81,7 @@ export default function CoachFitnessManagerView() {
               email: data.email || '',
               role: 'coach',
               coachId: data.coachId || d.id,
-              branch: data.branch || 'Inzan Athletics',
+              branch: data.branch || clubLabel,
             });
           }
         });
@@ -260,7 +263,7 @@ export default function CoachFitnessManagerView() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Badge className="bg-primary text-primary-foreground text-[10px] font-extrabold uppercase tracking-wider">
-              Inzan Athletics • Fitness Manager Command Board
+              {clubLabel} • Fitness Manager Command Board
             </Badge>
             <div className="flex items-center gap-2 text-xs font-bold">
               <Badge variant="outline" className="border-amber-500/40 text-amber-600 dark:text-amber-400">

@@ -905,8 +905,8 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                         className="text-[10px] text-primary border-primary/20 hover:border-primary/40 h-7 font-bold px-2.5 bg-primary/5 hover:bg-primary/10"
                         event={{
                           title: `PT Session with ${getTrainerName(session.coachId, session.coachName)} (${session.type || '1-on-1'})`,
-                          description: `Personal Training Session with Coach ${getTrainerName(session.coachId, session.coachName)}.\nType: ${session.type || '1-on-1'}\nBranch: ${session.branch || 'Inzan Athletics'}${session.notes ? `\nFocus/Notes: ${session.notes}` : ''}`,
-                          location: session.branch || 'Inzan Athletics',
+                          description: `Personal Training Session with Coach ${getTrainerName(session.coachId, session.coachName)}.\nType: ${session.type || '1-on-1'}\nBranch: ${session.branch || 'Club'}${session.notes ? `\nFocus/Notes: ${session.notes}` : ''}`,
+                          location: session.branch || 'Club',
                           startTime: getSessionEventDates(session).startIso,
                           endTime: getSessionEventDates(session).endIso
                         }}

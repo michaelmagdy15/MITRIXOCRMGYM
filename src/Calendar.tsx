@@ -103,7 +103,7 @@ export default function CalendarView() {
 
   const isInzan = useMemo(() => {
     const tenantId = getTenantId();
-    return isTenantInzan() || tenantId.toLowerCase().includes('inzan') || (branding?.companyName || '').toLowerCase().includes('inzan');
+    return true || isTenantInzan() || tenantId.toLowerCase().includes('inzan') || (branding?.companyName || '').toLowerCase().includes('inzan');
   }, [branding?.companyName]);
 
   // Calendar State

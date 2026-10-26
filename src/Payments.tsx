@@ -353,7 +353,7 @@ export default function Payments() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const canApplyDiscount = can('payments.apply_discount') || (isInzan && (isCurrentUserAdmin || currentUser?.role === 'manager'));
+  const canApplyDiscount = can('payments.apply_discount') || isCurrentUserAdmin || currentUser?.role === 'manager';
   const pricingBreakdown = calculatePricing({
     grossAmount: amount ? Number(amount) : 0,
     discountType: discountType || 'none',
@@ -1917,7 +1917,7 @@ export default function Payments() {
                       value={amountPaid}
                       onChange={(e) => setAmountPaid(e.target.value)}
                     />
-                    {isInzan && amountPaid && pricingBreakdown.remainingBalance > 0 && (
+                    {amountPaid && pricingBreakdown.remainingBalance > 0 && (
                       <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 space-y-2 mt-2">
                         <div className="flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
                           <span>Remaining Debt (Installment Schedule)</span>
@@ -1962,14 +1962,9 @@ export default function Payments() {
                         </div>
                       </div>
                     )}
-                    {!isInzan && amountPaid && pricingBreakdown.remainingBalance > 0 && (
-                      <p className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-1">
-                        Remaining Debt: {formatCurrencyAmount(pricingBreakdown.remainingBalance)}
-                      </p>
-                    )}
                   </div>
 
-                  {isInzan && discountType && (
+                  {discountType && (
                     <div className="space-y-2 pt-2 border-t border-border/30">
                       <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Discount Category</Label>
                       <Select value={discountReason} onValueChange={(v: any) => setDiscountReason(v)}>
@@ -2993,7 +2988,7 @@ export default function Payments() {
                             ) : (
                               <span className="text-xs text-muted-foreground">—</span>
                             )}
-                            {isInzan && recordedByLabel && recordedByLabel !== '—' && (
+                            {recordedByLabel && recordedByLabel !== '—' && (
                               <span className="text-[10px] text-muted-foreground truncate">
                                 By: <strong className="font-medium text-foreground/80">{recordedByLabel}</strong>
                               </span>

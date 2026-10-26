@@ -904,7 +904,7 @@ export const ClassManager: React.FC = () => {
       const isPaidClass = rosterClass.classType === 'Paid' || (rosterClass.classType !== 'Free' && Number(rosterClass.price) > 0);
       const trialsLeft = Number(selectedClient?.freeClassTrialsRemaining) || 0;
       if (
-        isTenantInzan() && isPaidClass && selectedClient && trialsLeft > 0 &&
+        isPaidClass && selectedClient && trialsLeft > 0 &&
         window.confirm(`${selectedClient.name} has ${trialsLeft} free class trial(s) from their package.\n\nUse 1 free trial for this paid class?`)
       ) {
         await updateDoc(doc(db, 'classSchedules', rosterClass.id), { attendees: arrayUnion(selectedClient.id) });

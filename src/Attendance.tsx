@@ -1584,7 +1584,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             hostClientId: invData.hostClientId || lastScannedMember.id,
             hostMemberId: invData.hostMemberId || lastScannedMember.memberId || '',
             hostName: invData.hostName || lastScannedMember.name,
-            branch: selectedBranch || invData.branch || lastScannedMember.branch || 'Garden 8',
+            branch: selectedBranch || invData.branch || lastScannedMember.branch || branches[0] || 'MAIN',
           },
           confirmedBy: currentUser?.name || 'Reception',
         });
@@ -1706,8 +1706,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         </div>
       </div>
 
-      {/* Live Floor Occupancy Banner (RedGITS v17.12 Parity) */}
-      {isInzan && !isKiosk && (
+      {/* Live Floor Occupancy Banner */}
+      {!isKiosk && (
         <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl border bg-card shadow-sm no-print">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
@@ -1778,7 +1778,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
           <div className="bg-muted/20 p-3.5 space-y-3">
             {/* 4-Mode Lookup Selector (Member ID, Universal QR, Invitation ID, Service Member ID) */}
-            {isInzan && !isKiosk && (
+            {!isKiosk && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {([
                   { id: 'member_id', label: 'Member ID', icon: User },
@@ -2598,13 +2598,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   );
                 })()}
 
-                {/* RedGITS v17.12 Parity: 1-Click Guest Invitation Pass Redemption */}
-                {isInzan && !isKiosk && (
+                {/* 1-Click Guest Invitation Pass Redemption */}
+                {!isKiosk && (
                   <div className="rounded-xl border border-primary/25 bg-primary/5 p-3 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
                         <Ticket className="h-3.5 w-3.5" />
-                        Guest Invitation Pass (RedGITS Parity)
+                        Guest Invitation Pass
                       </span>
                       <Button
                         type="button"
@@ -2659,7 +2659,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                           if (simMatches.length === 0) return null;
                           return (
                             <div className="p-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-800 dark:text-amber-300">
-                              <span className="font-bold">⚠️ RedGITS 7-Digit Phone Match:</span>{' '}
+                              <span className="font-bold">⚠️ 7-Digit Phone Match:</span>{' '}
                               {simMatches.slice(0, 2).map((m) => `${m.matchedClient.name} (${maskEgyptianPhone(m.matchedClient.phone)})`).join(', ')}
                             </div>
                           );
@@ -2784,8 +2784,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
             </Card>
           )}
 
-          {/* Stage 6: Wrong Entry / Denied Scan Audit Log (RedGITS checkerror Parity) */}
-          {isInzan && !isKiosk && wrongEntryLogs.length > 0 && (
+          {/* Stage 6: Wrong Entry / Denied Scan Audit Log */}
+          {!isKiosk && wrongEntryLogs.length > 0 && (
             <Card className="border-rose-500/30">
               <CardHeader className="py-3 border-b bg-rose-500/5 flex flex-row items-center justify-between">
                 <CardTitle className="text-xs font-bold uppercase tracking-wider text-rose-600 flex items-center gap-1.5">

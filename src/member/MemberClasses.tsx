@@ -740,8 +740,8 @@ export default function MemberClasses({ client, onSwitchToStore }: { client: Cli
                                 className="h-8 text-xs font-semibold rounded-xl border-primary/30 hover:border-primary/60 text-primary bg-primary/5 hover:bg-primary/10"
                                 event={{
                                   title: `${gymClass.name}${((gymClass as any).coachName || gymClass.instructorName) ? ` with ${(gymClass as any).coachName || gymClass.instructorName}` : ''}`,
-                                  description: `Inzan Athletics Class: ${gymClass.name}\nInstructor: ${(gymClass as any).coachName || gymClass.instructorName || 'Coach'}\nBranch: ${gymClass.branch || ''}\nTime: ${getClassTimeDisplay(gymClass)}${(gymClass as any).description ? `\n\n${(gymClass as any).description}` : ''}`,
-                                  location: gymClass.branch || 'Inzan Athletics',
+                                  description: `${branding?.companyName || 'STRIKE'} Class: ${gymClass.name}\nInstructor: ${(gymClass as any).coachName || gymClass.instructorName || 'Coach'}\nBranch: ${gymClass.branch || ''}\nTime: ${getClassTimeDisplay(gymClass)}${(gymClass as any).description ? `\n\n${(gymClass as any).description}` : ''}`,
+                                  location: gymClass.branch || branding?.companyName || 'STRIKE',
                                   startTime: getClassEventDateTimes(gymClass).start,
                                   endTime: getClassEventDateTimes(gymClass).end
                                 }}

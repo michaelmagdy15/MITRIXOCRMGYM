@@ -8,6 +8,7 @@ import {
   AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, onSnapshot, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { format, parseISO, isToday, startOfWeek, endOfWeek, isWithinInterval, differenceInDays, isAfter, startOfDay } from 'date-fns';
@@ -53,6 +54,8 @@ export default function CoachHome({
   onStartFloor?: (client?: any, session?: any) => void;
 }) {
   const { currentUser } = useAuth();
+  const { branding } = useSettings();
+  const clubTitleUpper = (branding?.companyName || 'STRIKE').toUpperCase();
   const [stats, setStats] = useState<CoachStats>({
     totalClients: 0,
     sessionsThisWeek: 0,
@@ -381,7 +384,7 @@ export default function CoachHome({
                 <h2 className="text-2xl font-black tracking-tight text-zinc-100">{currentUser?.name || 'Coach'}</h2>
                 <div className="flex items-center gap-2 mt-1">
                   <Badge variant="outline" className="text-[9px] font-mono font-bold uppercase tracking-widest bg-zinc-900/80 text-zinc-300 border-zinc-700">
-                    INZAN TRAINER
+                    {clubTitleUpper} TRAINER
                   </Badge>
                   {currentUser?.coachId && (
                     <span className="text-[10px] font-mono text-zinc-400">#{currentUser.coachId}</span>
@@ -397,7 +400,7 @@ export default function CoachHome({
           </div>
           
           <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
-            <span>INZAN ATHLETICS COACHING PORTAL</span>
+            <span>{clubTitleUpper} COACHING PORTAL</span>
             <span className="font-mono text-zinc-300">SYSTEM OPERATIONAL</span>
           </div>
         </div>
@@ -802,7 +805,7 @@ export default function CoachHome({
           <Award className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-xs font-black uppercase tracking-widest text-zinc-200">INZAN ATHLETICS STANDARD</p>
+          <p className="text-xs font-black uppercase tracking-widest text-zinc-200">{clubTitleUpper} STANDARD</p>
           <p className="text-[11px] text-zinc-400 mt-0.5">
             Consistent execution fuels athletic greatness. All sessions and class check-ins are logged with audit protection.
           </p>
