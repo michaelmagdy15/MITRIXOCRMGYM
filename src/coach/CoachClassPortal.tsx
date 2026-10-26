@@ -2,24 +2,39 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, getDocs, doc, updateDoc } from 'firebase/firestore';
-import { ClassSchedule, ClassBooking } from '../types/class';
+import { ClassSchedule } from '../types/class';
 import { Client } from '../types';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Users, CheckCircle, XCircle, Clock, Search } from 'lucide-react';
-import { format, parseISO, isSameDay } from 'date-fns';
+import { Users, CheckCircle, XCircle, Search, Calendar } from 'lucide-react';
 import { safeFormatDate, safeIsSameDay, toValidDate } from '../utils/dateUtils';
 import { Input } from '@/components/ui/input';
+import { isFitnessManagerUser } from '../utils/permissions';
+import { ClassManager } from '../components/ClassManager';
 
 export default function CoachClassPortal() {
   const { currentUser } = useAuth();
+  const isFitnessManager = Boolean(
+    currentUser?.isFitnessManager ||
+      currentUser?.role === 'fitness_manager' ||
+      isFitnessManagerUser(currentUser)
+  );
+  const [viewMode, setViewMode] = useState<'manage' | 'my_classes'>(
+    isFitnessManager ? 'manage' : 'my_classes'
+  );
   const [classes, setClasses] = useState<ClassSchedule[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassSchedule | null>(null);
   const [loading, setLoading] = useState(true);
   
   // Client mapping for names
   const [clientMap, setClientMap] = useState<Record<string, Client>>({});
+
+  useEffect(() => {
+    if (isFitnessManager) {
+      setViewMode('manage');
+    }
+  }, [isFitnessManager]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -94,6 +109,36 @@ export default function CoachClassPortal() {
     fetchClients();
   }, []);
 
+  if (isFitnessManager && viewMode === 'manage') {
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => setViewMode('manage')}
+              className="gap-1.5 text-xs font-bold h-8"
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              All Group Classes &amp; Schedule Manager
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setViewMode('my_classes')}
+              className="gap-1.5 text-xs font-bold h-8"
+            >
+              <Users className="h-3.5 w-3.5" />
+              My Assigned Classes ({classes.length})
+            </Button>
+          </div>
+        </div>
+        <ClassManager />
+      </div>
+    );
+  }
+
   if (loading) {
     return <div className="flex items-center justify-center h-48"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>;
   }
@@ -110,6 +155,31 @@ export default function CoachClassPortal() {
 
   return (
     <div className="space-y-4">
+      {isFitnessManager && (
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setViewMode('manage')}
+              className="gap-1.5 text-xs font-bold h-8"
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              All Group Classes &amp; Schedule Manager
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => setViewMode('my_classes')}
+              className="gap-1.5 text-xs font-bold h-8"
+            >
+              <Users className="h-3.5 w-3.5" />
+              My Assigned Classes ({classes.length})
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -312,4 +382,3 @@ function ClassRosterView({ classData, clientMap, onBack }: { classData: ClassSch
     </div>
   );
 }
-

@@ -91,10 +91,11 @@
     <meta name="application-name" content="STRIKE" />
 
     <!-- iOS home-screen icon (proper square with padding) -->
-    <link rel="apple-touch-icon" href="/pwa-icon.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/pwa-icon.png" />
-    <link rel="apple-touch-icon" sizes="167x167" href="/pwa-icon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/pwa-icon.png" />
+    <link id="apple-touch-icon-1" rel="apple-touch-icon" href="/pwa-icon.png" />
+    <link id="apple-touch-icon-152" rel="apple-touch-icon" sizes="152x152" href="/pwa-icon.png" />
+    <link id="apple-touch-icon-167" rel="apple-touch-icon" sizes="167x167" href="/pwa-icon.png" />
+    <link id="apple-touch-icon-180" rel="apple-touch-icon" sizes="180x180" href="/pwa-icon.png" />
+    <link id="pwa-manifest-link" rel="manifest" href="/manifest.webmanifest" />
 
     <!-- Browser tab favicon -->
     <link id="favicon-32" rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
@@ -280,6 +281,7 @@
           
           var companyName = isInzan ? 'INZAN ATHLETICS' : 'STRIKE';
           var faviconPath = isInzan ? '/inzan-favicon.png' : '/favicon.png';
+          var pwaIconPath = isInzan ? '/inzan-pwa-icon.png' : '/pwa-icon.png';
           
           document.title = companyName;
           
@@ -294,6 +296,15 @@
           if (f16) f16.href = faviconPath;
           var fsc = document.getElementById('favicon-shortcut');
           if (fsc) fsc.href = faviconPath;
+
+          var appleIcons = document.querySelectorAll('link[rel="apple-touch-icon"]');
+          for (var i = 0; i < appleIcons.length; i++) {
+            appleIcons[i].href = pwaIconPath;
+          }
+          var manifestLinks = document.querySelectorAll('link[rel="manifest"]');
+          for (var j = 0; j < manifestLinks.length; j++) {
+            manifestLinks[j].href = isInzan ? '/manifest.webmanifest?tenant=inzanathletics' : '/manifest.webmanifest';
+          }
         } catch(e) {}
       })();
 
@@ -357,6 +368,13 @@
         window.addEventListener('resize', applyMobileSafeAreaOffsets, { passive: true });
         window.addEventListener('orientationchange', applyMobileSafeAreaOffsets, { passive: true });
       })();
+      // Capture beforeinstallprompt globally before React mounts so Android Chrome install prompt is never missed
+      window.__deferredPwaInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__deferredPwaInstallPrompt = e;
+        window.dispatchEvent(new CustomEvent('pwa-install-available', { detail: e }));
+      });
     </script>
   </head>
   <body>

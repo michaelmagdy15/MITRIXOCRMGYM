@@ -411,14 +411,15 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
   const scriptTag = `<script type="text/javascript">window.__FIREBASE_CONFIG__ = ${JSON.stringify(config)};</script>`;
   let updatedHtml = html.replace("<!-- FIREBASE_CONFIG_PLACEHOLDER -->", scriptTag);
   
-  const tenantName = isTenantInzan ? 'INZAN ATHLETICS' : 'STRIKE';
-  const tenantFullTitle = isTenantInzan ? 'INZAN ATHLETICS' : 'Strike Boxing Club';
+  const tenantName = isTenantInzan ? 'INZAN Athletics' : 'STRIKE';
+  const tenantFullTitle = isTenantInzan ? 'INZAN Athletics' : 'Strike Boxing Club';
   const tenantDesc = isTenantInzan 
     ? 'Official Member Portal & Training Management - Inzan Athletics' 
     : 'Official Member Portal & Gym Management - Strike Boxing Club';
   const favicon = isTenantInzan ? '/inzan-favicon.png' : '/favicon.png';
   const pwaIcon = isTenantInzan ? '/inzan-pwa-icon.png' : '/pwa-icon.png';
   const splashLogo = isTenantInzan ? '/inzanlogo.png' : '/strikelogo_white.png';
+  const manifestUrl = isTenantInzan ? '/manifest.webmanifest?tenant=inzanathletics' : '/manifest.webmanifest';
   
   // Prefer the exact public custom domain if accessed, otherwise construct from hostname
   const hostDomain = normalizedHost.includes('inzan')
@@ -433,6 +434,7 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
   // Update Favicon & PWA Icons
   updatedHtml = updatedHtml.replace(/\/favicon\.png/g, favicon);
   updatedHtml = updatedHtml.replace(/\/pwa-icon\.png/g, pwaIcon);
+  updatedHtml = updatedHtml.replace(/href="\/manifest\.webmanifest"/g, `href="${manifestUrl}"`);
   
   // Update App Titles for home screen
   updatedHtml = updatedHtml.replace(/content="STRIKE"/g, `content="${tenantName}"`);
@@ -1295,6 +1297,54 @@ async function startServer() {
 
       if (!resolvedEmail) {
         return res.status(404).json({ error: "Coach ID, Email, or Name not found. Please check and try again." });
+      }
+
+      // Ensure the coach's users/{uid} document exists and has the right role/name/coachId
+      try {
+        const targetUid = resolvedUid || (await admin.auth().getUserByEmail(resolvedEmail)).uid;
+        if (targetUid) {
+          const existingUserSnap = await db.collection("users").doc(targetUid).get();
+          const existingUser = existingUserSnap.exists ? existingUserSnap.data() : null;
+          let coachDocData: any = null;
+          const coachSnap = await db.collection("coaches").where("userId", "==", targetUid).limit(1).get();
+          if (!coachSnap.empty) {
+            coachDocData = coachSnap.docs[0]!.data();
+          } else {
+            const coachByEmailSnap = await db.collection("coaches").where("email", "==", resolvedEmail.toLowerCase()).limit(1).get();
+            if (!coachByEmailSnap.empty) {
+              coachDocData = coachByEmailSnap.docs[0]!.data();
+            }
+          }
+          const isFM = Boolean(coachDocData?.isFitnessManager || existingUser?.isFitnessManager || existingUser?.role === "fitness_manager");
+          const shouldHeal =
+            !existingUser ||
+            !existingUser.role ||
+            existingUser.role === "client" ||
+            existingUser.name === "Member" ||
+            existingUser.name === "New User";
+          if (shouldHeal) {
+            await db.collection("users").doc(targetUid).set(
+              {
+                id: targetUid,
+                name: resolvedName || coachDocData?.name || existingUser?.name || "Coach",
+                email: resolvedEmail.toLowerCase(),
+                role: isFM ? "fitness_manager" : "coach",
+                isFitnessManager: isFM,
+                ...(resolvedCoachId || coachDocData?.coachId ? { coachId: resolvedCoachId || coachDocData?.coachId } : {}),
+                ...(coachDocData?.phone ? { phone: coachDocData.phone } : {}),
+                jobTitle: isFM ? "Fitness Manager" : "Coach",
+                department: "Fitness",
+                status: "working",
+                authActivated: true,
+                isPending: false,
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            );
+          }
+        }
+      } catch (healErr) {
+        console.warn("[API] Coach user doc self-heal warning:", healErr);
       }
 
       // Sync password if provided and matches valid test or default passwords
@@ -6122,6 +6172,168 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
     } catch (err: any) {
       console.error("[Push Proxy] Error forwarding push request:", err);
       return res.status(500).json({ error: err.message || "Failed to forward push request." });
+    }
+  });
+
+  // Dynamic tenant-aware Web App Manifest (for Android Chrome & iOS Safari "Add to Home Screen")
+  app.get(["/manifest.webmanifest", "/manifest.json"], async (req, res) => {
+    try {
+      const hostname = getRequestHostname(req);
+      const normalizedHost = hostname.toLowerCase();
+      const queryTenant = String(req.query.tenant || "").toLowerCase();
+      let { config } = await getTenantInfoForHost(normalizedHost);
+      const isTenantInzan =
+        config?.tenantId === "inzanathletics" ||
+        normalizedHost.includes("inzan") ||
+        queryTenant.includes("inzan");
+
+      const appName = isTenantInzan ? "INZAN Athletics" : "Strike Boxing Club";
+      const shortName = isTenantInzan ? "INZAN Athletics" : "STRIKE";
+      const description = isTenantInzan
+        ? "INZAN Athletics — Official Member & Staff Portal"
+        : "Strike Boxing Club — Member & Staff Portal";
+      const iconSrc = isTenantInzan ? "/inzan-pwa-icon.png" : "/pwa-icon.png";
+      const bgColor = isTenantInzan ? "#ffffff" : "#000000";
+      const themeColor = isTenantInzan ? "#000000" : "#000000";
+
+      const manifestPayload = {
+        name: appName,
+        short_name: shortName,
+        description,
+        theme_color: themeColor,
+        background_color: bgColor,
+        display: "standalone",
+        orientation: "portrait",
+        start_url: "/?pwa=1",
+        scope: "/",
+        id: isTenantInzan ? "com.inzanathletics.crm.pwa" : "com.mitrixogymcrmboxing.crm.pwa",
+        icons: [
+          {
+            src: iconSrc,
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: iconSrc,
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: iconSrc,
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
+      };
+
+      res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      return res.status(200).send(JSON.stringify(manifestPayload));
+    } catch (err) {
+      console.error("[Manifest] Error serving dynamic manifest:", err);
+      return res.status(500).json({ error: "Failed to generate manifest" });
+    }
+  });
+
+  // Dynamic Apple iOS Mobile Configuration Profile (.mobileconfig) Web Clip Installer
+  // Allows 1-tap forced "Add to Home Screen" installation on iPhone / iPad with Inzan Athletics or Strike icon & full-screen mode
+  app.get("/api/pwa/ios-profile.mobileconfig", async (req, res) => {
+    try {
+      const hostname = getRequestHostname(req);
+      const normalizedHost = hostname.toLowerCase();
+      const queryTenant = String(req.query.tenant || "").toLowerCase();
+      let { config } = await getTenantInfoForHost(normalizedHost);
+      const isTenantInzan =
+        config?.tenantId === "inzanathletics" ||
+        normalizedHost.includes("inzan") ||
+        queryTenant.includes("inzan");
+
+      const appLabel = isTenantInzan ? "INZAN Athletics" : "STRIKE";
+      const bundleIdPrefix = isTenantInzan ? "com.inzanathletics.crm" : "com.mitrixogymcrmboxing.crm";
+      const targetUrl = isTenantInzan
+        ? "https://admin.inzanathletics.com/?pwa=1"
+        : normalizedHost.includes("localhost")
+        ? `http://${hostname}/?pwa=1`
+        : `https://${hostname}/?pwa=1`;
+
+      const iconRelPath = isTenantInzan
+        ? path.join(process.cwd(), "public", "inzan-pwa-icon.png")
+        : path.join(process.cwd(), "public", "pwa-icon.png");
+
+      let iconBase64 = "";
+      if (fs.existsSync(iconRelPath)) {
+        iconBase64 = fs.readFileSync(iconRelPath).toString("base64");
+      }
+
+      const webClipUuid = isTenantInzan
+        ? "A1B2C3D4-E5F6-4711-8899-001122334455"
+        : "B2C3D4E5-F6A1-4711-8899-554433221100";
+      const profileUuid = isTenantInzan
+        ? "C3D4E5F6-A1B2-4711-8899-998877665544"
+        : "D4E5F6A1-B2C3-4711-8899-445566778899";
+
+      const mobileConfigXml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>FullScreen</key>
+      <true/>
+      <key>Precomposed</key>
+      <true/>
+      ${iconBase64 ? `<key>Icon</key>\n      <data>${iconBase64}</data>` : ""}
+      <key>IsRemovable</key>
+      <true/>
+      <key>Label</key>
+      <string>${appLabel}</string>
+      <key>PayloadDescription</key>
+      <string>Installs the official ${appLabel} Web App directly onto your iPhone or iPad Home Screen.</string>
+      <key>PayloadDisplayName</key>
+      <string>${appLabel} Home Screen App</string>
+      <key>PayloadIdentifier</key>
+      <string>${bundleIdPrefix}.webclip</string>
+      <key>PayloadType</key>
+      <string>com.apple.webClip.managed</string>
+      <key>PayloadUUID</key>
+      <string>${webClipUuid}</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>URL</key>
+      <string>${targetUrl}</string>
+    </dict>
+  </array>
+  <key>PayloadDescription</key>
+  <string>Official ${appLabel} Mobile App Home Screen Installer. Adds ${appLabel} directly to your Home Screen in full-screen app mode.</string>
+  <key>PayloadDisplayName</key>
+  <string>${appLabel} App Installer</string>
+  <key>PayloadIdentifier</key>
+  <string>${bundleIdPrefix}.profile</string>
+  <key>PayloadOrganization</key>
+  <string>${appLabel}</string>
+  <key>PayloadRemovalDisallowed</key>
+  <false/>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadUUID</key>
+  <string>${profileUuid}</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+</dict>
+</plist>`;
+
+      const filename = isTenantInzan ? "Inzan-Athletics-App.mobileconfig" : "Strike-App.mobileconfig";
+      res.setHeader("Content-Type", "application/x-apple-aspen-config; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      return res.status(200).send(mobileConfigXml);
+    } catch (err) {
+      console.error("[iOS Profile] Error generating .mobileconfig:", err);
+      return res.status(500).send("Failed to generate iOS configuration profile");
     }
   });
 

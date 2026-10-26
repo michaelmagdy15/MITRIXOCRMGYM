@@ -193,6 +193,26 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       document.title = effectiveName;
     }
 
+    // Synchronize PWA / iOS / Android home-screen meta tags & icons dynamically per tenant
+    try {
+      const tid = (typeof window !== 'undefined' ? getTenantId() : 'default').toLowerCase();
+      const isInzanTenant = tid.includes('inzan') || effectiveName.toLowerCase().includes('inzan');
+      const pwaTitle = isInzanTenant ? 'INZAN Athletics' : (effectiveName || 'STRIKE');
+      const pwaIconUrl = isInzanTenant ? '/inzan-pwa-icon.png' : (mergedData.logoUrl || '/pwa-icon.png');
+
+      const metaApple = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+      if (metaApple) metaApple.setAttribute('content', pwaTitle);
+      const metaApp = document.querySelector('meta[name="application-name"]');
+      if (metaApp) metaApp.setAttribute('content', pwaTitle);
+
+      document.querySelectorAll('link[rel="apple-touch-icon"]').forEach((el) => {
+        (el as HTMLLinkElement).href = pwaIconUrl;
+      });
+      document.querySelectorAll('link[rel="manifest"]').forEach((el) => {
+        (el as HTMLLinkElement).href = isInzanTenant ? '/manifest.webmanifest?tenant=inzanathletics' : '/manifest.webmanifest';
+      });
+    } catch (_) {}
+
     // Cache branding in localStorage for instant cold start
     try {
       const tid = (typeof window !== 'undefined' ? getTenantId() : 'default').toLowerCase();

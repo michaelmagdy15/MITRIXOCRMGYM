@@ -47,12 +47,15 @@ import {
   TrendingUp,
   Coffee,
   Activity,
+  Calendar,
 } from 'lucide-react';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { openWhatsAppChat } from '../utils/whatsappTemplates';
+import { ClassManager } from '../components/ClassManager';
 
 type FMCommandTab =
   | 'triage'
+  | 'group_classes'
   | 'trainers'
   | 'pt_controls'
   | 'session_approvals'
@@ -923,6 +926,7 @@ export default function CoachFitnessManagerView() {
         {(
           [
             { id: 'triage', label: `Client Distribution (${unassignedCount})`, icon: <UserCheck className="h-3.5 w-3.5" /> },
+            { id: 'group_classes', label: 'Group Classes & Schedule', icon: <Calendar className="h-3.5 w-3.5" /> },
             { id: 'trainers', label: `Trainers, Targets & Commissions (${coaches.length})`, icon: <Target className="h-3.5 w-3.5" /> },
             { id: 'pt_controls', label: 'PT Freeze & Session (+/-) Controls', icon: <Snowflake className="h-3.5 w-3.5" /> },
             { id: 'session_approvals', label: `Session Cancellations (${pendingCancelSessions.length})`, icon: <Clock className="h-3.5 w-3.5" /> },
@@ -942,6 +946,13 @@ export default function CoachFitnessManagerView() {
           </Button>
         ))}
       </div>
+
+      {/* TAB 1B: GROUP CLASSES & SCHEDULE MANAGER */}
+      {commandTab === 'group_classes' && (
+        <div className="space-y-4">
+          <ClassManager />
+        </div>
+      )}
 
       {/* TAB 1: CLIENT DISTRIBUTION & ASSESSMENT TRIAGE */}
       {commandTab === 'triage' && (

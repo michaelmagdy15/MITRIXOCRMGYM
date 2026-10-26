@@ -16,7 +16,15 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['pwa-icon.png', 'favicon.png', 'strikelogo.png'],
+        includeAssets: [
+          'pwa-icon.png',
+          'favicon.png',
+          'strikelogo.png',
+          'inzan-pwa-icon.png',
+          'inzan-favicon.png',
+          'inzanlogo.png',
+          'inzanlogo_white.png',
+        ],
         manifest: {
           name: 'Strike Boxing Club',
           short_name: 'STRIKE',
@@ -60,6 +68,8 @@ export default defineConfig(({ mode }) => {
             /^\/quote-generator\.html/,
             /^\/help-guide\.html/,
             /^\/privacy\.html/,
+            /^\/manifest\.webmanifest/,
+            /^\/manifest\.json/,
             /^\/api/,
             /^\/contracts\//
           ],

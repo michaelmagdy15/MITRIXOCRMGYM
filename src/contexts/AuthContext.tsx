@@ -382,6 +382,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             }
 
+            // Coach / Fitness Manager lookup in coaches collection when userDoc does not exist yet
+            if (role === 'client') {
+              try {
+                let matchedCoachDoc: any = null;
+                const coachSnapByUid = await getDocs(query(collection(db, 'coaches'), where('userId', '==', userId), limit(1)));
+                if (!coachSnapByUid.empty) {
+                  matchedCoachDoc = coachSnapByUid.docs[0];
+                } else if (firebaseUser.email) {
+                  const coachSnapByEmail = await getDocs(query(collection(db, 'coaches'), where('email', '==', firebaseUser.email.toLowerCase()), limit(1)));
+                  if (!coachSnapByEmail.empty) {
+                    matchedCoachDoc = coachSnapByEmail.docs[0];
+                  }
+                }
+                if (matchedCoachDoc) {
+                  const cData = matchedCoachDoc.data();
+                  const isFM = Boolean(cData.isFitnessManager);
+                  role = isFM ? 'fitness_manager' : 'coach';
+                  if (cData.name) initialName = cData.name;
+                  if (cData.coachId) coachId = cData.coachId;
+                  matchedExistingData = {
+                    ...matchedExistingData,
+                    isFitnessManager: isFM,
+                    jobTitle: isFM ? 'Fitness Manager' : 'Coach',
+                    department: 'Fitness',
+                    ...(cData.phone ? { phone: cData.phone } : {}),
+                    ...(cData.branch ? { branch: cData.branch } : {}),
+                  };
+                  if (cData.userId !== userId) {
+                    try { await updateDoc(doc(db, 'coaches', matchedCoachDoc.id), { userId }); } catch {}
+                  }
+                }
+              } catch (cLookupErr) {
+                console.warn("Could not check coaches collection during user creation:", cLookupErr);
+              }
+            }
+
             // Phone match lookup in users and clients
             if (firebaseUser.phoneNumber) {
               const phoneDigits = firebaseUser.phoneNumber.replace(/\D/g, '').slice(-9);

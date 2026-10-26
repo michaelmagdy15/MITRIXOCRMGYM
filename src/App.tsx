@@ -71,6 +71,7 @@ import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
 import { ClickToCallModal } from './components/ClickToCallModal';
 import { NotificationEnforcementGate } from './components/NotificationEnforcementGate';
+import { SmartPWAInstallGate } from './components/SmartPWAInstallGate';
 import KitchenKioskView from './components/KitchenKioskView';
 import { isKitchenUser, isNutritionistUser, isFitnessManagerUser, isSalesManagerUser, isSgfAcademyOwnerUser, isGeneralManagerOrCEO } from './utils/permissions';
 
@@ -1586,6 +1587,7 @@ export default function App() {
                   <CartProvider>
                     <TenantInitWrapper>
                       <OfflineBanner />
+                      <SmartPWAInstallGate />
                       <NotificationEnforcementGate />
                       <NotificationsProvider>
                         <AppContent />

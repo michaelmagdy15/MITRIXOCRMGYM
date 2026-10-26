@@ -196,7 +196,14 @@ export const ClassManager: React.FC = () => {
       try {
         const snap = await getDocs(collection(db, 'users'));
         const users = snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
-        const activeCoaches = users.filter(u => u.role === 'coach' || (u.role as string) === 'trainer' || u.role === 'admin');
+        const activeCoaches = users.filter(
+          u =>
+            u.role === 'coach' ||
+            (u.role as string) === 'trainer' ||
+            u.role === 'fitness_manager' ||
+            Boolean(u.isFitnessManager) ||
+            u.role === 'admin'
+        );
         setCoaches(activeCoaches);
         if (activeCoaches.length > 0 && !instructorId) {
           setInstructorId(activeCoaches[0]?.id || '');

@@ -79,7 +79,11 @@ export default function Coaches() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ targetUserId })
+        body: JSON.stringify({
+          targetUserId,
+          email: managingCoach?.email || linkedUser?.email,
+          name: managingCoach?.name || linkedUser?.name || coachName,
+        })
       });
 
       if (!response.ok) {
