@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppContext } from './context';
 import { db, auth, getTenantId } from './firebase';
 import { isTenantInzan } from './utils/inzanOrg';
+import { normalizeBranchName } from './utils/memberCategories';
 import { 
   collection, 
   onSnapshot, 
@@ -667,8 +668,8 @@ export default function Bookings() {
         const category = sysPkg ? resolveCategory(sysPkg) : 'Memberships' as PaymentCategory;
 
         const isKidsPackage = item.packageName.toLowerCase().includes('kids') || item.packageName.toLowerCase().includes('junior');
-        if (isInzan && isKidsPackage && clientBranch !== 'Mivida') {
-          alert(`Booking rejected: "${item.packageName}" can only be booked at the Mivida branch.`);
+        if (!isInzan && isKidsPackage && clientBranch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(clientBranch))) {
+          alert(`Booking rejected: "${item.packageName}" cannot be booked at the ${clientBranch} branch.`);
           return;
         }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth, getTenantId } from './firebase';
 import InzanLockerConsole from './components/InzanLockerConsole';
+import KitchenKioskView from './components/KitchenKioskView';
 import { collection, onSnapshot, setDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { addAuditLog } from './services/auditService';
 import { activatePendingGuestInvite } from './services/guestReferralService';
@@ -11,22 +12,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Coffee, Lock, UserCheck, Search, Plus, Key, RefreshCw, XCircle, CheckCircle2, AlertCircle, Trash2, MapPin } from 'lucide-react';
+import { Coffee, Lock, UserCheck, Search, Plus, Key, RefreshCw, XCircle, CheckCircle2, AlertCircle, Trash2, MapPin, ExternalLink } from 'lucide-react';
 import { JuiceBarOrder, Locker, LockerRequest, GuestInvite } from './types';
 import { useSettings } from './contexts/SettingsContext';
 
-const DEFAULT_BRANCHES = ['Garden 8', 'Heliopolis', 'Fifth Settlement', 'Zamalek', 'Sheikh Zayed'];
+const DEFAULT_BRANCHES = ['Maxim Compound', 'Mivida Compound', 'Impact by Strike', 'Playa North Cost'];
 
 export default function ClubOperations() {
   const { features, branding, branches: settingsBranches } = useSettings();
-  const BRANCHES = useMemo(
-    () => (settingsBranches && settingsBranches.length > 0 ? settingsBranches : DEFAULT_BRANCHES),
-    [settingsBranches]
-  );
   const isInzan = useMemo(() => {
     const tid = getTenantId().toLowerCase();
     return tid.includes('inzan') || (branding?.companyName || '').toLowerCase().includes('inzan');
   }, [branding?.companyName]);
+  const BRANCHES = useMemo(
+    () => (settingsBranches && settingsBranches.length > 0 ? settingsBranches : (isInzan ? ['Garden 8'] : DEFAULT_BRANCHES)),
+    [settingsBranches, isInzan]
+  );
 
   // --- Earth's Kitchen Juice Bar State ---
   const [juiceOrders, setJuiceOrders] = useState<JuiceBarOrder[]>([]);
@@ -295,7 +296,7 @@ export default function ClubOperations() {
           hostClientId: invite.hostClientId,
           hostMemberId: invite.hostMemberId,
           hostName: invite.hostName,
-          branch: invite.branch || 'Garden 8',
+          branch: invite.branch || BRANCHES[0] || (isInzan ? 'Garden 8' : 'Maxim Compound'),
         },
         confirmedBy: 'Club Receptionist',
       });
@@ -340,70 +341,20 @@ export default function ClubOperations() {
 
       {/* Earth's Kitchen orders tab */}
       {activeTab === 'juicebar' && (
-        <Card className="border bg-card/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <Coffee className="h-4 w-4 text-primary animate-pulse" /> Pre-order Preparation Queue
-            </CardTitle>
-            <CardDescription className="text-[11px]">Active beverage and protein bowl orders sorted by pickup schedules.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingJuice ? (
-              <div className="flex justify-center py-6">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
-              </div>
-            ) : juiceOrders.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {juiceOrders.map(order => (
-                  <Card key={order.id} className="border bg-zinc-950/40 relative">
-                    <CardContent className="p-4 space-y-3.5">
-                      <div className="flex justify-between items-start border-b border-white/5 pb-2">
-                        <div>
-                          <strong className="text-xs font-bold text-foreground block">{order.clientName}</strong>
-                          <span className="text-[9px] text-zinc-500 font-mono">Pickup: {order.pickupTime}</span>
-                        </div>
-                        <Badge className={`text-[9px] px-2 py-0.5 rounded-full font-bold ${order.status === 'Ready' ? 'bg-emerald-500/10 text-emerald-400' : order.status === 'Preparing' ? 'bg-blue-500/10 text-blue-400' : 'bg-amber-500/10 text-amber-500'}`}>
-                          {order.status}
-                        </Badge>
-                      </div>
-
-                      <div className="space-y-1 text-xs">
-                        {order.items.map((it, idx) => (
-                          <div key={idx} className="flex justify-between text-muted-foreground">
-                            <span>{it.name} <strong className="text-primary font-bold">x{it.quantity}</strong></span>
-                            <span className="font-mono text-[10px]">{branding.currencySymbol || 'LE'} {it.price * it.quantity}</span>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="flex gap-2 pt-2 border-t border-white/5">
-                        <Button
-                          size="sm"
-                          className="flex-1 font-bold text-[10px] h-8"
-                          onClick={() => updateJuiceStatus(order.id, order.status)}
-                        >
-                          {order.status === 'Pending' ? 'Start Preparing' : order.status === 'Preparing' ? 'Mark Ready' : 'Complete Order'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-[10px] text-destructive border-destructive/20 hover:bg-destructive hover:text-white h-8"
-                          onClick={() => cancelJuiceOrder(order.id)}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <div className="py-12 text-center text-xs text-muted-foreground italic">
-                No active orders in Earth's Kitchen queue right now.
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs font-bold gap-2 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
+              onClick={() => window.open('/kitchen', '_blank')}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Open Fullscreen Kitchen Kiosk (/kitchen)
+            </Button>
+          </div>
+          <KitchenKioskView isEmbedded={true} />
+        </div>
       )}
 
       {/* Lockers management tab */}

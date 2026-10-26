@@ -48,6 +48,7 @@ import { ClientAuditLogs } from './components/ClientAuditLogs';
 import { canReassignMemberSalesRep } from './utils/permissions';
 import { validateMembershipEligibility, validateFreezeDurationLimits } from './utils/membershipRules';
 import { isTenantInzan } from './utils/inzanOrg';
+import { normalizeBranchName } from './utils/memberCategories';
 import { getEffectivePackageHierarchy, getEffectivePackageCategory } from './utils/membershipRules';
 import { createMemberReferralWithProfile } from './services/guestReferralService';
 import { MemberAttendanceHistoryTab } from './components/MemberAttendanceHistoryTab';
@@ -486,8 +487,8 @@ export default function Clients() {
       return;
     }
     
-    if ((newMemberCategory?.toLowerCase().includes('kids') || newMemberCategory?.toLowerCase().includes('junior')) && newMemberBranch !== 'Mivida') {
-      alert('Kids and Junior members must be assigned to the Mivida branch.');
+    if (!isInzanTenant && (newMemberCategory?.toLowerCase().includes('kids') || newMemberCategory?.toLowerCase().includes('junior')) && newMemberBranch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(newMemberBranch))) {
+      alert('Kids and Junior members must be assigned to Maxim, Mivida, or Playa branch.');
       return;
     }
 
@@ -630,8 +631,8 @@ export default function Clients() {
     if (!pkg) return;
 
     const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
-    if (isInzanTenant && isKidsPackage && client.branch !== 'Mivida') {
-      alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
+    if (!isInzanTenant && isKidsPackage && client.branch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(client.branch))) {
+      alert("Kids and Junior packages/memberships can only be booked at Maxim, Mivida, or Playa branches.");
       return;
     }
     
@@ -735,8 +736,8 @@ export default function Clients() {
     if (!pkg) return;
 
     const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
-    if (isInzanTenant && isKidsPackage && client.branch !== 'Mivida') {
-      alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
+    if (!isInzanTenant && isKidsPackage && client.branch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(client.branch))) {
+      alert("Kids and Junior packages/memberships can only be booked at Maxim, Mivida, or Playa branches.");
       return;
     }
     
@@ -818,8 +819,8 @@ export default function Clients() {
     if (!pkg) return;
 
     const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
-    if (isInzanTenant && isKidsPackage && client.branch !== 'Mivida') {
-      alert("Kids and Junior packages/memberships can only be booked at the Mivida branch.");
+    if (!isInzanTenant && isKidsPackage && client.branch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(client.branch))) {
+      alert("Kids and Junior packages/memberships can only be booked at Maxim, Mivida, or Playa branches.");
       return;
     }
 

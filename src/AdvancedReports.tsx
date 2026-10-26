@@ -986,7 +986,7 @@ export default function AdvancedReports() {
           source: 'Referral',
           referredBy: host.id,
           referredByName: r.referredByName || host.name,
-          branch: host.branch || 'Garden 8',
+          branch: host.branch || branches?.[0] || ((branding?.companyName || '').toLowerCase().includes('inzan') ? 'Garden 8' : 'Maxim Compound'),
           createdAt: r.createdAt || host.createdAt,
         });
       });

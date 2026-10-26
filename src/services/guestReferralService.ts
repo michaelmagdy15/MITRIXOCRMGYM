@@ -277,7 +277,7 @@ export async function createGuestInvitationWithProfile(
     trialDate: status === 'Attended' ? chosenAttendanceIso.slice(0, 10) : undefined,
     frontDeskNote: noteText,
     notes: noteText,
-    branch: hostClient.branch || hostClient.homeBranch || 'Garden 8',
+    branch: hostClient.branch || hostClient.homeBranch || (isInzan ? 'Garden 8' : 'Maxim Compound'),
     createdAt: existingUninvitedLeadDoc?.data?.createdAt || nowIso,
     updatedAt: nowIso,
   };
@@ -300,7 +300,7 @@ export async function createGuestInvitationWithProfile(
     inviteCode,
     status,
     createdAt: nowIso,
-    branch: hostClient.branch || hostClient.homeBranch || 'Garden 8',
+    branch: hostClient.branch || hostClient.homeBranch || (isInzan ? 'Garden 8' : 'Maxim Compound'),
   };
 
   if (status === 'Attended') {
@@ -415,7 +415,7 @@ export async function activatePendingGuestInvite(params: {
     guestSerial: inviteData.inviteCode,
     trialDate: nowIso.slice(0, 10),
     frontDeskNote: noteText,
-    branch: inviteData.branch || 'Garden 8',
+    branch: inviteData.branch || (getTenantId().toLowerCase().includes('inzan') ? 'Garden 8' : 'Maxim Compound'),
     updatedAt: nowIso,
   };
   if (!targetLeadId) {
@@ -519,7 +519,7 @@ export async function createMemberReferralWithProfile(
     salesRep: hostClient.salesRep || hostClient.assignedTo || '',
     assignedTo: hostClient.assignedTo || hostClient.salesRep || '',
     salesName: (hostClient as any).salesName || '',
-    branch: hostClient.branch || hostClient.homeBranch || 'Garden 8',
+    branch: hostClient.branch || hostClient.homeBranch || (getTenantId().toLowerCase().includes('inzan') ? 'Garden 8' : 'Maxim Compound'),
     createdAt: nowIso,
     updatedAt: nowIso,
   });

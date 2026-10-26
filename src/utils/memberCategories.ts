@@ -13,11 +13,11 @@ export const MEMBER_CATEGORIES: MemberCategory[] = [
 // ===============================================================
 
 export type CanonicalTier = 'KIDS' | 'KIDS_PRO' | 'JUNIORS' | 'JUNIORS_PRO' | 'ADULT';
-export type CanonicalBranchId = 'strike_maxim' | 'strike_mivida' | 'impact';
+export type CanonicalBranchId = 'strike_maxim' | 'strike_mivida' | 'impact' | 'strike_playa';
 
 export const CANONICAL_TIERS: CanonicalTier[] = ['KIDS', 'KIDS_PRO', 'JUNIORS', 'JUNIORS_PRO', 'ADULT'];
-export const ALLOWED_ADULT_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida', 'impact'];
-export const ALLOWED_YOUTH_HOME_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida'];
+export const ALLOWED_ADULT_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida', 'impact', 'strike_playa'];
+export const ALLOWED_YOUTH_HOME_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida', 'strike_playa'];
 
 /**
  * Maps any tier string, category string, or class name to its canonical tier.
@@ -68,6 +68,9 @@ export function toCanonicalBranchId(val?: string | null): CanonicalBranchId | ''
   }
   if (lower.includes('impact')) {
     return 'impact';
+  }
+  if (lower.includes('playa')) {
+    return 'strike_playa';
   }
 
   return '';
