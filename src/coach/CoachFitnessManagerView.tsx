@@ -43,6 +43,10 @@ import {
   XCircle,
   UserPlus,
   FileCheck,
+  Flame,
+  TrendingUp,
+  Coffee,
+  Activity,
 } from 'lucide-react';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { openWhatsAppChat } from '../utils/whatsappTemplates';
@@ -69,6 +73,7 @@ export default function CoachFitnessManagerView() {
   const [workoutTemplates, setWorkoutTemplates] = useState<any[]>([]);
   const [assignedWorkouts, setAssignedWorkouts] = useState<any[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [juiceOrders, setJuiceOrders] = useState<any[]>([]);
 
   const [search, setSearch] = useState('');
   const [filterTab, setFilterTab] = useState<'unassigned' | 'assigned' | 'all'>('unassigned');
@@ -158,6 +163,14 @@ export default function CoachFitnessManagerView() {
       (err) => console.error('Error listening to payments:', err)
     );
 
+    const unsubJuice = onSnapshot(
+      collection(db, 'juiceBarOrders'),
+      (snap) => {
+        setJuiceOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => console.error('Error listening to juiceBarOrders:', err)
+    );
+
     const loadCoaches = async () => {
       try {
         const [coachesSnap, usersSnap] = await Promise.all([
@@ -229,6 +242,7 @@ export default function CoachFitnessManagerView() {
       unsubTemplates();
       unsubAssignedWorkouts();
       unsubPayments();
+      unsubJuice();
     };
   }, [clubLabel]);
 
@@ -673,6 +687,13 @@ export default function CoachFitnessManagerView() {
     [payments]
   );
 
+  const kitchenTotal = useMemo(() => {
+    return juiceOrders.reduce((sum, order) => {
+      const isSettled = order.status === 'Completed' || order.status === 'Ready' || order.status === 'Preparing';
+      return sum + (isSettled ? (Number(order.totalAmount) || Number(order.total) || 0) : 0);
+    }, 0);
+  }, [juiceOrders]);
+
   const servicesBreakdown = useMemo(() => {
     let ptTotal = 0;
     let nutritionTotal = 0;
@@ -692,9 +713,82 @@ export default function CoachFitnessManagerView() {
       ptTotal,
       nutritionTotal,
       classesTotal,
-      grandTotal: ptTotal + nutritionTotal + classesTotal,
+      kitchenTotal,
+      grandTotal: ptTotal + nutritionTotal + classesTotal + kitchenTotal,
     };
-  }, [servicesPayments]);
+  }, [servicesPayments, kitchenTotal]);
+
+  const assessmentConversion = useMemo(() => {
+    const total = assessments.length;
+    if (total === 0) return { total: 0, completed: 0, converted: 0, ratePct: 0 };
+
+    const evaluated = assessments.filter(
+      (a) => a.status === 'Completed' || a.status === 'Scheduled' || a.status === 'Contacted'
+    );
+
+    let convertedCount = 0;
+    assessments.forEach((a) => {
+      const client = a.clientId ? clientsMap[a.clientId] : null;
+      if (!client) return;
+      const pkgs: any[] = Array.isArray(client.packages) ? client.packages : [];
+      const hasPaidPt =
+        pkgs.some(
+          (p) =>
+            (p?.status === 'Active' || p?.status === 'Completed') &&
+            (/pt|private|trainer/i.test(`${p?.category || ''} ${p?.packageName || ''}`) || p?.type === 'pt') &&
+            (Number(p?.price) > 0 || Number(p?.sessionsTotal) > 0)
+        ) ||
+        (typeof client.ptSessionsRemaining === 'number' && client.ptSessionsRemaining > 0);
+
+      if (hasPaidPt) {
+        convertedCount++;
+      }
+    });
+
+    const baseCount = evaluated.length > 0 ? evaluated.length : total;
+    const ratePct = baseCount > 0 ? Math.round((convertedCount / baseCount) * 100) : 0;
+    return {
+      total,
+      completed: evaluated.length,
+      converted: convertedCount,
+      ratePct,
+    };
+  }, [assessments, clientsMap]);
+
+  const ptBurnRate = useMemo(() => {
+    const nowMs = Date.now();
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+
+    let past7Days = 0;
+    let prior7Days = 0;
+
+    sessions.forEach((s) => {
+      const isAttended = s.status === 'Attended' || s.status === 'Completed';
+      if (!isAttended) return;
+
+      const dateStr = s.date || (s as any).scheduledDate || (s as any).createdAt;
+      if (!dateStr) return;
+      const timeMs = new Date(dateStr).getTime();
+      if (isNaN(timeMs)) return;
+
+      const ageMs = nowMs - timeMs;
+      if (ageMs >= 0 && ageMs <= sevenDaysMs) {
+        past7Days++;
+      } else if (ageMs > sevenDaysMs && ageMs <= fourteenDaysMs) {
+        prior7Days++;
+      }
+    });
+
+    const diff = past7Days - prior7Days;
+    const trendPct = prior7Days > 0 ? Math.round((diff / prior7Days) * 100) : (past7Days > 0 ? 100 : 0);
+
+    return {
+      past7Days,
+      prior7Days,
+      trendPct,
+    };
+  }, [sessions]);
 
   const searchedMembers = useMemo(() => {
     const all = Object.values(clientsMap);
@@ -745,10 +839,84 @@ export default function CoachFitnessManagerView() {
             Fitness Manager Operations &amp; Approvals
           </CardTitle>
           <CardDescription className="text-xs leading-relaxed">
-            Distribute clients to trainers, manage trainer targets/salaries/commissions, freeze PT packages, add/deduct/reset PT sessions, approve coach session cancellations &amp; workouts, and monitor Services financials (PT, Classes &amp; Nutrition).
+            Distribute clients to trainers, manage trainer targets/salaries/commissions, freeze PT packages, add/deduct/reset PT sessions, approve coach session cancellations &amp; workouts, and monitor Services financials (PT, Classes, Nutrition &amp; Earth&apos;s Kitchen).
           </CardDescription>
         </CardHeader>
       </Card>
+
+      {/* High-Level Fitness & Performance Executive KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Card className="border bg-card/60 shadow-sm">
+          <CardContent className="p-3.5">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Assessment &rarr; Paid PT</span>
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                {assessmentConversion.ratePct}%
+              </span>
+              <span className="text-[10px] text-muted-foreground font-semibold">
+                ({assessmentConversion.converted} of {assessmentConversion.completed})
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Assessed members enrolled in paid PT</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border bg-card/60 shadow-sm">
+          <CardContent className="p-3.5">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Weekly PT Burn Rate</span>
+              <Flame className="h-4 w-4 text-primary" />
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-primary">
+                {ptBurnRate.past7Days}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-semibold">
+                sessions / 7d
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {ptBurnRate.trendPct >= 0 ? `+${ptBurnRate.trendPct}%` : `${ptBurnRate.trendPct}%`} vs prior 7 days ({ptBurnRate.prior7Days})
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border bg-card/60 shadow-sm">
+          <CardContent className="p-3.5">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Services Revenue</span>
+              <DollarSign className="h-4 w-4 text-emerald-500" />
+            </div>
+            <div className="mt-1 flex items-baseline gap-1">
+              <span className="text-2xl font-black text-foreground">
+                {currency} {Math.round(servicesBreakdown.grandTotal).toLocaleString()}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">PT, Classes, Nutrition &amp; EK Kitchen</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border bg-card/60 shadow-sm">
+          <CardContent className="p-3.5">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Triage Queue</span>
+              <Activity className="h-4 w-4 text-amber-500" />
+            </div>
+            <div className="mt-1 flex items-baseline gap-2">
+              <span className="text-2xl font-black text-amber-600 dark:text-amber-400">
+                {unassignedCount}
+              </span>
+              <span className="text-[10px] text-muted-foreground font-semibold">
+                awaiting coach
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{assignedCount} assigned active intakes</p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Command Suite Navigation Tabs */}
       <div className="flex flex-wrap gap-2 border-b pb-3">
@@ -759,7 +927,7 @@ export default function CoachFitnessManagerView() {
             { id: 'pt_controls', label: 'PT Freeze & Session (+/-) Controls', icon: <Snowflake className="h-3.5 w-3.5" /> },
             { id: 'session_approvals', label: `Session Cancellations (${pendingCancelSessions.length})`, icon: <Clock className="h-3.5 w-3.5" /> },
             { id: 'workouts', label: 'Approve Workouts', icon: <FileCheck className="h-3.5 w-3.5" /> },
-            { id: 'services_revenue', label: 'Services Revenue (PT / Classes / Nutrition)', icon: <DollarSign className="h-3.5 w-3.5" /> },
+            { id: 'services_revenue', label: 'Services Revenue (PT / Classes / Nutrition / Kitchen)', icon: <DollarSign className="h-3.5 w-3.5" /> },
           ] as const
         ).map((tab) => (
           <Button
@@ -1474,15 +1642,15 @@ export default function CoachFitnessManagerView() {
         </div>
       )}
 
-      {/* TAB 6: SERVICES FINANCIALS ONLY (PT, CLASSES/INSTRUCTORS, NUTRITION) */}
+      {/* TAB 6: SERVICES FINANCIALS ONLY (PT, CLASSES/INSTRUCTORS, NUTRITION, KITCHEN) */}
       {commandTab === 'services_revenue' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
             <Card className="border bg-emerald-500/5 border-emerald-500/30">
               <CardContent className="p-4">
                 <p className="text-[11px] font-bold uppercase text-muted-foreground">Total Services Revenue</p>
                 <p className="text-2xl font-black text-emerald-500 mt-1">
-                  {currency} {servicesBreakdown.grandTotal.toLocaleString()}
+                  {currency} {Math.round(servicesBreakdown.grandTotal).toLocaleString()}
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-1">Excludes Membership Sales</p>
               </CardContent>
@@ -1511,11 +1679,20 @@ export default function CoachFitnessManagerView() {
                 </p>
               </CardContent>
             </Card>
+            <Card className="border">
+              <CardContent className="p-4">
+                <p className="text-[11px] font-bold uppercase text-muted-foreground">Earth&apos;s Kitchen</p>
+                <p className="text-2xl font-black text-teal-500 mt-1">
+                  {currency} {kitchenTotal.toLocaleString()}
+                </p>
+                <p className="text-[10px] text-muted-foreground mt-1">{juiceOrders.length} Mobile &amp; Kiosk Orders</p>
+              </CardContent>
+            </Card>
           </div>
 
           <Card className="border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-bold">Recent Service Payments (PT, Classes &amp; Nutrition Only)</CardTitle>
+              <CardTitle className="text-sm font-bold">Recent Service Payments (PT, Classes, Nutrition &amp; Kitchen)</CardTitle>
             </CardHeader>
             <CardContent>
               {servicesPayments.length === 0 ? (

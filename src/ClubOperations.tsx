@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db, auth, getTenantId } from './firebase';
 import InzanLockerConsole from './components/InzanLockerConsole';
 import KitchenKioskView from './components/KitchenKioskView';
+import KitchenInventoryManager from './components/KitchenInventoryManager';
 import { collection, onSnapshot, setDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { addAuditLog } from './services/auditService';
 import { activatePendingGuestInvite } from './services/guestReferralService';
@@ -12,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Coffee, Lock, UserCheck, Search, Plus, Key, RefreshCw, XCircle, CheckCircle2, AlertCircle, Trash2, MapPin, ExternalLink } from 'lucide-react';
+import { Coffee, Lock, UserCheck, Search, Plus, Key, RefreshCw, XCircle, CheckCircle2, AlertCircle, Trash2, MapPin, ExternalLink, Boxes } from 'lucide-react';
 import { JuiceBarOrder, Locker, LockerRequest, GuestInvite } from './types';
 import { useSettings } from './contexts/SettingsContext';
 
@@ -35,13 +36,14 @@ export default function ClubOperations() {
   const operationsTabs = useMemo(() => {
     const list = [
       { id: 'juicebar', label: "Earth's Kitchen Orders", count: juiceOrders.length, icon: <Coffee className="h-4 w-4" />, requiredFeature: features.juiceBar },
+      { id: 'kitchen_inventory', label: "Kitchen Inventory & Stock", icon: <Boxes className="h-4 w-4" />, requiredFeature: features.juiceBar },
       { id: 'lockers', label: isInzan ? 'Smart Lockers (Inzan Hardware)' : 'Lockers & Smart Locks', icon: <Lock className="h-4 w-4" />, requiredFeature: isInzan ? true : features.locker },
       { id: 'guests', label: 'Guest Invites & Leads', icon: <UserCheck className="h-4 w-4" /> },
     ];
     return list.filter(t => t.requiredFeature !== false);
   }, [features, juiceOrders.length, isInzan]);
 
-  const [activeTab, setActiveTab] = useState<'juicebar' | 'lockers' | 'guests'>('juicebar');
+  const [activeTab, setActiveTab] = useState<'juicebar' | 'kitchen_inventory' | 'lockers' | 'guests'>('juicebar');
 
   // Auto-transition if activeTab is disabled
   useEffect(() => {
@@ -355,6 +357,11 @@ export default function ClubOperations() {
           </div>
           <KitchenKioskView isEmbedded={true} />
         </div>
+      )}
+
+      {/* Earth's Kitchen inventory management tab */}
+      {activeTab === 'kitchen_inventory' && (
+        <KitchenInventoryManager />
       )}
 
       {/* Lockers management tab */}
