@@ -1827,26 +1827,22 @@ export default function CoachSchedule({
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {isInzan ? (
-                            ent.paidRem > 0 ? (
-                              <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-700 border-emerald-300">
-                                {ent.paidRem === 999 ? 'Unlimited PT' : `${ent.paidRem} Paid PT left`}
-                              </Badge>
-                            ) : ent.freeRem > 0 ? (
-                              <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-700 border-blue-300">
-                                {ent.freeRem}/{ent.freeTotal} Free PT left
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-700 border-amber-300">
-                                No Active PT • Awaiting Payment
-                              </Badge>
-                            )
+                          {ent.paidRem > 0 ? (
+                            <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-700 border-emerald-300">
+                              {ent.paidRem === 999 ? 'Unlimited PT' : `${ent.paidRem} Paid PT left`}
+                            </Badge>
+                          ) : ent.freeRem > 0 ? (
+                            <Badge variant="outline" className="text-[9px] bg-blue-500/10 text-blue-700 border-blue-300">
+                              {ent.freeRem}/{ent.freeTotal} Free PT left
+                            </Badge>
+                          ) : c.sessionsRemaining !== undefined && Number(c.sessionsRemaining) > 0 ? (
+                            <Badge variant="outline" className="text-[9px]">
+                              {c.sessionsRemaining} left
+                            </Badge>
                           ) : (
-                            c.sessionsRemaining !== undefined && (
-                              <Badge variant="outline" className="text-[9px]">
-                                {c.sessionsRemaining} left
-                              </Badge>
-                            )
+                            <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-700 border-amber-300">
+                              No Active PT • Awaiting Payment
+                            </Badge>
                           )}
                           {isSelected && <Check className="h-4 w-4 text-primary" />}
                         </div>
@@ -1866,22 +1862,20 @@ export default function CoachSchedule({
                         {selectedClient.packageType || 'General PT'}
                       </span>
                     </div>
-                    {isInzan && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] pt-1 border-t border-primary/10">
-                        <span className={ent.hasEntitlement ? 'text-emerald-600 font-semibold' : 'text-amber-600 font-semibold'}>
-                          {ent.paidRem > 0
-                            ? `Paid PT Balance: ${ent.paidRem} session(s)`
-                            : ent.freeRem > 0
-                              ? `Free PT Quota: ${ent.freeRem} of ${ent.freeTotal} available`
-                              : 'No active PT package — awaiting payment'}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] pt-1 border-t border-primary/10">
+                      <span className={ent.hasEntitlement ? 'text-emerald-600 font-semibold' : 'text-amber-600 font-semibold'}>
+                        {ent.paidRem > 0
+                          ? `Paid PT Balance: ${ent.paidRem} session(s)`
+                          : ent.freeRem > 0
+                            ? `Free PT Quota: ${ent.freeRem} of ${ent.freeTotal} available`
+                            : 'No active PT package — awaiting payment'}
+                      </span>
+                      {ent.pkgEndDate && (
+                        <span className="font-mono text-muted-foreground">
+                          Package Valid Until: {ent.pkgEndDate}
                         </span>
-                        {ent.pkgEndDate && (
-                          <span className="font-mono text-muted-foreground">
-                            Package Valid Until: {ent.pkgEndDate}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 );
               })()}

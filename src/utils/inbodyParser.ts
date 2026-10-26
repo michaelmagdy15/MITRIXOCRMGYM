@@ -195,7 +195,8 @@ export function buildWhatsAppInBodyReportUrl(params: {
   const latest = params.summary.latest;
   if (!phone || !latest) return null;
 
-  const club = params.clubName || 'Inzan Athletics';
+  const defaultClub = (typeof window !== 'undefined' && window.location.hostname.toLowerCase().includes('strike')) ? 'STRIKE' : 'Inzan Athletics';
+  const club = params.clubName || defaultClub;
   const lines: string[] = [
     `📊 *${club} — InBody Transformation Report*`,
     ``,

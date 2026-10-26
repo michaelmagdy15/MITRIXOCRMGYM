@@ -1,5 +1,14 @@
 import type { Client, Payment, PaymentMethodType } from '../types';
+import { getTenantId } from '../firebase';
 import { normalizeWhatsAppPhone } from './whatsappTemplates';
+
+const getDefaultClubName = () => {
+  try {
+    return getTenantId().toLowerCase().includes('inzan') ? 'Inzan Athletics' : 'STRIKE';
+  } catch {
+    return 'STRIKE';
+  }
+};
 
 export interface InstapayValidationResult {
   valid: boolean;
@@ -112,7 +121,7 @@ export function buildWhatsAppPaymentLinkUrl({
   packageName,
   amount,
   method,
-  clubName = 'Inzan Athletics',
+  clubName = getDefaultClubName(),
   instapayIpa,
   bnplMonths = 6,
 }: WhatsAppPaymentLinkParams): string | null {

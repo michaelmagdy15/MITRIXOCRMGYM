@@ -17,6 +17,7 @@ import { AssessmentDialog } from './components/AssessmentDialog';
 import { SessionRatingDialog } from './components/SessionRatingDialog';
 import { createApprovalRequest } from '../services/approvalService';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import CalendarSyncButton from '../components/CalendarSyncButton';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
@@ -77,6 +78,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
   const [lateCancelReason, setLateCancelReason] = useState('');
 
   const { currentUser } = useAuth();
+  const { branding } = useSettings();
   const isInzan = useMemo(() => {
     const t = getTenantId().toLowerCase();
     return t.includes('inzan') || t === 'db-inzanathletics' || t === 'default';
@@ -308,7 +310,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
 
     if (client.status === 'Expired') {
       const isTenantInzan = getTenantId().toLowerCase().includes('inzan');
-      const gymName = isTenantInzan ? 'Inzan Athletics' : 'STRIKE';
+      const gymName = branding?.companyName || (isInzan ? 'Inzan Athletics' : 'STRIKE');
       setBookingError(`Your membership is expired. You must head to the ${gymName} branch to renew before booking sessions.`);
       return;
     }
@@ -320,7 +322,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       return;
     }
 
-    if (isInzan && activePackageBounds.endDate && bookingDate > activePackageBounds.endDate) {
+    if (activePackageBounds.endDate && bookingDate > activePackageBounds.endDate) {
       setBookingError(
         `Session date (${bookingDate}) cannot exceed your active package expiry date (${activePackageBounds.endDate}).`
       );
@@ -336,7 +338,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       
       // Enforce entitlement check (or Free PT sessions for Inzan)
       const entitlementCheck = await checkEntitlement(client, 'pt');
-      if (!entitlementCheck.canBook && !(isInzan && freePtRemaining > 0)) {
+      if (!entitlementCheck.canBook && freePtRemaining <= 0) {
         throw new Error(entitlementCheck.reason || "You do not have a valid PT package or Free PT entitlement to book this session.");
       }
 
@@ -393,7 +395,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       }
     }
 
-    if (isInzan && activePackageBounds.endDate && rescheduleDate > activePackageBounds.endDate) {
+    if (activePackageBounds.endDate && rescheduleDate > activePackageBounds.endDate) {
       setRescheduleError(
         `New date (${rescheduleDate}) cannot be after your package expiry date (${activePackageBounds.endDate}).`
       );
@@ -410,7 +412,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
       }
       
       const { updateDoc } = await import('firebase/firestore');
-      if (isInzan) {
+      if (Boolean(selectedRescheduleSession.id)) {
         // In Inzan Athletics, member reschedule sends an Edit Request to the Coach for confirmation
         await updateDoc(doc(db, 'sessions', selectedRescheduleSession.id), {
           rescheduleRequest: {
@@ -641,7 +643,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                     : 'Select a coach and request a personalized training session.'}
                 </CardDescription>
               </div>
-              {isInzan && activePackageBounds.endDate && (
+              {activePackageBounds.endDate && (
                 <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">
                   Valid until {activePackageBounds.endDate}
                 </Badge>
@@ -729,7 +731,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                     id="bookDate"
                     type="date"
                     min={format(addDays(new Date(), 1), 'yyyy-MM-dd')}
-                    max={isInzan && activePackageBounds.endDate ? activePackageBounds.endDate : undefined}
+                    max={activePackageBounds.endDate ? activePackageBounds.endDate : undefined}
                     value={bookingDate}
                     onChange={e => setBookingDate(e.target.value)}
                     required
@@ -923,7 +925,7 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
                           setRescheduleError(null);
                         }}
                       >
-                        {isInzan ? (pendingReschedule ? 'Update Edit Request' : 'Edit / Request Reschedule') : 'Reschedule'}
+                        {pendingReschedule ? 'Update Edit Request' : 'Edit / Request Reschedule'}
                       </Button>
                       <Button
                         size="xs"

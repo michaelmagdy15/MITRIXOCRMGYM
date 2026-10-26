@@ -108,7 +108,8 @@ export function buildWhatsAppRetentionOutreachUrl(params: {
   clubName?: string;
   lang?: 'en' | 'ar';
 }): string | null {
-  const { item, clubName = 'Inzan Athletics', lang = 'en' } = params;
+  const defaultClub = (typeof window !== 'undefined' && window.location.hostname.toLowerCase().includes('strike')) ? 'STRIKE' : 'Inzan Athletics';
+  const { item, clubName = defaultClub, lang = 'en' } = params;
   const phone = normalizeWhatsAppPhone(item.member.phone);
   if (!phone) return null;
 

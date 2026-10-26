@@ -175,12 +175,15 @@ export default function Users() {
           Object.assign(updates, legacy);
         }
 
-        if (isInzan) {
+        if (editDepartment) {
           updates.department = (editDepartment as InzanDepartment) || undefined;
           updates.jobTitle = (editJobTitle as InzanJobTitle) || undefined;
           if (editDepartment === 'Fitness') {
             updates.trainerType = (editTrainerType as 'Full-Time' | 'Part-Time') || undefined;
           }
+        } else {
+          updates.department = undefined;
+          updates.jobTitle = undefined;
         }
       }
 
@@ -294,7 +297,7 @@ export default function Users() {
       case 'crm_admin': return <Badge className="bg-emerald-500"><Shield className="w-3 h-3 mr-1" /> CRM Admin</Badge>;
       case 'fitness_manager': return <Badge className="bg-amber-600 text-white"><Shield className="w-3 h-3 mr-1" /> Fitness Manager</Badge>;
       case 'coach': return <Badge className="bg-indigo-600 text-white">Coach</Badge>;
-      case 'rep': return <Badge variant="secondary">Rep</Badge>;
+      case 'rep': return <Badge variant="secondary">Sales / Rep</Badge>;
       default: return <Badge variant="outline">{role}</Badge>;
     }
   };
@@ -381,10 +384,10 @@ export default function Users() {
           branch: inviteBranch || undefined,
           salesTarget: inviteTarget ? parseFloat(inviteTarget) : undefined,
           status: inviteStatus,
-          department: isInzan ? ((inviteDepartment as InzanDepartment) || (inviteRole === 'fitness_manager' ? 'Fitness' : undefined)) : undefined,
-          jobTitle: isInzan ? ((inviteJobTitle as InzanJobTitle) || (inviteRole === 'fitness_manager' ? 'Fitness Manager' : undefined)) : undefined,
-          trainerType: (isInzan && (inviteDepartment === 'Fitness' || inviteRole === 'fitness_manager')) ? (inviteTrainerType as 'Full-Time' | 'Part-Time') : undefined,
-          isFitnessManager: isInzan && inviteRole === 'fitness_manager',
+          department: (inviteDepartment as InzanDepartment) || (inviteRole === 'fitness_manager' ? 'Fitness' : inviteRole === 'rep' ? 'Sales' : undefined),
+          jobTitle: (inviteJobTitle as InzanJobTitle) || (inviteRole === 'fitness_manager' ? 'Fitness Manager' : undefined),
+          trainerType: (inviteDepartment === 'Fitness' || inviteRole === 'fitness_manager') ? (inviteTrainerType as 'Full-Time' | 'Part-Time') : undefined,
+          isFitnessManager: inviteRole === 'fitness_manager',
           customPermissions,
           ...legacy
         }
@@ -468,9 +471,9 @@ export default function Users() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="rep">Rep</SelectItem>
+                                <SelectItem value="rep">Sales / Rep</SelectItem>
                                 <SelectItem value="manager">Manager</SelectItem>
-                                {isInzan && <SelectItem value="fitness_manager">Fitness Manager</SelectItem>}
+                                <SelectItem value="fitness_manager">Fitness Manager</SelectItem>
                                 <SelectItem value="coach">Coach</SelectItem>
                                 {canInviteUsers && (
                                   <SelectItem value="admin">Admin</SelectItem>
@@ -573,67 +576,65 @@ export default function Users() {
                             </div>
                           </div>
 
-                          {/* INZAN Org Structure */}
-                          {isInzan && (
-                            <div className="space-y-3.5 pt-4 border-t">
-                              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                                <Building2 className="h-3.5 w-3.5 text-primary" /> INZAN Organization
-                              </h4>
+                          {/* Organization & Department Structure */}
+                          <div className="space-y-3.5 pt-4 border-t">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                              <Building2 className="h-3.5 w-3.5 text-primary" /> Department & Job Title
+                            </h4>
 
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-semibold">Department</Label>
+                              <Select 
+                                value={inviteDepartment} 
+                                onValueChange={(val: any) => {
+                                  setInviteDepartment(val || '');
+                                  setInviteJobTitle('');
+                                }}
+                              >
+                                <SelectTrigger className="h-10 rounded-xl bg-background">
+                                  <SelectValue placeholder="Select Department" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">None / Unassigned</SelectItem>
+                                  {INZAN_DEPARTMENTS.map(dept => (
+                                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {inviteDepartment && (
                               <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Department</Label>
-                                <Select 
-                                  value={inviteDepartment} 
-                                  onValueChange={(val: any) => {
-                                    setInviteDepartment(val || '');
-                                    setInviteJobTitle('');
-                                  }}
-                                >
+                                <Label className="text-xs font-semibold">Job Title / Position</Label>
+                                <Select value={inviteJobTitle} onValueChange={(val: any) => setInviteJobTitle(val || '')}>
                                   <SelectTrigger className="h-10 rounded-xl bg-background">
-                                    <SelectValue placeholder="Select Department" />
+                                    <SelectValue placeholder="Select Job Title" />
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="">None / Unassigned</SelectItem>
-                                    {INZAN_DEPARTMENTS.map(dept => (
-                                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                    {(INZAN_JOB_TITLES[inviteDepartment as InzanDepartment] || []).map(title => (
+                                      <SelectItem key={title} value={title}>{title}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               </div>
+                            )}
 
-                              {inviteDepartment && (
-                                <div className="space-y-1.5">
-                                  <Label className="text-xs font-semibold">Job Title / Position</Label>
-                                  <Select value={inviteJobTitle} onValueChange={(val: any) => setInviteJobTitle(val || '')}>
-                                    <SelectTrigger className="h-10 rounded-xl bg-background">
-                                      <SelectValue placeholder="Select Job Title" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="">None / Unassigned</SelectItem>
-                                      {(INZAN_JOB_TITLES[inviteDepartment as InzanDepartment] || []).map(title => (
-                                        <SelectItem key={title} value={title}>{title}</SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
-
-                              {inviteDepartment === 'Fitness' && (
-                                <div className="space-y-1.5">
-                                  <Label className="text-xs font-semibold">Trainer Contract Type</Label>
-                                  <Select value={inviteTrainerType} onValueChange={(val: any) => setInviteTrainerType(val || 'Full-Time')}>
-                                    <SelectTrigger className="h-10 rounded-xl bg-background">
-                                      <SelectValue placeholder="Select Contract Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
-                                      <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                            {inviteDepartment === 'Fitness' && (
+                              <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold">Trainer Contract Type</Label>
+                                <Select value={inviteTrainerType} onValueChange={(val: any) => setInviteTrainerType(val || 'Full-Time')}>
+                                  <SelectTrigger className="h-10 rounded-xl bg-background">
+                                    <SelectValue placeholder="Select Contract Type" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
+                                    <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </div>
 
                           <p className="text-[11px] text-muted-foreground pt-1">
                             Note: Account created with default password <span className="font-mono font-semibold text-foreground">12345678</span>. User is prompted to change on first login.
@@ -793,7 +794,7 @@ export default function Users() {
                   <TableRow>
                     <TableHead className="pl-4">Staff Member & Contact</TableHead>
                     <TableHead className="hidden sm:table-cell">Branch & Activity</TableHead>
-                    <TableHead>Role{isInzan ? ' & Department' : ''}</TableHead>
+                    <TableHead>Role & Department</TableHead>
                     <TableHead className="hidden md:table-cell">Access & Role Switcher</TableHead>
                     <TableHead className="text-right pr-4">Actions</TableHead>
                   </TableRow>
@@ -847,7 +848,7 @@ export default function Users() {
                       <TableCell className="py-3 align-top">
                         <div className="flex flex-col gap-1 items-start">
                           {getRoleBadge(user.role)}
-                          {isInzan && user.department && (
+                          {user.department && (
                             <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
                               <span className="font-semibold text-foreground/80">{user.department}</span>
                               {user.jobTitle && <span>• {user.jobTitle}</span>}
@@ -870,9 +871,9 @@ export default function Users() {
                                 <SelectValue placeholder="Select role" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="rep">Rep</SelectItem>
+                                <SelectItem value="rep">Sales / Rep</SelectItem>
                                 <SelectItem value="manager">Manager</SelectItem>
-                                {isInzan && <SelectItem value="fitness_manager">Fitness Manager</SelectItem>}
+                                <SelectItem value="fitness_manager">Fitness Manager</SelectItem>
                                 <SelectItem value="coach">Coach</SelectItem>
                                 <SelectItem value="admin">Admin</SelectItem>
                                 <SelectItem value="crm_admin">CRM Admin</SelectItem>
@@ -1385,67 +1386,65 @@ export default function Users() {
                     </div>
                   </div>
 
-                  {/* INZAN Org Structure */}
-                  {isInzan && (
-                    <div className="space-y-3.5 pt-4 border-t">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <Building2 className="h-3.5 w-3.5 text-primary" /> INZAN Organization
-                      </h4>
+                  {/* Department & Job Title Structure */}
+                  <div className="space-y-3.5 pt-4 border-t">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-primary" /> Department & Job Title
+                    </h4>
 
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Department</Label>
+                      <Select 
+                        value={editDepartment} 
+                        onValueChange={(val: any) => {
+                          setEditDepartment(val || '');
+                          setEditJobTitle('');
+                        }}
+                      >
+                        <SelectTrigger className="h-10 rounded-xl bg-background">
+                          <SelectValue placeholder="Select Department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None / Unassigned</SelectItem>
+                          {INZAN_DEPARTMENTS.map(dept => (
+                            <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {editDepartment && (
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Department</Label>
-                        <Select 
-                          value={editDepartment} 
-                          onValueChange={(val: any) => {
-                            setEditDepartment(val || '');
-                            setEditJobTitle('');
-                          }}
-                        >
+                        <Label className="text-xs font-semibold">Job Title / Position</Label>
+                        <Select value={editJobTitle} onValueChange={(val: any) => setEditJobTitle(val || '')}>
                           <SelectTrigger className="h-10 rounded-xl bg-background">
-                            <SelectValue placeholder="Select Department" />
+                            <SelectValue placeholder="Select Job Title" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="">None / Unassigned</SelectItem>
-                            {INZAN_DEPARTMENTS.map(dept => (
-                              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                            {(INZAN_JOB_TITLES[editDepartment as InzanDepartment] || []).map(title => (
+                              <SelectItem key={title} value={title}>{title}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
+                    )}
 
-                      {editDepartment && (
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold">Job Title / Position</Label>
-                          <Select value={editJobTitle} onValueChange={(val: any) => setEditJobTitle(val || '')}>
-                            <SelectTrigger className="h-10 rounded-xl bg-background">
-                              <SelectValue placeholder="Select Job Title" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">None / Unassigned</SelectItem>
-                              {(INZAN_JOB_TITLES[editDepartment as InzanDepartment] || []).map(title => (
-                                <SelectItem key={title} value={title}>{title}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-
-                      {editDepartment === 'Fitness' && (
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-semibold">Trainer Contract Type</Label>
-                          <Select value={editTrainerType} onValueChange={(val: any) => setEditTrainerType(val || 'Full-Time')}>
-                            <SelectTrigger className="h-10 rounded-xl bg-background">
-                              <SelectValue placeholder="Select Contract Type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
-                              <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    {editDepartment === 'Fitness' && (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">Trainer Contract Type</Label>
+                        <Select value={editTrainerType} onValueChange={(val: any) => setEditTrainerType(val || 'Full-Time')}>
+                          <SelectTrigger className="h-10 rounded-xl bg-background">
+                            <SelectValue placeholder="Select Contract Type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
+                            <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
 
                   <p className="text-[11px] text-muted-foreground pt-1">
                     Note: Updating email allows user to login with the new email address.

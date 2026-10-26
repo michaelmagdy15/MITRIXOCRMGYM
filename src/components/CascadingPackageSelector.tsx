@@ -643,36 +643,34 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <Dumbbell className="h-3.5 w-3.5 text-amber-500" />
-                  Private Training (PT) Add-on
+                  Package Type Filter
                 </Label>
-                <div
-                  onClick={() => {
-                    const nextVal = !isPtSelected;
-                    setIsPtSelected(nextVal);
-                    if (activePackage) {
-                      const isPtPkg = isPtPackage(activePackage);
-                      if (isPtPkg !== nextVal) {
-                        onPackageSelect(null, nextVal);
-                      }
-                    }
-                  }}
-                  className={`flex items-center justify-between h-10 px-3 rounded-xl border transition-all cursor-pointer ${
-                    isPtSelected
-                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400 font-semibold'
-                      : 'bg-background/70 border-border/50 text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={isPtSelected}
-                      onCheckedChange={(checked) => setIsPtSelected(!!checked)}
-                      id="pt-addon-checkbox"
-                    />
-                    <span className="text-xs font-medium">Show Private PT Packages</span>
-                  </div>
-                  <Badge variant={isPtSelected ? 'default' : 'secondary'} className="text-[10px] h-5 px-1.5">
-                    {isPtSelected ? 'PT Filter Active' : 'Group Sessions'}
-                  </Badge>
+                <div className="grid grid-cols-4 gap-1 bg-muted/40 p-1 rounded-xl border border-border/40 h-10 items-center">
+                  {([
+                    { id: 'ALL', label: 'All' },
+                    { id: 'MEMBERSHIP', label: 'Memberships' },
+                    { id: 'PT', label: 'Private PT' },
+                    { id: 'CLASSES', label: 'Group / Classes' },
+                  ] as const).map((tab) => {
+                    const isSel = packageTypeFilter === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          setPackageTypeFilter(tab.id);
+                          setIsPtSelected(tab.id === 'PT');
+                        }}
+                        className={`h-8 px-1.5 rounded-lg text-[11px] font-semibold transition-all truncate cursor-pointer ${
+                          isSel
+                            ? 'bg-primary text-primary-foreground shadow-xs font-bold'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-background/70'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
