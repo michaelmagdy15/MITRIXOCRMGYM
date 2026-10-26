@@ -98,38 +98,65 @@ export default function CoachFitnessManagerView() {
   const [selectedCoachForMember, setSelectedCoachForMember] = useState('');
 
   useEffect(() => {
-    const unsubAssessments = onSnapshot(collection(db, 'assessments'), (snap) => {
-      const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Assessment));
-      list.sort((a, b) => (toValidDate(b.createdAt)?.getTime() || 0) - (toValidDate(a.createdAt)?.getTime() || 0));
-      setAssessments(list);
-      setLoading(false);
-    });
+    const unsubAssessments = onSnapshot(
+      collection(db, 'assessments'),
+      (snap) => {
+        const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Assessment));
+        list.sort((a, b) => (toValidDate(b.createdAt)?.getTime() || 0) - (toValidDate(a.createdAt)?.getTime() || 0));
+        setAssessments(list);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error listening to assessments:', err);
+        setLoading(false);
+      }
+    );
 
-    const unsubClients = onSnapshot(collection(db, 'clients'), (snap) => {
-      const cMap: Record<string, Client> = {};
-      snap.docs.forEach((d) => {
-        cMap[d.id] = { ...d.data(), id: d.id } as Client;
-      });
-      setClientsMap(cMap);
-    });
+    const unsubClients = onSnapshot(
+      collection(db, 'clients'),
+      (snap) => {
+        const cMap: Record<string, Client> = {};
+        snap.docs.forEach((d) => {
+          cMap[d.id] = { ...d.data(), id: d.id } as Client;
+        });
+        setClientsMap(cMap);
+      },
+      (err) => console.error('Error listening to clients:', err)
+    );
 
-    const unsubSessions = onSnapshot(collection(db, 'sessions'), (snap) => {
-      const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Session));
-      list.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-      setSessions(list);
-    });
+    const unsubSessions = onSnapshot(
+      collection(db, 'sessions'),
+      (snap) => {
+        const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Session));
+        list.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+        setSessions(list);
+      },
+      (err) => console.error('Error listening to sessions:', err)
+    );
 
-    const unsubTemplates = onSnapshot(collection(db, 'workoutTemplates'), (snap) => {
-      setWorkoutTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    const unsubTemplates = onSnapshot(
+      collection(db, 'workoutTemplates'),
+      (snap) => {
+        setWorkoutTemplates(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => console.error('Error listening to workoutTemplates:', err)
+    );
 
-    const unsubAssignedWorkouts = onSnapshot(collection(db, 'assignedWorkouts'), (snap) => {
-      setAssignedWorkouts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
+    const unsubAssignedWorkouts = onSnapshot(
+      collection(db, 'assignedWorkouts'),
+      (snap) => {
+        setAssignedWorkouts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      },
+      (err) => console.error('Error listening to assignedWorkouts:', err)
+    );
 
-    const unsubPayments = onSnapshot(collection(db, 'payments'), (snap) => {
-      setPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Payment)));
-    });
+    const unsubPayments = onSnapshot(
+      collection(db, 'payments'),
+      (snap) => {
+        setPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Payment)));
+      },
+      (err) => console.error('Error listening to payments:', err)
+    );
 
     const loadCoaches = async () => {
       try {
@@ -283,15 +310,17 @@ export default function CoachFitnessManagerView() {
     try {
       const nowIso = new Date().toISOString();
 
-      await updateDoc(doc(db, 'assessments', assessment.id), {
-        assignedCoachId: chosenCoachId,
-        assignedCoachName: coachName,
-        triageStatus: 'AssignedByFitnessManager',
-        assignedByFitnessManagerId: currentUser?.id || 'fitness_manager',
-        assignedByFitnessManagerName: currentUser?.name || 'Fitness Manager',
-        assignedAt: nowIso,
-        updatedAt: nowIso,
-      });
+      if (!String(assessment.id).startsWith('client-triage-')) {
+        await updateDoc(doc(db, 'assessments', assessment.id), {
+          assignedCoachId: chosenCoachId,
+          assignedCoachName: coachName,
+          triageStatus: 'AssignedByFitnessManager',
+          assignedByFitnessManagerId: currentUser?.id || 'fitness_manager',
+          assignedByFitnessManagerName: currentUser?.name || 'Fitness Manager',
+          assignedAt: nowIso,
+          updatedAt: nowIso,
+        });
+      }
 
       if (assessment.clientId && assessment.clientId !== 'guest') {
         try {
@@ -570,9 +599,49 @@ export default function CoachFitnessManagerView() {
     }
   };
 
+  const mergedTriageList = useMemo(() => {
+    const list: any[] = [...assessments];
+    const seenClientIds = new Set<string>(assessments.map((a) => a.clientId).filter(Boolean));
+
+    Object.values(clientsMap).forEach((c: Client) => {
+      if (seenClientIds.has(c.id)) return;
+      const cAny = c as any;
+      const coachId = c.assignedCoachId || cAny.staffAssignments?.coach?.uid || cAny.staffAssignments?.coach?.staffId || '';
+      const coachName = c.assignedCoachName || cAny.trainerName || cAny.coach || cAny.staffAssignments?.coach?.name || cAny.staffAssignments?.coach?.staffName || '';
+      const pkgs: any[] = Array.isArray(c.packages) ? c.packages : [];
+      const activePtPkg = pkgs.find(
+        (p) =>
+          p?.status === 'Active' &&
+          (/pt|private|trainer/i.test(`${p?.category || ''} ${p?.packageName || ''}`) || p?.type === 'pt' || p?.type === 'Private' || p?.hierarchy === 'Secondary')
+      );
+      const ptRem = Number(c.ptSessionsRemaining ?? activePtPkg?.sessionsRemaining ?? 0);
+      const freePtRem = Number(cAny.freePtSessionsRemaining ?? 0);
+
+      const isActive = c.status === 'Active' || (c as any).isActive === true;
+      if (coachId || coachName || (isActive && (activePtPkg || ptRem > 3))) {
+        list.push({
+          id: `client-triage-${c.id}`,
+          clientId: c.id,
+          clientName: c.name || 'Member',
+          phone: c.phone || '',
+          email: c.email || '',
+          membershipId: c.memberId || '',
+          assignedCoachId: coachId || (coachName ? coachName : ''),
+          assignedCoachName: coachName || '',
+          triageStatus: coachId || coachName ? 'AssignedByFitnessManager' : 'AwaitingFitnessManager',
+          createdAt: activePtPkg?.createdAt || c.startDate || c.createdAt || '',
+          source: 'crm',
+          freePtSessionsRemaining: freePtRem,
+        });
+      }
+    });
+
+    return list;
+  }, [assessments, clientsMap]);
+
   const filteredAssessments = useMemo(() => {
-    return assessments.filter((a: any) => {
-      const isAssigned = Boolean(a.assignedCoachId && a.triageStatus !== 'AwaitingFitnessManager');
+    return mergedTriageList.filter((a: any) => {
+      const isAssigned = Boolean((a.assignedCoachId || a.assignedCoachName) && a.triageStatus !== 'AwaitingFitnessManager');
       if (filterTab === 'unassigned' && isAssigned) return false;
       if (filterTab === 'assigned' && !isAssigned) return false;
 
@@ -586,12 +655,12 @@ export default function CoachFitnessManagerView() {
       }
       return true;
     });
-  }, [assessments, filterTab, search]);
+  }, [mergedTriageList, filterTab, search]);
 
-  const unassignedCount = assessments.filter(
-    (a: any) => !a.assignedCoachId || a.triageStatus === 'AwaitingFitnessManager'
+  const unassignedCount = mergedTriageList.filter(
+    (a: any) => (!a.assignedCoachId && !a.assignedCoachName) || a.triageStatus === 'AwaitingFitnessManager'
   ).length;
-  const assignedCount = assessments.length - unassignedCount;
+  const assignedCount = mergedTriageList.length - unassignedCount;
 
   const pendingCancelSessions = useMemo(
     () => sessions.filter((s) => s.cancellationRequest?.status === 'Pending'),
@@ -744,7 +813,7 @@ export default function CoachFitnessManagerView() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                All ({assessments.length})
+                All ({mergedTriageList.length})
               </button>
             </div>
 

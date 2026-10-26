@@ -84,18 +84,22 @@ export default function CoachHome({
     const coachCustomId = currentUser?.coachId || '';
 
     // 1. Listen to Assessments assigned to this coach
-    const unsubAssessments = onSnapshot(collection(db, 'assessments'), (snap) => {
-      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assessment));
-      const myAssessments = all.filter(a =>
-        a.assignedCoachId === coachId ||
-        a.preferredCoachId === coachId ||
-        (coachCustomId && (a.assignedCoachId === coachCustomId || a.preferredCoachId === coachCustomId)) ||
-        (coachName && (a.assignedCoachName === coachName || a.preferredCoachName === coachName))
-      );
-      const pending = myAssessments.filter(a => a.status === 'Pending');
-      setPendingAssessments(pending);
-      setStats(prev => ({ ...prev, pendingAssessmentsCount: pending.length }));
-    });
+    const unsubAssessments = onSnapshot(
+      collection(db, 'assessments'),
+      (snap) => {
+        const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as Assessment));
+        const myAssessments = all.filter(a =>
+          a.assignedCoachId === coachId ||
+          a.preferredCoachId === coachId ||
+          (coachCustomId && (a.assignedCoachId === coachCustomId || a.preferredCoachId === coachCustomId)) ||
+          (coachName && (a.assignedCoachName === coachName || a.preferredCoachName === coachName))
+        );
+        const pending = myAssessments.filter(a => a.status === 'Pending');
+        setPendingAssessments(pending);
+        setStats(prev => ({ ...prev, pendingAssessmentsCount: pending.length }));
+      },
+      (err) => console.warn('CoachHome assessments listener warning:', err)
+    );
 
     // 1b. Listen to PT Client Assignment Notifications for this coach
     const unsubNotifications = onSnapshot(
