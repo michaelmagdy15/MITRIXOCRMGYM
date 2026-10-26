@@ -225,7 +225,7 @@ const SalesTargetDialog = React.memo(function SalesTargetDialog({
 });
 
 export default function Dashboard() {
-  const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, branches, branding, clients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId } = useAppContext();
+  const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, can, branches, branding, allClients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId } = useAppContext();
   const { t, language, isRtl } = useLanguage();
   // Use context data directly instead of creating duplicate Firestore listeners.
   // Context 'clients' and 'payments' are already filtered for the current user's visibility.
@@ -403,15 +403,25 @@ export default function Dashboard() {
     return false;
   }, [clientMap, getCanonicalName, userDisplayById]);
 
+  // Managers, admins, super_admins, and crm_admins can drill into individual rep performance.
+  const canViewRepBreakdown = can('dashboard.view_rep_breakdown') || ['super_admin', 'crm_admin', 'admin', 'manager', 'sales_manager'].includes(currentUser?.role || '');
+
+  // Ensure non-breakdown users always see the "all" aggregate view
+  const effectiveRepId = canViewRepBreakdown ? selectedRepId : 'all';
+
   const clients = React.useMemo(() => {
     let filtered = selectedBranch === 'all' ? allClients : allClients.filter(c => c.branch === selectedBranch);
     
     if (!canViewGlobalDashboard && currentUser) {
       filtered = filtered.filter(c => isClientAssignedToRep(c, currentUser.id, currentUser.name || ''));
+    } else if (canViewGlobalDashboard && effectiveRepId !== 'all') {
+      const selectedUser = users.find(u => u.id === effectiveRepId);
+      const repName = selectedUser?.name || '';
+      filtered = filtered.filter(c => isClientAssignedToRep(c, effectiveRepId, repName));
     }
     
     return filtered;
-  }, [allClients, selectedBranch, canViewGlobalDashboard, currentUser, isClientAssignedToRep]);
+  }, [allClients, selectedBranch, canViewGlobalDashboard, currentUser, effectiveRepId, users, isClientAssignedToRep]);
 
   const payments = React.useMemo(() => {
     let filtered = allPayments;
@@ -429,13 +439,6 @@ export default function Dashboard() {
 
     return filtered;
   }, [allPayments, allClients, selectedBranch, canViewGlobalDashboard, currentUser, isPaymentAttributedToRep, clientMap]);
-
-  // Only super_admin and crm_admin can drill into individual rep performance.
-  // admin / manager see aggregate global data but cannot filter by rep.
-  const canViewRepBreakdown = currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin';
-
-  // Ensure non-breakdown users always see the "all" aggregate view
-  const effectiveRepId = canViewRepBreakdown ? selectedRepId : 'all';
 
   const now = new Date();
 
@@ -752,7 +755,8 @@ export default function Dashboard() {
 
       let totalLeadsCount = 0;
       let convertedThisMonth = 0;
-      for (const c of clients) {
+      const branchClients = selectedBranch === 'all' ? allClients : allClients.filter(c => c.branch === selectedBranch);
+      for (const c of branchClients) {
         if (!isClientAssignedToRep(c, rep.id, repName)) continue;
         totalLeadsCount++;
         if (c.status !== 'Lead' && c.startDate && c.startDate.startsWith(currentMonthStr)) convertedThisMonth++;
@@ -772,7 +776,7 @@ export default function Dashboard() {
         conversionRate: Math.round(conversionRate * 10) / 10,
       };
     });
-  }, [reps, selectedMonthPayments, userTargets, currentMonthStr, clients, canViewGlobalDashboard, isPaymentAttributedToRep, isClientAssignedToRep]);
+  }, [reps, selectedMonthPayments, userTargets, currentMonthStr, allClients, selectedBranch, canViewGlobalDashboard, isPaymentAttributedToRep, isClientAssignedToRep]);
 
   // Per-rep revenue vs target for selected month
   const repComparisonData = React.useMemo(

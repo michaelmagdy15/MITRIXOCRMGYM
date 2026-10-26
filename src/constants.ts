@@ -15,7 +15,9 @@ export const SALES_MEMBERS = [
   'Hassan Tarek',
   'Maison Mohamed',
   'Mustafa Mahmoud',
-  'Omar Ehab'
+  'Omar Ehab',
+  'Khaled FK',
+  'Sama'
 ];
 
 export const ASSIGNABLE_ROLES = [
@@ -82,6 +84,18 @@ export const SALES_NAME_MAPPING: Record<string, string> = {
   'Omar Ehab': 'Omar Ehab',
   'Omar': 'Omar Ehab',
   'omarehab98765': 'Omar Ehab',  // email prefix
+
+  // ---- Khaled FK ----
+  'Khaled FK': 'Khaled FK',
+  'Khaled': 'Khaled FK',
+  'khaled fk': 'Khaled FK',
+  'khaled': 'Khaled FK',
+  'khaledfk3000': 'Khaled FK',
+
+  // ---- Sama ----
+  'Sama': 'Sama',
+  'sama': 'Sama',
+  'olaessam307': 'Sama',
 
   // ---- Legacy / other names ----
   'Abdallah Atef': 'Abdallah Atef',

@@ -373,13 +373,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [clients]);
 
   const isClientAssignedToRep = useCallback((client: any, repId: string, repName: string) => {
-    if (!client.assignedTo) return false;
-    if (client.assignedTo === repId) return true;
+    const assigned = client.assignedTo || client.salesRep || client.salesName;
+    if (!assigned) return false;
+    if (client.assignedTo === repId || client.salesRep === repId) return true;
     
-    const canonicalAssigned = getCanonicalName(client.assignedTo);
     const canonicalRep = getCanonicalName(repName);
-    
-    return canonicalAssigned === canonicalRep && canonicalAssigned !== '';
+    if (!canonicalRep) return false;
+    if (client.assignedTo && getCanonicalName(client.assignedTo) === canonicalRep) return true;
+    if (client.salesName && getCanonicalName(client.salesName) === canonicalRep) return true;
+    if (client.salesRep && getCanonicalName(client.salesRep) === canonicalRep) return true;
+    return false;
   }, [getCanonicalName]);
 
   const isPaymentAttributedToRep = useCallback((payment: any, repId: string, repName: string, _visibleClientIds: Set<string>) => {
