@@ -69,6 +69,16 @@ import { checkPhoneSimilarityForCandidate, maskEgyptianPhone } from './utils/pho
 
 const safeFormatDate = (dateStr: any, formatStr: string, fallback: string = '—') => utilsSafeFormatDate(dateStr, formatStr, fallback);
 
+export const getSafeCleanMemberId = (val: any): string | null => {
+  if (!val) return null;
+  if (typeof val === 'object') return null;
+  const s = String(val).trim();
+  if (!s || s.includes('[object Object]') || s === '{}' || s === 'null' || s === 'undefined' || /^code\s*\(/i.test(s)) {
+    return null;
+  }
+  return s;
+};
+
 // Migrate legacy packageType to new packages array format
 const migratePackageData = (client: Client, systemPackages: any[]): Partial<Client> => {
   if (client.packages && client.packages.length > 0) return {}; // Already migrated
@@ -1637,6 +1647,7 @@ export default function Clients() {
 
     for (const c of clients) {
       const s = (c.status || '').toLowerCase().trim();
+      if (s === 'merged' || (c as any).mergedInto) continue;
       const lifecycle = computeMemberGlobalStatus(c);
       const isLead = lifecycle.globalStatus === 'GUEST' || s === 'lead';
       if (isLead && !lifecycle.hasActiveOrUpcomingPackage && lifecycle.globalStatus !== 'EXPIRED') {
@@ -1721,7 +1732,12 @@ export default function Clients() {
       const term = deferredSearchTerm.toLowerCase().trim();
       if (searchMode === 'id') {
         const idTerm = term.replace(/^#/, '');
-        filtered = filtered.filter(m => m.memberId && m.memberId.toString().includes(idTerm));
+        filtered = filtered.filter(m => 
+          (m.memberId && m.memberId.toString().includes(idTerm)) ||
+          (m.barcode && m.barcode.toLowerCase().includes(idTerm)) ||
+          (m.secondaryBarcodes && m.secondaryBarcodes.some(b => b.toLowerCase().includes(idTerm))) ||
+          (m.packages && m.packages.some(p => p.barcode && p.barcode.toLowerCase().includes(idTerm)))
+        );
       } else {
         const cleanId = term.replace(/^#/, '');
         filtered = filtered.filter(m => {
@@ -1732,6 +1748,18 @@ export default function Clients() {
           }
           if (m.memberId && m.memberId.toString().toLowerCase().includes(cleanId)) {
             searchScoreMap.set(m.id, 100);
+            return true;
+          }
+          if (m.barcode && m.barcode.toLowerCase().includes(term)) {
+            searchScoreMap.set(m.id, 100);
+            return true;
+          }
+          if (m.secondaryBarcodes && m.secondaryBarcodes.some(b => b.toLowerCase().includes(term))) {
+            searchScoreMap.set(m.id, 100);
+            return true;
+          }
+          if (m.mergedClientIds && m.mergedClientIds.some(mid => mid.toLowerCase().includes(term))) {
+            searchScoreMap.set(m.id, 90);
             return true;
           }
           if (matchesPhoneSearch(m.phone, term) || matchesPhoneSearch((m as any).parentPhone, term)) {
@@ -2170,7 +2198,7 @@ export default function Clients() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {client.memberId && <span className="text-[10px] font-bold text-muted-foreground">#{client.memberId}</span>}
+                  {getSafeCleanMemberId(client.memberId) && <span className="text-[10px] font-bold text-muted-foreground">#{getSafeCleanMemberId(client.memberId)}</span>}
                   <span className="font-semibold text-sm truncate">{client.name}</span>
                   {birthdayClientIds.has(client.id) && <Gift className="h-3.5 w-3.5 text-pink-500 shrink-0" />}
                 </div>
@@ -2279,9 +2307,9 @@ export default function Clients() {
               <TableCell className="py-3 align-top">
                 <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {client.memberId ? (
+                    {getSafeCleanMemberId(client.memberId) ? (
                       <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-                        #{client.memberId}
+                        #{getSafeCleanMemberId(client.memberId)}
                       </span>
                     ) : (client.leadId || client.redgitsId) ? (
                       <span className="font-mono text-[10px] font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">
@@ -3310,32 +3338,37 @@ export default function Clients() {
                     </Button>
                   </div>
 
-                  {/* CENTER: Large Member ID / Lead ID */}
+                  {/* CENTER: Large Member ID / Lead ID + PT/SGF Letter Code Cards */}
                   <div className="flex items-center sm:justify-center gap-2 flex-wrap min-w-0">
                     <div 
                       onClick={() => {
-                        const rawId = activeClient.status === 'Lead' || !activeClient.memberId
+                        const cleanMid = getSafeCleanMemberId(activeClient.memberId);
+                        const rawId = activeClient.status === 'Lead' || !cleanMid
                           ? (activeClient.leadId || activeClient.redgitsId || activeClient.id)
-                          : activeClient.memberId;
+                          : cleanMid;
                         const idToCopy = String(rawId || '').replace(/^#/, '');
                         if (idToCopy) {
                           navigator.clipboard.writeText(idToCopy);
-                          toast.success(`${activeClient.status === 'Lead' || !activeClient.memberId ? 'Lead ID' : 'Member ID'} copied: ${idToCopy}`);
+                          toast.success(`${activeClient.status === 'Lead' || !cleanMid ? 'Lead ID' : 'Member ID'} copied: ${idToCopy}`);
                         }
                       }}
                       title="Click to copy ID"
                       className="px-3 py-1.5 sm:px-5 sm:py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border/80 rounded-xl flex flex-col items-start justify-center shadow-sm min-w-0"
                     >
                       <span className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">
-                        {activeClient.status === 'Lead' || !activeClient.memberId ? 'Lead ID' : 'Member ID'}
+                        {activeClient.status === 'Lead' || !getSafeCleanMemberId(activeClient.memberId) ? 'Lead ID' : 'Member ID'}
                       </span>
                       <span className="text-base sm:text-2xl font-black font-mono tracking-wide sm:tracking-wider text-foreground truncate max-w-full">
-                        {activeClient.status !== 'Lead' && activeClient.memberId
-                          ? (String(activeClient.memberId).startsWith('#') ? activeClient.memberId : `#${activeClient.memberId}`)
-                          : `Lead #${activeClient.leadId || activeClient.redgitsId || activeClient.id || '—'}`}
+                        {(() => {
+                          const cleanMid = getSafeCleanMemberId(activeClient.memberId);
+                          if (activeClient.status !== 'Lead' && cleanMid) {
+                            return cleanMid.startsWith('#') ? cleanMid : `#${cleanMid}`;
+                          }
+                          return `Lead #${activeClient.leadId || activeClient.redgitsId || activeClient.id || '—'}`;
+                        })()}
                       </span>
                     </div>
-                    {activeClient.status !== 'Lead' && activeClient.memberId && (activeClient.leadId || activeClient.redgitsId) && String(activeClient.leadId || activeClient.redgitsId) !== String(activeClient.memberId) && (
+                    {activeClient.status !== 'Lead' && getSafeCleanMemberId(activeClient.memberId) && (activeClient.leadId || activeClient.redgitsId) && String(activeClient.leadId || activeClient.redgitsId) !== String(getSafeCleanMemberId(activeClient.memberId)) && (
                       <div className="px-3 py-1.5 bg-muted/30 border border-border/50 rounded-xl flex flex-col items-start justify-center">
                         <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest block">Origin Lead ID</span>
                         <span className="text-xs font-mono font-bold text-muted-foreground">
@@ -3343,6 +3376,71 @@ export default function Clients() {
                         </span>
                       </div>
                     )}
+
+                    {/* Secondary letter-code cards (PT: Q... / SGF: O...) */}
+                    {(() => {
+                      const allCards: string[] = [];
+                      if (activeClient.barcode && typeof activeClient.barcode === 'string' && !activeClient.barcode.includes('[object Object]')) {
+                        allCards.push(activeClient.barcode);
+                      }
+                      if (Array.isArray(activeClient.secondaryBarcodes)) {
+                        activeClient.secondaryBarcodes.forEach(b => {
+                          if (b && typeof b === 'string' && !allCards.includes(b) && !b.includes('[object Object]')) allCards.push(b);
+                        });
+                      }
+                      (activeClient.packages || []).forEach(p => {
+                        if (p.barcode && typeof p.barcode === 'string' && !allCards.includes(p.barcode) && !p.barcode.includes('[object Object]')) {
+                          allCards.push(p.barcode);
+                        }
+                      });
+
+                      const cleanMemId = getSafeCleanMemberId(activeClient.memberId);
+                      const ptBarcodes = allCards.filter(b => /^q/i.test(b));
+                      const sgfBarcodes = allCards.filter(b => /^o/i.test(b));
+                      const otherCards = allCards.filter(b => 
+                        !/^q/i.test(b) && 
+                        !/^o/i.test(b) && 
+                        b !== cleanMemId && 
+                        b !== activeClient.leadId && 
+                        b !== activeClient.redgitsId &&
+                        /^\d{1,5}$/.test(b)
+                      );
+
+                      if (ptBarcodes.length === 0 && sgfBarcodes.length === 0 && otherCards.length === 0) return null;
+
+                      return (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {ptBarcodes.map(code => (
+                            <Badge 
+                              key={code} 
+                              className="bg-purple-500/15 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 text-[11px] font-mono font-bold px-2 py-1"
+                              title="Personal Training Package Card / RFID"
+                            >
+                              PT: {code}
+                            </Badge>
+                          ))}
+                          {sgfBarcodes.map(code => (
+                            <Badge 
+                              key={code} 
+                              className="bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/30 text-[11px] font-mono font-bold px-2 py-1"
+                              title="Small Group Fitness Class Card / RFID"
+                            >
+                              SGF: {code}
+                            </Badge>
+                          ))}
+                          {otherCards.map(code => (
+                            <Badge 
+                              key={code} 
+                              variant="outline" 
+                              className="text-[10px] font-mono font-bold px-1.5 py-0.5"
+                              title="Secondary Member Card / RFID"
+                            >
+                              Card: #{code}
+                            </Badge>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
@@ -3668,6 +3766,7 @@ export default function Clients() {
                             const rawParentPhone = String((activeClient as any).parentPhone || '').replace(/[^0-9]/g, '').slice(-9);
                             const unlinkedSiblings = clients.filter(c => {
                               if (c.id === activeClient.id) return false;
+                              if (c.status === 'Merged' || (c as any).mergedInto) return false;
                               if ((activeClient.linkedClientIds || []).includes(c.id)) return false;
                               const cPhone = String(c.phone || '').replace(/[^0-9]/g, '').slice(-9);
                               const cParentPhone = String((c as any).parentPhone || '').replace(/[^0-9]/g, '').slice(-9);
@@ -3679,30 +3778,183 @@ export default function Clients() {
 
                             if (unlinkedSiblings.length === 0) return null;
 
+                            const activeNormName = (activeClient.name || '').trim().toLowerCase();
+                            const matchingSiblings = unlinkedSiblings.filter(s => {
+                              const sNorm = (s.name || '').trim().toLowerCase();
+                              return sNorm === activeNormName || sNorm.includes(activeNormName) || activeNormName.includes(sNorm);
+                            });
+
+                            const handleMergeSibling = async (sib: Client) => {
+                              if (!window.confirm(`Merge ${sib.name}'s packages and cards into ${activeClient.name}? This will unify the profile and archive the duplicate account.`)) {
+                                return;
+                              }
+                              try {
+                                const existingPkgs = activeClient.packages || [];
+                                const incomingPkgs = sib.packages || [];
+                                const combinedPkgs = [...existingPkgs];
+                                incomingPkgs.forEach(ip => {
+                                  const isDup = combinedPkgs.some(ep => ep.packageName === ip.packageName && ep.startDate === ip.startDate && ep.endDate === ip.endDate);
+                                  if (!isDup) {
+                                    combinedPkgs.push({
+                                      ...ip,
+                                      id: `pkg-m-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                                      barcode: ip.barcode || sib.barcode || undefined
+                                    });
+                                  }
+                                });
+
+                                const newBarcodes = Array.from(new Set([
+                                  ...(activeClient.secondaryBarcodes || []),
+                                  ...(sib.secondaryBarcodes || []),
+                                  sib.barcode,
+                                  sib.cardId,
+                                  sib.memberId
+                                ].filter(b => b && typeof b === 'string' && !b.includes('[object Object]')) as string[]));
+
+                                await updateClient(activeClient.id, {
+                                  packages: combinedPkgs,
+                                  secondaryBarcodes: newBarcodes,
+                                  mergedClientIds: Array.from(new Set([...(activeClient.mergedClientIds || []), sib.id]))
+                                });
+
+                                await updateClient(sib.id, {
+                                  status: 'Merged',
+                                  mergedInto: activeClient.id,
+                                  mergedReason: 'Manual in-app PT/SGF package consolidation'
+                                });
+
+                                toast.success(`Merged ${sib.name}'s packages into this profile!`);
+                              } catch (err) {
+                                console.error('Error merging client:', err);
+                                toast.error('Failed to merge client profile.');
+                              }
+                            };
+
+                            const handleMergeAllMatching = async () => {
+                              if (!window.confirm(`Merge all ${matchingSiblings.length} matching PT/SGF duplicate profile(s) into ${activeClient.name}? All packages, cards, and barcodes will be unified.`)) {
+                                return;
+                              }
+                              try {
+                                let combinedPkgs = [...(activeClient.packages || [])];
+                                let combinedBarcodes = new Set<string>([
+                                  ...(activeClient.secondaryBarcodes || []),
+                                  activeClient.barcode || '',
+                                  activeClient.cardId || '',
+                                  activeClient.memberId || ''
+                                ].filter(b => b && typeof b === 'string' && !b.includes('[object Object]')));
+
+                                const mergedIds: string[] = [...(activeClient.mergedClientIds || [])];
+
+                                for (const sib of matchingSiblings) {
+                                  (sib.packages || []).forEach(ip => {
+                                    const isDup = combinedPkgs.some(ep => ep.packageName === ip.packageName && ep.startDate === ip.startDate && ep.endDate === ip.endDate);
+                                    if (!isDup) {
+                                      combinedPkgs.push({
+                                        ...ip,
+                                        id: `pkg-m-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                                        barcode: ip.barcode || sib.barcode || undefined
+                                      });
+                                    }
+                                  });
+
+                                  if (sib.barcode) combinedBarcodes.add(sib.barcode);
+                                  if (sib.cardId) combinedBarcodes.add(sib.cardId);
+                                  if (sib.memberId && typeof sib.memberId === 'string' && !sib.memberId.includes('[object Object]')) combinedBarcodes.add(sib.memberId);
+                                  (sib.secondaryBarcodes || []).forEach(b => b && combinedBarcodes.add(b));
+                                  mergedIds.push(sib.id);
+
+                                  await updateClient(sib.id, {
+                                    status: 'Merged',
+                                    mergedInto: activeClient.id,
+                                    mergedReason: 'Bulk manual PT/SGF consolidation'
+                                  });
+                                }
+
+                                await updateClient(activeClient.id, {
+                                  packages: combinedPkgs,
+                                  secondaryBarcodes: Array.from(combinedBarcodes).filter(Boolean) as string[],
+                                  mergedClientIds: Array.from(new Set(mergedIds))
+                                });
+
+                                toast.success(`Unified all ${matchingSiblings.length} matching PT/SGF profile(s) into this account!`);
+                              } catch (err) {
+                                console.error('Bulk merge error:', err);
+                                toast.error('Failed to complete bulk merge.');
+                              }
+                            };
+
                             return (
-                              <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs space-y-1.5">
-                                <p className="font-semibold text-amber-600 dark:text-amber-400 text-[11px] flex items-center gap-1.5">
-                                  <span>💡 Detected {unlinkedSiblings.length} sibling profile{unlinkedSiblings.length > 1 ? 's' : ''} sharing phone:</span>
-                                </p>
+                              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs space-y-2">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <p className="font-semibold text-amber-600 dark:text-amber-400 text-[11px] flex items-center gap-1.5">
+                                    <span>💡 Detected {unlinkedSiblings.length} profile{unlinkedSiblings.length > 1 ? 's' : ''} sharing phone:</span>
+                                  </p>
+                                  {matchingSiblings.length > 0 && (
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      className="h-6 px-2 text-[10px] font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs"
+                                      onClick={handleMergeAllMatching}
+                                    >
+                                      ⚡ Consolidate {matchingSiblings.length} Duplicate Account{matchingSiblings.length > 1 ? 's' : ''}
+                                    </Button>
+                                  )}
+                                </div>
                                 <div className="flex flex-wrap gap-2">
-                                  {unlinkedSiblings.map(sib => (
-                                    <div key={sib.id} className="flex items-center gap-2 bg-background/80 px-2 py-1 rounded border text-[11px]">
-                                      <span><strong>{sib.name}</strong> ({getMemberCategory(sib)})</span>
-                                      <Button 
-                                        size="sm" 
-                                        variant="outline" 
-                                        className="h-5 px-1.5 text-[10px]"
-                                        onClick={() => {
-                                          const currentLinked = activeClient.linkedClientIds || [];
-                                          updateClient(activeClient.id, { linkedClientIds: Array.from(new Set([...currentLinked, sib.id])) });
-                                          const sibLinked = sib.linkedClientIds || [];
-                                          updateClient(sib.id, { linkedClientIds: Array.from(new Set([...sibLinked, activeClient.id])) });
-                                        }}
-                                      >
-                                        + Link
-                                      </Button>
-                                    </div>
-                                  ))}
+                                  {unlinkedSiblings.map(sib => {
+                                    const isPtCode = /^q/i.test(sib.barcode || '');
+                                    const isSgfCode = /^o/i.test(sib.barcode || '');
+                                    const isSameName = (sib.name || '').trim().toLowerCase() === activeNormName;
+
+                                    return (
+                                      <div key={sib.id} className="flex items-center gap-2 bg-background/80 px-2.5 py-1.5 rounded-lg border text-[11px]">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-bold text-foreground">{sib.name}</span>
+                                          {isPtCode && (
+                                            <Badge className="bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[9px] px-1 py-0 h-4 font-mono">
+                                              PT: {sib.barcode}
+                                            </Badge>
+                                          )}
+                                          {isSgfCode && (
+                                            <Badge className="bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] px-1 py-0 h-4 font-mono">
+                                              SGF: {sib.barcode}
+                                            </Badge>
+                                          )}
+                                          <span className="text-[10px] text-muted-foreground">
+                                            ({(sib.packages || []).length} pkg{sib.packages?.length !== 1 ? 's' : ''})
+                                          </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-1">
+                                          {isSameName || isPtCode || isSgfCode ? (
+                                            <Button 
+                                              size="sm" 
+                                              variant="default" 
+                                              className="h-5 px-1.5 text-[10px] font-bold bg-amber-600 hover:bg-amber-700 text-white"
+                                              onClick={() => handleMergeSibling(sib)}
+                                              title="Merge this profile's packages into the active member"
+                                            >
+                                              ⚡ Merge
+                                            </Button>
+                                          ) : null}
+                                          <Button 
+                                            size="sm" 
+                                            variant="outline" 
+                                            className="h-5 px-1.5 text-[10px]"
+                                            onClick={() => {
+                                              const currentLinked = activeClient.linkedClientIds || [];
+                                              updateClient(activeClient.id, { linkedClientIds: Array.from(new Set([...currentLinked, sib.id])) });
+                                              const sibLinked = sib.linkedClientIds || [];
+                                              updateClient(sib.id, { linkedClientIds: Array.from(new Set([...sibLinked, activeClient.id])) });
+                                            }}
+                                            title="Link as a separate family member sharing phone"
+                                          >
+                                            + Link
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             );

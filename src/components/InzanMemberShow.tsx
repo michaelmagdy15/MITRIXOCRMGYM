@@ -53,6 +53,16 @@ import {
   InzanMemberLockerStatus,
 } from '../utils/inzanLockerClient';
 
+const getSafeCleanMemberId = (val: any): string | null => {
+  if (!val) return null;
+  if (typeof val === 'object') return null;
+  const s = String(val).trim();
+  if (!s || s.includes('[object Object]') || s === '{}' || s === 'null' || s === 'undefined' || /^code\s*\(/i.test(s)) {
+    return null;
+  }
+  return s;
+};
+
 interface InzanMemberShowProps {
   client: Client;
   onClose: () => void;
@@ -1231,7 +1241,7 @@ export function InzanMemberShow({
         </div>
         <div className="flex items-center gap-4">
           <span className="text-xs font-mono font-bold text-zinc-300">
-            ID: {client.memberId ? (String(client.memberId).startsWith('#') ? client.memberId : `#${client.memberId}`) : client.id}
+            ID: {(() => { const clean = getSafeCleanMemberId(client.memberId); return clean ? (clean.startsWith('#') ? clean : `#${clean}`) : (client.leadId || client.redgitsId || client.id); })()}
           </span>
           <span className="text-[11px] font-mono text-zinc-400">TENANT: INZAN ATHLETICS</span>
         </div>
@@ -1324,7 +1334,7 @@ export function InzanMemberShow({
           >
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Member ID</span>
             <span className="text-xl sm:text-2xl font-black font-mono tracking-wider text-foreground">
-              {client.memberId ? (String(client.memberId).startsWith('#') ? client.memberId : `#${client.memberId}`) : (client.id || '—')}
+              {(() => { const clean = getSafeCleanMemberId(client.memberId); return clean ? (clean.startsWith('#') ? clean : `#${clean}`) : `Lead #${client.leadId || client.redgitsId || client.id || '—'}`; })()}
             </span>
           </div>
 
@@ -1563,7 +1573,7 @@ export function InzanMemberShow({
                 {/* Redgits Member ID Badge */}
                 <div className="border border-border rounded-xl p-4 bg-muted/20 text-center flex flex-col justify-center items-center">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Redgits Member ID</span>
-                  <span className="text-3xl font-black text-rose-500 tracking-wider mt-1">{client.memberId || '—'}</span>
+                  <span className="text-3xl font-black text-rose-500 tracking-wider mt-1">{getSafeCleanMemberId(client.memberId) || client.leadId || client.redgitsId || '—'}</span>
                 </div>
 
                 {/* Member Portal Access & Password Reset Card */}

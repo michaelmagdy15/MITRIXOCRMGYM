@@ -1,4 +1,4 @@
-export type ClientStatus = 'Lead' | 'Active' | 'Nearly Expired' | 'Expired' | 'Hold';
+export type ClientStatus = 'Lead' | 'Active' | 'Nearly Expired' | 'Expired' | 'Hold' | 'Merged';
 export type LeadInterest = 'Interested' | 'Not Interested' | 'Pending';
 export type LeadCategory = 'Out of area zone' | 'Social class' | 'Price' | 'No answer' | 'Ladies only' | 'Morning session' | 'Other' | 'None';
 export type LeadSource = 'Call in' | 'Walk-in' | 'Word Of Mouth' | 'Instagram' | 'ADS' | 'Facebook' | 'Website' | 'Google' | 'WhatsApp' | 'TikTok' | 'Other';
@@ -537,6 +537,10 @@ export interface Client {
   redgitsId?: string; // Legacy RedGITS internal row ID
   portalUserId?: string; // Link to the user portal record
   linkedClientIds?: string[]; // Array of linked client record IDs (family members)
+  secondaryBarcodes?: string[]; // All barcodes/RFID cards associated with member (e.g. PT 'Q...', SGF 'o...', secondary cards)
+  mergedClientIds?: string[]; // IDs of duplicate accounts merged into this master profile
+  mergedInto?: string; // Master client ID if this record was merged
+  mergedReason?: string;
   importBatchId?: string; // ID of the import batch this client was created in
   
   // Lead specific
@@ -663,6 +667,7 @@ export interface ClientPackage {
   id: string;
   packageId?: string;
   packageName: string;
+  barcode?: string; // Specific barcode / letter code for this package (e.g. Q1421 for PT, o968 for SGF)
   type?: 'Private' | 'Group' | 'Other' | string;
   packageVersion?: number;
   benefitSubtitle?: string;

@@ -1210,14 +1210,17 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     const lookupToken = parsedQr.tokenOrMemberId;
     if (!lookupToken) return;
 
+    const tokenLower = lookupToken.toLowerCase().trim();
     const member = clients.find(
       (c) =>
         c.id === lookupToken ||
-        c.memberId === lookupToken ||
-        c.phone === lookupToken ||
-        c.barcode === lookupToken ||
-        c.cardId === lookupToken ||
-        c.guestSerial === lookupToken
+        (c.memberId && String(c.memberId).toLowerCase().trim() === tokenLower) ||
+        (c.phone && c.phone === lookupToken) ||
+        (c.barcode && String(c.barcode).toLowerCase().trim() === tokenLower) ||
+        (c.cardId && String(c.cardId).toLowerCase().trim() === tokenLower) ||
+        (c.guestSerial && c.guestSerial === lookupToken) ||
+        (c.secondaryBarcodes && Array.isArray(c.secondaryBarcodes) && c.secondaryBarcodes.some(b => String(b).toLowerCase().trim() === tokenLower)) ||
+        (c.packages && Array.isArray(c.packages) && c.packages.some(p => p.barcode && String(p.barcode).toLowerCase().trim() === tokenLower))
     );
     if (!member) {
       appendWrongEntryLog({
