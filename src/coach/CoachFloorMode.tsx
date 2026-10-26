@@ -14,10 +14,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { 
   Play, Pause, Plus, Check, Trash2, Trophy, 
-  Dumbbell, Timer, Flame, ArrowLeft, Search, User, 
+  Dumbbell, Timer, Flame, ArrowLeft, Search, User, Users, Copy, TrendingUp,
   Sparkles, CheckCircle2, Award, BookmarkPlus, Send, Calendar, Info, Eye, FolderPlus
 } from 'lucide-react';
 import { toast } from 'sonner';
+import AthletePerformanceDashboard from '../member/components/AthletePerformanceDashboard';
 import {
   FULL_EXERCISE_CATALOG,
   ExerciseCatalogItem,
@@ -255,6 +256,15 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
 
   // ALL useState declarations FIRST (prevents TDZ on minification)
   const [selectedClient, setSelectedClient] = useState<Client | null>(initialClient || null);
+  const [activeFloorClients, setActiveFloorClients] = useState<Client[]>(initialClient ? [initialClient] : []);
+  const [floorSessionMap, setFloorSessionMap] = useState<Record<string, {
+    exercises: WorkoutExercise[];
+    sessionNotes: string;
+    overallRpe: number;
+  }>>({});
+  const [clientPickerMode, setClientPickerMode] = useState<'switch' | 'add'>('switch');
+  const [showAthleteStatsPanel, setShowAthleteStatsPanel] = useState(false);
+  const [selectedClientPerfLogs, setSelectedClientPerfLogs] = useState<any[]>([]);
   const [activeSession] = useState<Session | null>(initialSession || null);
   const [clients, setClients] = useState<Client[]>([]);
   const [clientPickerOpen, setClientPickerOpen] = useState(!initialClient);
@@ -328,8 +338,106 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
   useEffect(() => {
     if (selectedClient?.id) {
       setAssignClientId(selectedClient.id);
+      setActiveFloorClients(prev =>
+        prev.some(c => c.id === selectedClient.id) ? prev : [...prev, selectedClient]
+      );
     }
   }, [selectedClient?.id]);
+
+  // Switch between active floor clients while preserving each client's workout state
+  const handleSwitchFloorClient = (targetClient: Client) => {
+    if (selectedClient?.id === targetClient.id) return;
+    const currentId = selectedClient?.id;
+    const nextSaved = floorSessionMap[targetClient.id];
+
+    if (currentId) {
+      setFloorSessionMap(prev => ({
+        ...prev,
+        [currentId]: {
+          exercises,
+          sessionNotes,
+          overallRpe,
+        }
+      }));
+    }
+
+    setSelectedClient(targetClient);
+    setExercises(nextSaved ? nextSaved.exercises : []);
+    setSessionNotes(nextSaved ? nextSaved.sessionNotes : '');
+    setOverallRpe(nextSaved ? nextSaved.overallRpe : 8);
+  };
+
+  // Add or switch a client from the picker modal
+  const handlePickClientFromModal = (pickedClient: Client) => {
+    setActiveFloorClients(prev =>
+      prev.some(c => c.id === pickedClient.id) ? prev : [...prev, pickedClient]
+    );
+    handleSwitchFloorClient(pickedClient);
+    setClientPickerOpen(false);
+  };
+
+  // Remove a client from the concurrent floor session bar
+  const handleRemoveFloorClient = (clientIdToRemove: string) => {
+    const remaining = activeFloorClients.filter(c => c.id !== clientIdToRemove);
+    setActiveFloorClients(remaining);
+    if (selectedClient?.id === clientIdToRemove) {
+      const nextClient = remaining[0] || null;
+      if (nextClient) {
+        const nextSaved = floorSessionMap[nextClient.id];
+        setSelectedClient(nextClient);
+        setExercises(nextSaved ? nextSaved.exercises : []);
+        setSessionNotes(nextSaved ? nextSaved.sessionNotes : '');
+        setOverallRpe(nextSaved ? nextSaved.overallRpe : 8);
+      } else {
+        setSelectedClient(null);
+        setExercises([]);
+        setSessionNotes('');
+        setOverallRpe(8);
+      }
+    }
+  };
+
+  // Broadcast/Copy current exercises to all active floor clients being trained simultaneously
+  const handleBroadcastWorkoutToAllFloorClients = () => {
+    if (exercises.length === 0) {
+      toast.error('Add at least one exercise before copying to all floor clients');
+      return;
+    }
+    if (activeFloorClients.length <= 1) {
+      toast.info('Add another client to the floor first using "+ Add Client"');
+      return;
+    }
+
+    const now = Date.now();
+    setFloorSessionMap(prev => {
+      const updated = { ...prev };
+      activeFloorClients.forEach((c, cIdx) => {
+        if (c.id === selectedClient?.id) {
+          updated[c.id] = { exercises, sessionNotes, overallRpe };
+          return;
+        }
+        const existingState = updated[c.id];
+        const clonedExercises: WorkoutExercise[] = exercises.map((ex, exIdx) => ({
+          ...ex,
+          id: `ex_${now}_${cIdx}_${exIdx}`,
+          sets: ex.sets.map((s, sIdx) => ({
+            ...s,
+            id: `set_${sIdx + 1}_${now}_${cIdx}_${exIdx}`,
+            completed: false,
+            isPR: false,
+          })),
+        }));
+        updated[c.id] = {
+          exercises: clonedExercises,
+          sessionNotes: existingState?.sessionNotes || sessionNotes,
+          overallRpe: existingState?.overallRpe || overallRpe,
+        };
+      });
+      return updated;
+    });
+
+    toast.success(`Copied ${exercises.length} exercises to all ${activeFloorClients.length} active floor clients!`);
+  };
 
   // 1. Fetch clients list for picker
   useEffect(() => {
@@ -387,19 +495,25 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
     return () => unsub();
   }, [selectedClient?.id]);
 
-  // 4. Fetch client's PR history when client selected
+  // 4. Fetch client's PR history & live performance logs (including client self-logged weights/reps) when client selected
   useEffect(() => {
-    if (!selectedClient?.id) return;
-    const fetchPrHistory = async () => {
-      try {
-        const q = query(
-          collection(db, 'clientPerformance'),
-          where('clientId', '==', selectedClient.id)
-        );
-        const snap = await getDocs(q);
+    if (!selectedClient?.id) {
+      setSelectedClientPerfLogs([]);
+      return;
+    }
+    const q = query(
+      collection(db, 'clientPerformance'),
+      where('clientId', '==', selectedClient.id)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const logs = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        logs.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+        setSelectedClientPerfLogs(logs);
+
         const map: Record<string, { weight: number; reps: number; date: string }> = {};
-        snap.docs.forEach(d => {
-          const data = d.data();
+        logs.forEach(data => {
           if (Array.isArray(data.prs)) {
             data.prs.forEach((pr: any) => {
               const name = (pr.exercise || '').trim().toLowerCase();
@@ -412,13 +526,27 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
               }
             });
           }
+          if (Array.isArray(data.exercises)) {
+            data.exercises.forEach((ex: any) => {
+              const name = (ex.name || '').trim().toLowerCase();
+              if (!name || !Array.isArray(ex.sets)) return;
+              ex.sets.forEach((s: any) => {
+                const w = parseFloat(s.weightKg) || 0;
+                const r = parseInt(s.reps, 10) || 0;
+                if (w > 0 && (!map[name] || w > map[name]!.weight)) {
+                  map[name] = { weight: w, reps: r, date: data.date || '' };
+                }
+              });
+            });
+          }
         });
         setClientPrs(map);
-      } catch (err) {
+      },
+      (err) => {
         console.error("Error fetching client PRs:", err);
       }
-    };
-    fetchPrHistory();
+    );
+    return () => unsub();
   }, [selectedClient?.id]);
 
   // 5. Stopwatch Interval
@@ -1103,11 +1231,38 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setClientPickerOpen(true)}
+                  onClick={() => {
+                    setClientPickerMode('switch');
+                    setClientPickerOpen(true);
+                  }}
                   className="h-5 text-[10px] px-1.5 text-primary font-bold hover:bg-primary/10 rounded"
                 >
                   Change
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setClientPickerMode('add');
+                    setClientPickerOpen(true);
+                  }}
+                  className="h-6 text-[10px] px-2 border-primary/40 text-primary font-bold hover:bg-primary/10 rounded-lg gap-1"
+                  title="Train multiple clients at the same time"
+                >
+                  <Users className="h-3 w-3" /> + Add Client ({activeFloorClients.length})
+                </Button>
+                {selectedClient && (
+                  <Button
+                    variant={showAthleteStatsPanel ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setShowAthleteStatsPanel(v => !v)}
+                    className="h-6 text-[10px] px-2 font-bold rounded-lg gap-1"
+                    title="View client's self-logged weights/reps & dynamic athlete stats"
+                  >
+                    <TrendingUp className="h-3 w-3" />
+                    {showAthleteStatsPanel ? 'Hide Athlete Stats' : 'Client Stats & Logs'}
+                  </Button>
+                )}
               </div>
               <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                 {selectedClient ? (
@@ -1176,6 +1331,126 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
           </Button>
         </div>
       </div>
+
+      {/* MULTI-CLIENT CONCURRENT FLOOR SESSION BAR */}
+      <div className="bg-card/85 border border-primary/25 rounded-2xl p-3 shadow-xs space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-primary" />
+            <span className="text-xs font-extrabold uppercase tracking-wider text-foreground">
+              Active Floor Clients ({activeFloorClients.length})
+            </span>
+            <span className="text-[11px] text-muted-foreground hidden sm:inline">
+              Switch tabs to log sets for multiple clients simultaneously
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {activeFloorClients.length > 1 && exercises.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleBroadcastWorkoutToAllFloorClients}
+                className="h-7 px-2.5 text-[11px] font-bold rounded-lg gap-1 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+              >
+                <Copy className="h-3 w-3" /> Copy Exercises to All ({activeFloorClients.length}) Clients
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setClientPickerMode('add');
+                setClientPickerOpen(true);
+              }}
+              className="h-7 px-2.5 text-[11px] font-bold rounded-lg gap-1 border-primary/40 text-primary hover:bg-primary/10"
+            >
+              <Plus className="h-3.5 w-3.5" /> Train Another Client Simultaneously
+            </Button>
+          </div>
+        </div>
+
+        {activeFloorClients.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5">
+            {activeFloorClients.map(c => {
+              const isCurrent = selectedClient?.id === c.id;
+              const savedState = isCurrent ? { exercises } : floorSessionMap[c.id];
+              const exCount = savedState?.exercises?.length || 0;
+              const completedSetsCount = (savedState?.exercises || []).reduce(
+                (acc, ex) => acc + ex.sets.filter(s => s.completed).length,
+                0
+              );
+
+              return (
+                <div
+                  key={c.id}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs transition-all shrink-0 ${
+                    isCurrent
+                      ? 'bg-primary text-primary-foreground border-primary font-black shadow-sm'
+                      : 'bg-background hover:bg-muted text-foreground border-border/80'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchFloorClient(c)}
+                    className="flex items-center gap-2 text-left"
+                  >
+                    <span className="h-5 w-5 rounded-full bg-black/15 flex items-center justify-center font-mono text-[10px] font-black">
+                      {(c.name || 'M').charAt(0).toUpperCase()}
+                    </span>
+                    <div>
+                      <span className="block leading-tight">{c.name}</span>
+                      <span className={`text-[9px] font-mono block ${isCurrent ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}>
+                        {exCount} ex • {completedSetsCount} sets done
+                      </span>
+                    </div>
+                  </button>
+                  {activeFloorClients.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFloorClient(c.id)}
+                      className={`text-[10px] px-1 rounded hover:bg-black/15 ${
+                        isCurrent ? 'text-primary-foreground/80 hover:text-primary-foreground' : 'text-muted-foreground hover:text-red-500'
+                      }`}
+                      title="Remove from active floor bar"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* CLIENT DYNAMIC ATHLETE STATS & SELF-LOGGED SETS PANEL (COACH INSPECTION VIEW) */}
+      {selectedClient && showAthleteStatsPanel && (
+        <div className="rounded-2xl border-2 border-primary/30 bg-card/90 p-4 space-y-3 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
+              <TrendingUp className="h-4 w-4" /> Coach View — {selectedClient.name}'s Athlete Stats & Self-Logged PT Sets
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAthleteStatsPanel(false)}
+              className="h-7 text-xs"
+            >
+              Close Panel ✕
+            </Button>
+          </div>
+          <AthletePerformanceDashboard
+            client={selectedClient}
+            assignedWorkouts={clientAssignedWorkouts}
+            performanceLogs={selectedClientPerfLogs}
+            isCoachView={true}
+          />
+        </div>
+      )}
 
       {/* FLOATING REST TIMER DOCK */}
       {restSecondsRemaining !== null && (
@@ -2283,10 +2558,13 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <User className="h-4 w-4 text-primary" /> Select Training Member
+              <Users className="h-4 w-4 text-primary" />
+              {clientPickerMode === 'add' ? 'Add Another Client to Floor Session' : 'Select Training Member'}
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Choose the member you are training in this floor session.
+              {clientPickerMode === 'add'
+                ? 'Select another client to train simultaneously. You can switch between active clients at the top of Floor Mode.'
+                : 'Choose the member you are training in this floor session.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -2311,20 +2589,25 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
                 .slice(0, 20)
                 .map(client => {
                   const isSelected = selectedClient?.id === client.id;
+                  const isAlreadyOnFloor = activeFloorClients.some(ac => ac.id === client.id);
                   return (
                     <button
                       key={client.id}
                       type="button"
-                      onClick={() => {
-                        setSelectedClient(client);
-                        setClientPickerOpen(false);
-                      }}
+                      onClick={() => handlePickClientFromModal(client)}
                       className={`w-full text-left p-2.5 transition-colors flex items-center justify-between text-xs ${
                         isSelected ? 'bg-primary/10 text-primary font-bold' : 'hover:bg-muted/60'
                       }`}
                     >
                       <div>
-                        <p className="font-bold">{client.name || 'Member'}</p>
+                        <p className="font-bold flex items-center gap-1.5">
+                          <span>{client.name || 'Member'}</span>
+                          {isAlreadyOnFloor && (
+                            <Badge variant="outline" className="text-[8px] px-1 py-0 border-emerald-500/40 text-emerald-500">
+                              On Floor
+                            </Badge>
+                          )}
+                        </p>
                         <p className="text-[10px] text-muted-foreground">
                           {client.packageType || 'Personal Training'} • {client.phone || 'No phone'}
                         </p>
@@ -2344,7 +2627,20 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
       </Dialog>
 
       {/* MODAL 5: WORKOUT COMPLETE CELEBRATION SUMMARY */}
-      <Dialog open={Boolean(completionSummary)} onOpenChange={open => !open && onExit()}>
+      <Dialog
+        open={Boolean(completionSummary)}
+        onOpenChange={open => {
+          if (!open) {
+            if (activeFloorClients.length > 1 && selectedClient) {
+              const finishedId = selectedClient.id;
+              setCompletionSummary(null);
+              handleRemoveFloorClient(finishedId);
+            } else {
+              onExit();
+            }
+          }
+        }}
+      >
         {completionSummary && (
           <DialogContent className="max-w-md rounded-2xl text-center">
             <div className="space-y-4 py-3">
@@ -2393,13 +2689,26 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
               )}
             </div>
 
-            <DialogFooter>
-              <Button
-                onClick={onExit}
-                className="w-full font-bold text-xs h-10 rounded-xl"
-              >
-                Back to Dashboard
-              </Button>
+            <DialogFooter className="flex flex-col sm:flex-row gap-2">
+              {activeFloorClients.length > 1 && selectedClient ? (
+                <Button
+                  onClick={() => {
+                    const finishedId = selectedClient.id;
+                    setCompletionSummary(null);
+                    handleRemoveFloorClient(finishedId);
+                  }}
+                  className="w-full font-bold text-xs h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  Continue with Remaining Floor Clients ({activeFloorClients.length - 1})
+                </Button>
+              ) : (
+                <Button
+                  onClick={onExit}
+                  className="w-full font-bold text-xs h-10 rounded-xl"
+                >
+                  Back to Dashboard
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         )}

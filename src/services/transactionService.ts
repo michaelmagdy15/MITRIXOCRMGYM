@@ -408,11 +408,25 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
     const legacyStartDate = clientData.startDate || params.startDate;
 
     // Fetch wallet details and member ID counter inside transaction before any writes to satisfy Firestore rules
-    const pointsEarned = Math.floor(actualAmountPaid / 100);
+    const isPrimaryWallet = params.method === 'Wallet Balance';
+    const isSecondaryWallet = params.secondaryMethod === 'Wallet Balance';
+    const walletDeductionEGP =
+      (isPrimaryWallet ? (params.primaryTenderAmount !== undefined ? Number(params.primaryTenderAmount) : actualAmountPaid) : 0) +
+      (isSecondaryWallet ? Number(params.secondaryTenderAmount || 0) : 0);
+    const nonWalletCashCollected = Math.max(0, actualAmountPaid - walletDeductionEGP);
+    const pointsEarned = Math.floor(nonWalletCashCollected / 100);
     const walletRef = doc(db, 'pointsWallets', params.clientId);
     let walletSnap: any = null;
-    if (pointsEarned > 0) {
+    if (pointsEarned > 0 || walletDeductionEGP > 0) {
       walletSnap = await transaction.get(walletRef);
+    }
+    if (walletDeductionEGP > 0 && params.paymentStatus !== 'pending' && params.paymentStatus !== 'failed') {
+      const currentWalletCash = walletSnap?.exists?.() ? Number(walletSnap.data()?.cashBalance || 0) : Number(clientData.walletBalance || 0);
+      if (currentWalletCash < walletDeductionEGP) {
+        throw new Error(
+          `Insufficient Wallet Cash Balance. Available: ${currentWalletCash.toLocaleString()} EGP, Required: ${walletDeductionEGP.toLocaleString()} EGP`
+        );
+      }
     }
 
     const existingMemberId = String(clientData.memberId || '').trim();
@@ -760,44 +774,71 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
         resolvedClientMemberId = existingMemberId;
       }
 
-      // Award points on actual money collected (1 Point per 100 LE/EGP spent)
-      if (pointsEarned > 0 && walletSnap) {
-        const currentPoints = clientData.points || 0;
-        clientUpdate.points = currentPoints + pointsEarned;
+      // Deduct Wallet Cash Balance if paid via Wallet Balance (full or split tender) and award Points on new money collected
+      if ((pointsEarned > 0 || walletDeductionEGP > 0) && walletSnap) {
+        const walletData = walletSnap.exists() ? walletSnap.data() : {};
+        const prevPoints = Number(walletData.balance ?? clientData.points ?? 0);
+        const nextPoints = prevPoints + pointsEarned;
+        const prevCash = Number(walletData.cashBalance ?? clientData.walletBalance ?? 0);
+        const nextCash = Math.max(0, prevCash - walletDeductionEGP);
 
-        // Update pointsWallet doc
-        let walletData: any;
-        if (walletSnap.exists()) {
-          walletData = walletSnap.data();
-          transaction.update(walletRef, {
-            balance: (walletData.balance || 0) + pointsEarned,
-            totalEarned: (walletData.totalEarned || 0) + pointsEarned,
-            lastUpdated: new Date().toISOString()
-          });
-        } else {
-          walletData = {
-            memberId: params.clientId,
-            balance: pointsEarned,
-            totalEarned: pointsEarned,
-            totalSpent: 0,
-            lastUpdated: new Date().toISOString()
-          };
-          transaction.set(walletRef, walletData);
+        if (pointsEarned > 0) {
+          clientUpdate.points = nextPoints;
+        }
+        if (walletDeductionEGP > 0) {
+          clientUpdate.walletBalance = nextCash;
         }
 
-        // Log pointsTransaction
-        const txnRef = doc(collection(db, 'pointsTransactions'));
-        transaction.set(txnRef, {
+        const nextWalletPayload: Record<string, any> = {
           memberId: params.clientId,
-          type: 'credit',
-          amount: pointsEarned,
-          reason: 'purchase',
-          description: `Earned from package purchase: ${params.packageType}`,
-          balanceBefore: walletSnap.exists() ? (walletData.balance || 0) : 0,
-          balanceAfter: (walletSnap.exists() ? (walletData.balance || 0) : 0) + pointsEarned,
-          createdBy: params.recordedByName || 'System',
-          createdAt: new Date().toISOString()
-        });
+          balance: nextPoints,
+          totalEarned: Number(walletData.totalEarned || 0) + pointsEarned,
+          totalSpent: Number(walletData.totalSpent || 0),
+          cashBalance: nextCash,
+          cashTotalDeposited: Number(walletData.cashTotalDeposited || 0),
+          cashTotalSpent: Number(walletData.cashTotalSpent || 0) + walletDeductionEGP,
+          lastUpdated: new Date().toISOString(),
+        };
+
+        if (walletSnap.exists()) {
+          transaction.update(walletRef, nextWalletPayload);
+        } else {
+          transaction.set(walletRef, nextWalletPayload);
+        }
+
+        if (walletDeductionEGP > 0) {
+          const cashTxnRef = doc(collection(db, 'pointsTransactions'));
+          transaction.set(cashTxnRef, {
+            memberId: params.clientId,
+            walletType: 'cash',
+            type: 'debit',
+            amount: walletDeductionEGP,
+            reason: 'cash_spend',
+            description: `Paid for package: ${params.packageType}${walletDeductionEGP < actualAmountPaid ? ` (Split Tender: ${walletDeductionEGP.toLocaleString()} EGP Wallet + ${(actualAmountPaid - walletDeductionEGP).toLocaleString()} EGP)` : ''}`,
+            referenceId: paymentRef.id,
+            balanceBefore: prevCash,
+            balanceAfter: nextCash,
+            createdBy: params.recordedByName || 'System',
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        if (pointsEarned > 0) {
+          const txnRef = doc(collection(db, 'pointsTransactions'));
+          transaction.set(txnRef, {
+            memberId: params.clientId,
+            walletType: 'points',
+            type: 'credit',
+            amount: pointsEarned,
+            reason: 'purchase',
+            description: `Earned from package purchase: ${params.packageType}`,
+            referenceId: paymentRef.id,
+            balanceBefore: prevPoints,
+            balanceAfter: nextPoints,
+            createdBy: params.recordedByName || 'System',
+            createdAt: new Date().toISOString(),
+          });
+        }
       }
 
       transaction.update(clientRef, cleanData(clientUpdate));

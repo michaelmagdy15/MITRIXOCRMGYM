@@ -827,11 +827,14 @@ export const DEFAULT_SYSTEM_TEMPLATES: Omit<PermissionTemplate, 'id' | 'createdA
       ...ALL_PERMISSIONS_FALSE,
       'dashboard.view': true,
       'dashboard.view_attendance_trends': true,
+      'dashboard.view_global': true,
       'payments.view': true,
+      'payments.view_all_branches': true,
       'payments.create': true,
       'payments.create_guest': true,
       'payments.print_receipt': true,
       'members.view': true,
+      'members.view_all_branches': true,
       'members.create': true,
       'members.edit_profile': true,
       'members.view_contact_info': true,
@@ -1151,9 +1154,141 @@ export function hasPermission(
     if (template && template.permissions) {
       const templatePerm = template.permissions[permissionKey];
       if (typeof templatePerm === 'boolean') {
-        return templatePerm;
+        if (templatePerm) return true;
+        // Front Desk / Receptionist template must always allow viewing all members and checking them in
+        if (
+          isFrontDeskUser(user) &&
+          [
+            'members.view',
+            'members.view_all_branches',
+            'members.view_contact_info',
+            'attendance.view',
+            'attendance.checkin',
+            'attendance.checkin_guests',
+            'dashboard.view_global',
+            'payments.view',
+            'payments.view_all_branches'
+          ].includes(permissionKey)
+        ) {
+          return true;
+        }
+        return false;
       }
     }
+  }
+
+  // 3b. Role/Title-aware safeguards for Front Desk, Sales Manager, and Fitness Manager
+  // Even while permissionTemplates are loading from Firestore, ensure these roles have their essential access:
+  if (
+    isFrontDeskUser(user) &&
+    [
+      'dashboard.view',
+      'dashboard.view_attendance_trends',
+      'dashboard.view_global',
+      'payments.view',
+      'payments.view_all_branches',
+      'payments.create',
+      'payments.create_guest',
+      'payments.print_receipt',
+      'members.view',
+      'members.view_all_branches',
+      'members.create',
+      'members.edit_profile',
+      'members.view_contact_info',
+      'members.log_interactions',
+      'members.assign_rfid',
+      'attendance.view',
+      'attendance.checkin',
+      'attendance.checkin_guests',
+      'attendance.view_live_count',
+      'classes.view',
+      'classes.book_member',
+      'classes.cancel_booking',
+      'classes.view_roster',
+      'classes.mark_attendance',
+      'packages.view',
+      'operations.pos_juice_bar',
+      'operations.lockers',
+      'operations.lost_found',
+      'operations.shift_handover'
+    ].includes(permissionKey)
+  ) {
+    return true;
+  }
+
+  if (
+    isSalesManagerUser(user) &&
+    [
+      'dashboard.view',
+      'dashboard.view_financials',
+      'dashboard.view_rep_breakdown',
+      'dashboard.view_attendance_trends',
+      'dashboard.view_retention_metrics',
+      'dashboard.view_global',
+      'payments.view',
+      'payments.view_all_branches',
+      'payments.create',
+      'payments.create_guest',
+      'payments.edit',
+      'payments.print_receipt',
+      'payments.view_branch_totals',
+      'members.view',
+      'members.view_all_branches',
+      'members.view_contact_info',
+      'members.create',
+      'members.edit_profile',
+      'members.manage_packages',
+      'members.freeze_hold',
+      'members.transfer_membership',
+      'members.reassign_rep',
+      'members.log_interactions',
+      'leads.view_all',
+      'leads.view_contact_info',
+      'leads.create',
+      'leads.edit',
+      'leads.assign',
+      'leads.convert',
+      'attendance.view',
+      'attendance.checkin',
+      'attendance.checkin_guests',
+      'attendance.view_live_count',
+      'classes.view',
+      'classes.book_member',
+      'packages.view',
+      'reports.view_basic',
+      'reports.view_advanced',
+      'operations.call_center'
+    ].includes(permissionKey)
+  ) {
+    return true;
+  }
+
+  if (
+    isFitnessManagerUser(user) &&
+    [
+      'dashboard.view',
+      'dashboard.view_global',
+      'dashboard.view_attendance_trends',
+      'members.view',
+      'members.view_all_branches',
+      'members.view_contact_info',
+      'attendance.view',
+      'classes.view',
+      'classes.manage_schedule',
+      'classes.book_member',
+      'classes.cancel_booking',
+      'classes.view_roster',
+      'classes.mark_attendance',
+      'coaches.view',
+      'coaches.manage',
+      'coaches.schedule_pt',
+      'coaches.cancel_pt',
+      'coaches.complete_pt',
+      'coaches.view_payouts',
+      'packages.view'
+    ].includes(permissionKey)
+  ) {
+    return true;
   }
 
   // 4. Check legacy boolean flags for backward compatibility
@@ -1210,7 +1345,7 @@ export function getEffectiveUserPermissions(
 export function syncLegacyFlags(permissions: Record<string, boolean>): Partial<User> {
   return {
     can_delete_payments: !!permissions['payments.delete'],
-    can_view_global_dashboard: !!permissions['dashboard.view_global'],
+    can_view_global_dashboard: !!permissions['dashboard.view_global'] || !!permissions['members.view_all_branches'],
     can_access_settings_and_history: !!permissions['settings.access'] || !!permissions['reports.view_audit_logs'],
     can_delete_records: !!permissions['members.delete'] || !!permissions['payments.delete'],
     can_assign_leads: !!permissions['leads.assign']
@@ -1291,6 +1426,27 @@ export function isGeneralManagerOrCEO(user: User | null | undefined): boolean {
     title === 'gm' ||
     title.includes('general manager') ||
     (user.role === 'manager' && dept === 'executive')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if user is a Front Desk / Receptionist / Experience staff member.
+ */
+export function isFrontDeskUser(user: User | null | undefined): boolean {
+  if (!user) return false;
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  const dept = (user.department || '').trim().toLowerCase();
+  const tmpl = (user.permissionTemplateId || '').trim().toLowerCase();
+  if (
+    title.includes('front desk') ||
+    title.includes('reception') ||
+    title.includes('experience') ||
+    tmpl.includes('front-desk') ||
+    tmpl.includes('receptionist') ||
+    dept === 'experience'
   ) {
     return true;
   }

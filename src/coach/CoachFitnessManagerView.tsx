@@ -299,6 +299,15 @@ export default function CoachFitnessManagerView() {
             assignedCoachId: chosenCoachId,
             assignedCoachName: coachName,
             trainerName: coachName,
+            coach: coachName,
+            staffAssignments: {
+              coach: {
+                uid: chosenCoachId,
+                staffId: chosenCoachId,
+                name: coachName,
+                staffName: coachName,
+              },
+            },
             ptAssessmentStatus: 'AssignedToCoach',
             assignedByFitnessManagerAt: nowIso,
             updatedAt: nowIso,

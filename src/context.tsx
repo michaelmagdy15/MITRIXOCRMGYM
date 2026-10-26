@@ -47,7 +47,14 @@ import {
 import { cleanData } from './utils';
 import { scoreNameMatch } from './utils/fuzzyNameSearch';
 import { matchesPhoneSearch } from './utils/phoneUtils';
-import { hasPermission, getEffectiveUserPermissions } from './utils/permissions';
+import {
+  hasPermission,
+  getEffectiveUserPermissions,
+  isFrontDeskUser,
+  isSalesManagerUser,
+  isFitnessManagerUser,
+  isGeneralManagerOrCEO
+} from './utils/permissions';
 import { 
   subscribePermissionTemplates, 
   createPermissionTemplate as createPermissionTemplateService, 
@@ -415,7 +422,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const roleScopedClients = useMemo(() => {
     if (!currentUser) return [];
     let filtered = clients;
+    const isUnrestrictedStaff =
+      isFrontDeskUser(currentUser) ||
+      isSalesManagerUser(currentUser) ||
+      isFitnessManagerUser(currentUser) ||
+      isGeneralManagerOrCEO(currentUser) ||
+      currentUser.can_view_global_dashboard === true;
     const isRestrictedRep = (currentUser.role === 'rep' || effectiveRole === 'rep') &&
+      !isUnrestrictedStaff &&
       !can('members.view_all_branches') &&
       !can('dashboard.view_global') &&
       currentUser.role !== 'admin' &&
@@ -447,7 +461,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let filtered = clients;
     // Only restrict to assigned clients if the user is strictly a sales representative
     // without global or all-branch view rights. Admin, Manager, Front Desk, Super Admin MUST see all members!
+    const isUnrestrictedStaff =
+      isFrontDeskUser(currentUser) ||
+      isSalesManagerUser(currentUser) ||
+      isFitnessManagerUser(currentUser) ||
+      isGeneralManagerOrCEO(currentUser) ||
+      currentUser.can_view_global_dashboard === true;
     const isRestrictedRep = (currentUser.role === 'rep' || effectiveRole === 'rep') &&
+      !isUnrestrictedStaff &&
       !can('members.view_all_branches') &&
       !can('dashboard.view_global') &&
       currentUser.role !== 'admin' &&

@@ -286,11 +286,44 @@ service cloud.firestore {
       allow update, delete: if isStaff();
     }
 
-    // POINTS WALLETS
+    // POINTS & CASH WALLETS
     match /pointsWallets/{walletId} {
       allow read: if isStaff() || (isAuthenticated() && (walletId == request.auth.uid || ownsClientProfile(walletId)));
-      allow create, update: if isStaff();
+      allow create, update: if isStaff() || (isAuthenticated() && (walletId == request.auth.uid || ownsClientProfile(walletId)));
       allow delete: if isManager();
+    }
+    match /pointsTransactions/{docId} {
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.memberId));
+      allow create: if isStaff() || (isAuthenticated() && ownsClientProfile(request.resource.data.memberId));
+      allow update, delete: if isStaff();
+    }
+    match /pointsBundles/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+    match /walletRefundRequests/{docId} {
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.memberId));
+      allow create: if isStaff() || (isAuthenticated() && ownsClientProfile(request.resource.data.memberId));
+      allow update, delete: if isStaff();
+    }
+    match /walletDepositRequests/{docId} {
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.memberId));
+      allow create: if isStaff() || (isAuthenticated() && ownsClientProfile(request.resource.data.memberId));
+      allow update, delete: if isStaff();
+    }
+    match /clientPerformance/{performanceId} {
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+      allow create, update: if isStaff() || (isAuthenticated() && ownsClientProfile(request.resource.data.clientId));
+      allow delete: if isStaff();
+    }
+    match /assignedWorkouts/{workoutId} {
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+      allow create, delete: if isStaff();
+      allow update: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+    }
+    match /workoutTemplates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
     }
     
     // COMPLAINTS (Tickets)

@@ -8,9 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Globe, ShoppingCart, Plus, Minus, Clock, CheckCircle2, Trash2, ArrowRight, Search, Sparkles, Flame } from 'lucide-react';
+import { Globe, ShoppingCart, Plus, Minus, Clock, CheckCircle2, Trash2, ArrowRight, Search, Sparkles, Flame, Wallet, Coins } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLanguage } from '../contexts/LanguageContext';
+import {
+  getOrCreateWallet,
+  spendCashBalance,
+  debitPoints,
+  type PointsWallet,
+} from '../services/pointsService';
 import {
   EARTHS_KITCHEN_MENU,
   EARTHS_KITCHEN_CATEGORIES,
@@ -34,9 +40,16 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
   const [activeCategory, setActiveCategory] = useState<'All' | EarthsKitchenCategory>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [pickupTime, setPickupTime] = useState<string>('In 15 mins');
+  const [paymentMethod, setPaymentMethod] = useState<'counter' | 'wallet_cash' | 'points'>('counter');
+  const [memberWallet, setMemberWallet] = useState<PointsWallet | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!client?.id) return;
+    getOrCreateWallet(client.id).then(setMemberWallet).catch(() => {});
+  }, [client?.id]);
 
   useEffect(() => {
     if (!client?.id) {
@@ -126,6 +139,37 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
     setSubmitSuccess(false);
 
     try {
+      const pointsCost = Math.ceil(cartTotal / 10); // 1 Point = 10 EGP in gym services
+      if (paymentMethod === 'wallet_cash') {
+        const cashAvail = memberWallet?.cashBalance || 0;
+        if (cashAvail < cartTotal) {
+          alert(`Insufficient Wallet Cash Balance. Available: ${cashAvail.toLocaleString()} LE, Order Total: ${cartTotal.toLocaleString()} LE.`);
+          setIsSubmitting(false);
+          return;
+        }
+        await spendCashBalance(
+          client.id,
+          cartTotal,
+          'juice_bar',
+          `Earth's Kitchen Order (${cartItemsList.map(c => `${c.qty}x ${c.item?.name}`).join(', ')})`,
+          client.name
+        );
+      } else if (paymentMethod === 'points') {
+        const ptsAvail = memberWallet?.balance || 0;
+        if (ptsAvail < pointsCost) {
+          alert(`Insufficient Points Balance. Available: ${ptsAvail} PTS, Order Cost: ${pointsCost} PTS.`);
+          setIsSubmitting(false);
+          return;
+        }
+        await debitPoints(
+          client.id,
+          pointsCost,
+          'juice_bar',
+          `Earth's Kitchen Order (${cartItemsList.map(c => `${c.qty}x ${c.item?.name}`).join(', ')})`,
+          client.name
+        );
+      }
+
       const itemsToSubmit = cartItemsList.map(ci => {
         const addonLabel = ci.addons.length > 0 ? ` (+ ${ci.addons.map(a => a.name).join(', ')})` : '';
         return {
@@ -144,10 +188,17 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
         clientPhotoUrl: client.photoURL || '',
         items: itemsToSubmit,
         totalAmount: cartTotal,
+        paymentMethod: paymentMethod === 'wallet_cash' ? 'Wallet Balance' : paymentMethod === 'points' ? `Points (${pointsCost} PTS)` : 'Pay at Counter',
+        isPaid: paymentMethod !== 'counter',
         pickupTime: pickupTime,
         status: 'Pending',
         orderedAt: new Date().toISOString()
       });
+
+      if (paymentMethod !== 'counter') {
+        const updatedW = await getOrCreateWallet(client.id);
+        setMemberWallet(updatedW);
+      }
 
       await addDoc(collection(db, 'auditLogs'), {
         action: 'CREATE',
@@ -457,7 +508,62 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                 </div>
                 <div className="text-right pb-1">
                   <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Total Amount</span>
-                  <strong className="text-lg font-mono font-extrabold text-white">{t('payments.currency_le')} {cartTotal}</strong>
+                  <strong className="text-lg font-mono font-extrabold text-white">
+                    {paymentMethod === 'points'
+                      ? `${Math.ceil(cartTotal / 10)} PTS`
+                      : `${t('payments.currency_le')} ${cartTotal}`}
+                  </strong>
+                </div>
+              </div>
+
+              {/* Payment Method Selector (Counter / Wallet Cash Balance / Gym Points) */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Payment Method</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('counter')}
+                    className={`p-2 rounded-xl border text-left transition-all ${
+                      paymentMethod === 'counter'
+                        ? 'bg-primary/20 border-primary text-white'
+                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <p className="text-[10px] font-extrabold">Pay at Counter</p>
+                    <p className="text-[9px] opacity-80 font-mono">{cartTotal} LE</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('wallet_cash')}
+                    className={`p-2 rounded-xl border text-left transition-all ${
+                      paymentMethod === 'wallet_cash'
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <p className="text-[10px] font-extrabold flex items-center gap-1">
+                      <Wallet className="h-3 w-3" /> Wallet Cash
+                    </p>
+                    <p className="text-[9px] opacity-80 font-mono">
+                      Bal: {(memberWallet?.cashBalance || 0).toLocaleString()} LE
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('points')}
+                    className={`p-2 rounded-xl border text-left transition-all ${
+                      paymentMethod === 'points'
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                        : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <p className="text-[10px] font-extrabold flex items-center gap-1">
+                      <Coins className="h-3 w-3" /> Gym Points
+                    </p>
+                    <p className="text-[9px] opacity-80 font-mono">
+                      {Math.ceil(cartTotal / 10)} PTS (Bal: {memberWallet?.balance || 0})
+                    </p>
+                  </button>
                 </div>
               </div>
 

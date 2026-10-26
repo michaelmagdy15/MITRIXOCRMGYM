@@ -426,6 +426,8 @@ export type PaymentMethodType =
   | 'Credit Card'
   | 'Bank Transfer'
   | 'Instapay'
+  | 'Wallet Balance'
+  | 'Points'
   | 'ValU'
   | 'Sympl'
   | 'Souhoola'
@@ -643,6 +645,10 @@ export interface Client {
   updatedAt?: string;
   memberFeedback?: string;
   primaryPackageName?: string;
+  secondaryPackageType?: string;
+  trainerName?: string;
+  coach?: string;
+  walletBalance?: number;
   daysRemaining?: number;
 }
 
@@ -657,6 +663,7 @@ export interface ClientPackage {
   id: string;
   packageId?: string;
   packageName: string;
+  type?: 'Private' | 'Group' | 'Other' | string;
   packageVersion?: number;
   benefitSubtitle?: string;
   startDate?: string;

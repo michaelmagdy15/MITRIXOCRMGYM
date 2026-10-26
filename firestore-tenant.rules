@@ -51,8 +51,8 @@ service cloud.firestore {
     function isTenantAdmin() {
       return isPlatformSuperAdmin() || (
         isAuthenticated() && (
-          (request.auth.token.keys().hasAny(['role']) && request.auth.token.role in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'owner']) ||
-          (userExists() && getUserRole() in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'owner'])
+          (request.auth.token.keys().hasAny(['role']) && request.auth.token.role in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'fitness_manager', 'owner']) ||
+          (userExists() && getUserRole() in ['admin', 'super_admin', 'crm_admin', 'sales_manager', 'manager', 'fitness_manager', 'owner'])
         )
       );
     }
@@ -69,8 +69,8 @@ service cloud.firestore {
     function isTenantStaff() {
       return isTenantAdmin() || (
         isAuthenticated() && (
-          (request.auth.token.keys().hasAny(['role']) && request.auth.token.role in ['rep', 'sales_rep', 'coach', 'staff', 'sales', 'frontdesk', 'receptionist']) ||
-          (userExists() && getUserRole() in ['rep', 'sales_rep', 'coach', 'staff', 'sales', 'frontdesk', 'receptionist'])
+          (request.auth.token.keys().hasAny(['role']) && request.auth.token.role in ['rep', 'sales_rep', 'coach', 'trainer', 'fitness_manager', 'staff', 'sales', 'frontdesk', 'receptionist']) ||
+          (userExists() && getUserRole() in ['rep', 'sales_rep', 'coach', 'trainer', 'fitness_manager', 'staff', 'sales', 'frontdesk', 'receptionist'])
         )
       );
     }
@@ -136,7 +136,7 @@ service cloud.firestore {
     function canAccessSettings() {
       return isPlatformSuperAdmin() || (
         isAuthenticated() && userExists() && (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'] ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'fitness_manager', 'admin'] ||
           (
             'can_access_settings_and_history' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.can_access_settings_and_history == true
@@ -148,7 +148,7 @@ service cloud.firestore {
     function canViewGlobalDashboard() {
       return isPlatformSuperAdmin() || (
         isAuthenticated() && userExists() && (
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'] ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'fitness_manager', 'admin'] ||
           (
             'can_view_global_dashboard' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.can_view_global_dashboard == true
@@ -673,7 +673,8 @@ service cloud.firestore {
 
     match /clientPerformance/{performanceId} {
       allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
-      allow write: if isTenantStaff();
+      allow create, update: if isTenantStaff() || (isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId));
+      allow delete: if isTenantStaff();
     }
 
     match /workoutTemplates/{templateId} {
@@ -686,7 +687,7 @@ service cloud.firestore {
       allow create, delete: if isTenantStaff();
       allow update: if isTenantStaff() || (
         isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'exercises', 'loggedExercises', 'clientNotes', 'totalVolumeKg', 'totalSets', 'totalReps', 'performanceDocId', 'updatedAt'])
       );
     }
 
@@ -814,16 +815,37 @@ service cloud.firestore {
       allow update, delete: if isTenantAdmin();
     }
 
-    // GAMIFICATION, BADGES & REWARDS
+    // GAMIFICATION, BADGES, WALLETS & REWARDS
     match /badgeConfigs/{docId} { allow read: if isAuthenticated(); allow write: if isTenantAdmin(); }
     match /badgeDefinitions/{docId} { allow read: if isAuthenticated(); allow write: if isTenantAdmin(); }
     match /memberBadges/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
     match /rewards/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
     match /rewardsConfig/{docId} { allow read: if isAuthenticated(); allow write: if isTenantAdmin(); }
     match /rewardRedemptions/{docId} { allow read: if isAuthenticated(); allow create: if isAuthenticated(); allow update, delete: if isTenantStaff(); }
-    match /coinsTransactions/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
+    match /coinsWallets/{walletId} { allow read: if isAuthenticated(); allow create, update: if isTenantStaff() || isAuthenticated(); allow delete: if isTenantAdmin(); }
+    match /coinsTransactions/{docId} { allow read: if isAuthenticated(); allow create: if isTenantStaff() || isAuthenticated(); allow update, delete: if isTenantStaff(); }
+    match /pointsWallets/{walletId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && (walletId == request.auth.uid || isOwnClientRecord(walletId)));
+      allow create, update: if isTenantStaff() || (isAuthenticated() && (walletId == request.auth.uid || isOwnClientRecord(walletId)));
+      allow delete: if isTenantAdmin();
+    }
+    match /pointsTransactions/{docId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId));
+      allow update, delete: if isTenantStaff();
+    }
     match /pointTransactions/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
     match /pointsBundles/{docId} { allow read: if isAuthenticated(); allow write: if isTenantStaff(); }
+    match /walletRefundRequests/{docId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId));
+      allow update, delete: if isTenantStaff();
+    }
+    match /walletDepositRequests/{docId} {
+      allow read: if isTenantStaff() || (isAuthenticated() && resource.data.memberId != null && isOwnClientRecord(resource.data.memberId));
+      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.memberId != null && isOwnClientRecord(request.resource.data.memberId));
+      allow update, delete: if isTenantStaff();
+    }
 
     // TRANSFER & UPGRADE AUDIT LOGS
     match /salesTransferLogs/{docId} { allow read, write: if isTenantStaff(); }

@@ -16,7 +16,7 @@ export const LOCKED_CORE_MEMBER_FIELDS: (keyof Client)[] = [
   'barcode',
 ];
 
-export const EDITABLE_ADDITIONAL_MEMBER_FIELDS: (keyof Client)[] = [
+export const EDITABLE_ADDITIONAL_MEMBER_FIELDS: (keyof Client | string)[] = [
   'backupPhone',
   'email',
   'jobTitle',
@@ -37,6 +37,11 @@ export const EDITABLE_ADDITIONAL_MEMBER_FIELDS: (keyof Client)[] = [
   'typeOfClient',
   'guestSerial',
   'assignedTo',
+  'assignedCoachId',
+  'assignedCoachName',
+  'trainerName',
+  'coach',
+  'staffAssignments',
 ];
 
 /**

@@ -122,11 +122,46 @@ export default function CoachHome({
     const loadOverview = async () => {
       try {
         const coachNameLower = coachName.toLowerCase();
+        const coachEmail = (currentUser?.email || '').trim().toLowerCase();
+
+        // Also resolve any linked coaches collection document IDs (e.g. redgits-staff-10)
+        const linkedCoachDocIds = new Set<string>();
+        try {
+          const coachesSnap = await getDocs(collection(db, 'coaches'));
+          coachesSnap.docs.forEach(d => {
+            const cData = d.data() as any;
+            const cNameLower = String(cData.name || '').trim().toLowerCase();
+            const cEmailLower = String(cData.email || '').trim().toLowerCase();
+            if (
+              d.id === coachId ||
+              (coachCustomId && (d.id === coachCustomId || cData.coachId === coachCustomId || cData.customId === coachCustomId)) ||
+              (coachId && (cData.userId === coachId || cData.uid === coachId)) ||
+              (coachEmail && cEmailLower === coachEmail) ||
+              (coachNameLower && cNameLower === coachNameLower)
+            ) {
+              linkedCoachDocIds.add(d.id);
+              if (cData.coachId) linkedCoachDocIds.add(String(cData.coachId));
+              if (cData.customId) linkedCoachDocIds.add(String(cData.customId));
+            }
+          });
+        } catch {}
+
         const clientQueries: Promise<any>[] = [
           getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachId))),
+          getDocs(query(collection(db, 'clients'), where('assignedTo', '==', coachId))),
         ];
         if (coachCustomId) {
           clientQueries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachCustomId))));
+          clientQueries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachCustomId', '==', coachCustomId))));
+        }
+        linkedCoachDocIds.forEach(linkedId => {
+          if (linkedId && linkedId !== coachId && linkedId !== coachCustomId) {
+            clientQueries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', linkedId))));
+            clientQueries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachDocId', '==', linkedId))));
+          }
+        });
+        if (coachEmail) {
+          clientQueries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachEmail', '==', coachEmail))));
         }
         if (coachName) {
           clientQueries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachName', '==', coachName))));
@@ -148,7 +183,12 @@ export default function CoachHome({
             const matchesPkg = (c.packages || []).some(p => {
               const pName = (p.trainerName || (p as any).coachName || '').toLowerCase();
               const pId = (p as any).coachId || '';
-              return (coachNameLower && pName === coachNameLower) || pId === coachId || (coachCustomId && pId === coachCustomId);
+              return (
+                (coachNameLower && pName === coachNameLower) ||
+                pId === coachId ||
+                (coachCustomId && pId === coachCustomId) ||
+                linkedCoachDocIds.has(pId)
+              );
             });
             if (matchesPkg) assignedClientDocsMap.set(d.id, c);
           });

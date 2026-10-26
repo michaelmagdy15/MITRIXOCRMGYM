@@ -32,6 +32,7 @@ import EntitlementManager from './EntitlementManager';
 import { AdjustPackageDatesDialog, canOverridePackageDates, buildPackageUpdates } from './AdjustPackageDatesDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { addAuditLog } from '../services/auditService';
+import { resolveCoachAssignmentInfo, notifyCoachClientAssigned } from '../services/transactionService';
 import { canReassignMemberSalesRep, isSalesManagerUser, isGeneralManagerOrCEO, isFitnessManagerUser } from '../utils/permissions';
 import { Trash2, CalendarClock, TrendingUp, Key } from 'lucide-react';
 import { MemberGuestInvitationsTab } from './member/MemberGuestInvitationsTab';
@@ -861,6 +862,111 @@ export function InzanMemberShow({
   };
 
   // Initialize edit form
+  const assignableCoaches = React.useMemo(() => {
+    return users
+      .filter(u => {
+        if (u.status === 'nonworking') return false;
+        const role = (u.role || '').toLowerCase();
+        const dept = ((u as any).department || '').toLowerCase();
+        return role === 'coach' || role === 'trainer' || role === 'fitness_manager' || Boolean(u.isFitnessManager) || dept === 'fitness';
+      })
+      .sort((a, b) => (a.name || a.email || '').localeCompare(b.name || b.email || ''));
+  }, [users]);
+
+  const [isQuickAssigningCoach, setIsQuickAssigningCoach] = useState(false);
+
+  const handleQuickAssignCoach = async (coachUserId: string) => {
+    setIsQuickAssigningCoach(true);
+    try {
+      if (!coachUserId || coachUserId === 'unassigned') {
+        await onUpdateClient(client.id, {
+          assignedCoachId: '',
+          assignedCoachName: '',
+          trainerName: '',
+          coach: '',
+        } as any);
+        toast.success('Coach unassigned from member.');
+        return;
+      }
+
+      const selectedUser = users.find(u => u.id === coachUserId);
+      const resolved = await resolveCoachAssignmentInfo(selectedUser?.name || '', coachUserId);
+      const coachName = resolved?.coachName || selectedUser?.name || selectedUser?.email || 'Coach';
+      const effectiveCoachId = resolved?.coachUserId || coachUserId;
+
+      const updatedPackages = Array.isArray(client.packages)
+        ? client.packages.map(p => {
+            const isPt =
+              (p as any).type === 'Private' ||
+              (p as any).hierarchy === 'Secondary' ||
+              /pt|private|trainer/i.test(`${(p as any).category || ''} ${p.packageName || ''}`);
+            if (isPt && p.status === 'Active') {
+              return {
+                ...p,
+                coachId: effectiveCoachId,
+                coachName,
+                trainerId: effectiveCoachId,
+                trainerName: coachName,
+              };
+            }
+            return p;
+          })
+        : client.packages;
+
+      await onUpdateClient(client.id, {
+        assignedCoachId: effectiveCoachId,
+        assignedCoachDocId: resolved?.coachDocId || undefined,
+        assignedCoachCustomId: resolved?.coachCustomId || selectedUser?.coachId || undefined,
+        assignedCoachEmail: selectedUser?.email || undefined,
+        assignedCoachName: coachName,
+        trainerName: coachName,
+        coach: coachName,
+        staffAssignments: {
+          ...(client.staffAssignments || {}),
+          coach: {
+            uid: effectiveCoachId,
+            staffId: effectiveCoachId,
+            docId: resolved?.coachDocId,
+            customId: resolved?.coachCustomId || selectedUser?.coachId,
+            name: coachName,
+            staffName: coachName,
+            email: selectedUser?.email,
+          },
+        },
+        ...(updatedPackages ? { packages: updatedPackages as any } : {}),
+      } as any);
+
+      await notifyCoachClientAssigned({
+        coachId: effectiveCoachId,
+        coachUserId: effectiveCoachId,
+        coachDocId: resolved?.coachDocId,
+        coachCustomId: resolved?.coachCustomId || selectedUser?.coachId,
+        coachName,
+        clientId: client.id,
+        clientName: client.name,
+        memberId: client.memberId ? String(client.memberId) : undefined,
+        packageName: (client as any).secondaryPackageType || client.packageType || 'Personal Training',
+        branch: client.branch,
+        assignedBy: currentUser?.name || currentUser?.email || 'Staff',
+      });
+
+      await addAuditLog(
+        'UPDATE',
+        'CLIENT',
+        client.id,
+        `Assigned member ${client.name} (#${client.memberId || client.id}) to Coach ${coachName}`,
+        currentUser?.name
+      );
+
+      toast.success(`Assigned ${client.name} to Coach ${coachName}!`);
+    } catch (err: any) {
+      console.error('Error assigning coach:', err);
+      toast.error(err?.message || 'Failed to assign coach.');
+    } finally {
+      setIsQuickAssigningCoach(false);
+    }
+  };
+
   const startEditing = () => {
     setFormData({
       name: client.name || '',
@@ -873,6 +979,7 @@ export function InzanMemberShow({
       city: client.city || '',
       salesRep: client.salesRep || '',
       assignedTo: client.assignedTo || '',
+      assignedCoachId: client.assignedCoachId || '',
       weight: client.weight || undefined,
       height: client.height || undefined,
       activityLevel: client.activityLevel || undefined,
@@ -902,10 +1009,29 @@ export function InzanMemberShow({
     try {
       const isRepLocked = Boolean(client.salesRep || client.assignedTo);
       const canReassign = canReassignMemberSalesRep(currentUser);
-      const rawUpdates = { ...formData };
+      const rawUpdates: any = { ...formData };
       if (isRepLocked && !canReassign) {
         // Enforce Sales Manager authority rule: preserve assigned sales rep unless Sales Manager
         rawUpdates.salesRep = client.salesRep || client.assignedTo || '';
+      }
+      if (rawUpdates.assignedCoachId !== undefined && rawUpdates.assignedCoachId !== client.assignedCoachId) {
+        const selectedCoach = users.find(u => u.id === rawUpdates.assignedCoachId);
+        const coachName = selectedCoach?.name || '';
+        rawUpdates.assignedCoachName = coachName;
+        rawUpdates.trainerName = coachName;
+        rawUpdates.coach = coachName;
+        if (coachName) {
+          rawUpdates.staffAssignments = {
+            ...(client.staffAssignments || {}),
+            coach: {
+              uid: rawUpdates.assignedCoachId,
+              staffId: rawUpdates.assignedCoachId,
+              name: coachName,
+              staffName: coachName,
+              email: selectedCoach?.email,
+            },
+          };
+        }
       }
       const canUnlockCoreFields = isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser);
       const updates = sanitizeMemberProfileUpdates(rawUpdates, client, currentUser, canUnlockCoreFields);
@@ -1227,6 +1353,31 @@ export function InzanMemberShow({
               <Lock className="h-3 w-3 mr-1" /> Packages Locked on Profile (&lt;24h rule in Packages tab)
             </Badge>
 
+            {/* 1-Click Quick Assign Coach Selector */}
+            <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-2.5 h-8">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 shrink-0">
+                Coach:
+              </span>
+              <select
+                className="bg-transparent text-xs font-bold text-foreground focus:outline-none cursor-pointer disabled:opacity-50 max-w-[165px]"
+                value={
+                  client.assignedCoachId && assignableCoaches.some(u => u.id === client.assignedCoachId)
+                    ? client.assignedCoachId
+                    : assignableCoaches.find(u => u.name?.toLowerCase() === (client.assignedCoachName || (client as any).trainerName || '').toLowerCase())?.id || 'unassigned'
+                }
+                disabled={isQuickAssigningCoach}
+                onChange={(e) => handleQuickAssignCoach(e.target.value)}
+                title="1-Click Assign Member to Coach"
+              >
+                <option value="unassigned" className="bg-background text-foreground">Unassigned</option>
+                {assignableCoaches.map(coach => (
+                  <option key={coach.id} value={coach.id} className="bg-background text-foreground">
+                    {coach.name} ({coach.email || coach.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <Button
               variant="outline"
               size="sm"
@@ -1381,9 +1532,16 @@ export function InzanMemberShow({
                     users.filter(u => ['crm_admin', 'super_admin', 'admin', 'manager', 'rep'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
                     isFieldLockedForUser('salesRep', currentUser, client)
                   )}
-                  {renderField('Trainer', users.find(u => u.id === (formData.assignedTo || client.assignedTo))?.name || (client as any).trainerName || 'unassigned', 'assignedTo', 'select',
-                    users.filter(u => ['coach'].includes(u.role?.toLowerCase() || '')).map(u => ({ value: u.id, label: u.name })),
-                    isFieldLockedForUser('assignedTo', currentUser, client)
+                  {renderField(
+                    'Trainer',
+                    users.find(u => u.id === (formData.assignedCoachId || client.assignedCoachId))?.name ||
+                      client.assignedCoachName ||
+                      (client as any).trainerName ||
+                      'unassigned',
+                    'assignedCoachId',
+                    'select',
+                    assignableCoaches.map(u => ({ value: u.id, label: `${u.name}${u.email ? ` (${u.email})` : ''}` })),
+                    isFieldLockedForUser('assignedCoachId', currentUser, client)
                   )}
                   {renderField('Weight (kg)', client.weight, 'weight', 'number', undefined, isFieldLockedForUser('weight', currentUser, client))}
                   {renderField('Height (cm)', client.height, 'height', 'number', undefined, isFieldLockedForUser('height', currentUser, client))}

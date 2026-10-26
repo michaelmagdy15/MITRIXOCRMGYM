@@ -52,8 +52,10 @@ import {
   X,
   Flame,
   Filter,
+  TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import AthletePerformanceDashboard from '../member/components/AthletePerformanceDashboard';
 
 const CATEGORIES: ('All' | ExerciseCategory)[] = [
   'All',
@@ -123,7 +125,8 @@ export default function ExerciseLibraryHub({
   const { currentUser } = useAuth();
   const { clients } = useAppContext();
 
-  const [activeSubView, setActiveSubView] = useState<'library' | 'templates' | 'assigned'>('library');
+  const [activeSubView, setActiveSubView] = useState<'library' | 'templates' | 'assigned' | 'stats'>('library');
+  const [workoutToLog, setWorkoutToLog] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All' | ExerciseCategory>('All');
   const [selectedEquipment, setSelectedEquipment] = useState<'All' | ExerciseEquipment>('All');
@@ -537,6 +540,20 @@ export default function ExerciseLibraryHub({
                   {mode === 'member' ? 'My Workouts' : 'Assigned'} ({assignedWorkouts.length})
                 </span>
               </button>
+              {mode === 'member' && memberClient && (
+                <button
+                  type="button"
+                  onClick={() => setActiveSubView('stats')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    activeSubView === 'stats'
+                      ? 'bg-background text-primary shadow-xs'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  <span>Athlete Stats & 1RM</span>
+                </button>
+              )}
             </div>
 
             {mode === 'staff' && (
@@ -1094,7 +1111,20 @@ export default function ExerciseLibraryHub({
                       })}
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 pt-2">
+                    <div className="flex items-center justify-end gap-2 pt-2 flex-wrap">
+                      {mode === 'member' && memberClient && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setWorkoutToLog(w);
+                            setActiveSubView('stats');
+                          }}
+                          className="h-9 rounded-xl text-xs font-bold gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Log Weights & Reps
+                        </Button>
+                      )}
                       {w.status !== 'Completed' && (
                         <Button
                           size="sm"
@@ -1124,6 +1154,16 @@ export default function ExerciseLibraryHub({
             </div>
           )}
         </div>
+      )}
+
+      {/* SUBVIEW 4: ATHLETE PERFORMANCE & STRENGTH STATS (MEMBER PORTAL) */}
+      {activeSubView === 'stats' && mode === 'member' && memberClient && (
+        <AthletePerformanceDashboard
+          client={memberClient}
+          assignedWorkouts={assignedWorkouts}
+          initialLogWorkout={workoutToLog}
+          onCloseInitialLog={() => setWorkoutToLog(null)}
+        />
       )}
 
       {/* EXERCISE GIF & FORM DETAIL MODAL */}

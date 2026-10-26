@@ -13,11 +13,11 @@ export const MEMBER_CATEGORIES: MemberCategory[] = [
 // ===============================================================
 
 export type CanonicalTier = 'KIDS' | 'KIDS_PRO' | 'JUNIORS' | 'JUNIORS_PRO' | 'ADULT';
-export type CanonicalBranchId = 'strike_maxim' | 'strike_mivida' | 'impact' | 'strike_playa';
+export type CanonicalBranchId = 'strike_maxim' | 'strike_mivida' | 'impact' | 'strike_playa' | 'garden_8' | 'inzan_main';
 
 export const CANONICAL_TIERS: CanonicalTier[] = ['KIDS', 'KIDS_PRO', 'JUNIORS', 'JUNIORS_PRO', 'ADULT'];
-export const ALLOWED_ADULT_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida', 'impact', 'strike_playa'];
-export const ALLOWED_YOUTH_HOME_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida', 'strike_playa'];
+export const ALLOWED_ADULT_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida', 'impact', 'strike_playa', 'garden_8', 'inzan_main'];
+export const ALLOWED_YOUTH_HOME_BRANCHES: CanonicalBranchId[] = ['strike_maxim', 'strike_mivida', 'strike_playa', 'garden_8', 'inzan_main'];
 
 /**
  * Maps any tier string, category string, or class name to its canonical tier.
@@ -71,6 +71,12 @@ export function toCanonicalBranchId(val?: string | null): CanonicalBranchId | ''
   }
   if (lower.includes('playa')) {
     return 'strike_playa';
+  }
+  if (lower.includes('garden 8') || lower.includes('garden8')) {
+    return 'garden_8';
+  }
+  if (lower.includes('inzan')) {
+    return 'inzan_main';
   }
 
   return '';
@@ -215,6 +221,7 @@ export function normalizeBranchName(branch?: string): string {
   if (lower.includes('impact')) return 'impact';
   if (lower.includes('envida')) return 'envida';
   if (lower.includes('playa')) return 'playa';
+  if (lower.includes('garden 8') || lower.includes('garden8') || lower.includes('inzan')) return 'garden 8';
   if (lower === 'all' || lower === 'all branches') return 'all';
   return lower;
 }
@@ -437,19 +444,24 @@ export function validateBookingRules(
   const sessionTier = toCanonicalTier(s.tier || s.category || s.name);
   const sessionAllowedTiers = getSessionAllowedTiers(s);
 
-  const memberHomeBranch = toCanonicalBranchId(
-    m.home_branch_id || m.branch_id || m.branchId || m.homeBranch || m.branch
-  );
-  const sessionBranch = toCanonicalBranchId(
-    s.branch_id || s.branchId || s.branch || s.location
-  );
+  const rawMemberBranch = m.home_branch_id || m.branch_id || m.branchId || m.homeBranch || m.branch;
+  const rawSessionBranch = s.branch_id || s.branchId || s.branch || s.location;
+  const memberHomeBranch = toCanonicalBranchId(rawMemberBranch);
+  const sessionBranch = toCanonicalBranchId(rawSessionBranch);
 
   const isAdult = memberTier === 'ADULT' || m.category?.toUpperCase() === 'ADULT';
 
   if (!isAdult) {
     // Under-18s (Kids, Kids Pro, Juniors, Juniors Pro):
-    // Rule 1: Home branch isolation
-    if (sessionBranch !== memberHomeBranch) {
+    // Rule 1: Home branch isolation (treat garden_8 and inzan_main as the same facility)
+    const isSameInzanBranch =
+      (sessionBranch === 'garden_8' || sessionBranch === 'inzan_main') &&
+      (memberHomeBranch === 'garden_8' || memberHomeBranch === 'inzan_main');
+    const isCustomBranchMatch =
+      !sessionBranch && !memberHomeBranch &&
+      normalizeBranchName(rawSessionBranch) === normalizeBranchName(rawMemberBranch);
+
+    if (sessionBranch !== memberHomeBranch && !isSameInzanBranch && !isCustomBranchMatch) {
       const branchLabel = m.homeBranch || (memberHomeBranch === 'strike_maxim' ? 'Maxim Compound' : memberHomeBranch === 'strike_mivida' ? 'Mivida' : memberHomeBranch);
       return {
         allowed: false,
@@ -477,8 +489,9 @@ export function validateBookingRules(
     }
   } else {
     // Adults:
-    // Rule 1: Facility access across Maxim, Mivida, and Impact
-    if (!ALLOWED_ADULT_BRANCHES.includes(sessionBranch as CanonicalBranchId)) {
+    // Rule 1: Facility access across Maxim, Mivida, Impact, Playa, Garden 8 (Inzan), or any custom tenant branch when rawSessionBranch is present
+    const hasCustomTenantBranch = !sessionBranch && Boolean((rawSessionBranch || '').trim());
+    if (!ALLOWED_ADULT_BRANCHES.includes(sessionBranch as CanonicalBranchId) && !hasCustomTenantBranch) {
       return {
         allowed: false,
         status: 403,

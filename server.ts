@@ -3604,7 +3604,11 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
                 (p.packageName || '').toLowerCase().includes('private')
               );
               const hasRemaining = !hasPtOnly && typeof rawRemaining === 'number' && rawRemaining > 0;
-              const isUnlimited = clientEffective?.membershipType === 'unlimited' || clientEffective?.isUnlimited === true;
+              const isUnlimited =
+                clientEffective?.membershipType === 'unlimited' ||
+                clientEffective?.isUnlimited === true ||
+                rawRemaining === 'unlimited' ||
+                (!hasPtOnly && (clientEffective?.status === 'Active' || clientEffective?.status === 'Nearly Expired') && rawRemaining === undefined);
 
               if (!packageDeducted && !hasRemaining && !isUnlimited) {
                 if (hasPtOnly) {

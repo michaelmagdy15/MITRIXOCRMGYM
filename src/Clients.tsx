@@ -45,7 +45,7 @@ import { addAuditLog } from './services/auditService';
 import { resolveCoachAssignmentInfo, notifyCoachClientAssigned } from './services/transactionService';
 import { openClickToCallModal } from './services/clickToCallService';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
-import { canReassignMemberSalesRep } from './utils/permissions';
+import { canReassignMemberSalesRep, isFrontDeskUser, isSalesManagerUser } from './utils/permissions';
 import { validateMembershipEligibility, validateFreezeDurationLimits } from './utils/membershipRules';
 import { isTenantInzan } from './utils/inzanOrg';
 import { normalizeBranchName } from './utils/memberCategories';
@@ -260,6 +260,8 @@ export default function Clients() {
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [isBulkPackageDialogOpen, setIsBulkPackageDialogOpen] = useState(false);
   const [bulkSelectedPackageName, setBulkSelectedPackageName] = useState('');
+  const [bulkSelectedCoachId, setBulkSelectedCoachId] = useState('');
+  const [isBulkAssigningCoach, setIsBulkAssigningCoach] = useState(false);
   
   // Lazy Loading Details State
   const [activeClientDetails, setActiveClientDetails] = useState<{clientId: string, comments: any[], interactions: any[]} | null>(null);
@@ -1946,6 +1948,110 @@ export default function Clients() {
     });
   };
 
+  const assignMemberToCoach = async (clientId: string, coachIdOrName: string) => {
+    const client = clients.find(c => c.id === clientId);
+    if (!client) return;
+
+    if (!coachIdOrName || coachIdOrName === 'unassigned') {
+      await updateClient(client.id, {
+        assignedCoachId: '',
+        assignedCoachName: '',
+        trainerName: '',
+        coach: '',
+      } as any);
+      return;
+    }
+
+    const matchedCoach = availableCoaches.find(
+      c => c.id === coachIdOrName || c.name.toLowerCase() === coachIdOrName.toLowerCase()
+    );
+    const resolved = await resolveCoachAssignmentInfo(matchedCoach?.name || coachIdOrName, matchedCoach?.id || coachIdOrName);
+    const effectiveCoachId = resolved?.coachUserId || matchedCoach?.userId || matchedCoach?.id || resolved?.effectiveCoachId || coachIdOrName;
+    const effectiveCoachName = resolved?.coachName || matchedCoach?.name || coachIdOrName;
+    const coachDocId = resolved?.coachDocId || matchedCoach?.coachDocId;
+    const coachCustomId = resolved?.coachCustomId || matchedCoach?.coachId;
+
+    const updatedPackages = Array.isArray(client.packages)
+      ? client.packages.map(p => {
+          const pAny = p as any;
+          const isPt =
+            pAny.type === 'Private' ||
+            pAny.hierarchy === 'Secondary' ||
+            /pt|private|trainer/i.test(`${pAny.category || ''} ${p.packageName || ''}`);
+          if (isPt && p.status === 'Active') {
+            return {
+              ...p,
+              coachId: effectiveCoachId,
+              coachName: effectiveCoachName,
+              trainerId: effectiveCoachId,
+              trainerName: effectiveCoachName,
+            };
+          }
+          return p;
+        })
+      : client.packages;
+
+    await updateClient(client.id, {
+      assignedCoachId: effectiveCoachId,
+      assignedCoachDocId: coachDocId || undefined,
+      assignedCoachCustomId: coachCustomId || undefined,
+      assignedCoachName: effectiveCoachName,
+      trainerName: effectiveCoachName,
+      coach: effectiveCoachName,
+      staffAssignments: {
+        ...(client.staffAssignments || {}),
+        coach: {
+          uid: effectiveCoachId,
+          staffId: effectiveCoachId,
+          docId: coachDocId,
+          customId: coachCustomId,
+          name: effectiveCoachName,
+          staffName: effectiveCoachName,
+        },
+      },
+      ...(updatedPackages ? { packages: updatedPackages as any } : {}),
+    } as any);
+
+    await notifyCoachClientAssigned({
+      coachId: effectiveCoachId,
+      coachUserId: resolved?.coachUserId || matchedCoach?.userId || effectiveCoachId,
+      coachDocId,
+      coachCustomId,
+      coachName: effectiveCoachName,
+      clientId: client.id,
+      clientName: client.name,
+      memberId: client.memberId ? String(client.memberId) : undefined,
+      packageName: (client as any).secondaryPackageType || client.packageType || 'Personal Training',
+      branch: client.branch,
+      assignedBy: currentUser?.name || currentUser?.email || 'Staff',
+    });
+  };
+
+  const handleBulkAssignCoach = async (coachId: string) => {
+    if (!coachId || selectedClientIds.length === 0) return;
+    setIsBulkAssigningCoach(true);
+    let successCount = 0;
+    try {
+      for (const clientId of selectedClientIds) {
+        await assignMemberToCoach(clientId, coachId);
+        successCount++;
+      }
+      const coachObj = availableCoaches.find(c => c.id === coachId);
+      toast.success(
+        coachId === 'unassigned'
+          ? `Unassigned coach for ${successCount} member(s).`
+          : `Assigned ${successCount} member(s) to Coach ${coachObj?.name || coachId}!`
+      );
+      setSelectedClientIds([]);
+      setBulkSelectedCoachId('');
+    } catch (err) {
+      console.error('Error bulk assigning coach:', err);
+      toast.error('Failed to assign coach to some selected members.');
+    } finally {
+      setIsBulkAssigningCoach(false);
+    }
+  };
+
   const confirmBulkUpdatePackage = async () => {
     if (!bulkSelectedPackageName) return;
     setIsBulkPackageDialogOpen(false);
@@ -2191,7 +2297,13 @@ export default function Clients() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (currentUser?.role === 'rep' && client.assignedTo !== currentUser.id) return;
+                        const shouldMaskPhone =
+                          currentUser?.role === 'rep' &&
+                          !isFrontDeskUser(currentUser) &&
+                          !isSalesManagerUser(currentUser) &&
+                          !can('members.view_contact_info') &&
+                          client.assignedTo !== currentUser.id;
+                        if (shouldMaskPhone) return;
                         openClickToCallModal({
                           clientId: client.id,
                           memberId: client.memberId,
@@ -2208,7 +2320,13 @@ export default function Clients() {
                       title="Click to Call"
                     >
                       <Phone className="h-3 w-3 mr-1" />
-                      {currentUser?.role === 'rep' && client.assignedTo !== currentUser.id ? '**********' : client.phone}
+                      {currentUser?.role === 'rep' &&
+                      !isFrontDeskUser(currentUser) &&
+                      !isSalesManagerUser(currentUser) &&
+                      !can('members.view_contact_info') &&
+                      client.assignedTo !== currentUser.id
+                        ? '**********'
+                        : client.phone}
                     </button>
                   </div>
                 </div>
@@ -2908,7 +3026,28 @@ export default function Clients() {
                     {t('common.cancel')}
                   </Button>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 bg-background border border-primary/20 rounded-md px-2.5 h-8">
+                    <span className="text-[11px] font-bold text-primary shrink-0">Assign Coach:</span>
+                    <select
+                      className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer disabled:opacity-50"
+                      value={bulkSelectedCoachId}
+                      disabled={isBulkAssigningCoach}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBulkSelectedCoachId(val);
+                        if (val) void handleBulkAssignCoach(val);
+                      }}
+                    >
+                      <option value="">Select Coach...</option>
+                      <option value="unassigned">— Unassign Coach —</option>
+                      {availableCoaches.map(coach => (
+                        <option key={coach.id} value={coach.id}>
+                          {coach.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <Button variant="outline" size="sm" className="bg-background text-primary border-primary/20 hover:bg-primary/5" onClick={() => setIsBulkPackageDialogOpen(true)}>
                     <RefreshCw className="h-4 w-4 mr-2" /> Change Package
                   </Button>
@@ -3449,6 +3588,34 @@ export default function Clients() {
                                   {rep.name || rep.email || 'Unknown'}
                                 </option>
                               ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1 sm:col-span-2 lg:col-span-2">
+                          <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Assigned Coach / Trainer</Label>
+                          <select
+                            className="flex h-9 w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            value={
+                              activeClient.assignedCoachId && availableCoaches.some(c => c.id === activeClient.assignedCoachId)
+                                ? activeClient.assignedCoachId
+                                : availableCoaches.find(c => c.name.toLowerCase() === (activeClient.assignedCoachName || (activeClient as any).trainerName || '').toLowerCase())?.id || 'unassigned'
+                            }
+                            onChange={async (e) => {
+                              const val = e.target.value;
+                              await assignMemberToCoach(activeClient.id, val);
+                              const cObj = availableCoaches.find(c => c.id === val);
+                              toast.success(
+                                val === 'unassigned'
+                                  ? 'Coach unassigned from member.'
+                                  : `Assigned ${activeClient.name} to Coach ${cObj?.name || val}!`
+                              );
+                            }}
+                          >
+                            <option value="unassigned">Unassigned</option>
+                            {availableCoaches.map((coach) => (
+                              <option key={coach.id} value={coach.id}>
+                                {coach.name}{coach.branch ? ` (${coach.branch})` : ''}
+                              </option>
+                            ))}
                           </select>
                         </div>
                         <div className="space-y-2 sm:col-span-2 lg:col-span-2">

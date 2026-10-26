@@ -7,8 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '../contexts/ThemeContext';
 import { safeFormatDate } from '../utils/dateUtils';
-import { Activity, Award, Calendar, TrendingUp, Apple, Dumbbell, Flame, CheckCircle2, Eye } from 'lucide-react';
+import { Activity, Award, Calendar, TrendingUp, Apple, Dumbbell, Flame, CheckCircle2, Eye, Plus } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import AthletePerformanceDashboard from './components/AthletePerformanceDashboard';
 
 const CORE_MUSCLE_GROUPS = ['Calisthenics', 'Chest', 'Back', 'Legs', 'Shoulders', 'Arms & Core', 'Conditioning'] as const;
 
@@ -19,6 +20,7 @@ export default function MemberProgress({ client }: { client: Client | null }) {
   const [assignedWorkouts, setAssignedWorkouts] = useState<any[]>([]);
   const [expandedExerciseDemo, setExpandedExerciseDemo] = useState<string | null>(null);
   const [completingWorkoutId, setCompletingWorkoutId] = useState<string | null>(null);
+  const [selectedWorkoutToLog, setSelectedWorkoutToLog] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -243,9 +245,19 @@ export default function MemberProgress({ client }: { client: Client | null }) {
           <Activity className="h-5 w-5 text-primary" /> Workouts & Fitness Progress
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          View your coach-assigned workout programs, personal records, and training logs.
+          View your coach-assigned workout programs, log your weights and reps during PT, and track your dynamic athletic performance.
         </p>
       </div>
+
+      {/* Dynamic Athlete Stats, 1RM Curves & Interactive PT Weights/Reps Logger */}
+      <AthletePerformanceDashboard
+        client={client}
+        assignedWorkouts={assignedWorkouts}
+        performanceLogs={performanceLogs}
+        bodyweightKg={uniqueWeightEntries.length > 0 ? uniqueWeightEntries[uniqueWeightEntries.length - 1]?.weight : undefined}
+        initialLogWorkout={selectedWorkoutToLog}
+        onCloseInitialLog={() => setSelectedWorkoutToLog(null)}
+      />
 
       {/* Assigned Workouts from Coach */}
       <Card className="border border-primary/30 bg-card/60 shadow-sm overflow-hidden">
@@ -301,17 +313,28 @@ export default function MemberProgress({ client }: { client: Client | null }) {
                       </p>
                     </div>
 
-                    {!isCompleted && (
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <Button
                         size="sm"
-                        onClick={() => handleMarkWorkoutCompleted(workout.id)}
-                        disabled={completingWorkoutId === workout.id}
-                        className="h-7 px-2.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1 shrink-0"
+                        variant="outline"
+                        onClick={() => setSelectedWorkoutToLog(workout)}
+                        className="h-7 px-2.5 text-[11px] font-bold border-primary/40 text-primary hover:bg-primary/10 rounded-xl gap-1"
                       >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        {completingWorkoutId === workout.id ? 'Saving...' : 'Mark Done'}
+                        <Plus className="h-3.5 w-3.5" />
+                        Log Weights & Reps
                       </Button>
-                    )}
+                      {!isCompleted && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleMarkWorkoutCompleted(workout.id)}
+                          disabled={completingWorkoutId === workout.id}
+                          className="h-7 px-2.5 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-1 shrink-0"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          {completingWorkoutId === workout.id ? 'Saving...' : 'Mark Done'}
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {workout.coachNotes && (

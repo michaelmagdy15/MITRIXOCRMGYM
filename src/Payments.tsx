@@ -2073,6 +2073,7 @@ export default function Payments() {
                       <SelectItem value="Cash" className="rounded-xl py-3 px-4">{t('dashboard.cash')}</SelectItem>
                       <SelectItem value="Credit Card" className="rounded-xl py-3 px-4">{t('dashboard.visa')}</SelectItem>
                       <SelectItem value="Instapay" className="rounded-xl py-3 px-4">{t('dashboard.instapay')}</SelectItem>
+                      <SelectItem value="Wallet Balance" className="rounded-xl py-3 px-4">💳 Wallet Cash Balance</SelectItem>
                       <SelectItem value="ValU" className="rounded-xl py-3 px-4">ValU (BNPL Installments)</SelectItem>
                       <SelectItem value="Sympl" className="rounded-xl py-3 px-4">Sympl (Pay Later)</SelectItem>
                       <SelectItem value="Souhoola" className="rounded-xl py-3 px-4">Souhoola (BNPL)</SelectItem>
@@ -2081,6 +2082,33 @@ export default function Payments() {
                       <SelectItem value="Other" className="rounded-xl py-3 px-4">{t('leads.tabs.other')}</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  {clientId && !isWalkInGuest && (() => {
+                    const selClient = clients.find(c => c.id === clientId);
+                    const wBal = Number((selClient as any)?.walletBalance || 0);
+                    if (wBal <= 0 && method !== 'Wallet Balance' && (!useSplitTender || secondaryMethod !== 'Wallet Balance')) return null;
+                    return (
+                      <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs">
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          💳 Member Wallet Cash Balance: <span className="font-mono font-black">{wBal.toLocaleString()} LE</span>
+                        </span>
+                        {wBal > 0 && wBal < pricingBreakdown.amountPaid && !useSplitTender && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMethod('Wallet Balance');
+                              setUseSplitTender(true);
+                              setPrimaryTenderAmount(String(wBal));
+                              setSecondaryMethod('Cash');
+                            }}
+                            className="text-[11px] font-bold underline text-emerald-600 dark:text-emerald-400 hover:opacity-80"
+                          >
+                            Apply {wBal.toLocaleString()} LE + Split Remainder
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {useSplitTender && (
                     <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 space-y-2.5">
@@ -2112,6 +2140,7 @@ export default function Payments() {
                             <option value="Credit Card">Visa / Credit Card</option>
                             <option value="Instapay">Instapay</option>
                             <option value="Cash">Cash</option>
+                            <option value="Wallet Balance">Wallet Cash Balance</option>
                             <option value="ValU">ValU</option>
                             <option value="Sympl">Sympl</option>
                             <option value="Bank Transfer">Bank Transfer</option>

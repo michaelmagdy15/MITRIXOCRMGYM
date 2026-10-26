@@ -73,17 +73,48 @@ export default function CoachClients({
     try {
       const coachId = currentUser.id;
       const coachCustomId = currentUser.coachId || '';
+      const coachEmail = (currentUser.email || '').trim().toLowerCase();
       const coachName = (currentUser.name || '').trim();
       const coachNameLower = coachName.toLowerCase();
+
+      // Resolve any coaches-collection document IDs linked to this user
+      const linkedCoachDocIds = new Set<string>();
+      try {
+        const coachesSnap = await getDocs(collection(db, 'coaches'));
+        coachesSnap.docs.forEach(d => {
+          const data = d.data() as any;
+          const dName = String(data.name || '').trim().toLowerCase();
+          const dEmail = String(data.email || '').trim().toLowerCase();
+          if (
+            data.userId === coachId ||
+            d.id === coachId ||
+            (coachCustomId && (data.coachId === coachCustomId || d.id === coachCustomId)) ||
+            (coachNameLower && dName === coachNameLower) ||
+            (coachEmail && dEmail === coachEmail)
+          ) {
+            linkedCoachDocIds.add(d.id);
+          }
+        });
+      } catch {}
 
       const queries: Promise<any>[] = [
         getDocs(query(collection(db, 'sessions'), where('trainerId', '==', coachId))),
         getDocs(query(collection(db, 'sessions'), where('coachId', '==', coachId))),
-        getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachId))),
         getDocs(query(collection(db, 'assessments'), where('assignedCoachId', '==', coachId))),
+        getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachId))),
+        getDocs(query(collection(db, 'clients'), where('assignedTo', '==', coachId))),
       ];
       if (coachCustomId) {
         queries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', coachCustomId))));
+        queries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachCustomId', '==', coachCustomId))));
+      }
+      linkedCoachDocIds.forEach(docId => {
+        queries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachId', '==', docId))));
+        queries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachDocId', '==', docId))));
+        queries.push(getDocs(query(collection(db, 'clients'), where('assignedTo', '==', docId))));
+      });
+      if (coachEmail) {
+        queries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachEmail', '==', coachEmail))));
       }
       if (coachName) {
         queries.push(getDocs(query(collection(db, 'clients'), where('assignedCoachName', '==', coachName))));
@@ -94,9 +125,8 @@ export default function CoachClients({
       const [
         sessionsSnap1,
         sessionsSnap2,
-        assignedClientsSnap,
         assignedAssessmentsSnap,
-        ...extraClientSnaps
+        ...clientSnaps
       ] = await Promise.all(queries);
 
       const lastMap: Record<string, string> = {};
@@ -115,7 +145,7 @@ export default function CoachClients({
       setLastSessionMap(lastMap);
 
       const directClientMap = new Map<string, Client>();
-      [assignedClientsSnap, ...extraClientSnaps].forEach(snap => {
+      clientSnaps.forEach(snap => {
         snap?.docs?.forEach((d: any) => {
           directClientMap.set(d.id, { ...d.data(), id: d.id } as Client);
         });
@@ -129,7 +159,12 @@ export default function CoachClients({
           const c = { ...d.data(), id: d.id } as Client;
           const matchesProfile =
             c.assignedCoachId === coachId ||
-            (coachCustomId && c.assignedCoachId === coachCustomId) ||
+            (c as any).assignedTo === coachId ||
+            (coachCustomId && (c.assignedCoachId === coachCustomId || (c as any).assignedCoachCustomId === coachCustomId)) ||
+            (c.assignedCoachId && linkedCoachDocIds.has(c.assignedCoachId)) ||
+            ((c as any).assignedCoachDocId && linkedCoachDocIds.has((c as any).assignedCoachDocId)) ||
+            ((c as any).assignedTo && linkedCoachDocIds.has((c as any).assignedTo)) ||
+            (coachEmail && String((c as any).assignedCoachEmail || '').toLowerCase() === coachEmail) ||
             (coachNameLower && (
               (c.assignedCoachName || '').toLowerCase() === coachNameLower ||
               String((c as any).trainerName || '').toLowerCase() === coachNameLower ||
@@ -138,11 +173,12 @@ export default function CoachClients({
             ));
           const matchesPkg = (c.packages || []).some(p => {
             const pCoachName = (p.trainerName || (p as any).coachName || '').toLowerCase();
-            const pCoachId = (p as any).coachId || '';
+            const pCoachId = (p as any).coachId || (p as any).trainerId || '';
             return (
               (coachNameLower && pCoachName === coachNameLower) ||
               pCoachId === coachId ||
-              (coachCustomId && pCoachId === coachCustomId)
+              (coachCustomId && pCoachId === coachCustomId) ||
+              (pCoachId && linkedCoachDocIds.has(pCoachId))
             );
           });
           if (matchesProfile || matchesPkg) {

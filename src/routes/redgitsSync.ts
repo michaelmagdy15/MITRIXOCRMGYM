@@ -764,9 +764,11 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
 
     const repUserIdByName = new Map<string, string>();
     const repDisplayNameById = new Map<string, string>();
+    const existingUsersById = new Map<string, Record<string, any>>();
 
     for (const docSnap of existingUsersSnap.docs) {
       const u = docSnap.data();
+      existingUsersById.set(docSnap.id, u || {});
       const uName = String(u.name || '').trim();
       if (uName) {
         repUserIdByName.set(uName.toLowerCase(), docSnap.id);
@@ -805,6 +807,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       const newId = `redgits-rep-${slug}`;
       repUserIdByName.set(lower, newId);
       repDisplayNameById.set(newId, clean);
+      const existingUserDoc = existingUsersById.get(newId);
+      if (existingUserDoc) {
+        return { id: newId, name: String(existingUserDoc.name || clean) };
+      }
       userDocsMap.set(newId, {
         id: newId,
         data: {
@@ -813,7 +819,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           email: `${slug}@inzanathletics.com`,
           role: 'rep',
           status: 'working',
-          branch: 'Inzan Athletics',
+          branch: 'Garden 8',
           sourceSystem: 'RedGITS_v17.12',
           createdAt: nowIso,
           updatedAt: nowIso,
