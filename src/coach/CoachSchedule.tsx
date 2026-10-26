@@ -2083,15 +2083,41 @@ export default function CoachSchedule({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
+                    onClick={async () => {
+                      if (isInzan && !isFitnessManagerOrAdmin) {
+                        const reason = window.prompt('Regular coaches cannot cancel a session directly. Enter a reason to request Fitness Manager approval to cancel:', 'Member requested cancellation');
+                        if (reason === null) return;
+                        setIsUpdatingSession(true);
+                        try {
+                          const nowIso = new Date().toISOString();
+                          await updateDoc(doc(db, 'sessions', selectedSession.id), {
+                            cancellationRequest: {
+                              status: 'Pending',
+                              requestedBy: currentUser?.id || '',
+                              requestedByName: currentUser?.name || 'Coach',
+                              requestedAt: nowIso,
+                              reason: reason.trim() || 'Requested by Coach',
+                            },
+                            updatedAt: nowIso,
+                          });
+                          alert('Cancellation request submitted to the Fitness Manager.');
+                          setSelectedSession(null);
+                        } catch (err) {
+                          console.error('Failed to request cancellation:', err);
+                          alert('Failed to submit cancellation request.');
+                        } finally {
+                          setIsUpdatingSession(false);
+                        }
+                        return;
+                      }
                       if (window.confirm("Are you sure you want to cancel this session?")) {
                         handleUpdateSessionStatus('Cancelled');
                       }
                     }}
-                    disabled={isUpdatingSession || selectedSession.status === 'Cancelled'}
+                    disabled={isUpdatingSession || selectedSession.status === 'Cancelled' || selectedSession.cancellationRequest?.status === 'Pending'}
                     className="h-8 text-xs font-bold text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950/30 gap-1"
                   >
-                    <Ban className="h-3.5 w-3.5" /> Cancel Session
+                    <Ban className="h-3.5 w-3.5" /> {(isInzan && !isFitnessManagerOrAdmin) ? (selectedSession.cancellationRequest?.status === 'Pending' ? 'Cancel Pending FM' : 'Request Cancel') : 'Cancel Session'}
                   </Button>
                 </div>
               </div>

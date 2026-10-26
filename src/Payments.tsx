@@ -24,7 +24,7 @@ import { AlertDialog } from './components/AlertDialog';
 import { PaymentCategory, PAYMENT_CATEGORIES, resolvePaymentCategory } from './utils/paymentCategories';
 import { createApprovalRequest } from './services/approvalService';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
-import { canReassignMemberSalesRep, isPaymentEditableByStaff } from './utils/permissions';
+import { canReassignMemberSalesRep, isPaymentEditableByStaff, getRevenueScopeForUser, isPaymentInRevenueScope } from './utils/permissions';
 import { validateMembershipEligibility } from './utils/membershipRules';
 import { resolvePaymentBranch, normalizeBranchName } from './utils/branchUtils';
 import { matchesPhoneSearch } from './utils/phoneUtils';
@@ -1364,8 +1364,13 @@ export default function Payments() {
     return undefined;
   }, [clientById, clientByMemberId, clientByPortalUserId, clientByPhone]);
 
+  const revenueScope = React.useMemo(() => getRevenueScopeForUser(currentUser), [currentUser]);
+
   const filteredPayments = React.useMemo(() => {
     let result = payments.filter(payment => {
+      if (isInzan && revenueScope !== 'all' && !isPaymentInRevenueScope(payment, revenueScope)) {
+        return false;
+      }
       const client = resolvePaymentClient(payment);
 
       // Sales reps only see payments attributed to them.
@@ -1456,7 +1461,7 @@ export default function Payments() {
     });
 
     return result;
-  }, [payments, clients, deferredSearchTerm, deferredFilterMethod, deferredFilterBranch, deferredFilterPackage, deferredFilterCoach, deferredFilterDateFrom, deferredFilterDateTo, deferredSortConfig, isRep, currentUser, filterSalesName, deferredFilterShowOnlyHeld]);
+  }, [payments, clients, deferredSearchTerm, deferredFilterMethod, deferredFilterBranch, deferredFilterPackage, deferredFilterCoach, deferredFilterDateFrom, deferredFilterDateTo, deferredSortConfig, isRep, currentUser, filterSalesName, deferredFilterShowOnlyHeld, isInzan, revenueScope, resolvePaymentClient]);
 
   // Unique package names from all payments (for filter dropdown)
   const uniquePackageNames = React.useMemo(() => {

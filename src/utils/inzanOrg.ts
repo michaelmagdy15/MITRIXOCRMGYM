@@ -11,7 +11,7 @@ export const INZAN_DEPARTMENTS: InzanDepartment[] = [
 ];
 
 export const INZAN_JOB_TITLES: Record<InzanDepartment, InzanJobTitle[]> = {
-  Executive: ['General Manager'],
+  Executive: ['CEO', 'General Manager'],
   Operations: [
     'Operations Manager',
     'Floor Manager I',
@@ -19,7 +19,8 @@ export const INZAN_JOB_TITLES: Record<InzanDepartment, InzanJobTitle[]> = {
     'Maintenance',
     'Male Housekeeping',
     'Female Housekeeping',
-    'Housekeeping'
+    'Housekeeping',
+    'Kitchen'
   ],
   Marketing: [
     'Marketing Manager',
@@ -33,6 +34,7 @@ export const INZAN_JOB_TITLES: Record<InzanDepartment, InzanJobTitle[]> = {
   Fitness: [
     'Fitness Manager',
     'Nutritionist',
+    'SGF Academy Owner',
     'Zone Head',
     'Full-Time Trainer',
     'Part-Time Trainer'
@@ -50,7 +52,8 @@ export const INZAN_JOB_TITLES: Record<InzanDepartment, InzanJobTitle[]> = {
 
 // Maps reporting chain based on the INZAN Organizational Structure
 export const INZAN_SUPERVISOR_TITLES: Record<InzanJobTitle, InzanJobTitle | null> = {
-  'General Manager': null,
+  'CEO': null,
+  'General Manager': 'CEO',
   'Operations Manager': 'General Manager',
   'Floor Manager I': 'Operations Manager',
   'Floor Manager II': 'Operations Manager',
@@ -58,6 +61,7 @@ export const INZAN_SUPERVISOR_TITLES: Record<InzanJobTitle, InzanJobTitle | null
   'Male Housekeeping': 'Floor Manager I',
   'Female Housekeeping': 'Floor Manager II',
   'Housekeeping': 'Operations Manager',
+  'Kitchen': 'Operations Manager',
   'Marketing Manager': 'General Manager',
   'Content Creator': 'Marketing Manager',
   'Graphic Designer': 'Marketing Manager',
@@ -65,6 +69,7 @@ export const INZAN_SUPERVISOR_TITLES: Record<InzanJobTitle, InzanJobTitle | null
   'Front Desk': 'Experience Manager',
   'Fitness Manager': 'General Manager',
   'Nutritionist': 'Fitness Manager',
+  'SGF Academy Owner': 'General Manager',
   'Zone Head': 'Fitness Manager',
   'Full-Time Trainer': 'Zone Head',
   'Part-Time Trainer': 'Zone Head',
@@ -78,6 +83,7 @@ export const INZAN_SUPERVISOR_TITLES: Record<InzanJobTitle, InzanJobTitle | null
 // Maps INZAN Job Title to base system UserRole
 export const getSystemRoleForJobTitle = (title: InzanJobTitle): UserRole => {
   switch (title) {
+    case 'CEO':
     case 'General Manager':
       return 'manager';
     case 'Operations Manager':
@@ -85,11 +91,15 @@ export const getSystemRoleForJobTitle = (title: InzanJobTitle): UserRole => {
     case 'Floor Manager II':
     case 'Marketing Manager':
     case 'Experience Manager':
-    case 'Fitness Manager':
     case 'Financial Manager':
     case 'Sales Manager':
     case 'Assistant Sales Manager':
+    case 'SGF Academy Owner':
       return 'manager';
+    case 'Fitness Manager':
+      return 'fitness_manager';
+    case 'Kitchen':
+      return 'kitchen';
     case 'Full-Time Trainer':
     case 'Part-Time Trainer':
     case 'Zone Head':

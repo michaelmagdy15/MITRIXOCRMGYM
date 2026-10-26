@@ -1,5 +1,5 @@
 import { Client, User } from '../types';
-import { canReassignMemberSalesRep } from './permissions';
+import { canReassignMemberSalesRep, isGeneralManagerOrCEO, isSalesManagerUser } from './permissions';
 
 export const LOCKED_CORE_MEMBER_FIELDS: (keyof Client)[] = [
   'name',
@@ -71,7 +71,10 @@ export function isFieldLockedForUser(
     }
 
     const canUnlockCore =
-      currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin';
+      currentUser?.role === 'super_admin' ||
+      currentUser?.role === 'crm_admin' ||
+      isGeneralManagerOrCEO(currentUser) ||
+      (isSalesManagerUser(currentUser) && (fieldKey === 'name' || fieldKey === 'phone' || fieldKey === 'salesRep'));
 
     return !canUnlockCore;
   }

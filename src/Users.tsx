@@ -28,7 +28,10 @@ import { PermissionMatrixEditor } from './components/PermissionMatrixEditor';
 import { 
   syncLegacyFlags, 
   DEFAULT_ROLE_PERMISSIONS, 
-  ALL_PERMISSIONS_FALSE 
+  ALL_PERMISSIONS_FALSE,
+  isGeneralManagerOrCEO,
+  isSalesManagerUser,
+  isFitnessManagerUser
 } from './utils/permissions';
 
 export default function Users() {
@@ -88,7 +91,17 @@ export default function Users() {
 
   const [performanceUser, setPerformanceUser] = useState<User | null>(null);
 
-  if (currentUser?.role !== 'manager' && currentUser?.role !== 'admin' && currentUser?.role !== 'super_admin' && currentUser?.role !== 'crm_admin') {
+  const hasUsersPageAccess =
+    currentUser?.role === 'manager' ||
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'super_admin' ||
+    currentUser?.role === 'crm_admin' ||
+    currentUser?.role === 'fitness_manager' ||
+    isGeneralManagerOrCEO(currentUser) ||
+    isSalesManagerUser(currentUser) ||
+    isFitnessManagerUser(currentUser);
+
+  if (!currentUser || !hasUsersPageAccess) {
     return (
       <div className="flex items-center justify-center h-[400px]">
         <p className="text-muted-foreground">You do not have permission to view this page.</p>
@@ -96,8 +109,8 @@ export default function Users() {
     );
   }
 
-  const canChangeRoles = currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin' || currentUser?.role === 'admin';
-  const canInviteUsers = canChangeRoles || currentUser?.role === 'manager';
+  const canChangeRoles = currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin' || currentUser?.role === 'admin' || isGeneralManagerOrCEO(currentUser);
+  const canInviteUsers = canChangeRoles || currentUser?.role === 'manager' || currentUser?.role === 'fitness_manager' || isSalesManagerUser(currentUser) || isFitnessManagerUser(currentUser);
 
   const handleRoleChange = (userId: string, newRole: UserRole) => {
     const updates: Partial<User> = { role: newRole };
@@ -475,6 +488,7 @@ export default function Users() {
                                 <SelectItem value="manager">Manager</SelectItem>
                                 <SelectItem value="fitness_manager">Fitness Manager</SelectItem>
                                 <SelectItem value="coach">Coach</SelectItem>
+                                <SelectItem value="kitchen">Kitchen (Earth's Kitchen)</SelectItem>
                                 {canInviteUsers && (
                                   <SelectItem value="admin">Admin</SelectItem>
                                 )}

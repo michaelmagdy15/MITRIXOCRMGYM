@@ -15,6 +15,7 @@ import { ClassAnalytics } from './ClassAnalytics';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { collection, getDocs, doc, updateDoc, setDoc, arrayUnion, arrayRemove, query, where, increment } from 'firebase/firestore';
 import { isTenantInzan } from '../utils/inzanOrg';
+import { isSgfAcademyOwnerUser, isPaymentInRevenueScope } from '../utils/permissions';
 import { addAuditLog } from '../services/auditService';
 import { db, auth } from '../firebase';
 import { User, Client } from '../types';
@@ -70,7 +71,7 @@ export const TIER_OPTIONS: { id: CanonicalTier; label: string }[] = [
 export const BASE_CATEGORIES = [
   'Adults',
   'Kids',
-  'Juniors',
+  'Juniors', 'SGF', 'MMA',
   'Boxing',
   'HIIT',
   'Strength & Conditioning',
@@ -87,7 +88,49 @@ export const ClassManager: React.FC = () => {
   const { masterClasses } = useMasterClasses();
   const { currentUser } = useAuth();
   const { branches, branding } = useSettings();
-  const { clients, setActiveTab, setActiveClientId } = useAppContext();
+  const { clients, payments, setActiveTab, setActiveClientId } = useAppContext();
+  const isSgfOwner = isSgfAcademyOwnerUser(currentUser);
+  const [sgfTarget, setSgfTarget] = useState<string>(() => localStorage.getItem('sgf_monthly_target') || '150000');
+  const [newSgfCoachName, setNewSgfCoachName] = useState('');
+  const [newSgfCoachEmail, setNewSgfCoachEmail] = useState('');
+  const [addingSgfCoach, setAddingSgfCoach] = useState(false);
+
+  const sgfPayments = useMemo(
+    () => (payments || []).filter((p) => isPaymentInRevenueScope(p, 'sgf_only')),
+    [payments]
+  );
+  const sgfTotalRevenue = useMemo(
+    () => sgfPayments.reduce((sum, p) => sum + (Number((p as any).amount) || 0), 0),
+    [sgfPayments]
+  );
+
+  const handleAddSgfTrainer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSgfCoachName.trim() || !newSgfCoachEmail.trim()) return;
+    setAddingSgfCoach(true);
+    try {
+      const ref = doc(collection(db, 'users'));
+      const payload: User = {
+        id: ref.id,
+        name: newSgfCoachName.trim(),
+        email: newSgfCoachEmail.trim().toLowerCase(),
+        role: 'coach',
+        department: 'Fitness',
+        jobTitle: 'Personal Trainer',
+      };
+      await setDoc(ref, { ...payload, specialty: 'SGF / MMA Academy', status: 'Active', active: true });
+      await setDoc(doc(db, 'coaches', ref.id), { ...payload, specialty: 'SGF / MMA Academy', status: 'Active', active: true });
+      setCoaches((prev) => [...prev, payload]);
+      setNewSgfCoachName('');
+      setNewSgfCoachEmail('');
+      toast.success(`Added SGF / MMA Coach: ${payload.name}`);
+    } catch (err) {
+      console.error('Error adding SGF trainer:', err);
+      toast.error('Failed to add SGF trainer.');
+    } finally {
+      setAddingSgfCoach(false);
+    }
+  };
   const [coaches, setCoaches] = useState<User[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassSchedule | null>(null);
@@ -1015,6 +1058,7 @@ export const ClassManager: React.FC = () => {
 
   const filteredClasses = useMemo(() => {
     return sortedClasses.filter(cls => {
+      if (isSgfOwner && !/sgf|mma|martial|bjj|jiu|muay|kickbox|grappling|fighter|combat/i.test(`${cls.name || ''} ${cls.category || ''} ${cls.description || ''}`)) return false;
       // 0. Specific Exact Date filter
       if (selectedSpecificDate) {
         const dStr = cls.date || (cls.startTime ? cls.startTime.substring(0, 10) : '');
@@ -1076,6 +1120,79 @@ export const ClassManager: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {isSgfOwner && (
+        <Card className="border-2 border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-card to-card shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Badge className="bg-amber-500 text-black font-black uppercase text-[10px]">
+                SGF Academy (MMA) • Owner Portal
+              </Badge>
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-500 font-bold text-xs">
+                {sgfPayments.length} SGF / MMA Subscriptions Paid
+              </Badge>
+            </div>
+            <CardTitle className="text-lg font-black mt-1">
+              SGF / MMA Academy Revenue, Targets &amp; Trainers
+            </CardTitle>
+            <CardDescription className="text-xs">
+              View all members who paid for SGF / MMA, track your academy revenue target, add SGF coaches, and manage SGF class schedules &amp; booked rosters.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-xl border bg-card">
+                <p className="text-[10px] font-bold uppercase text-muted-foreground">SGF / MMA Revenue</p>
+                <p className="text-2xl font-black text-emerald-500 mt-1">
+                  {branding?.currencySymbol || 'EGP'} {sgfTotalRevenue.toLocaleString()}
+                </p>
+              </div>
+              <div className="p-3.5 rounded-xl border bg-card">
+                <p className="text-[10px] font-bold uppercase text-muted-foreground">Paid SGF Members</p>
+                <p className="text-2xl font-black text-foreground mt-1">{sgfPayments.length}</p>
+              </div>
+              <div className="p-3.5 rounded-xl border bg-card">
+                <p className="text-[10px] font-bold uppercase text-muted-foreground">Academy Monthly Target</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <Input
+                    type="number"
+                    value={sgfTarget}
+                    onChange={(e) => {
+                      setSgfTarget(e.target.value);
+                      localStorage.setItem('sgf_monthly_target', e.target.value);
+                    }}
+                    className="h-8 text-xs font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleAddSgfTrainer} className="flex flex-wrap items-end gap-2 pt-2 border-t">
+              <div className="flex-1 min-w-[180px]">
+                <Label className="text-[10px] font-bold uppercase">Add SGF / MMA Coach Name</Label>
+                <Input
+                  value={newSgfCoachName}
+                  onChange={(e) => setNewSgfCoachName(e.target.value)}
+                  placeholder="Coach Name"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <Label className="text-[10px] font-bold uppercase">Coach Email</Label>
+                <Input
+                  type="email"
+                  value={newSgfCoachEmail}
+                  onChange={(e) => setNewSgfCoachEmail(e.target.value)}
+                  placeholder="coach@sgf.com"
+                  className="h-8 text-xs"
+                />
+              </div>
+              <Button type="submit" size="sm" disabled={addingSgfCoach} className="h-8 text-xs font-bold">
+                <UserPlus className="h-3.5 w-3.5 mr-1" /> Add SGF Trainer
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
         <div>

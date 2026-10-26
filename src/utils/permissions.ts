@@ -739,29 +739,37 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Record<string, boolean>>
   fitness_manager: {
     ...ALL_PERMISSIONS_FALSE,
     'dashboard.view': true,
+    'dashboard.view_financials': true,
     'dashboard.view_attendance_trends': true,
+    'payments.view': true,
     'classes.view': true,
     'classes.view_roster': true,
     'classes.manage_schedule': true,
+    'classes.cancel_class': true,
     'classes.mark_attendance': true,
     'classes.book_member': true,
+    'classes.cancel_booking': true,
+    'classes.override_capacity': true,
     'coaches.view': true,
-    'coaches.manage': true,
+    'coaches.manage_profiles': true,
     'coaches.schedule_pt': true,
     'coaches.cancel_pt': true,
     'coaches.complete_pt': true,
     'coaches.view_payouts': true,
-    'coaches.manage_payouts': true,
+    'coaches.edit_payout_rates': true,
     'members.view': true,
     'members.view_contact_info': true,
     'members.edit_profile': true,
     'members.manage_packages': true,
+    'members.adjust_balances': true,
+    'members.freeze': true,
     'leads.view_all': true,
     'leads.view_contact_info': true,
     'attendance.view': true,
     'attendance.checkin': true,
     'packages.view': true,
-    'reports.view_basic': true
+    'reports.view_basic': true,
+    'reports.view_user_performance': true
   },
   coach: {
     ...ALL_PERMISSIONS_FALSE,
@@ -775,6 +783,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Record<string, boolean>>
     'coaches.view_payouts': true,
     'members.view': true,
     'attendance.view': true
+  },
+  kitchen: {
+    ...ALL_PERMISSIONS_FALSE,
+    'operations.pos_juice_bar': true
   },
   client: {
     ...ALL_PERMISSIONS_FALSE
@@ -793,14 +805,18 @@ export const DEFAULT_SYSTEM_TEMPLATES: Omit<PermissionTemplate, 'id' | 'createdA
     permissions: { ...ALL_PERMISSIONS_TRUE }
   },
   {
+    name: 'CEO',
+    description: 'Full executive and unrestricted access to all gym branches, financials, memberships, services, and system settings.',
+    isSystem: true,
+    baseRole: 'manager',
+    permissions: { ...ALL_PERMISSIONS_TRUE }
+  },
+  {
     name: 'General Manager',
     description: 'Complete operational management, staff oversight, full financial analytics, and approvals.',
     isSystem: true,
     baseRole: 'manager',
-    permissions: {
-      ...ALL_PERMISSIONS_TRUE,
-      'settings.system_tools': false
-    }
+    permissions: { ...ALL_PERMISSIONS_TRUE }
   },
   {
     name: 'Front Desk / Receptionist',
@@ -870,7 +886,7 @@ export const DEFAULT_SYSTEM_TEMPLATES: Omit<PermissionTemplate, 'id' | 'createdA
   },
   {
     name: 'Sales Manager',
-    description: 'Lead distribution, sales quota monitoring, rep re-assignments, commission audit, and revenue analytics.',
+    description: 'Lead distribution, sales quota monitoring, rep re-assignments, package management, freezing, check-ins, and membership revenue analytics.',
     isSystem: true,
     baseRole: 'manager',
     permissions: {
@@ -878,6 +894,8 @@ export const DEFAULT_SYSTEM_TEMPLATES: Omit<PermissionTemplate, 'id' | 'createdA
       'dashboard.view': true,
       'dashboard.view_financials': true,
       'dashboard.view_rep_breakdown': true,
+      'dashboard.view_attendance_trends': true,
+      'dashboard.view_retention_metrics': true,
       'dashboard.view_global': true,
       'payments.view': true,
       'payments.create': true,
@@ -885,13 +903,18 @@ export const DEFAULT_SYSTEM_TEMPLATES: Omit<PermissionTemplate, 'id' | 'createdA
       'payments.print_receipt': true,
       'payments.view_branch_totals': true,
       'payments.export': true,
+      'payments.hold_freeze': true,
+      'payments.release_hold': true,
+      'payments.upgrade': true,
       'members.view': true,
       'members.view_all_branches': true,
       'members.view_contact_info': true,
       'members.create': true,
       'members.edit_profile': true,
+      'members.edit_status': true,
       'members.manage_packages': true,
       'members.reassign_sales_rep': true,
+      'members.freeze': true,
       'members.log_interactions': true,
       'members.export': true,
       'leads.view_all': true,
@@ -902,11 +925,111 @@ export const DEFAULT_SYSTEM_TEMPLATES: Omit<PermissionTemplate, 'id' | 'createdA
       'leads.assign': true,
       'leads.convert': true,
       'leads.export': true,
+      'attendance.view': true,
+      'attendance.checkin': true,
+      'attendance.checkin_guests': true,
+      'attendance.export': true,
       'packages.view': true,
+      'packages.create': true,
+      'packages.edit': true,
+      'packages.delete': true,
       'reports.view_basic': true,
       'reports.view_advanced': true,
       'reports.view_user_performance': true,
-      'operations.call_center': true
+      'reports.export_csv': true,
+      'reports.export_pdf': true,
+      'reports.export_excel': true,
+      'operations.call_center': true,
+      'settings.access': true,
+      'settings.manage_users': true
+    }
+  },
+  {
+    name: 'Fitness Manager',
+    description: 'Trainer targets, commissions & salaries, PT package freezing, session controls (+/- / delete / reset), workout approvals, and services revenue.',
+    isSystem: true,
+    baseRole: 'fitness_manager',
+    permissions: {
+      ...ALL_PERMISSIONS_FALSE,
+      'dashboard.view': true,
+      'dashboard.view_financials': true,
+      'dashboard.view_attendance_trends': true,
+      'payments.view': true,
+      'members.view': true,
+      'members.view_contact_info': true,
+      'members.edit_profile': true,
+      'members.manage_packages': true,
+      'members.adjust_balances': true,
+      'members.freeze': true,
+      'attendance.view': true,
+      'attendance.checkin': true,
+      'classes.view': true,
+      'classes.manage_schedule': true,
+      'classes.cancel_class': true,
+      'classes.book_member': true,
+      'classes.cancel_booking': true,
+      'classes.override_capacity': true,
+      'classes.view_roster': true,
+      'classes.mark_attendance': true,
+      'coaches.view': true,
+      'coaches.manage_profiles': true,
+      'coaches.schedule_pt': true,
+      'coaches.cancel_pt': true,
+      'coaches.complete_pt': true,
+      'coaches.view_payouts': true,
+      'coaches.edit_payout_rates': true,
+      'packages.view': true,
+      'reports.view_basic': true,
+      'reports.view_user_performance': true
+    }
+  },
+  {
+    name: 'SGF Academy Owner',
+    description: 'Dedicated access to SGF / MMA Academy classes, schedules, bookings, SGF trainers, MMA PT, and SGF/MMA revenue & targets.',
+    isSystem: true,
+    baseRole: 'manager',
+    permissions: {
+      ...ALL_PERMISSIONS_FALSE,
+      'dashboard.view': true,
+      'dashboard.view_financials': true,
+      'payments.view': true,
+      'classes.view': true,
+      'classes.manage_schedule': true,
+      'classes.cancel_class': true,
+      'classes.book_member': true,
+      'classes.cancel_booking': true,
+      'classes.view_roster': true,
+      'classes.mark_attendance': true,
+      'coaches.view': true,
+      'coaches.manage_profiles': true,
+      'coaches.schedule_pt': true,
+      'coaches.complete_pt': true,
+      'members.view': true,
+      'members.view_contact_info': true,
+      'reports.view_basic': true
+    }
+  },
+  {
+    name: 'Nutritionist',
+    description: 'Manage nutritionist availability schedule, view booked members and nutrition payments, and create member dietary plans & body metrics.',
+    isSystem: true,
+    baseRole: 'rep',
+    permissions: {
+      ...ALL_PERMISSIONS_FALSE,
+      'members.view': true,
+      'members.view_contact_info': true,
+      'payments.view': true,
+      'reports.view_basic': true
+    }
+  },
+  {
+    name: 'Kitchen (Earth\'s Kitchen)',
+    description: 'Dedicated Kitchen Kiosk access to receive mobile orders, view member ID/name/photo/phone, and notify members when orders are ready.',
+    isSystem: true,
+    baseRole: 'kitchen',
+    permissions: {
+      ...ALL_PERMISSIONS_FALSE,
+      'operations.pos_juice_bar': true
     }
   },
   {
@@ -1007,9 +1130,14 @@ export function hasPermission(
 
   const role = user.role;
 
-  // 1. Super Admins and CRM Admins have unrestricted power
-  if (role === 'super_admin' || role === 'crm_admin') {
+  // 1. Super Admins, CRM Admins, CEO, and General Manager have unrestricted power
+  if (role === 'super_admin' || role === 'crm_admin' || isGeneralManagerOrCEO(user)) {
     return true;
+  }
+
+  // Inzan restriction: Sales Reps cannot check in members, whereas Sales Manager can
+  if (permissionKey === 'attendance.checkin' && isSalesRepOnly(user)) {
+    return false;
   }
 
   // 2. Explicit custom user-level override takes precedence
@@ -1134,28 +1262,202 @@ export function canReassignMemberSalesRep(
     return true;
   }
 
-  // 1. Super admins and CRM admins have executive override
-  if (user.role === 'super_admin' || user.role === 'crm_admin') return true;
+  // 1. Super admins, CRM admins, CEO, and General Manager have executive override
+  if (isGeneralManagerOrCEO(user)) return true;
 
   // 2. Explicit granular permission override (via template or custom permissions)
   if (hasPermission(user, 'members.reassign_sales_rep', templatesMap)) return true;
 
   // 3. Job title / role / department checks for Sales Manager
-  const jobTitle = (user.jobTitle || '').toLowerCase();
-  const dept = (user.department || '').toLowerCase();
+  if (isSalesManagerUser(user)) return true;
+
+  // Non-sales managers cannot reassign locked member sales reps
+  return false;
+}
+
+/**
+ * Checks if user is CEO, General Manager, Admin, or Super Admin.
+ * Both CEO and General Manager have 100% unrestricted access to all modules and financials.
+ */
+export function isGeneralManagerOrCEO(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (['super_admin', 'crm_admin', 'admin'].includes(user.role)) return true;
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  const dept = (user.department || '').trim().toLowerCase();
   if (
-    jobTitle.includes('sales manager') ||
-    jobTitle.includes('head of sales') ||
-    jobTitle.includes('director of sales') ||
-    jobTitle.includes('assistant sales manager')
+    title === 'ceo' ||
+    title.includes('chief executive') ||
+    title === 'general manager' ||
+    title === 'gm' ||
+    title.includes('general manager') ||
+    (user.role === 'manager' && dept === 'executive')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if user is a Sales Manager or Assistant Sales Manager.
+ */
+export function isSalesManagerUser(user: User | null | undefined): boolean {
+  if (!user) return false;
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  const dept = (user.department || '').trim().toLowerCase();
+  if (
+    title.includes('sales manager') ||
+    title.includes('head of sales') ||
+    title.includes('director of sales') ||
+    title.includes('assistant sales manager')
   ) {
     return true;
   }
   if ((user.role as string) === 'sales_manager') return true;
-  if (user.role === 'manager' && (dept === 'sales' || jobTitle.includes('sales'))) return true;
-
-  // Non-sales managers cannot reassign locked member sales reps
+  if (user.role === 'manager' && dept === 'sales') return true;
   return false;
+}
+
+/**
+ * Checks if user is a Fitness Manager.
+ */
+export function isFitnessManagerUser(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (user.role === 'fitness_manager' || user.isFitnessManager === true) return true;
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  const dept = (user.department || '').trim().toLowerCase();
+  if (title.includes('fitness manager') || title.includes('head of fitness')) return true;
+  if (user.role === 'manager' && dept === 'fitness' && !title.includes('sgf') && !title.includes('mma')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if user is the SGF / MMA Academy Owner.
+ */
+export function isSgfAcademyOwnerUser(user: User | null | undefined): boolean {
+  if (!user) return false;
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  const name = (user.name || '').trim().toLowerCase();
+  if (
+    title.includes('sgf') ||
+    title.includes('mma academy') ||
+    title.includes('academy owner') ||
+    (user.permissionTemplateId || '').toLowerCase().includes('sgf') ||
+    name.includes('sgf academy')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if user is a Nutritionist.
+ */
+export function isNutritionistUser(user: User | null | undefined): boolean {
+  if (!user) return false;
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  if (
+    title.includes('nutritionist') ||
+    title.includes('dietitian') ||
+    (user.permissionTemplateId || '').toLowerCase().includes('nutrition')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if user is a Kitchen / Earth's Kitchen staff account.
+ */
+export function isKitchenUser(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (user.role === 'kitchen') return true;
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  if (title === 'kitchen' || title.includes("earth's kitchen") || title.includes('earths kitchen')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if user is a Sales Representative (and NOT Front Desk, Receptionist, or Manager).
+ * In Inzan Athletics, Sales Reps cannot check in members, whereas Sales Manager can.
+ */
+export function isSalesRepOnly(user: User | null | undefined, tenantId?: string): boolean {
+  if (!user) return false;
+  if (!isTenantSubjectToInzanRules(tenantId)) return false;
+  if (isGeneralManagerOrCEO(user) || isSalesManagerUser(user) || isFitnessManagerUser(user)) return false;
+
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  const dept = (user.department || '').trim().toLowerCase();
+
+  if (title.includes('front desk') || title.includes('reception') || title.includes('experience')) {
+    return false;
+  }
+  if (dept === 'sales' && user.role === 'rep') return true;
+  if (title.includes('client relationship') || title.includes('sales rep') || title === 'sales') return true;
+  return false;
+}
+
+export type RevenueScope = 'all' | 'memberships_only' | 'services_only' | 'sgf_only' | 'nutrition_only';
+
+/**
+ * Returns the departmental revenue visibility scope for the given user.
+ * - GM / CEO / Admin / Finance: 'all'
+ * - Sales Manager / Sales Rep: 'memberships_only'
+ * - Fitness Manager: 'services_only' (PT, Classes/Instructors, Nutrition)
+ * - SGF Academy Owner: 'sgf_only' (SGF / MMA Classes & MMA PT)
+ * - Nutritionist: 'nutrition_only' (Nutrition payments)
+ */
+export function getRevenueScopeForUser(user: User | null | undefined, tenantId?: string): RevenueScope {
+  if (!user) return 'all';
+  if (!isTenantSubjectToInzanRules(tenantId)) return 'all';
+
+  if (isGeneralManagerOrCEO(user)) return 'all';
+  const dept = (user.department || '').trim().toLowerCase();
+  const title = (user.jobTitle || '').trim().toLowerCase();
+  if (dept === 'finance' || title.includes('financial') || title.includes('accountant')) return 'all';
+
+  if (isSgfAcademyOwnerUser(user)) return 'sgf_only';
+  if (isNutritionistUser(user)) return 'nutrition_only';
+  if (isFitnessManagerUser(user)) return 'services_only';
+  if (isSalesManagerUser(user) || isSalesRepOnly(user, tenantId)) return 'memberships_only';
+
+  return 'all';
+}
+
+/**
+ * Helper to check if a payment record matches a user's revenue scope.
+ */
+export function isPaymentInRevenueScope(
+  payment: { packageType?: string | null; package_category_type?: string | null; notes?: string | null },
+  scope: RevenueScope
+): boolean {
+  if (scope === 'all') return true;
+  const pkgName = (payment.packageType || '').toLowerCase();
+  const catType = (payment.package_category_type || '').toLowerCase();
+  const combined = `${catType} ${pkgName} ${(payment.notes || '').toLowerCase()}`;
+
+  const isNutrition = catType === 'nutrition' || combined.includes('nutrition') || combined.includes('diet') || combined.includes('inbody');
+  const isSgfOrMma = combined.includes('sgf') || combined.includes('mma') || combined.includes('academy') || combined.includes('boxing') || combined.includes('kickboxing') || combined.includes('jiu');
+  const isPt = catType === 'pt' || combined.includes('personal training') || /\bpt\b/.test(combined) || combined.includes('private');
+  const isClasses = catType === 'classes' || combined.includes('class') || combined.includes('sgf') || combined.includes('gymnastics') || combined.includes('group');
+  const isService = isNutrition || isPt || isClasses || catType === 'physio';
+
+  if (scope === 'memberships_only') {
+    return !isService;
+  }
+  if (scope === 'services_only') {
+    return isService;
+  }
+  if (scope === 'sgf_only') {
+    return isSgfOrMma;
+  }
+  if (scope === 'nutrition_only') {
+    return isNutrition;
+  }
+  return true;
 }
 
 /**

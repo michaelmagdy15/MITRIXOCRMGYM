@@ -3,6 +3,7 @@ import { useNutrition } from './hooks/useNutrition';
 import { matchesFuzzyNameSearch } from './utils/fuzzyNameSearch';
 import { useAuth } from './contexts/AuthContext';
 import { useAppContext } from './context';
+import { isNutritionistUser, isFitnessManagerUser, isGeneralManagerOrCEO, isPaymentInRevenueScope } from './utils/permissions';
 import {
   Calendar,
   Clock,
@@ -87,15 +88,30 @@ export default function NutritionModule() {
   } = useNutrition();
 
   const { currentUser, isSuperUser } = useAuth();
-  const { clients, coaches } = useAppContext();
+  const { clients, coaches, payments, branding } = useAppContext();
 
-  const isManagerOrSama =
+  const canViewNutritionFinancials =
     isSuperUser ||
-    currentUser?.role === 'manager' ||
+    isNutritionistUser(currentUser) ||
+    isFitnessManagerUser(currentUser) ||
+    isGeneralManagerOrCEO(currentUser) ||
     currentUser?.role === 'admin' ||
     currentUser?.role === 'super_admin' ||
-    currentUser?.role === 'crm_admin' ||
+    currentUser?.role === 'crm_admin';
+
+  const isManagerOrSama =
+    canViewNutritionFinancials ||
+    currentUser?.role === 'manager' ||
     (currentUser?.name ? currentUser.name.toLowerCase().includes('sama') : false);
+
+  const nutritionPayments = useMemo(
+    () => (payments || []).filter((p) => isPaymentInRevenueScope(p, 'nutrition_only')),
+    [payments]
+  );
+  const nutritionTotalRevenue = useMemo(
+    () => nutritionPayments.reduce((sum, p) => sum + (Number((p as any).amount) || 0), 0),
+    [nutritionPayments]
+  );
 
   const [activeTab, setActiveTab] = useState<ModuleTab>('appointments');
 
@@ -1416,6 +1432,48 @@ export default function NutritionModule() {
       {/* TAB 4: ANALYTICS */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
+          {canViewNutritionFinancials && (
+            <div className="bg-card p-6 rounded-xl border border-emerald-500/30 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-base font-bold text-card-foreground">
+                    Nutrition Subscriptions &amp; Payments (Who Paid &amp; Amount)
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Visible only to Nutritionist, Fitness Manager, General Manager &amp; CEO.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs text-muted-foreground uppercase font-bold block">Total Nutrition Revenue</span>
+                  <span className="text-2xl font-black text-emerald-500">
+                    {branding?.currencySymbol || 'EGP'} {nutritionTotalRevenue.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+              {nutritionPayments.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic py-4">No nutrition payments recorded yet.</p>
+              ) : (
+                <div className="divide-y max-h-80 overflow-y-auto border rounded-xl">
+                  {nutritionPayments.map((p: any) => {
+                    const clientObj = clients.find((c) => c.id === p.clientId);
+                    return (
+                      <div key={p.id} className="p-3 flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-bold text-foreground">{p.clientName || clientObj?.name || 'Member'}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Phone: {clientObj?.phone || p.clientPhone || 'N/A'} • {p.packageName || p.category || 'Nutrition Plan'} • {p.date || ''}
+                          </p>
+                        </div>
+                        <span className="font-mono font-bold text-emerald-500">
+                          {branding?.currencySymbol || 'EGP'} {Number(p.amount || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-bold text-card-foreground">Manager Analytics</h2>
             <button

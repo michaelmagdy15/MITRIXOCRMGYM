@@ -4,16 +4,16 @@ export type LeadCategory = 'Out of area zone' | 'Social class' | 'Price' | 'No a
 export type LeadSource = 'Call in' | 'Walk-in' | 'Word Of Mouth' | 'Instagram' | 'ADS' | 'Facebook' | 'Website' | 'Google' | 'WhatsApp' | 'TikTok' | 'Other';
 export type LeadStage = 'New' | 'Contacted' | 'Qualified' | 'Trial' | 'Trial/Visit' | 'Proposal' | 'Won' | 'Converted' | 'Lost' | 'Follow Up';
 export type PackageType = 'Private' | 'Group';
-export type UserRole = 'manager' | 'rep' | 'admin' | 'super_admin' | 'crm_admin' | 'coach' | 'fitness_manager' | 'client';
+export type UserRole = 'manager' | 'rep' | 'admin' | 'super_admin' | 'crm_admin' | 'coach' | 'fitness_manager' | 'kitchen' | 'client';
 
 // INZAN Athletics Commercial Gym Departmental Taxonomy
 export type InzanDepartment = 'Executive' | 'Operations' | 'Marketing' | 'Experience' | 'Fitness' | 'Finance' | 'Sales';
 export type InzanJobTitle = 
-  | 'General Manager'
-  | 'Operations Manager' | 'Floor Manager I' | 'Floor Manager II' | 'Maintenance' | 'Male Housekeeping' | 'Female Housekeeping' | 'Housekeeping'
+  | 'CEO' | 'General Manager'
+  | 'Operations Manager' | 'Floor Manager I' | 'Floor Manager II' | 'Maintenance' | 'Male Housekeeping' | 'Female Housekeeping' | 'Housekeeping' | 'Kitchen'
   | 'Marketing Manager' | 'Content Creator' | 'Graphic Designer'
   | 'Experience Manager' | 'Front Desk'
-  | 'Fitness Manager' | 'Nutritionist' | 'Zone Head' | 'Full-Time Trainer' | 'Part-Time Trainer'
+  | 'Fitness Manager' | 'Nutritionist' | 'SGF Academy Owner' | 'Zone Head' | 'Full-Time Trainer' | 'Part-Time Trainer'
   | 'Financial Manager' | 'Accountant'
   | 'Sales Manager' | 'Assistant Sales Manager' | 'Client Relationship Manager';
 export type InteractionType = 'Call' | 'WhatsApp' | 'Email' | 'Visit';
@@ -193,6 +193,16 @@ export interface Session {
   createdAt: string;
   rating?: number;
   feedback?: string;
+  cancellationRequest?: {
+    status: 'Pending' | 'Approved' | 'Rejected';
+    requestedBy: string;
+    requestedByName?: string;
+    requestedAt: string;
+    reason?: string;
+    reviewedBy?: string;
+    reviewedByName?: string;
+    reviewedAt?: string;
+  };
 }
 
 export type AssessmentStatus = 'Pending' | 'Contacted' | 'Scheduled' | 'Completed';
@@ -793,15 +803,21 @@ export interface JuiceBarOrder {
   id: string;
   clientId: string;
   clientName: string;
+  memberId?: string;
+  clientPhone?: string;
+  clientPhotoUrl?: string;
   items: {
     name: string;
     quantity: number;
     price: number;
+    addons?: { name: string; price: number }[];
   }[];
   totalAmount: number;
   pickupTime: string;
   status: 'Pending' | 'Preparing' | 'Ready' | 'Completed' | 'Cancelled';
   orderedAt: string;
+  completedAt?: string;
+  readyAt?: string;
 }
 
 export interface GuestInvite {

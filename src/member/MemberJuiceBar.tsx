@@ -1,31 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Client, JuiceBarOrder } from '../types';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, doc, updateDoc } from 'firebase/firestore';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Globe, ShoppingCart, Plus, Minus, Clock, CheckCircle2, AlertCircle, Trash2, ArrowRight } from 'lucide-react';
+import { Globe, ShoppingCart, Plus, Minus, Clock, CheckCircle2, Trash2, ArrowRight, Search, Sparkles, Flame } from 'lucide-react';
 import { format } from 'date-fns';
 import { useLanguage } from '../contexts/LanguageContext';
-
-const MENU_ITEMS = [
-  { id: 'shake-whey', name: 'Whey Protein Shake', category: 'Shakes', price: 85, description: 'Premium grass-fed whey, almond milk, banana, honey.' },
-  { id: 'shake-creatine', name: 'Creatine Punch Shake', category: 'Shakes', price: 90, description: 'Whey protein, creatine monohydrate, berries, oats.' },
-  { id: 'shake-pb', name: 'PB & Banana Blast', category: 'Shakes', price: 105, description: 'Whey protein, organic peanut butter, banana, dark chocolate.' },
-  { id: 'pre-c4', name: 'C4 Energy Shot', category: 'Pre-workouts', price: 60, description: 'Pre-workout shot with beta-alanine and caffeine.' },
-  { id: 'pre-espresso', name: 'Double Espresso', category: 'Pre-workouts', price: 50, description: 'Freshly brewed double shot of premium dark roast.' },
-  { id: 'bowl-acai', name: 'Acai Superfood Bowl', category: 'Bowls', price: 150, description: 'Pure acai berry blend topped with strawberries, banana, granola, chia.' },
-  { id: 'bowl-oatmeal', name: 'Oatmeal Energy Cup', category: 'Bowls', price: 75, description: 'Warm steel-cut oats topped with almond butter, honey, berries.' },
-];
+import {
+  EARTHS_KITCHEN_MENU,
+  EARTHS_KITCHEN_CATEGORIES,
+  EARTHS_KITCHEN_ADDONS,
+  EarthsKitchenCategory,
+} from '../data/earthsKitchenMenu';
 
 const STATUS_STYLES: Record<string, { badge: string; text: string }> = {
-  Pending: { badge: 'bg-strike-green/10 text-strike-green border-strike-green/20', text: 'Pending Approval' },
-  Preparing: { badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20', text: 'Preparing' },
-  Ready: { badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse', text: 'Ready for Pickup' },
-  Completed: { badge: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', text: 'Completed' },
+  Pending: { badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20', text: 'Order Received' },
+  Preparing: { badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20', text: 'Preparing in Kitchen' },
+  Ready: { badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 animate-pulse', text: 'Ready for Pickup! 🥤' },
+  Completed: { badge: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', text: 'Picked Up / Done' },
   Cancelled: { badge: 'bg-secondary text-muted-foreground border-border', text: 'Cancelled' },
 };
 
@@ -33,6 +30,9 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
   const { t } = useLanguage();
   const [orders, setOrders] = useState<JuiceBarOrder[]>([]);
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [selectedAddonsByItem, setSelectedAddonsByItem] = useState<Record<string, string[]>>({});
+  const [activeCategory, setActiveCategory] = useState<'All' | EarthsKitchenCategory>('All');
+  const [searchTerm, setSearchTerm] = useState('');
   const [pickupTime, setPickupTime] = useState<string>('In 15 mins');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -55,7 +55,6 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
         ...d.data()
       } as JuiceBarOrder));
 
-      // Sort: newest orders first
       list.sort((a, b) => new Date(b.orderedAt).getTime() - new Date(a.orderedAt).getTime());
       setOrders(list);
       setLoading(false);
@@ -80,18 +79,44 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
     });
   };
 
-  const clearCart = () => setCart({});
+  const toggleItemAddon = (itemId: string, addonId: string) => {
+    setSelectedAddonsByItem(prev => {
+      const cur = prev[itemId] || [];
+      const next = cur.includes(addonId) ? cur.filter(a => a !== addonId) : [...cur, addonId];
+      return { ...prev, [itemId]: next };
+    });
+  };
 
-  const cartItemsList = Object.entries(cart).map(([itemId, qty]) => {
-    const item = MENU_ITEMS.find(m => m.id === itemId);
-    return {
-      item,
-      qty,
-      subtotal: (item?.price || 0) * qty
-    };
-  }).filter(x => x.item !== undefined);
+  const clearCart = () => {
+    setCart({});
+    setSelectedAddonsByItem({});
+  };
+
+  const cartItemsList = useMemo(() => {
+    return Object.entries(cart).map(([itemId, qty]) => {
+      const item = EARTHS_KITCHEN_MENU.find(m => m.id === itemId);
+      const addonIds = selectedAddonsByItem[itemId] || [];
+      const addons = addonIds
+        .map(aid => EARTHS_KITCHEN_ADDONS.find(a => a.id === aid))
+        .filter((a): a is NonNullable<typeof a> => Boolean(a));
+      const addonsTotalPerUnit = addons.reduce((acc, a) => acc + a.price, 0);
+      const unitPrice = (item?.price || 0) + addonsTotalPerUnit;
+      return {
+        item,
+        qty,
+        addons,
+        unitPrice,
+        subtotal: unitPrice * qty
+      };
+    }).filter(x => x.item !== undefined);
+  }, [cart, selectedAddonsByItem]);
 
   const cartTotal = cartItemsList.reduce((sum, item) => sum + item.subtotal, 0);
+
+  const visibleCategories = useMemo(() => {
+    if (activeCategory === 'All') return EARTHS_KITCHEN_CATEGORIES;
+    return [activeCategory];
+  }, [activeCategory]);
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,15 +126,22 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
     setSubmitSuccess(false);
 
     try {
-      const itemsToSubmit = cartItemsList.map(ci => ({
-        name: ci.item!.name,
-        quantity: ci.qty,
-        price: ci.item!.price
-      }));
+      const itemsToSubmit = cartItemsList.map(ci => {
+        const addonLabel = ci.addons.length > 0 ? ` (+ ${ci.addons.map(a => a.name).join(', ')})` : '';
+        return {
+          name: `${ci.item!.name}${addonLabel}`,
+          quantity: ci.qty,
+          price: ci.unitPrice,
+          ...(ci.addons.length > 0 ? { addons: ci.addons.map(a => ({ name: a.name, price: a.price })) } : {})
+        };
+      });
 
       await addDoc(collection(db, 'juiceBarOrders'), {
         clientId: client.id,
         clientName: client.name,
+        memberId: client.memberId || client.id,
+        clientPhone: client.phone || '',
+        clientPhotoUrl: client.photoURL || '',
         items: itemsToSubmit,
         totalAmount: cartTotal,
         pickupTime: pickupTime,
@@ -117,12 +149,11 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
         orderedAt: new Date().toISOString()
       });
 
-      // Write to auditLogs
       await addDoc(collection(db, 'auditLogs'), {
         action: 'CREATE',
         entityType: 'SYSTEM',
         entityId: client.id,
-        details: `Member ${client.name} pre-ordered from Earth's Kitchen. Total: ${t('payments.currency_le')} ${cartTotal}. Pickup: ${pickupTime}`,
+        details: `Member ${client.name} (${client.memberId || client.id}) ordered from Earth's Kitchen. Total: ${t('payments.currency_le')} ${cartTotal}. Pickup: ${pickupTime}`,
         timestamp: new Date().toISOString(),
         userId: client.portalUserId || client.id,
         userName: client.name,
@@ -148,7 +179,6 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
         status: 'Cancelled'
       });
 
-      // Log Cancel to auditLogs
       await addDoc(collection(db, 'auditLogs'), {
         action: 'UPDATE',
         entityType: 'SYSTEM',
@@ -174,98 +204,209 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
     );
   }
 
-  // Categories
-  const categories = ['Shakes', 'Pre-workouts', 'Bowls'];
-
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-      <div>
-        <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
-          <Globe className="h-5 w-5 text-primary" /> Earth's Kitchen Juice Bar
-        </h2>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Pre-order protein shakes, pre-workouts, and healthy bowls for pickup at the counter.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <Globe className="h-5 w-5 text-primary" /> Earth's Kitchen Drinks Menu
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Pre-order pre-workout shakes, collagen blends, protein shakes, specialty coffee, matcha & mocktails for counter pickup.
+          </p>
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search drinks or ingredients..."
+            className="pl-8 h-8 text-xs bg-card/60"
+          />
+        </div>
+      </div>
+
+      {/* Category Filter Pills */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 no-scrollbar">
+        <button
+          type="button"
+          onClick={() => setActiveCategory('All')}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${
+            activeCategory === 'All'
+              ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+              : 'bg-card/60 text-muted-foreground border-border hover:text-foreground'
+          }`}
+        >
+          All Menu ({EARTHS_KITCHEN_MENU.length})
+        </button>
+        {EARTHS_KITCHEN_CATEGORIES.map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            onClick={() => setActiveCategory(cat)}
+            className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${
+              activeCategory === cat
+                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                : 'bg-card/60 text-muted-foreground border-border hover:text-foreground'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
       </div>
 
       {/* Earth's Kitchen Menu Grid */}
-      <div className="space-y-4">
-        {categories.map(cat => (
-          <div key={cat} className="space-y-2">
-            <h3 className="text-xs font-extrabold uppercase tracking-widest text-primary border-b border-white/5 pb-1">
-              {cat}
-            </h3>
-            <div className="space-y-2.5">
-              {MENU_ITEMS.filter(m => m.category === cat).map(item => {
-                const qtyInCart = cart[item.id] || 0;
-                return (
-                  <Card key={item.id} className="border bg-card/40 hover:bg-card/75 transition-colors shadow-sm">
-                    <CardContent className="p-3.5 flex justify-between items-center gap-4">
-                      <div className="space-y-1 flex-1">
-                        <div className="flex justify-between items-baseline">
-                          <span className="text-xs font-bold text-foreground">{item.name}</span>
-                          <span className="text-xs font-mono font-bold text-primary">{t('payments.currency_le')} {item.price}</span>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground leading-normal pr-2">
-                          {item.description}
-                        </p>
-                      </div>
+      <div className="space-y-5">
+        {visibleCategories.map(cat => {
+          const itemsInCat = EARTHS_KITCHEN_MENU.filter(m => {
+            if (m.category !== cat) return false;
+            if (!searchTerm.trim()) return true;
+            const q = searchTerm.toLowerCase();
+            return (
+              m.name.toLowerCase().includes(q) ||
+              (m.description || '').toLowerCase().includes(q)
+            );
+          });
 
-                      {/* Controls */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {qtyInCart > 0 ? (
-                          <div className="flex items-center gap-2 border bg-zinc-950/50 rounded-lg p-0.5">
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 rounded-md hover:bg-zinc-900"
-                              onClick={() => updateCartQty(item.id, -1)}
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="text-xs font-bold font-mono px-1 min-w-[14px] text-center">
-                              {qtyInCart}
-                            </span>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 rounded-md hover:bg-zinc-900"
-                              onClick={() => updateCartQty(item.id, 1)}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
+          if (itemsInCat.length === 0) return null;
+
+          return (
+            <div key={cat} className="space-y-2.5">
+              <h3 className="text-xs font-extrabold uppercase tracking-widest text-primary border-b border-border/60 pb-1.5 flex items-center justify-between">
+                <span>{cat}</span>
+                <span className="text-[10px] text-muted-foreground font-mono">{itemsInCat.length} items</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {itemsInCat.map(item => {
+                  const qtyInCart = cart[item.id] || 0;
+                  const itemAddons = selectedAddonsByItem[item.id] || [];
+                  return (
+                    <Card key={item.id} className="border bg-card/40 hover:bg-card/75 transition-colors shadow-sm">
+                      <CardContent className="p-3.5 space-y-2.5">
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="space-y-1 flex-1">
+                            <div className="flex justify-between items-baseline gap-2">
+                              <span className="text-xs font-bold text-foreground">{item.name}</span>
+                              <span className="text-xs font-mono font-extrabold text-primary shrink-0">
+                                {t('payments.currency_le')} {item.price}
+                              </span>
+                            </div>
+                            {item.description && (
+                              <p className="text-[10px] text-muted-foreground leading-normal">
+                                {item.description}
+                              </p>
+                            )}
+                            {item.macros && (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                {item.macros.calories !== undefined && (
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                                    <Flame className="h-2.5 w-2.5" /> {item.macros.calories} cal
+                                  </span>
+                                )}
+                                {item.macros.protein !== undefined && (
+                                  <span className="text-[9px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-bold">
+                                    {item.macros.protein}g protein
+                                  </span>
+                                )}
+                                {item.macros.fat !== undefined && (
+                                  <span className="text-[9px] font-mono bg-zinc-500/10 text-zinc-400 border border-zinc-500/20 px-1.5 py-0.5 rounded">
+                                    {item.macros.fat}g fat
+                                  </span>
+                                )}
+                                {item.macros.carbs !== undefined && (
+                                  <span className="text-[9px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded">
+                                    {item.macros.carbs}g carb
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="text-[10px] font-bold h-7 px-2.5 border-primary/20 hover:bg-primary hover:text-black"
-                            onClick={() => updateCartQty(item.id, 1)}
-                          >
-                            Add to Cart
-                          </Button>
+
+                          {/* Controls */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {qtyInCart > 0 ? (
+                              <div className="flex items-center gap-1.5 border bg-zinc-950/50 rounded-lg p-0.5">
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 rounded-md hover:bg-zinc-900"
+                                  onClick={() => updateCartQty(item.id, -1)}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </Button>
+                                <span className="text-xs font-bold font-mono px-1 min-w-[16px] text-center">
+                                  {qtyInCart}
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 rounded-md hover:bg-zinc-900"
+                                  onClick={() => updateCartQty(item.id, 1)}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="text-[10px] font-bold h-7 px-2.5 border-primary/30 hover:bg-primary hover:text-primary-foreground"
+                                onClick={() => updateCartQty(item.id, 1)}
+                              >
+                                <Plus className="h-3 w-3 mr-1" /> Add
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Add-ons selector when item is in cart and supports add-ons */}
+                        {qtyInCart > 0 && item.supportsAddons && (
+                          <div className="pt-2 border-t border-white/5 space-y-1">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                              <Sparkles className="h-2.5 w-2.5 text-primary" /> Customize Add-ons:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {EARTHS_KITCHEN_ADDONS.map(addon => {
+                                const isSelected = itemAddons.includes(addon.id);
+                                return (
+                                  <button
+                                    key={addon.id}
+                                    type="button"
+                                    onClick={() => toggleItemAddon(item.id, addon.id)}
+                                    className={`text-[9px] px-2 py-0.5 rounded-full border font-semibold transition-all ${
+                                      isSelected
+                                        ? 'bg-primary/20 text-primary border-primary'
+                                        : 'bg-background/60 text-muted-foreground border-border hover:text-foreground'
+                                    }`}
+                                  >
+                                    + {addon.name} ({addon.price} LE)
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
                         )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Shopping Cart Summary Card */}
       {cartTotal > 0 && (
-        <Card className="border-primary/20 bg-zinc-950/60 shadow-lg relative group overflow-hidden">
+        <Card className="border-primary/30 bg-zinc-950/80 shadow-xl relative group overflow-hidden sticky bottom-4 z-20">
           <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl" />
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <ShoppingCart className="h-4 w-4 text-primary" /> My Pre-order Cart
+                <ShoppingCart className="h-4 w-4 text-primary" /> Earth's Kitchen Pre-order Cart
               </span>
               <Button
                 variant="ghost"
@@ -278,14 +419,18 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Cart Items Details */}
-            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
-              {cartItemsList.map(({ item, qty, subtotal }) => (
+            <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+              {cartItemsList.map(({ item, qty, addons, unitPrice, subtotal }) => (
                 <div key={item!.id} className="flex justify-between items-center text-xs border-b border-white/5 pb-1.5">
                   <div className="space-y-0.5">
                     <span className="font-semibold">{item!.name}</span>
+                    {addons.length > 0 && (
+                      <span className="text-[10px] text-primary block">
+                        + {addons.map(a => `${a.name} (${a.price} LE)`).join(', ')}
+                      </span>
+                    )}
                     <span className="text-[10px] text-zinc-400 font-mono block">
-                      {qty} x {t('payments.currency_le')} {item!.price}
+                      {qty} x {t('payments.currency_le')} {unitPrice}
                     </span>
                   </div>
                   <strong className="font-mono font-bold text-primary">{t('payments.currency_le')} {subtotal}</strong>
@@ -293,7 +438,6 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
               ))}
             </div>
 
-            {/* Config: Pickup Time & Subtotal */}
             <form onSubmit={handlePlaceOrder} className="space-y-4 pt-1">
               <div className="grid grid-cols-2 gap-3 items-end">
                 <div className="space-y-1">
@@ -303,6 +447,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                       <SelectValue placeholder="Pickup schedule" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="ASAP (Now)">ASAP (Now)</SelectItem>
                       <SelectItem value="In 15 mins">In 15 minutes</SelectItem>
                       <SelectItem value="In 30 mins">In 30 minutes</SelectItem>
                       <SelectItem value="After my session">After training</SelectItem>
@@ -317,10 +462,10 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
               </div>
 
               <Button type="submit" disabled={isSubmitting} className="w-full font-bold h-9">
-                {isSubmitting ? 'Placing Pre-order...' : 'Confirm Pre-order'} <ArrowRight className="h-4 w-4 ml-1" />
+                {isSubmitting ? 'Sending Order to Kitchen...' : 'Send Order to Earth\'s Kitchen'} <ArrowRight className="h-4 w-4 ml-1" />
               </Button>
               <p className="text-[9px] text-center text-zinc-500 leading-tight">
-                * Pay via cash/card at Earth's Kitchen counter upon pickup. Pre-orders are final once preparing.
+                * You will receive an instant notification when Earth's Kitchen marks your order ready for pickup.
               </p>
             </form>
           </CardContent>
@@ -329,16 +474,16 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
 
       {/* Success banner */}
       {submitSuccess && (
-        <div className="bg-green-500/10 border border-green-500/20 text-green-600 p-3 rounded-lg flex items-center gap-2.5 text-xs font-semibold animate-in zoom-in-95">
+        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-3 rounded-lg flex items-center gap-2.5 text-xs font-semibold animate-in zoom-in-95">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>Pre-order sent! It will show up on Earth's Kitchen live prep screen.</span>
+          <span>Order sent to Earth's Kitchen! We'll notify you as soon as it's ready.</span>
         </div>
       )}
 
       {/* Live Pre-orders Monitoring */}
       <div className="space-y-3">
         <h3 className="text-xs font-extrabold uppercase tracking-widest text-primary flex items-center gap-1.5">
-          <Clock className="h-4 w-4 text-primary animate-pulse" /> My Pre-order Logs
+          <Clock className="h-4 w-4 text-primary animate-pulse" /> My Earth's Kitchen Orders
         </h3>
 
         {orders.length > 0 ? (
@@ -349,14 +494,13 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
               return (
                 <Card key={order.id} className="border bg-card/40 shadow-sm">
                   <CardContent className="p-4 space-y-3">
-                    {/* Header */}
                     <div className="flex justify-between items-start border-b border-white/5 pb-2">
                       <div className="space-y-0.5">
                         <Badge className={`border text-[10px] px-2 py-0 rounded-full font-bold ${style.badge}`} variant="outline">
                           {style.text}
                         </Badge>
                         <span className="text-[10px] font-mono text-zinc-500 block mt-1">
-                          Ordered: {format(dateObj, 'dd MMM h:mm a')}
+                          Ordered: {isNaN(dateObj.getTime()) ? order.orderedAt : format(dateObj, 'dd MMM h:mm a')}
                         </span>
                       </div>
                       <div className="text-right">
@@ -369,7 +513,6 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                       </div>
                     </div>
 
-                    {/* Items list */}
                     <div className="space-y-1 text-xs">
                       {order.items.map((it: any, idx: number) => (
                         <div key={idx} className="flex justify-between text-muted-foreground">
@@ -379,7 +522,6 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                       ))}
                     </div>
 
-                    {/* Actions (Cancel) */}
                     {order.status === 'Pending' && (
                       <div className="flex justify-end pt-1">
                         <Button
@@ -389,7 +531,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
                           className="text-[10px] text-muted-foreground border-border hover:bg-secondary hover:text-foreground h-7 font-bold px-3.5"
                           onClick={() => handleCancelOrder(order.id)}
                         >
-                          Cancel Pre-order
+                          Cancel Order
                         </Button>
                       </div>
                     )}
@@ -401,7 +543,7 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
         ) : (
           <Card className="border-dashed bg-muted/20">
             <CardContent className="py-8 text-center text-muted-foreground text-xs italic">
-              No recent Earth's Kitchen pre-orders found.
+              No recent Earth's Kitchen orders found.
             </CardContent>
           </Card>
         )}

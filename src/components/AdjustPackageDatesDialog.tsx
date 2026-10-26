@@ -9,10 +9,11 @@ import { ShieldAlert, CalendarClock, Plus, Minus } from 'lucide-react';
 import { addDays, differenceInCalendarDays, parseISO, isValid, format } from 'date-fns';
 import { ClientPackage, User } from '../types';
 import { safeFormatDate, safeIsoDate } from '../utils/dateUtils';
+import { isSalesManagerUser, isGeneralManagerOrCEO } from '../utils/permissions';
 
 /** Roles allowed to override package validity dates (Inzan date-lock policy). */
 export const canOverridePackageDates = (user: User | null | undefined): boolean =>
-  !!user && ['manager', 'admin', 'super_admin', 'crm_admin'].includes(user.role);
+  !!user && (['manager', 'admin', 'super_admin', 'crm_admin'].includes(user.role) || isSalesManagerUser(user) || isGeneralManagerOrCEO(user));
 
 /** Derives the top-level client fields that mirror the active package. */
 export const buildPackageUpdates = (newPkgs: ClientPackage[]): Record<string, unknown> => {
@@ -157,7 +158,7 @@ export function AdjustPackageDatesDialog({ pkg, onOpenChange, onConfirm }: Adjus
                 RedGITS Add / Minus Compensation Days (Adjust Expiry)
               </Label>
               <div className="flex flex-wrap gap-1.5">
-                {[-7, -3, -1, 1, 3, 7, 14, 30].map((d) => (
+                {[-7, -3, -1, 1, 3, 7, 14, 30, 60, 90].map((d) => (
                   <Button
                     key={d}
                     type="button"

@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { isFitnessManagerUser, isGeneralManagerOrCEO } from '../utils/permissions';
+import { getTenantId } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, updateDoc, doc, getDocs, or, addDoc } from 'firebase/firestore';
@@ -52,6 +54,38 @@ export default function CoachSessions() {
   const [recommendedPackage, setRecommendedPackage] = useState('');
   const [assessmentWeight, setAssessmentWeight] = useState('');
   const [savingAssessment, setSavingAssessment] = useState(false);
+
+  const isInzan = useMemo(() => {
+    const tid = getTenantId().toLowerCase();
+    return tid.includes('inzan') || tid === 'db-inzanathletics';
+  }, []);
+
+  const canDirectlyCancelSession = useMemo(() => {
+    if (!isInzan) return true;
+    return isFitnessManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser) || currentUser?.role === 'admin' || currentUser?.role === 'manager' || currentUser?.role === 'super_admin';
+  }, [isInzan, currentUser]);
+
+  const handleRequestCancelSession = async (session: Session) => {
+    const reason = window.prompt('Regular coaches cannot cancel a session directly. Please enter a reason to request Fitness Manager approval to cancel this session:', 'Member requested cancellation');
+    if (reason === null) return;
+    try {
+      const nowIso = new Date().toISOString();
+      await updateDoc(doc(db, 'sessions', session.id), {
+        cancellationRequest: {
+          status: 'Pending',
+          requestedBy: currentUser?.id || '',
+          requestedByName: currentUser?.name || 'Coach',
+          requestedAt: nowIso,
+          reason: reason.trim() || 'Requested by Coach',
+        },
+        updatedAt: nowIso,
+      });
+      alert('Cancellation request submitted to the Fitness Manager for approval.');
+    } catch (err) {
+      console.error('Failed to request session cancellation:', err);
+      alert('Failed to submit cancellation request.');
+    }
+  };
 
   useEffect(() => {
     if (!currentUser) return;
@@ -350,8 +384,8 @@ export default function CoachSessions() {
                           <Button size="sm" variant="outline" className="gap-1 text-zinc-500 border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 h-8" onClick={() => handleStatusUpdate(session.id, 'No Show')}>
                             <XCircle className="h-3.5 w-3.5" /> No Show
                           </Button>
-                          <Button size="sm" variant="ghost" className="gap-1 text-muted-foreground hover:text-foreground h-8" onClick={() => handleStatusUpdate(session.id, 'Cancelled')}>
-                            Cancel
+                          <Button size="sm" variant="ghost" className="gap-1 text-muted-foreground hover:text-foreground h-8" onClick={() => canDirectlyCancelSession ? handleStatusUpdate(session.id, 'Cancelled') : handleRequestCancelSession(session)}>
+                            {canDirectlyCancelSession ? 'Cancel' : (session.cancellationRequest?.status === 'Pending' ? 'Cancel Pending FM' : 'Request Cancel (FM Approval)')}
                           </Button>
                         </div>
                       )}
@@ -539,7 +573,7 @@ export default function CoachSessions() {
                                     setAssessmentWeight('');
                                   }}
                                 >
-                                  Cancel
+                                  {canDirectlyCancelSession ? 'Cancel' : 'Cancel'}
                                 </Button>
                                 <Button
                                   size="sm"

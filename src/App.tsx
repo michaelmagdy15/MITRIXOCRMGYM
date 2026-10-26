@@ -71,6 +71,8 @@ import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
 import { ClickToCallModal } from './components/ClickToCallModal';
 import { NotificationEnforcementGate } from './components/NotificationEnforcementGate';
+import KitchenKioskView from './components/KitchenKioskView';
+import { isKitchenUser, isNutritionistUser, isFitnessManagerUser, isSalesManagerUser, isSgfAcademyOwnerUser, isGeneralManagerOrCEO } from './utils/permissions';
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com', 'simary@inzan.com'];
 const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
@@ -87,6 +89,9 @@ function AppContent() {
   const { theme, toggleTheme, themeLocked } = useTheme();
   const { t, language, toggleLanguage, isRtl } = useLanguage();
   const [isKioskMode, setIsKioskMode] = React.useState(window.location.pathname === '/kiosk');
+  const [isKitchenKioskMode, setIsKitchenKioskMode] = React.useState(
+    window.location.pathname === '/kitchen' || window.location.pathname === '/kitchen-kiosk'
+  );
   const [isCheckinMode, setIsCheckinMode] = React.useState(window.location.pathname === '/checkin');
   const [isHelpMode, setIsHelpMode] = React.useState(window.location.pathname === '/help');
   const [isSubscribeMode, setIsSubscribeMode] = React.useState(window.location.pathname === '/subscribe');
@@ -206,6 +211,7 @@ function AppContent() {
   React.useEffect(() => {
     const handlePopState = () => {
       setIsKioskMode(window.location.pathname === '/kiosk');
+      setIsKitchenKioskMode(window.location.pathname === '/kitchen' || window.location.pathname === '/kitchen-kiosk');
       setIsCheckinMode(window.location.pathname === '/checkin');
       setIsHelpMode(window.location.pathname === '/help');
       setIsSubscribeMode(window.location.pathname === '/subscribe');
@@ -335,6 +341,66 @@ function AppContent() {
 
   if (isHelpMode) {
     return <HelpPage />;
+  }
+
+  if (isKitchenKioskMode) {
+    if (!currentUser && !kioskAuthenticated) {
+      return (
+        <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
+          <Card className="w-full max-w-md border-white/10 bg-zinc-950 shadow-2xl">
+            <CardHeader className="text-center space-y-4">
+              <div className="flex justify-center">
+                {branding.logoUrl ? (
+                  <img src={branding.logoUrl} alt="Logo" className="h-16 w-auto object-contain" />
+                ) : (
+                  <div className="h-16 w-16 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                    <Coffee className="h-8 w-8 text-emerald-400" />
+                  </div>
+                )}
+              </div>
+              <CardTitle className="text-2xl font-bold tracking-tight text-white">Earth&apos;s Kitchen Kiosk</CardTitle>
+              <CardDescription className="text-zinc-400">Enter the kiosk PIN or sign in with a Kitchen account to access live orders.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handlePinSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <div className="flex justify-center gap-4">
+                    <Input
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoFocus
+                      placeholder="••••••"
+                      className={`text-center text-3xl h-16 tracking-[1em] font-mono bg-zinc-900 border-zinc-800 text-white ${pinError ? 'border-destructive animate-pulse' : 'focus:border-emerald-500'}`}
+                      value={pinInput}
+                      onChange={(e) => setPinInput(e.target.value)}
+                      maxLength={6}
+                      autoComplete="off"
+                    />
+                  </div>
+                  {pinError && (
+                    <p className="text-center text-sm font-medium text-destructive">
+                      Incorrect PIN. Please try again.
+                    </p>
+                  )}
+                </div>
+                <Button type="submit" className="w-full h-12 text-lg font-bold bg-emerald-500 text-black hover:bg-emerald-400">
+                  Unlock Kitchen Kiosk
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+    return (
+      <KitchenKioskView
+        onLogout={() => {
+          setKioskAuthenticated(false);
+          if (currentUser) logout();
+        }}
+      />
+    );
   }
 
   if (isKioskMode) {
@@ -626,6 +692,11 @@ function AppContent() {
     return <ForcePasswordChangeDialog />;
   }
 
+  // Kitchen Role ONLY sees the Earth's Kitchen Kiosk view (Member ID, Photo, Name, Phone, Items)
+  if (isKitchenUser(currentUser)) {
+    return <KitchenKioskView onLogout={logout} />;
+  }
+
   if (currentUser.role === 'coach' || currentUser.role === 'fitness_manager' || currentUser.isFitnessManager) {
     if (isStrike) {
       return (
@@ -634,7 +705,10 @@ function AppContent() {
         />
       );
     }
-    return <CoachPortal />;
+    // If Nutritionist or SGF Academy Owner is given role 'coach' in Firestore, let Nutritionist / SGF Owner access CRM or CoachPortal appropriately
+    if (!isNutritionistUser(currentUser) && !isSgfAcademyOwnerUser(currentUser)) {
+      return <CoachPortal />;
+    }
   }
 
   if (currentUser.role === 'client') {
@@ -682,31 +756,31 @@ function AppContent() {
       id: 'packages',
       label: isInzan ? 'Packages' : (t('nav.packages') === 'nav.packages' ? 'Packages' : t('nav.packages')),
       icon: Package,
-      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || canAccessSettings)
+      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || canAccessSettings || isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser) || canAny(['packages.view', 'packages.create', 'packages.edit']))
     },
     {
       id: 'requests',
       label: 'Requests',
       icon: ClipboardList,
-      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || isGeneralManagerOrCEO(currentUser) || isSalesManagerUser(currentUser))
     },
     {
       id: 'pending-approvals',
       label: 'Pending Approvals',
       icon: Clock,
-      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin')
+      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || isGeneralManagerOrCEO(currentUser) || isSalesManagerUser(currentUser) || isFitnessManagerUser(currentUser))
     },
     {
       id: 'class-manager',
       label: 'Class Manager',
       icon: Target,
-      show: features.classBookingSystem === true && canAny(['classes.manage_schedule', 'classes.view'])
+      show: (features.classBookingSystem === true || isSgfAcademyOwnerUser(currentUser)) && (canAny(['classes.manage_schedule', 'classes.view']) || isSgfAcademyOwnerUser(currentUser))
     },
     {
       id: 'nutrition',
       label: 'Nutrition',
       icon: Activity,
-      show: (features.nutrition === true || isInzan) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'coach')
+      show: (features.nutrition === true || isInzan) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'coach' || isNutritionistUser(currentUser) || isFitnessManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser))
     },
     {
       id: 'workout-library',

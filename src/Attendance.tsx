@@ -89,6 +89,7 @@ import {
   activatePendingGuestInvite,
 } from './services/guestReferralService';
 import { MemberPhotoCapture } from './components/member/MemberPhotoCapture';
+import { isSalesRepOnly } from './utils/permissions';
 
 export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   const {
@@ -1194,6 +1195,13 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     const isArabic = language === 'ar';
     setError(null);
 
+    if (isInzan && !isKiosk && isSalesRepOnly(currentUser)) {
+      const msg = 'Sales Representatives are not permitted to check in members. Only Front Desk, Sales Manager, Fitness Manager, GM, or CEO can perform check-in.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
     const parsedQr = parseUniversalQrCode(decodedId);
     const lookupToken = parsedQr.tokenOrMemberId;
     if (!lookupToken) return;
@@ -1527,6 +1535,12 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
   const handleRecordAttendance = async () => {
     if (!lastScannedMember || isRecording) return;
+    if (isInzan && !isKiosk && isSalesRepOnly(currentUser)) {
+      const msg = 'Sales Representatives are not permitted to check in members. Only Front Desk, Sales Manager, Fitness Manager, GM, or CEO can perform check-in.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
     
     setIsRecording(true);
     setError(null);

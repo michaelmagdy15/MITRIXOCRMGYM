@@ -71,6 +71,7 @@ import InzanDailyRevenueSummary from './components/dashboard/InzanDailyRevenueSu
 import { RetentionRadarCard } from './components/dashboard/RetentionRadarCard';
 import { isTenantInzan } from './utils/inzanOrg';
 import { getTenantId } from './firebase';
+import { getRevenueScopeForUser, isPaymentInRevenueScope } from './utils/permissions';
 
 function PaginatedList({ items, renderItem, itemsPerPage = 5 }: { items: any[], renderItem: (item: any) => React.ReactNode, itemsPerPage?: number }) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -232,8 +233,12 @@ export default function Dashboard() {
   // For manager cross-rep analysis we need unfiltered data — but all users in context already
   // receive the full dataset when canViewGlobalDashboard is true. For reps, they only see their own.
   const allClients = contextClients;
-  const allPayments = contextPayments;
   const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
+  const revenueScope = React.useMemo(() => getRevenueScopeForUser(currentUser), [currentUser]);
+  const allPayments = React.useMemo(() => {
+    if (!isInzan || revenueScope === 'all') return contextPayments;
+    return contextPayments.filter(p => isPaymentInRevenueScope(p, revenueScope));
+  }, [contextPayments, isInzan, revenueScope]);
 
   const pendingConfirmationCount = React.useMemo(() => {
     let count = 0;

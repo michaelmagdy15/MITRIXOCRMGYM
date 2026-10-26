@@ -32,7 +32,7 @@ import EntitlementManager from './EntitlementManager';
 import { AdjustPackageDatesDialog, canOverridePackageDates, buildPackageUpdates } from './AdjustPackageDatesDialog';
 import { ConfirmDialog } from './ConfirmDialog';
 import { addAuditLog } from '../services/auditService';
-import { canReassignMemberSalesRep } from '../utils/permissions';
+import { canReassignMemberSalesRep, isSalesManagerUser, isGeneralManagerOrCEO, isFitnessManagerUser } from '../utils/permissions';
 import { Trash2, CalendarClock, TrendingUp, Key } from 'lucide-react';
 import { MemberGuestInvitationsTab } from './member/MemberGuestInvitationsTab';
 import { createMemberReferralWithProfile } from '../services/guestReferralService';
@@ -113,6 +113,7 @@ export function InzanMemberShow({
 
   // Freezing management state
   const [freezePkgId, setFreezePkgId] = useState<string>('');
+  const [freezeType, setFreezeType] = useState<'Normal' | 'Back' | 'Medical'>('Normal');
   const [freezeStartDate, setFreezeStartDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [freezeEndDate, setFreezeEndDate] = useState<string>('');
   const [freezeReason, setFreezeReason] = useState<string>('');
@@ -531,13 +532,17 @@ export function InzanMemberShow({
         newEndIso = curEnd.toISOString();
       }
 
+      const isEndedInPast = new Date(freezeEndDate).getTime() <= Date.now();
+      const shouldStayActive = freezeType === 'Back' && isEndedInPast;
+      const reasonWithTag = `[${freezeType} Freeze] ${freezeReason || 'Member requested freeze'}`;
+
       currentPkgs[idx] = {
         ...p,
-        status: 'Hold',
-        isOnHold: true,
-        holdReason: freezeReason || 'Member requested freeze',
+        status: shouldStayActive ? 'Active' : 'Hold',
+        isOnHold: !shouldStayActive,
+        holdReason: reasonWithTag,
         holdDate: new Date().toISOString(),
-        freezeDaysUsed: newUsed,
+        freezeDaysUsed: freezeType === 'Medical' ? curUsed : newUsed,
         endDate: newEndIso,
       };
 
@@ -545,28 +550,31 @@ export function InzanMemberShow({
       const newLog = {
         packageId: pkgIdToFreeze,
         packageName: p.packageName,
+        freezeType,
         startDate: freezeStartDate,
         endDate: freezeEndDate,
         days: reqDays,
-        reason: freezeReason || 'Member requested freeze',
+        reason: reasonWithTag,
         appliedBy: currentUser?.name || 'Staff',
         appliedAt: nowIso,
       };
 
       const existingLogs = Array.isArray((client as any).freezeLogs) ? (client as any).freezeLogs : [];
-      const curClientUsed = Number((client as any).freezeDaysUsed || 0) + reqDays;
-      const curClientRem = Math.max(0, Number((client as any).freezeDaysRemaining ?? (client as any).freezeAllowanceDays ?? 30) - reqDays);
+      const curClientUsed = freezeType === 'Medical' ? Number((client as any).freezeDaysUsed || 0) : Number((client as any).freezeDaysUsed || 0) + reqDays;
+      const curClientRem = freezeType === 'Medical'
+        ? Number((client as any).freezeDaysRemaining ?? (client as any).freezeAllowanceDays ?? 30)
+        : Math.max(0, Number((client as any).freezeDaysRemaining ?? (client as any).freezeAllowanceDays ?? 30) - reqDays);
 
       await onUpdateClient(client.id, {
-        status: 'Hold',
+        status: shouldStayActive ? 'Active' : 'Hold',
         packages: currentPkgs,
         freezeDaysUsed: curClientUsed,
         freezeDaysRemaining: curClientRem,
         freezeLogs: [newLog, ...existingLogs],
       } as any);
 
-      await addAuditLog('UPDATE', 'PACKAGE_RECORD', client.id, `Frozen package "${p.packageName}" for ${reqDays} days (${freezeStartDate} to ${freezeEndDate}).`);
-      toast.success(`Package "${p.packageName}" frozen for ${reqDays} days! Expiry extended.`);
+      await addAuditLog('UPDATE', 'PACKAGE_RECORD', client.id, `Applied ${freezeType} Freeze on package "${p.packageName}" for ${reqDays} days (${freezeStartDate} to ${freezeEndDate}).`);
+      toast.success(`${freezeType} Freeze applied to "${p.packageName}" for ${reqDays} days! Expiry extended.`);
       setFreezeReason('');
       setFreezeEndDate('');
       setFreezePkgId('');
@@ -899,7 +907,8 @@ export function InzanMemberShow({
         // Enforce Sales Manager authority rule: preserve assigned sales rep unless Sales Manager
         rawUpdates.salesRep = client.salesRep || client.assignedTo || '';
       }
-      const updates = sanitizeMemberProfileUpdates(rawUpdates, client, currentUser);
+      const canUnlockCoreFields = isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser);
+      const updates = sanitizeMemberProfileUpdates(rawUpdates, client, currentUser, canUnlockCoreFields);
       await onUpdateClient(client.id, updates);
       setIsEditing(false);
     } catch (err: any) {
@@ -940,7 +949,8 @@ export function InzanMemberShow({
     options?: { value: string; label: string }[],
     disabled?: boolean
   ) => {
-    const isDisabled = disabled !== undefined ? disabled : (fieldKey ? isFieldLockedForUser(fieldKey, currentUser, client) : false);
+    const canUnlockCoreFields = isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser);
+    const isDisabled = disabled !== undefined ? disabled : (fieldKey ? isFieldLockedForUser(fieldKey, currentUser, client, canUnlockCoreFields) : false);
     if (isEditing && fieldKey) {
       if (type === 'select' && options) {
         return (
@@ -1354,9 +1364,9 @@ export function InzanMemberShow({
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-4">
-                  {renderField('Member Name', client.name, 'name', 'text', undefined, isFieldLockedForUser('name', currentUser, client))}
-                  {renderField('Username', client.memberId, 'legacyNotes', 'text', undefined, isFieldLockedForUser('legacyNotes', currentUser, client))}
-                  {renderField('Mobile', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client))}
+                  {renderField('Member Name', client.name, 'name', 'text', undefined, isFieldLockedForUser('name', currentUser, client, isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser)))}
+                  {renderField('Username', client.memberId, 'legacyNotes', 'text', undefined, isFieldLockedForUser('legacyNotes', currentUser, client, isGeneralManagerOrCEO(currentUser)))}
+                  {renderField('Mobile', client.phone, 'phone', 'text', undefined, isFieldLockedForUser('phone', currentUser, client, isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser)))}
                   {renderField('Backup Mobile', client.backupPhone, 'backupPhone', 'text', undefined, isFieldLockedForUser('backupPhone', currentUser, client))}
                   {renderField('Job', client.jobTitle, 'jobTitle', 'text', undefined, isFieldLockedForUser('jobTitle', currentUser, client))}
                   {renderField('Birthday', (client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'yyyy-MM-dd', '') : '') + getAge(client.dateOfBirth), 'dateOfBirth', 'date', undefined, isFieldLockedForUser('dateOfBirth', currentUser, client))}
@@ -2916,6 +2926,38 @@ export function InzanMemberShow({
 
                 <div className="space-y-2">
                   <div>
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground">Freeze Type</Label>
+                    <div className="grid grid-cols-3 gap-1.5 mt-1">
+                      {(['Normal', 'Back', 'Medical'] as const)
+                        .filter(ft => ft === 'Normal' || isSalesManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser) || isFitnessManagerUser(currentUser))
+                        .map(ft => (
+                          <button
+                            key={ft}
+                            type="button"
+                            onClick={() => setFreezeType(ft)}
+                            className={`h-8 rounded border text-[11px] font-bold transition-colors ${
+                              freezeType === ft
+                                ? 'bg-cyan-600 text-white border-cyan-600'
+                                : 'bg-background text-muted-foreground border-input hover:text-foreground'
+                            }`}
+                          >
+                            {ft === 'Normal' ? '❄️ Normal' : ft === 'Back' ? '⏪ Back Freeze' : '🏥 Medical'}
+                          </button>
+                        ))}
+                    </div>
+                    {freezeType === 'Back' && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1">
+                        Retroactive (Back) Freeze: compensates past missed days and extends package expiry.
+                      </p>
+                    )}
+                    {freezeType === 'Medical' && (
+                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">
+                        Medical Freeze: extends package expiry without deducting from normal freeze balance.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
                     <Label className="text-[10px] font-bold uppercase text-muted-foreground">Select Package to Freeze</Label>
                     <select
                       value={freezePkgId}
@@ -2923,11 +2965,13 @@ export function InzanMemberShow({
                       className="h-8 w-full rounded border border-input bg-background px-2 text-xs mt-1"
                     >
                       <option value="">-- Choose Active Package --</option>
-                      {(client.packages || []).filter(p => p.status === 'Active').map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.packageName} (Expires: {safeFormatDate(p.endDate, 'dd MMM yyyy')})
-                        </option>
-                      ))}
+                      {(client.packages || [])
+                        .filter(p => p.status === 'Active' && (!isFitnessManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser) || isSecondaryPackageItem(p)))
+                        .map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.packageName} (Expires: {safeFormatDate(p.endDate, 'dd MMM yyyy')})
+                          </option>
+                        ))}
                     </select>
                   </div>
 

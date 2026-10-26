@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { downloadFile } from './utils/download';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,10 @@ import {
   subMonths,
   differenceInDays,
 } from 'date-fns';
-import { Download, AlertTriangle, TrendingUp, Users, DollarSign, RefreshCw } from 'lucide-react';
+import { Download, AlertTriangle, TrendingUp, Users, DollarSign, RefreshCw, Package as PackageIcon, PhoneCall, Activity } from 'lucide-react';
+import { db, getTenantId } from './firebase';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { getRevenueScopeForUser, isPaymentInRevenueScope } from './utils/permissions';
 import { Badge } from '@/components/ui/badge';
 import {
   BarChart,
@@ -100,7 +103,22 @@ const CustomTooltipRetention = ({ active, payload, label }: any) => {
 };
 
 export default function Reports() {
-  const { clients, payments, attendances } = useAppContext();
+  const { clients, payments: rawPayments, attendances, currentUser } = useAppContext();
+  const isInzan = getTenantId() === 'inzanathletics';
+  const revenueScope = useMemo(() => getRevenueScopeForUser(currentUser), [currentUser]);
+  const payments = useMemo(() => {
+    if (!isInzan || revenueScope === 'all') return rawPayments;
+    return rawPayments.filter(p => isPaymentInRevenueScope(p, revenueScope));
+  }, [rawPayments, isInzan, revenueScope]);
+  const [callCenterLogs, setCallCenterLogs] = useState<any[]>([]);
+  useEffect(() => {
+    if (!isInzan) return;
+    const q = query(collection(db, 'callCenterLogs'), orderBy('timestamp', 'desc'), limit(500));
+    const unsub = onSnapshot(q, snap => {
+      setCallCenterLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, () => setCallCenterLogs([]));
+    return () => unsub();
+  }, [isInzan]);
   const { t, language } = useLanguage();
   const now = new Date();
 
@@ -336,6 +354,80 @@ export default function Reports() {
     Left: r.churned,
     'Retention %': r.active + r.churned > 0 ? (((r.active / (r.active + r.churned)) * 100).toFixed(1) + '%') : '0%',
   }));
+
+  // --- Packages Sold Breakdown (How many of each package sold + revenue) ---
+  const packagesSoldBreakdown = useMemo(() => {
+    const map = new Map<string, { packageName: string; count: number; revenue: number }>();
+    for (const p of payments) {
+      if (p.deleted_at || p.status === 'refunded') continue;
+      const pkgName = (p.packageType || 'Unspecified Package').trim();
+      const amt = Number(p.amount_paid ?? p.amount) || 0;
+      const existing = map.get(pkgName) || { packageName: pkgName, count: 0, revenue: 0 };
+      existing.count += 1;
+      existing.revenue += amt;
+      map.set(pkgName, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count || b.revenue - a.revenue);
+  }, [payments]);
+
+  // --- Sales Team Calls Report ---
+  const salesTeamCallsReport = useMemo(() => {
+    const map = new Map<string, { repName: string; totalCalls: number; answered: number; followUp: number }>();
+    for (const log of callCenterLogs) {
+      const repName = log.staffName || log.callerName || log.recordedByName || 'Sales Team';
+      const cur = map.get(repName) || { repName, totalCalls: 0, answered: 0, followUp: 0 };
+      cur.totalCalls += 1;
+      const outcome = String(log.outcome || log.disposition || log.status || '').toLowerCase();
+      if (outcome.includes('answer') || outcome.includes('interested') || outcome.includes('booked') || outcome.includes('converted')) {
+        cur.answered += 1;
+      } else {
+        cur.followUp += 1;
+      }
+      map.set(repName, cur);
+    }
+    for (const c of clients) {
+      const comments = Array.isArray(c.comments) ? c.comments : [];
+      for (const cm of comments) {
+        const txt = String(cm.text || '').toLowerCase();
+        if (txt.includes('call') || txt.includes('phone') || txt.includes('spoke') || txt.includes('contacted')) {
+          const repName = cm.author || 'Sales Team';
+          const cur = map.get(repName) || { repName, totalCalls: 0, answered: 0, followUp: 0 };
+          cur.totalCalls += 1;
+          cur.answered += 1;
+          map.set(repName, cur);
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.totalCalls - a.totalCalls);
+  }, [callCenterLogs, clients]);
+
+  // --- Member Attendance Frequency Report ---
+  const memberAttendanceFrequency = useMemo(() => {
+    const countsByClient = new Map<string, { count: number; lastDate: string }>();
+    for (const a of attendances) {
+      if (!a.clientId) continue;
+      const cur = countsByClient.get(a.clientId) || { count: 0, lastDate: '' };
+      cur.count += 1;
+      if (a.date && a.date > cur.lastDate) cur.lastDate = a.date;
+      countsByClient.set(a.clientId, cur);
+    }
+    const rows: { id: string; memberId: string; name: string; packageType: string; visits: number; lastVisit: string }[] = [];
+    for (const c of clients) {
+      const stat = countsByClient.get(c.id);
+      const visits = stat?.count || Number((c as any).totalCheckins || 0);
+      if (visits > 0) {
+        rows.push({
+          id: c.id,
+          memberId: c.memberId || '—',
+          name: c.name,
+          packageType: c.packageType || '—',
+          visits,
+          lastVisit: stat?.lastDate ? stat.lastDate.slice(0, 10) : '—',
+        });
+      }
+    }
+    return rows.sort((a, b) => b.visits - a.visits).slice(0, 50);
+  }, [clients, attendances]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -591,6 +683,123 @@ export default function Reports() {
               <Download className="h-4 w-4 mr-2" />
               {t('reports.download_forecast')}
             </ExportMenu>
+          </CardContent>
+        </Card>
+
+        {/* 1. Packages Sold Breakdown */}
+        <Card className="shadow-sm border-primary/10">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <PackageIcon className="h-4 w-4 text-emerald-500" />
+                Packages Sold Breakdown
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Units sold and revenue per package tier ({revenueScope === 'all' ? 'All Revenue' : revenueScope})
+              </p>
+            </div>
+            <ExportMenu data={packagesSoldBreakdown} filename="packages_sold_breakdown">
+              <Download className="h-3.5 w-3.5 mr-1" /> Export
+            </ExportMenu>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[300px] overflow-y-auto space-y-1.5 pr-1">
+              {packagesSoldBreakdown.length === 0 ? (
+                <p className="text-center text-muted-foreground text-xs py-8">No package sales recorded yet.</p>
+              ) : (
+                packagesSoldBreakdown.map((pkg) => (
+                  <div key={pkg.packageName} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 text-xs">
+                    <div>
+                      <p className="font-bold text-foreground">{pkg.packageName}</p>
+                      <p className="text-[11px] text-muted-foreground">{pkg.count} sold</p>
+                    </div>
+                    <Badge variant="outline" className="font-mono font-bold text-emerald-600 border-emerald-500/30">
+                      {pkg.revenue.toLocaleString()} LE
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 2. Sales Team Calls Report */}
+        <Card className="shadow-sm border-primary/10">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <PhoneCall className="h-4 w-4 text-blue-500" />
+                Sales Team Calls Report
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Logged outbound &amp; follow-up calls per sales representative
+              </p>
+            </div>
+            <ExportMenu data={salesTeamCallsReport} filename="sales_team_calls_report">
+              <Download className="h-3.5 w-3.5 mr-1" /> Export
+            </ExportMenu>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[300px] overflow-y-auto space-y-1.5 pr-1">
+              {salesTeamCallsReport.length === 0 ? (
+                <p className="text-center text-muted-foreground text-xs py-8">No sales calls logged yet.</p>
+              ) : (
+                salesTeamCallsReport.map((rep) => (
+                  <div key={rep.repName} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 text-xs">
+                    <div>
+                      <p className="font-bold text-foreground">{rep.repName}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Answered/Positive: {rep.answered} • Follow-up: {rep.followUp}
+                      </p>
+                    </div>
+                    <Badge className="bg-blue-600 text-white font-bold">
+                      {rep.totalCalls} Calls
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 3. Member Activity & Attendance Frequency */}
+        <Card className="shadow-sm border-primary/10 md:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-4 w-4 text-amber-500" />
+                Member Attendance Frequency
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                How many times members attended the club
+              </p>
+            </div>
+            <ExportMenu data={memberAttendanceFrequency} filename="member_attendance_frequency">
+              <Download className="h-3.5 w-3.5 mr-1" /> Export
+            </ExportMenu>
+          </CardHeader>
+          <CardContent>
+            <div className="max-h-[300px] overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-2 pr-1">
+              {memberAttendanceFrequency.length === 0 ? (
+                <p className="text-center text-muted-foreground text-xs py-8 md:col-span-2">No attendance records found.</p>
+              ) : (
+                memberAttendanceFrequency.map((m) => (
+                  <div key={m.id} className="flex items-center justify-between p-2.5 rounded-lg border bg-muted/20 text-xs">
+                    <div>
+                      <p className="font-bold text-foreground">
+                        {m.name} <span className="text-muted-foreground font-mono">#{m.memberId}</span>
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {m.packageType} • Last: {m.lastVisit}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="font-bold border-amber-500/40 text-amber-600">
+                      {m.visits} Visits
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
