@@ -95,6 +95,8 @@ export const SALES_NAME_MAPPING: Record<string, string> = {
   // ---- Sama ----
   'Sama': 'Sama',
   'sama': 'Sama',
+  'Sama Mahmoud': 'Sama',
+  'sama mahmoud': 'Sama',
   'olaessam307': 'Sama',
 
   // ---- Legacy / other names ----

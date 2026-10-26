@@ -197,30 +197,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         collection(db, 'clients'),
         where('status', 'in', ['Expired', 'expired'])
       );
-      const tenantKey = getTenantId() || 'default';
-      const cacheKey = `expired_sync_ts_v2_${tenantKey}`;
-      const lastSync = Number(localStorage.getItem(cacheKey) || '0');
-      const twelveHoursMs = 12 * 60 * 60 * 1000;
-      if (Date.now() - lastSync < twelveHoursMs) {
-        try {
-          const { getDocsFromCache } = await import('firebase/firestore');
-          const cachedSnap = await getDocsFromCache(q);
-          if (!cachedSnap.empty) {
-            setExpiredMembersList(
-              cachedSnap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
-            );
-            setExpiredLoaded(true);
-            return;
-          }
-        } catch {}
-      }
       const snap = await getDocs(q);
       setExpiredMembersList(
         snap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
       );
-      if (!snap.empty) {
-        localStorage.setItem(cacheKey, String(Date.now()));
-      }
       setExpiredLoaded(true);
     } catch (error) {
       console.error('Error fetching expired members:', error);
@@ -232,14 +212,14 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   // Defer background fetch of expired members slightly after initial render so initial page load is instant
   useEffect(() => {
     if (!currentUser?.id || effectiveRole === 'client') return undefined;
-    if (!loading && membersList.length > 0 && !expiredLoaded && !loadingExpired) {
+    if (!loading && !expiredLoaded && !loadingExpired) {
       const timer = setTimeout(() => {
         fetchExpiredMembers();
-      }, 2000);
+      }, 500);
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [currentUser?.id, effectiveRole, loading, membersList.length, expiredLoaded, loadingExpired, fetchExpiredMembers]);
+  }, [currentUser?.id, effectiveRole, loading, expiredLoaded, loadingExpired, fetchExpiredMembers]);
 
   // Trigger expired fetch immediately if a search query is entered (so search results find expired members)
   useEffect(() => {

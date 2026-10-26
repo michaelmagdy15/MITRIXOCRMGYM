@@ -227,12 +227,22 @@ export default function Leads() {
   const itemsPerPage = 20;
 
   const allLeads = useMemo(() => {
+    const isRestrictedRep = currentUser?.role === 'rep' && !canAssignLeads && currentUser?.can_view_global_dashboard !== true;
+    const userNameLower = (currentUser?.name || '').trim().toLowerCase();
     return clients.filter(c => {
       if (c.status !== 'Lead') return false;
-      if (currentUser?.role === 'rep' && c.assignedTo !== currentUser.id) return false;
+      if (isRestrictedRep) {
+        if (c.assignedTo === currentUser.id || c.salesRep === currentUser.id) return true;
+        if (userNameLower) {
+          if ((c.salesName || '').trim().toLowerCase() === userNameLower) return true;
+          if ((c.salesRep || '').trim().toLowerCase() === userNameLower) return true;
+          if ((c.assignedTo || '').trim().toLowerCase() === userNameLower) return true;
+        }
+        return false;
+      }
       return true;
     });
-  }, [clients, currentUser?.role, currentUser?.id]);
+  }, [clients, currentUser?.role, currentUser?.id, currentUser?.name, currentUser?.can_view_global_dashboard, canAssignLeads]);
 
   const calculateLeadScore = (lead: Client) => {
     let score = 0;

@@ -361,13 +361,15 @@ export default function Dashboard() {
   }, [users]);
 
   const isClientAssignedToRep = React.useCallback((client: any, repId: string, repName: string) => {
-    const assigned = client.assignedTo || client.salesRep || client.salesName;
+    const assigned = client.assignedTo || client.salesRep || client.salesName || client.recordedBy;
     if (!assigned) return false;
     if (client.assignedTo === repId || client.salesRep === repId) return true;
     const canonicalRep = getCanonicalName(repName);
     if (!canonicalRep) return false;
     if (client.assignedTo && getCanonicalName(client.assignedTo) === canonicalRep) return true;
     if (client.salesName && getCanonicalName(client.salesName) === canonicalRep) return true;
+    if (client.salesRep && getCanonicalName(client.salesRep) === canonicalRep) return true;
+    if (!client.assignedTo && !client.salesRep && !client.salesName && client.recordedBy && getCanonicalName(client.recordedBy) === canonicalRep) return true;
     return false;
   }, [getCanonicalName]);
 

@@ -14,7 +14,10 @@ export const useUserTargets = (currentUser: User | null) => {
       setLoading(false);
       return;
     }
-    const isManager = ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'].includes(currentUser.role || '');
+    const isManager =
+      ['super_admin', 'crm_admin', 'sales_manager', 'manager', 'admin'].includes(currentUser.role || '') ||
+      currentUser.can_view_global_dashboard === true ||
+      Boolean(currentUser.customPermissions?.['dashboard.view_global']);
     const targetsQuery = isManager
       ? collection(db, 'userTargets')
       : query(collection(db, 'userTargets'), where('userId', '==', currentUser.id));
@@ -27,7 +30,7 @@ export const useUserTargets = (currentUser: User | null) => {
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser?.id, currentUser?.role]);
+  }, [currentUser?.id, currentUser?.role, currentUser?.can_view_global_dashboard]);
 
   const updateUserTarget = async (userId: string, month: string, targetAmount: number, ptTarget?: number, classesTarget?: number, membershipsTarget?: number) => {
     if (!currentUser) return;

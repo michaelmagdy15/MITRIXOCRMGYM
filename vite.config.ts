@@ -49,10 +49,12 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
           // Raise precache limit to 5 MB so all split chunks are accepted
           maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          ignoreURLParametersMatching: [/^cb$/],
+          ignoreURLParametersMatching: [/^cb$/, /^sw_reloaded$/],
           cleanupOutdatedCaches: true,
           navigateFallbackDenylist: [
             /^\/quote-generator\.html/,
