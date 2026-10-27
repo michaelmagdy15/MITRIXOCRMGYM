@@ -860,13 +860,36 @@ export interface FeatureFlags {
   operations?: boolean;
   mobileApp?: boolean;
   juiceBar?: boolean;
+  kitchenInventory?: boolean;
   locker?: boolean;
+  inzanSmartLockers?: boolean;
+  guestInvites?: boolean;
   qrCheckin?: boolean;
   pointsSystem?: boolean;
   wallet?: boolean;
   debtors?: boolean;
   unconfirmedMemberships?: boolean;
   frozenMembers?: boolean;
+  // Core & Staff Modules
+  workoutLibrary?: boolean;
+  tasks?: boolean;
+  bookings?: boolean;
+  requests?: boolean;
+  pendingApprovals?: boolean;
+  appQrGenerator?: boolean;
+  smartPwaInstaller?: boolean;
+  coachPortal?: boolean;
+  twilioBroadcasts?: boolean;
+  redgitsMigration?: boolean;
+  secondaryPackages?: boolean;
+  packageBenefitsEngine?: boolean;
+  clickToCall?: boolean;
+  advancedPermissionMatrix?: boolean;
+  splitTenderPayments?: boolean;
+  webcamPhotoCapture?: boolean;
+  turnstileGateControl?: boolean;
+  repLocking?: boolean;
+  corporateDiscounts?: boolean;
   // Premium Tier Modules
   callCenter?: boolean;
   lostAndFound?: boolean;
@@ -877,7 +900,6 @@ export interface FeatureFlags {
   customMemberProfile?: boolean;
   classBookingSystem?: boolean;
   nutrition?: boolean;
-  tasks?: boolean;
   // Commercial Gym & Department Isolation Flags
   commercialGymWorkspaces?: boolean;
   salesPipelineStages?: '5-stage' | '7-stage';

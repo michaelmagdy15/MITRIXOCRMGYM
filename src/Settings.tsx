@@ -37,7 +37,7 @@ import NotificationTemplateSettings from './components/NotificationTemplateSetti
 import TwilioBroadcastManager from './components/TwilioBroadcastManager';
 
 export default function Settings() {
-  const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches, defaultPayoutRates, updateDefaultPayoutRates } = useAppContext();
+  const { branding, updateBranding, currentUser, wipeSystem, canAccessSettings, branches, updateBranches, defaultPayoutRates, updateDefaultPayoutRates, features } = useAppContext();
   const { changeMyPassword, runExistingUsersMigration } = useAuth();
   const [activeTab, setActiveTab] = useState('my-profile');
   const [companyName, setCompanyName] = useState(branding.companyName);
@@ -643,7 +643,16 @@ export default function Settings() {
     );
   }
 
-  const SETTINGS_NAV_GROUPS = [
+  interface SettingsNavItem {
+    id: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    description: string;
+    danger?: boolean;
+    hidden?: boolean;
+  }
+
+  const SETTINGS_NAV_GROUPS: { title: string; items: SettingsNavItem[] }[] = [
     {
       title: 'Account',
       items: [
@@ -672,9 +681,9 @@ export default function Settings() {
       items: [
         { id: 'notifications', label: 'Notification Templates', icon: Bell, description: 'Automated WhatsApp and SMS notification templates' },
         { id: 'announcements', label: 'Announcements', icon: Megaphone, description: 'Member bulletins, alerts, and promotional announcements' },
-        { id: 'gamification', label: 'Gamification', icon: Trophy, description: 'Badges, streaks, achievement levels and leaderboards' },
-        { id: 'points', label: 'Points Engine', icon: Sparkles, description: 'Loyalty points earn rates and redemption options' },
-        { id: 'storefront', label: 'Storefront', icon: Smartphone, description: 'Mobile app storefront items, banners and packages' },
+        { id: 'gamification', label: 'Gamification', icon: Trophy, description: 'Badges, streaks, achievement levels and leaderboards', hidden: features?.pointsSystem === false },
+        { id: 'points', label: 'Points Engine', icon: Sparkles, description: 'Loyalty points earn rates and redemption options', hidden: features?.pointsSystem === false },
+        { id: 'storefront', label: 'Storefront', icon: Smartphone, description: 'Mobile app storefront items, banners and packages', hidden: features?.mobileApp === false },
       ],
     },
     {
@@ -1503,7 +1512,7 @@ export default function Settings() {
 
         {/* ── Notification Templates ── */}
         <TabsContent value="notifications" className="space-y-6 animate-in fade-in-50 duration-500">
-          <TwilioBroadcastManager />
+          {features?.twilioBroadcasts !== false && <TwilioBroadcastManager />}
           <NotificationTemplateSettings />
         </TabsContent>
 
@@ -1652,7 +1661,7 @@ export default function Settings() {
 
         {/* ── Announcements ── */}
         <TabsContent value="announcements" className="space-y-6 animate-in fade-in-50 duration-500">
-          <TwilioBroadcastManager />
+          {features?.twilioBroadcasts !== false && <TwilioBroadcastManager />}
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>

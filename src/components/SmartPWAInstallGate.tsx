@@ -31,7 +31,8 @@ declare global {
 }
 
 export function SmartPWAInstallGate() {
-  const { branding } = useSettings();
+  const { branding, features } = useSettings();
+  const isSmartPwaEnabled = features?.smartPwaInstaller !== false;
   const [isMobile, setIsMobile] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
@@ -170,7 +171,11 @@ export function SmartPWAInstallGate() {
     setTimeout(() => setCopiedUrl(false), 2500);
   };
 
-  // Never show on desktop (unless explicitly testing with ?install=1) or when already installed as standalone PWA
+  // Never show when disabled via Admin Hub feature flag, on desktop (unless explicitly testing with ?install=1), or when already installed as standalone PWA
+  if (!isSmartPwaEnabled && !forceInstallParam) {
+    return null;
+  }
+
   if (typeof window !== 'undefined') {
     const path = window.location.pathname;
     if (path === '/kiosk' || path === '/checkin') return null;

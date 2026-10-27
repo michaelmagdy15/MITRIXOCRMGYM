@@ -93,6 +93,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     paidClassPercentage: 0,
     paidClassFixedRate: 0
   });
+  const isDefaultInzan = getTenantId().toLowerCase().includes('inzan');
   const [features, setFeatures] = useState<FeatureFlags>({
     leads: true,
     ptPackages: false,
@@ -103,20 +104,49 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     operations: true,
     mobileApp: false,
     juiceBar: true,
+    kitchenInventory: true,
     locker: true,
+    inzanSmartLockers: isDefaultInzan,
+    guestInvites: true,
     qrCheckin: true,
     pointsSystem: true,
     wallet: true,
     debtors: true,
     unconfirmedMemberships: true,
     frozenMembers: true,
+    workoutLibrary: true,
+    tasks: true,
+    bookings: true,
+    requests: true,
+    pendingApprovals: true,
+    appQrGenerator: true,
+    smartPwaInstaller: true,
+    coachPortal: true,
+    twilioBroadcasts: true,
+    redgitsMigration: isDefaultInzan,
+    secondaryPackages: isDefaultInzan,
+    packageBenefitsEngine: isDefaultInzan,
+    clickToCall: true,
+    advancedPermissionMatrix: true,
+    splitTenderPayments: true,
+    webcamPhotoCapture: true,
+    turnstileGateControl: isDefaultInzan,
+    repLocking: isDefaultInzan,
+    corporateDiscounts: isDefaultInzan,
     callCenter: true,
     lostAndFound: true,
     complaints: true,
     advancedReports: true,
     surveys: true,
     serviceCategoryTargets: true,
-    nutrition: getTenantId().toLowerCase().includes('inzan')
+    customMemberProfile: isDefaultInzan,
+    classBookingSystem: true,
+    nutrition: isDefaultInzan,
+    commercialGymWorkspaces: isDefaultInzan,
+    salesPipelineStages: isDefaultInzan ? '7-stage' : '5-stage',
+    twoPersonApproval: isDefaultInzan,
+    shiftHandover: isDefaultInzan,
+    fitnessAssessmentQueue: isDefaultInzan
   });
 
   // Storefront CMS config

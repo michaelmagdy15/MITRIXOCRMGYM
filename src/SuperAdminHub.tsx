@@ -13,7 +13,7 @@ import {
   Shield, Search, RefreshCw, Power, PowerOff, Globe, Database, 
   Calendar, Users, Sliders, CheckCircle2, UserPlus, CreditCard, 
   Scan, BarChart3, FileText, Package, Smartphone, Plus, Mail, User, Building, Loader2, Clock,
-  Coffee, Lock, QrCode, Trophy, Coins, AlertCircle, Snowflake
+  Coffee, Lock, QrCode, Trophy, Coins, AlertCircle, Snowflake, Dumbbell, PhoneCall, MessageSquare, Layers, Sparkles
 } from 'lucide-react';
 import { Tenant } from './types';
 
@@ -51,14 +51,24 @@ export default function SuperAdminHub() {
   const [features, setFeatures] = useState({
     leads: true,
     ptPackages: true,
+    secondaryPackages: false,
+    packageBenefitsEngine: false,
     payments: true,
+    splitTenderPayments: true,
     attendance: true,
     reports: true,
     quotes: true,
     operations: true,
     mobileApp: false,
+    smartPwaInstaller: true,
     juiceBar: true,
+    kitchenInventory: true,
     locker: true,
+    inzanSmartLockers: false,
+    workoutLibrary: true,
+    clickToCall: true,
+    twilioBroadcasts: true,
+    advancedPermissionMatrix: true,
     qrCheckin: true,
     pointsSystem: true,
     wallet: true,
@@ -257,17 +267,28 @@ export default function SuperAdminHub() {
       const snap = await getDoc(featuresRef);
       if (snap.exists()) {
         const data = snap.data();
+        const isTenantInzan = tenant.id === 'inzanathletics' || tenant.databaseId === 'db-inzanathletics';
         setFeatures({
           leads: data.leads !== false,
           ptPackages: data.ptPackages !== false,
+          secondaryPackages: data.secondaryPackages !== undefined ? Boolean(data.secondaryPackages) : isTenantInzan,
+          packageBenefitsEngine: data.packageBenefitsEngine !== undefined ? Boolean(data.packageBenefitsEngine) : isTenantInzan,
           payments: data.payments !== false,
+          splitTenderPayments: data.splitTenderPayments !== false,
           attendance: data.attendance !== false,
           reports: data.reports !== false,
           quotes: data.quotes !== false,
           operations: data.operations !== false,
           mobileApp: data.mobileApp === true,
+          smartPwaInstaller: data.smartPwaInstaller !== false,
           juiceBar: data.juiceBar !== false,
+          kitchenInventory: data.kitchenInventory !== false,
           locker: data.locker !== false,
+          inzanSmartLockers: data.inzanSmartLockers !== undefined ? Boolean(data.inzanSmartLockers) : isTenantInzan,
+          workoutLibrary: data.workoutLibrary !== false,
+          clickToCall: data.clickToCall !== false,
+          twilioBroadcasts: data.twilioBroadcasts !== false,
+          advancedPermissionMatrix: data.advancedPermissionMatrix !== false,
           qrCheckin: data.qrCheckin !== false,
           pointsSystem: data.pointsSystem !== false,
           wallet: data.wallet !== false,
@@ -276,18 +297,29 @@ export default function SuperAdminHub() {
           frozenMembers: data.frozenMembers === true
         });
       } else {
+        const isTenantInzan = tenant.id === 'inzanathletics' || tenant.databaseId === 'db-inzanathletics';
         // Fallback default configurations
         setFeatures({
           leads: true,
           ptPackages: true,
+          secondaryPackages: isTenantInzan,
+          packageBenefitsEngine: isTenantInzan,
           payments: true,
+          splitTenderPayments: true,
           attendance: true,
           reports: true,
           quotes: true,
           operations: true,
           mobileApp: false,
+          smartPwaInstaller: true,
           juiceBar: true,
+          kitchenInventory: true,
           locker: true,
+          inzanSmartLockers: isTenantInzan,
+          workoutLibrary: true,
+          clickToCall: true,
+          twilioBroadcasts: true,
+          advancedPermissionMatrix: true,
           qrCheckin: true,
           pointsSystem: true,
           wallet: true,
@@ -944,6 +976,104 @@ export default function SuperAdminHub() {
                     </div>
                   </div>
                   <Switch checked={features.frozenMembers} onCheckedChange={() => toggleFeature('frozenMembers')} disabled={savingFeatures} />
+                </div>
+
+                {/* Workout Library */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Dumbbell className="h-3.5 w-3.5 text-emerald-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('workoutLibrary')}>Workout & Exercise Library</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">1,585+ GIF Exercise catalog & workout builder.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.workoutLibrary} onCheckedChange={() => toggleFeature('workoutLibrary')} disabled={savingFeatures} />
+                </div>
+
+                {/* Secondary Packages */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-purple-500/10 border border-purple-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Layers className="h-3.5 w-3.5 text-purple-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('secondaryPackages')}>Primary + Secondary Packages</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Enable Secondary add-on packages alongside Primary.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.secondaryPackages} onCheckedChange={() => toggleFeature('secondaryPackages')} disabled={savingFeatures} />
+                </div>
+
+                {/* Smart Hardware Lockers */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Lock className="h-3.5 w-3.5 text-blue-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('inzanSmartLockers')}>Smart Hardware Lockers</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">QR/PIN electronic locker cabinet grid.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.inzanSmartLockers} onCheckedChange={() => toggleFeature('inzanSmartLockers')} disabled={savingFeatures} />
+                </div>
+
+                {/* Click-to-Call */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-sky-500/10 border border-sky-500/20 rounded-lg shrink-0 mt-0.5">
+                      <PhoneCall className="h-3.5 w-3.5 text-sky-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('clickToCall')}>Click-to-Call Bridge</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Desktop-to-mobile dialer push & call disposition logger.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.clickToCall} onCheckedChange={() => toggleFeature('clickToCall')} disabled={savingFeatures} />
+                </div>
+
+                {/* WhatsApp Broadcasts */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg shrink-0 mt-0.5">
+                      <MessageSquare className="h-3.5 w-3.5 text-emerald-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('twilioBroadcasts')}>WhatsApp & SMS Broadcasts</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Bulk WhatsApp & SMS campaign broadcaster.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.twilioBroadcasts} onCheckedChange={() => toggleFeature('twilioBroadcasts')} disabled={savingFeatures} />
+                </div>
+
+                {/* 88-Permission Matrix */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-rose-500/10 border border-rose-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Shield className="h-3.5 w-3.5 text-rose-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('advancedPermissionMatrix')}>88-Permission Matrix</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Granular 88-checkbox permissions vs basic roles.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.advancedPermissionMatrix} onCheckedChange={() => toggleFeature('advancedPermissionMatrix')} disabled={savingFeatures} />
+                </div>
+
+                {/* Smart PWA Installer */}
+                <div className="flex items-center justify-between p-3 rounded-xl border border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:border-zinc-700 transition-all">
+                  <div className="flex items-start gap-2.5">
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg shrink-0 mt-0.5">
+                      <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                    </div>
+                    <div className="space-y-0.5">
+                      <Label className="font-bold text-xs text-zinc-200 cursor-pointer block" onClick={() => toggleFeature('smartPwaInstaller')}>Forced Smart PWA Installer</Label>
+                      <p className="text-[10px] text-zinc-400 leading-snug">Prompt iOS & Android users to Add to Home Screen.</p>
+                    </div>
+                  </div>
+                  <Switch checked={features.smartPwaInstaller} onCheckedChange={() => toggleFeature('smartPwaInstaller')} disabled={savingFeatures} />
                 </div>
               </div>
 

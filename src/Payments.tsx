@@ -84,6 +84,8 @@ export default function Payments() {
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const isInzan = isTenantInzan(branding?.companyName) || getTenantId() === 'inzanathletics';
+  const showSplitTender = features?.splitTenderPayments !== undefined ? features.splitTenderPayments : true;
+  const showCorporateDiscounts = features?.corporateDiscounts !== undefined ? features.corporateDiscounts : isInzan;
   const isCurrentUserAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'crm_admin';
   const isSalesManager = canReassignMemberSalesRep(currentUser);
 
@@ -1983,7 +1985,9 @@ export default function Payments() {
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-none shadow-2xl">
                           <SelectItem value="Standard">Standard / Manager Discretion</SelectItem>
-                          <SelectItem value="Corporate">Corporate Partner (Proof Required)</SelectItem>
+                          {showCorporateDiscounts && (
+                            <SelectItem value="Corporate">Corporate Partner (Proof Required)</SelectItem>
+                          )}
                           <SelectItem value="Referral">Member Referral</SelectItem>
                           <SelectItem value="Promotional">Seasonal / Promotional Campaign</SelectItem>
                         </SelectContent>
@@ -2052,23 +2056,25 @@ export default function Payments() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_method')}</Label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = !useSplitTender;
-                        setUseSplitTender(next);
-                        if (next && !primaryTenderAmount) {
-                          setPrimaryTenderAmount(String(Math.round(pricingBreakdown.amountPaid / 2)));
-                        }
-                      }}
-                      className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
-                        useSplitTender
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-muted/50 text-muted-foreground border-border hover:border-primary/40'
-                      }`}
-                    >
-                      {useSplitTender ? '✓ Split Tender (2 Methods)' : '+ Split Tender (Cash + Instapay / Visa)'}
-                    </button>
+                    {showSplitTender && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !useSplitTender;
+                          setUseSplitTender(next);
+                          if (next && !primaryTenderAmount) {
+                            setPrimaryTenderAmount(String(Math.round(pricingBreakdown.amountPaid / 2)));
+                          }
+                        }}
+                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+                          useSplitTender
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-muted/50 text-muted-foreground border-border hover:border-primary/40'
+                        }`}
+                      >
+                        {useSplitTender ? '✓ Split Tender (2 Methods)' : '+ Split Tender (Cash + Instapay / Visa)'}
+                      </button>
+                    )}
                   </div>
                   <Select value={method} onValueChange={(v) => v && setMethod(v as Payment['method'])}>
                     <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">

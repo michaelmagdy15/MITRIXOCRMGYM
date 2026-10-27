@@ -837,7 +837,8 @@ export default function Clients() {
       return;
     }
 
-    if (isInzanTenant) {
+    const allowSecondaryPackages = features?.secondaryPackages !== undefined ? features.secondaryPackages : isInzanTenant;
+    if (allowSecondaryPackages) {
       const eligibility = validateMembershipEligibility(client, pkg);
       if (!eligibility.allowed) {
         alert(`Primary Membership Required:\n${eligibility.reason}`);
@@ -846,8 +847,8 @@ export default function Clients() {
     }
 
     const clientAssignedRep = client.assignedTo || client.salesRep;
-    const isRepLocked = isInzanTenant && Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
-    const canReassign = isInzanTenant ? canReassignMemberSalesRep(currentUser) : true;
+    const isRepLocked = (features?.repLocking !== undefined ? features.repLocking : isInzanTenant) && Boolean(clientAssignedRep && clientAssignedRep !== 'unassigned');
+    const canReassign = (features?.repLocking !== undefined ? features.repLocking : isInzanTenant) ? canReassignMemberSalesRep(currentUser) : true;
 
     const repId = (isRepLocked && !canReassign)
       ? clientAssignedRep!
@@ -914,7 +915,7 @@ export default function Clients() {
         const startDateObj = toValidDate(addPackageStartDate) || new Date();
         const endDateObj = safeAddDays(startDateObj, pkg.expiryDays);
         const nowIso = new Date().toISOString();
-        const isSecondaryPkg = pkg.hierarchy === 'Secondary' || pkg.type === 'Private' || String(pkg.category || '').toLowerCase().includes('pt');
+        const isSecondaryPkg = allowSecondaryPackages && (pkg.hierarchy === 'Secondary' || pkg.type === 'Private' || String(pkg.category || '').toLowerCase().includes('pt'));
         const resolvedCoachInfo = cleanAddCoachName
           ? await resolveCoachAssignmentInfo(cleanAddCoachName, selectedAddCoach?.id)
           : null;
@@ -3268,7 +3269,7 @@ export default function Clients() {
 
       {activeClient && (
         <div className="-m-4 md:-m-8 min-h-[calc(100vh-4.5rem)] flex flex-col bg-background overflow-hidden animate-in fade-in duration-200">
-          {(isInzanTenant && features?.customMemberProfile) ? (
+          {(features?.customMemberProfile === true || (isInzanTenant && features?.customMemberProfile !== false)) ? (
             <InzanMemberShow
               client={activeClient}
               onClose={() => setActiveClientId(null)}
@@ -4250,12 +4251,14 @@ export default function Clients() {
                             currentUser?.role === 'super_admin' ||
                             currentUser?.role === 'manager';
 
+                          const showSecondaryPackages = features?.secondaryPackages !== undefined ? features.secondaryPackages : isInzanTenant;
+
                           return (
                             <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-3">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
                                   <span className="text-[10px] font-bold uppercase tracking-wider text-primary block">
-                                    Primary &amp; Secondary Packages {isAdminUser ? '(Admin Quick-Change Enabled)' : '(Read-Only on Overview)'}
+                                    {showSecondaryPackages ? 'Primary & Secondary Packages' : 'Primary Membership Package'} {isAdminUser ? '(Admin Quick-Change Enabled)' : '(Read-Only on Overview)'}
                                   </span>
                                   <span className="text-[11px] text-muted-foreground">
                                     {isAdminUser
@@ -4306,7 +4309,7 @@ export default function Clients() {
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div className={`grid grid-cols-1 ${showSecondaryPackages ? 'sm:grid-cols-2' : ''} gap-2.5`}>
                                 <div className="p-3 rounded-lg border bg-background space-y-1.5">
                                   <div className="flex items-center justify-between gap-1">
                                     <Badge className="bg-emerald-600 text-white text-[9px] font-bold uppercase">Primary Package</Badge>
@@ -4387,34 +4390,36 @@ export default function Clients() {
                                   </p>
                                 </div>
 
-                                <div className="p-3 rounded-lg border bg-background space-y-1">
-                                  <div className="flex items-center justify-between gap-1">
-                                    <Badge variant="outline" className="border-purple-500/40 text-purple-600 dark:text-purple-400 text-[9px] font-bold uppercase">
-                                      Secondary Package {secondaryPkgs.length > 1 ? `(${secondaryPkgs.length})` : ''}
-                                    </Badge>
-                                    {Number(rawC.paidPtSessionsRemaining || 0) > 0 && (
-                                      <Badge variant="outline" className="text-[10px] font-mono font-bold text-purple-600 border-purple-500/30">
-                                        {rawC.paidPtSessionsRemaining} PT left
+                                {showSecondaryPackages && (
+                                  <div className="p-3 rounded-lg border bg-background space-y-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <Badge variant="outline" className="border-purple-500/40 text-purple-600 dark:text-purple-400 text-[9px] font-bold uppercase">
+                                        Secondary Package {secondaryPkgs.length > 1 ? `(${secondaryPkgs.length})` : ''}
                                       </Badge>
+                                      {Number(rawC.paidPtSessionsRemaining || 0) > 0 && (
+                                        <Badge variant="outline" className="text-[10px] font-mono font-bold text-purple-600 border-purple-500/30">
+                                          {rawC.paidPtSessionsRemaining} PT left
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {secondaryLabel ? (
+                                      <>
+                                        <p className="text-xs font-black text-foreground truncate">{secondaryLabel}</p>
+                                        <p className="text-[10px] text-muted-foreground font-mono">
+                                          {secondaryPkgs[0]?.startDate ? safeFormatDate(secondaryPkgs[0].startDate, 'dd MMM yyyy') : 'Active Add-On'}
+                                          {secondaryPkgs[0]?.endDate ? ` → ${safeFormatDate(secondaryPkgs[0].endDate, 'dd MMM yyyy')}` : ''}
+                                        </p>
+                                        <p className="text-[10px] text-muted-foreground">
+                                          Created By: <strong className="text-foreground">{secondaryPkgs[0]?.createdByName || secondaryPkgs[0]?.createdBy || rawC.salesName || 'Staff'}</strong>
+                                          {' • '}
+                                          {secondaryPkgs[0]?.createdAt ? safeFormatDate(secondaryPkgs[0].createdAt, 'dd MMM yyyy HH:mm') : 'Recorded'}
+                                        </p>
+                                      </>
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground italic py-2">No active secondary package assigned.</p>
                                     )}
                                   </div>
-                                  {secondaryLabel ? (
-                                    <>
-                                      <p className="text-xs font-black text-foreground truncate">{secondaryLabel}</p>
-                                      <p className="text-[10px] text-muted-foreground font-mono">
-                                        {secondaryPkgs[0]?.startDate ? safeFormatDate(secondaryPkgs[0].startDate, 'dd MMM yyyy') : 'Active Add-On'}
-                                        {secondaryPkgs[0]?.endDate ? ` → ${safeFormatDate(secondaryPkgs[0].endDate, 'dd MMM yyyy')}` : ''}
-                                      </p>
-                                      <p className="text-[10px] text-muted-foreground">
-                                        Created By: <strong className="text-foreground">{secondaryPkgs[0]?.createdByName || secondaryPkgs[0]?.createdBy || rawC.salesName || 'Staff'}</strong>
-                                        {' • '}
-                                        {secondaryPkgs[0]?.createdAt ? safeFormatDate(secondaryPkgs[0].createdAt, 'dd MMM yyyy HH:mm') : 'Recorded'}
-                                      </p>
-                                    </>
-                                  ) : (
-                                    <p className="text-xs text-muted-foreground italic py-2">No active secondary package assigned.</p>
-                                  )}
-                                </div>
+                                )}
                               </div>
                             </div>
                           );
@@ -4656,15 +4661,18 @@ export default function Clients() {
                       const canSameDayEdit = isAdminUser || (isWithin24h && !isFinanceConfirmed);
                       const hoursLeft = isWithin24h ? Math.max(1, Math.ceil(24 - ageHours)) : 0;
 
+                      const allowSecondaryPackages = features?.secondaryPackages !== undefined ? features.secondaryPackages : isInzanTenant;
                       const isSecondaryPkg =
-                        (pkg as any).hierarchy === 'Secondary' ||
-                        catMatch?.hierarchy === 'Secondary' ||
-                        String((pkg as any).category || catMatch?.category || '').toLowerCase().includes('pt') ||
-                        pkgNorm.includes('pt') ||
-                        pkgNorm.includes('private') ||
-                        pkgNorm.includes('sgf') ||
-                        pkgNorm.includes('nutrition') ||
-                        pkgNorm.includes('physio');
+                        allowSecondaryPackages && (
+                          (pkg as any).hierarchy === 'Secondary' ||
+                          catMatch?.hierarchy === 'Secondary' ||
+                          String((pkg as any).category || catMatch?.category || '').toLowerCase().includes('pt') ||
+                          pkgNorm.includes('pt') ||
+                          pkgNorm.includes('private') ||
+                          pkgNorm.includes('sgf') ||
+                          pkgNorm.includes('nutrition') ||
+                          pkgNorm.includes('physio')
+                        );
 
                       const creatorDisplay =
                         (pkg as any).createdByName ||

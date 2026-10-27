@@ -120,17 +120,21 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     };
     return NAV_ITEMS.filter((item) => {
       if (item.tab === 'home' && features.qrCheckin === false) return false;
+      if (item.tab === 'workouts' && features.workoutLibrary === false) return false;
       if (item.tab === 'juicebar') {
-        if (isStrike && isMobile) return false;
+        if (isStrike && isMobile && features.juiceBar !== true) return false;
         if (features.juiceBar === false) return false;
       }
       if (item.tab === 'locker') {
-        if (isStrike && isMobile) return false;
-        if (features.locker === false && !isInzan) return false;
+        const smartLockersOn = features.inzanSmartLockers !== undefined ? features.inzanSmartLockers : isInzan;
+        if (features.locker === false && !smartLockersOn) return false;
       }
       if (item.tab === 'wallet' && features.wallet === false) return false;
-      if (item.tab === 'invites' && features.operations === false) return false;
-      if (item.tab === 'nutrition' && features.nutrition === false && !isInzan) return false;
+      if (item.tab === 'invites' && (features.operations === false || features.guestInvites === false)) return false;
+      if (item.tab === 'nutrition') {
+        const nutritionOn = features.nutrition !== undefined ? features.nutrition : isInzan;
+        if (!nutritionOn) return false;
+      }
       return true;
     }).map(item => {
       if (language === 'ar') {

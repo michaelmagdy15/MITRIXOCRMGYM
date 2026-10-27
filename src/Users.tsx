@@ -41,9 +41,13 @@ export default function Users() {
     createPermissionTemplate, 
     updatePermissionTemplate, 
     deletePermissionTemplate,
-    can 
+    can,
+    features,
   } = useAppContext();
   const { branches } = useSettings();
+  const isInzan = getTenantId() === 'inzanathletics';
+  const showAdvancedMatrix = features?.advancedPermissionMatrix !== false;
+  const showDepartmentOrg = features?.commercialGymWorkspaces !== undefined ? features.commercialGymWorkspaces : isInzan;
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
@@ -82,8 +86,6 @@ export default function Users() {
   const [editDepartment, setEditDepartment] = useState<string>('');
   const [editJobTitle, setEditJobTitle] = useState<string>('');
   const [editTrainerType, setEditTrainerType] = useState<string>('Full-Time');
-
-  const isInzan = getTenantId() === 'inzanathletics';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
@@ -176,7 +178,11 @@ export default function Users() {
 
         // Granular Permissions & Templates
         updates.permissionTemplateId = editPermissionTemplateId || undefined;
-        if (editUseCustomOverrides) {
+        if (!showAdvancedMatrix) {
+          updates.can_view_global_dashboard = editCanViewGlobalDashboard;
+          updates.can_delete_payments = editCanDeletePayments;
+          updates.can_access_settings_and_history = editCanAccessSettings;
+        } else if (editUseCustomOverrides) {
           updates.customPermissions = editCustomPermissions;
           const legacy = syncLegacyFlags(editCustomPermissions);
           Object.assign(updates, legacy);
@@ -430,10 +436,12 @@ export default function Users() {
           <TabsTrigger value="members" className="data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-1.5 text-sm">
             Member Portal Accounts
           </TabsTrigger>
-          <TabsTrigger value="templates" className="data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-1.5 text-sm">
-            <Shield className="w-3.5 h-3.5 mr-1.5 inline-block" />
-            Permission Templates & Roles
-          </TabsTrigger>
+          {showAdvancedMatrix && (
+            <TabsTrigger value="templates" className="data-[state=active]:bg-background data-[state=active]:shadow-sm px-4 py-1.5 text-sm">
+              <Shield className="w-3.5 h-3.5 mr-1.5 inline-block" />
+              Permission Templates & Roles
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="staff" className="space-y-6 m-0 outline-none">
@@ -591,64 +599,66 @@ export default function Users() {
                           </div>
 
                           {/* Organization & Department Structure */}
-                          <div className="space-y-3.5 pt-4 border-t">
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                              <Building2 className="h-3.5 w-3.5 text-primary" /> Department & Job Title
-                            </h4>
+                          {showDepartmentOrg && (
+                            <div className="space-y-3.5 pt-4 border-t">
+                              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                <Building2 className="h-3.5 w-3.5 text-primary" /> Department & Job Title
+                              </h4>
 
-                            <div className="space-y-1.5">
-                              <Label className="text-xs font-semibold">Department</Label>
-                              <Select 
-                                value={inviteDepartment} 
-                                onValueChange={(val: any) => {
-                                  setInviteDepartment(val || '');
-                                  setInviteJobTitle('');
-                                }}
-                              >
-                                <SelectTrigger className="h-10 rounded-xl bg-background">
-                                  <SelectValue placeholder="Select Department" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="">None / Unassigned</SelectItem>
-                                  {INZAN_DEPARTMENTS.map(dept => (
-                                    <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-
-                            {inviteDepartment && (
                               <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Job Title / Position</Label>
-                                <Select value={inviteJobTitle} onValueChange={(val: any) => setInviteJobTitle(val || '')}>
+                                <Label className="text-xs font-semibold">Department</Label>
+                                <Select 
+                                  value={inviteDepartment} 
+                                  onValueChange={(val: any) => {
+                                    setInviteDepartment(val || '');
+                                    setInviteJobTitle('');
+                                  }}
+                                >
                                   <SelectTrigger className="h-10 rounded-xl bg-background">
-                                    <SelectValue placeholder="Select Job Title" />
+                                    <SelectValue placeholder="Select Department" />
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="">None / Unassigned</SelectItem>
-                                    {(INZAN_JOB_TITLES[inviteDepartment as InzanDepartment] || []).map(title => (
-                                      <SelectItem key={title} value={title}>{title}</SelectItem>
+                                    {INZAN_DEPARTMENTS.map(dept => (
+                                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               </div>
-                            )}
 
-                            {inviteDepartment === 'Fitness' && (
-                              <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold">Trainer Contract Type</Label>
-                                <Select value={inviteTrainerType} onValueChange={(val: any) => setInviteTrainerType(val || 'Full-Time')}>
-                                  <SelectTrigger className="h-10 rounded-xl bg-background">
-                                    <SelectValue placeholder="Select Contract Type" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
-                                    <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            )}
-                          </div>
+                              {inviteDepartment && (
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold">Job Title / Position</Label>
+                                  <Select value={inviteJobTitle} onValueChange={(val: any) => setInviteJobTitle(val || '')}>
+                                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                                      <SelectValue placeholder="Select Job Title" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="">None / Unassigned</SelectItem>
+                                      {(INZAN_JOB_TITLES[inviteDepartment as InzanDepartment] || []).map(title => (
+                                        <SelectItem key={title} value={title}>{title}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+
+                              {inviteDepartment === 'Fitness' && (
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs font-semibold">Trainer Contract Type</Label>
+                                  <Select value={inviteTrainerType} onValueChange={(val: any) => setInviteTrainerType(val || 'Full-Time')}>
+                                    <SelectTrigger className="h-10 rounded-xl bg-background">
+                                      <SelectValue placeholder="Select Contract Type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
+                                      <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           <p className="text-[11px] text-muted-foreground pt-1">
                             Note: Account created with default password <span className="font-mono font-semibold text-foreground">12345678</span>. User is prompted to change on first login.
@@ -657,117 +667,134 @@ export default function Users() {
 
                         {/* Right Column: Permissions & Access Engine */}
                         <div className="lg:col-span-7 xl:col-span-8 p-5 sm:p-6 overflow-y-auto space-y-5 bg-background">
-                          {/* Banner Card */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border shadow-xs">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <Shield className="h-4 w-4 text-primary" />
-                                <h4 className="font-bold text-sm text-foreground">Operational Permissions & Access</h4>
-                                <Badge variant="outline" className="text-xs font-semibold border-primary/30 text-primary bg-primary/5">
-                                  {Object.values(inviteUseCustomOverrides ? inviteCustomPermissions : (permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || {})).filter(Boolean).length} / 88 active
-                                </Badge>
+                          {showAdvancedMatrix ? (
+                            <>
+                              {/* Banner Card */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border shadow-xs">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <Shield className="h-4 w-4 text-primary" />
+                                    <h4 className="font-bold text-sm text-foreground">Operational Permissions & Access</h4>
+                                    <Badge variant="outline" className="text-xs font-semibold border-primary/30 text-primary bg-primary/5">
+                                      {Object.values(inviteUseCustomOverrides ? inviteCustomPermissions : (permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || {})).filter(Boolean).length} / 88 active
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Assign an operational template or customize specific user-level permission overrides.
+                                  </p>
+                                </div>
+
+                                <div className="flex items-center gap-2 bg-muted/60 p-1.5 rounded-xl border shrink-0">
+                                  <span className={`text-xs ${!inviteUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                                    Template
+                                  </span>
+                                  <Switch
+                                    checked={inviteUseCustomOverrides}
+                                    onCheckedChange={(checked) => {
+                                      setInviteUseCustomOverrides(checked);
+                                      if (checked && Object.keys(inviteCustomPermissions).length === 0) {
+                                        const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
+                                        const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
+                                        setInviteCustomPermissions({ ...basePerms });
+                                      }
+                                    }}
+                                  />
+                                  <span className={`text-xs ${inviteUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                                    Custom Overrides
+                                  </span>
+                                </div>
                               </div>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Assign an operational template or customize specific user-level permission overrides.
-                              </p>
-                            </div>
 
-                            <div className="flex items-center gap-2 bg-muted/60 p-1.5 rounded-xl border shrink-0">
-                              <span className={`text-xs ${!inviteUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
-                                Template
-                              </span>
-                              <Switch
-                                checked={inviteUseCustomOverrides}
-                                onCheckedChange={(checked) => {
-                                  setInviteUseCustomOverrides(checked);
-                                  if (checked && Object.keys(inviteCustomPermissions).length === 0) {
-                                    const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
-                                    const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
-                                    setInviteCustomPermissions({ ...basePerms });
-                                  }
-                                }}
-                              />
-                              <span className={`text-xs ${inviteUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
-                                Custom Overrides
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Template Selection Dropdown */}
-                          <div className="space-y-1.5 p-3.5 rounded-2xl bg-muted/30 border">
-                            <div className="flex items-center justify-between">
-                              <Label className="text-xs font-semibold text-foreground">Assigned Permission Template</Label>
-                              {invitePermissionTemplateId && (
-                                <span className="text-[11px] text-muted-foreground">
-                                  {permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.description || ''}
-                                </span>
-                              )}
-                            </div>
-                            <Select 
-                              value={invitePermissionTemplateId} 
-                              onValueChange={(val: any) => handleInviteTemplateChange(val || '')}
-                            >
-                              <SelectTrigger className="h-10 rounded-xl bg-background">
-                                <SelectValue placeholder="Select a Permission Template..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="">Role Defaults (Inherit from {inviteRole})</SelectItem>
-                                {permissionTemplates.map(tpl => (
-                                  <SelectItem key={tpl.id} value={tpl.id}>
-                                    {tpl.name} {tpl.isSystem ? '• (System Default)' : '• (Custom Template)'}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          {/* Permission Matrix or Preview */}
-                          {inviteUseCustomOverrides ? (
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
-                                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
-                                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                                  Custom overrides are active. Adjust any of the 88 checkboxes below.
-                                </span>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
-                                    const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
-                                    setInviteCustomPermissions({ ...basePerms });
-                                  }}
-                                  className="h-7 text-xs text-primary hover:underline px-2.5 rounded-lg"
+                              {/* Template Selection Dropdown */}
+                              <div className="space-y-1.5 p-3.5 rounded-2xl bg-muted/30 border">
+                                <div className="flex items-center justify-between">
+                                  <Label className="text-xs font-semibold text-foreground">Assigned Permission Template</Label>
+                                  {invitePermissionTemplateId && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                      {permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.description || ''}
+                                    </span>
+                                  )}
+                                </div>
+                                <Select 
+                                  value={invitePermissionTemplateId} 
+                                  onValueChange={(val: any) => handleInviteTemplateChange(val || '')}
                                 >
-                                  Reset to Template Defaults
-                                </Button>
+                                  <SelectTrigger className="h-10 rounded-xl bg-background">
+                                    <SelectValue placeholder="Select a Permission Template..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="">Role Defaults (Inherit from {inviteRole})</SelectItem>
+                                    {permissionTemplates.map(tpl => (
+                                      <SelectItem key={tpl.id} value={tpl.id}>
+                                        {tpl.name} {tpl.isSystem ? '• (System Default)' : '• (Custom Template)'}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
                               </div>
 
-                              <PermissionMatrixEditor
-                                permissions={inviteCustomPermissions}
-                                onChange={setInviteCustomPermissions}
-                                defaultExpanded={false}
-                              />
-                            </div>
+                              {/* Permission Matrix or Preview */}
+                              {inviteUseCustomOverrides ? (
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
+                                    <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                                      <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                                      Custom overrides are active. Adjust any of the 88 checkboxes below.
+                                    </span>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const template = permissionTemplates.find(t => t.id === invitePermissionTemplateId);
+                                        const basePerms = template?.permissions || DEFAULT_ROLE_PERMISSIONS[inviteRole] || ALL_PERMISSIONS_FALSE;
+                                        setInviteCustomPermissions({ ...basePerms });
+                                      }}
+                                      className="h-7 text-xs text-primary hover:underline px-2.5 rounded-lg"
+                                    >
+                                      Reset to Template Defaults
+                                    </Button>
+                                  </div>
+
+                                  <PermissionMatrixEditor
+                                    permissions={inviteCustomPermissions}
+                                    onChange={setInviteCustomPermissions}
+                                    defaultExpanded={false}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  <div className="text-xs text-muted-foreground px-1">
+                                    Permissions are currently inherited from{' '}
+                                    <strong className="text-foreground">
+                                      {permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.name || `Default ${inviteRole} role`}
+                                    </strong>. Toggle <strong>"Custom Overrides"</strong> above to adjust individual permissions.
+                                  </div>
+                                  <PermissionMatrixEditor
+                                    permissions={
+                                      (permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.permissions) ||
+                                      (inviteRole ? DEFAULT_ROLE_PERMISSIONS[inviteRole] : undefined) ||
+                                      ALL_PERMISSIONS_FALSE
+                                    }
+                                    onChange={() => {}}
+                                    readOnly={true}
+                                    defaultExpanded={false}
+                                  />
+                                </div>
+                              )}
+                            </>
                           ) : (
-                            <div className="space-y-3">
-                              <div className="text-xs text-muted-foreground px-1">
-                                Permissions are currently inherited from{' '}
-                                <strong className="text-foreground">
-                                  {permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.name || `Default ${inviteRole} role`}
-                                </strong>. Toggle <strong>"Custom Overrides"</strong> above to adjust individual permissions.
+                            <div className="space-y-4">
+                              <div className="p-4 rounded-2xl bg-card border shadow-xs space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <Shield className="h-4 w-4 text-primary" />
+                                  <h4 className="font-bold text-sm text-foreground">Basic Role Permissions</h4>
+                                  <Badge variant="outline" className="text-xs font-mono uppercase">{inviteRole}</Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Standard role-based access is active. Enable the 88-Permission Matrix in Platform Admin Hub if you need granular checkbox overrides.
+                                </p>
                               </div>
-                              <PermissionMatrixEditor
-                                permissions={
-                                  (permissionTemplates.find(t => t.id === invitePermissionTemplateId)?.permissions) ||
-                                  (inviteRole ? DEFAULT_ROLE_PERMISSIONS[inviteRole] : undefined) ||
-                                  ALL_PERMISSIONS_FALSE
-                                }
-                                onChange={() => {}}
-                                readOnly={true}
-                                defaultExpanded={false}
-                              />
                             </div>
                           )}
                         </div>
@@ -1401,64 +1428,66 @@ export default function Users() {
                   </div>
 
                   {/* Department & Job Title Structure */}
-                  <div className="space-y-3.5 pt-4 border-t">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5 text-primary" /> Department & Job Title
-                    </h4>
+                  {showDepartmentOrg && (
+                    <div className="space-y-3.5 pt-4 border-t">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-primary" /> Department & Job Title
+                      </h4>
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold">Department</Label>
-                      <Select 
-                        value={editDepartment} 
-                        onValueChange={(val: any) => {
-                          setEditDepartment(val || '');
-                          setEditJobTitle('');
-                        }}
-                      >
-                        <SelectTrigger className="h-10 rounded-xl bg-background">
-                          <SelectValue placeholder="Select Department" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">None / Unassigned</SelectItem>
-                          {INZAN_DEPARTMENTS.map(dept => (
-                            <SelectItem key={dept} value={dept}>{dept}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {editDepartment && (
                       <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Job Title / Position</Label>
-                        <Select value={editJobTitle} onValueChange={(val: any) => setEditJobTitle(val || '')}>
+                        <Label className="text-xs font-semibold">Department</Label>
+                        <Select 
+                          value={editDepartment} 
+                          onValueChange={(val: any) => {
+                            setEditDepartment(val || '');
+                            setEditJobTitle('');
+                          }}
+                        >
                           <SelectTrigger className="h-10 rounded-xl bg-background">
-                            <SelectValue placeholder="Select Job Title" />
+                            <SelectValue placeholder="Select Department" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="">None / Unassigned</SelectItem>
-                            {(INZAN_JOB_TITLES[editDepartment as InzanDepartment] || []).map(title => (
-                              <SelectItem key={title} value={title}>{title}</SelectItem>
+                            {INZAN_DEPARTMENTS.map(dept => (
+                              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
-                    )}
 
-                    {editDepartment === 'Fitness' && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold">Trainer Contract Type</Label>
-                        <Select value={editTrainerType} onValueChange={(val: any) => setEditTrainerType(val || 'Full-Time')}>
-                          <SelectTrigger className="h-10 rounded-xl bg-background">
-                            <SelectValue placeholder="Select Contract Type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
-                            <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
+                      {editDepartment && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Job Title / Position</Label>
+                          <Select value={editJobTitle} onValueChange={(val: any) => setEditJobTitle(val || '')}>
+                            <SelectTrigger className="h-10 rounded-xl bg-background">
+                              <SelectValue placeholder="Select Job Title" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">None / Unassigned</SelectItem>
+                              {(INZAN_JOB_TITLES[editDepartment as InzanDepartment] || []).map(title => (
+                                <SelectItem key={title} value={title}>{title}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {editDepartment === 'Fitness' && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">Trainer Contract Type</Label>
+                          <Select value={editTrainerType} onValueChange={(val: any) => setEditTrainerType(val || 'Full-Time')}>
+                            <SelectTrigger className="h-10 rounded-xl bg-background">
+                              <SelectValue placeholder="Select Contract Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Full-Time">Full-Time Trainer (1-12)</SelectItem>
+                              <SelectItem value="Part-Time">Part-Time Trainer (1-10)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <p className="text-[11px] text-muted-foreground pt-1">
                     Note: Updating email allows user to login with the new email address.
@@ -1467,125 +1496,167 @@ export default function Users() {
 
                 {/* Right Column: Permissions & Access Engine */}
                 <div className="lg:col-span-7 xl:col-span-8 p-5 sm:p-6 overflow-y-auto space-y-5 bg-background">
-                  {/* Banner Card */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border shadow-xs">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-primary" />
-                        <h4 className="font-bold text-sm text-foreground">Operational Permissions & Access</h4>
-                        <Badge variant="outline" className="text-xs font-semibold border-primary/30 text-primary bg-primary/5">
-                          {Object.values(editUseCustomOverrides ? editCustomPermissions : (permissionTemplates.find(t => t.id === editPermissionTemplateId)?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || {})).filter(Boolean).length} / 88 active
-                        </Badge>
+                  {showAdvancedMatrix ? (
+                    <>
+                      {/* Banner Card */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-card border shadow-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Shield className="h-4 w-4 text-primary" />
+                            <h4 className="font-bold text-sm text-foreground">Operational Permissions & Access</h4>
+                            <Badge variant="outline" className="text-xs font-semibold border-primary/30 text-primary bg-primary/5">
+                              {Object.values(editUseCustomOverrides ? editCustomPermissions : (permissionTemplates.find(t => t.id === editPermissionTemplateId)?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || {})).filter(Boolean).length} / 88 active
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Select a gym permission template or customize granular user overrides.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-muted/60 p-1.5 rounded-xl border shrink-0">
+                          <span className={`text-xs ${!editUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                            Template
+                          </span>
+                          <Switch
+                            checked={editUseCustomOverrides}
+                            onCheckedChange={(checked) => {
+                              setEditUseCustomOverrides(checked);
+                              if (checked && Object.keys(editCustomPermissions).length === 0) {
+                                const template = permissionTemplates.find(t => t.id === editPermissionTemplateId);
+                                const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
+                                setEditCustomPermissions({ ...basePerms });
+                              }
+                            }}
+                          />
+                          <span className={`text-xs ${editUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
+                            Custom Overrides
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Select a gym permission template or customize granular user overrides.
-                      </p>
-                    </div>
 
-                    <div className="flex items-center gap-2 bg-muted/60 p-1.5 rounded-xl border shrink-0">
-                      <span className={`text-xs ${!editUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
-                        Template
-                      </span>
-                      <Switch
-                        checked={editUseCustomOverrides}
-                        onCheckedChange={(checked) => {
-                          setEditUseCustomOverrides(checked);
-                          if (checked && Object.keys(editCustomPermissions).length === 0) {
-                            const template = permissionTemplates.find(t => t.id === editPermissionTemplateId);
-                            const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
-                            setEditCustomPermissions({ ...basePerms });
-                          }
-                        }}
-                      />
-                      <span className={`text-xs ${editUseCustomOverrides ? 'font-bold text-primary' : 'text-muted-foreground'}`}>
-                        Custom Overrides
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Template Selection Dropdown */}
-                  <div className="space-y-1.5 p-3.5 rounded-2xl bg-muted/30 border">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold text-foreground">Assigned Permission Template</Label>
-                      {editPermissionTemplateId && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {permissionTemplates.find(t => t.id === editPermissionTemplateId)?.description || ''}
-                        </span>
-                      )}
-                    </div>
-                    <Select 
-                      value={editPermissionTemplateId} 
-                      onValueChange={(val: any) => {
-                        const newTplId = val || '';
-                        setEditPermissionTemplateId(newTplId);
-                        if (!editUseCustomOverrides) {
-                          const template = permissionTemplates.find(t => t.id === newTplId);
-                          const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
-                          setEditCustomPermissions({ ...basePerms });
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="h-10 rounded-xl bg-background">
-                        <SelectValue placeholder="Select a Permission Template..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Role Defaults (Inherit from {editingUser?.role || 'role'})</SelectItem>
-                        {permissionTemplates.map(tpl => (
-                          <SelectItem key={tpl.id} value={tpl.id}>
-                            {tpl.name} {tpl.isSystem ? '• (System Default)' : '• (Custom Template)'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Permission Matrix or Preview */}
-                  {editUseCustomOverrides ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
-                        <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
-                          <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                          Custom overrides are active. Adjust any of the 88 checkboxes below.
-                        </span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const template = permissionTemplates.find(t => t.id === editPermissionTemplateId);
-                            const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
-                            setEditCustomPermissions({ ...basePerms });
+                      {/* Template Selection Dropdown */}
+                      <div className="space-y-1.5 p-3.5 rounded-2xl bg-muted/30 border">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-semibold text-foreground">Assigned Permission Template</Label>
+                          {editPermissionTemplateId && (
+                            <span className="text-[11px] text-muted-foreground">
+                              {permissionTemplates.find(t => t.id === editPermissionTemplateId)?.description || ''}
+                            </span>
+                          )}
+                        </div>
+                        <Select 
+                          value={editPermissionTemplateId} 
+                          onValueChange={(val: any) => {
+                            const newTplId = val || '';
+                            setEditPermissionTemplateId(newTplId);
+                            if (!editUseCustomOverrides) {
+                              const template = permissionTemplates.find(t => t.id === newTplId);
+                              const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
+                              setEditCustomPermissions({ ...basePerms });
+                            }
                           }}
-                          className="h-7 text-xs text-primary hover:underline px-2.5 rounded-lg"
                         >
-                          Reset to Template Defaults
-                        </Button>
+                          <SelectTrigger className="h-10 rounded-xl bg-background">
+                            <SelectValue placeholder="Select a Permission Template..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="">Role Defaults (Inherit from {editingUser?.role || 'role'})</SelectItem>
+                            {permissionTemplates.map(tpl => (
+                              <SelectItem key={tpl.id} value={tpl.id}>
+                                {tpl.name} {tpl.isSystem ? '• (System Default)' : '• (Custom Template)'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
 
-                      <PermissionMatrixEditor
-                        permissions={editCustomPermissions}
-                        onChange={setEditCustomPermissions}
-                        defaultExpanded={false}
-                      />
-                    </div>
+                      {/* Permission Matrix or Preview */}
+                      {editUseCustomOverrides ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-xs px-1 text-muted-foreground">
+                            <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
+                              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                              Custom overrides are active. Adjust any of the 88 checkboxes below.
+                            </span>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const template = permissionTemplates.find(t => t.id === editPermissionTemplateId);
+                                const basePerms = template?.permissions || (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) || ALL_PERMISSIONS_FALSE;
+                                setEditCustomPermissions({ ...basePerms });
+                              }}
+                              className="h-7 text-xs text-primary hover:underline px-2.5 rounded-lg"
+                            >
+                              Reset to Template Defaults
+                            </Button>
+                          </div>
+
+                          <PermissionMatrixEditor
+                            permissions={editCustomPermissions}
+                            onChange={setEditCustomPermissions}
+                            defaultExpanded={false}
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="text-xs text-muted-foreground px-1">
+                            Permissions are currently inherited from{' '}
+                            <strong className="text-foreground">
+                              {permissionTemplates.find(t => t.id === editPermissionTemplateId)?.name || `Default ${editingUser?.role || 'role'} role`}
+                            </strong>. Toggle <strong>"Custom Overrides"</strong> above to adjust individual permissions.
+                          </div>
+                          <PermissionMatrixEditor
+                            permissions={
+                              (permissionTemplates.find(t => t.id === editPermissionTemplateId)?.permissions) ||
+                              (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) ||
+                              ALL_PERMISSIONS_FALSE
+                            }
+                            onChange={() => {}}
+                            readOnly={true}
+                            defaultExpanded={false}
+                          />
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="text-xs text-muted-foreground px-1">
-                        Permissions are currently inherited from{' '}
-                        <strong className="text-foreground">
-                          {permissionTemplates.find(t => t.id === editPermissionTemplateId)?.name || `Default ${editingUser?.role || 'role'} role`}
-                        </strong>. Toggle <strong>"Custom Overrides"</strong> above to adjust individual permissions.
+                    <div className="space-y-4">
+                      <div className="p-4 rounded-2xl bg-card border shadow-xs space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-4 w-4 text-primary" />
+                          <h4 className="font-bold text-sm text-foreground">Basic Role Permissions (Classic Mode)</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Toggle essential permissions for this staff member. You can switch to the 88-Permission Matrix anytime in the Platform Admin Hub.
+                        </p>
                       </div>
-                      <PermissionMatrixEditor
-                        permissions={
-                          (permissionTemplates.find(t => t.id === editPermissionTemplateId)?.permissions) ||
-                          (editingUser?.role ? DEFAULT_ROLE_PERMISSIONS[editingUser.role] : undefined) ||
-                          ALL_PERMISSIONS_FALSE
-                        }
-                        onChange={() => {}}
-                        readOnly={true}
-                        defaultExpanded={false}
-                      />
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between p-4 rounded-2xl border bg-card/50">
+                          <div>
+                            <div className="font-semibold text-sm">View Global Dashboard & Analytics</div>
+                            <div className="text-xs text-muted-foreground">Allow viewing overall club revenue and executive metrics</div>
+                          </div>
+                          <Switch checked={editCanViewGlobalDashboard} onCheckedChange={setEditCanViewGlobalDashboard} />
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 rounded-2xl border bg-card/50">
+                          <div>
+                            <div className="font-semibold text-sm">Delete Payment Records</div>
+                            <div className="text-xs text-muted-foreground">Allow deleting or voiding financial receipts</div>
+                          </div>
+                          <Switch checked={editCanDeletePayments} onCheckedChange={setEditCanDeletePayments} />
+                        </div>
+
+                        <div className="flex items-center justify-between p-4 rounded-2xl border bg-card/50">
+                          <div>
+                            <div className="font-semibold text-sm">Access System Settings & Audit History</div>
+                            <div className="text-xs text-muted-foreground">Allow configuring packages, branding, and viewing audit logs</div>
+                          </div>
+                          <Switch checked={editCanAccessSettings} onCheckedChange={setEditCanAccessSettings} />
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

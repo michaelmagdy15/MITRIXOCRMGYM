@@ -33,15 +33,17 @@ export default function ClubOperations() {
   // --- Earth's Kitchen Juice Bar State ---
   const [juiceOrders, setJuiceOrders] = useState<JuiceBarOrder[]>([]);
 
+  const useSmartLockers = features.inzanSmartLockers !== undefined ? features.inzanSmartLockers : isInzan;
+
   const operationsTabs = useMemo(() => {
     const list = [
-      { id: 'juicebar', label: "Earth's Kitchen Orders", count: juiceOrders.length, icon: <Coffee className="h-4 w-4" />, requiredFeature: features.juiceBar },
-      { id: 'kitchen_inventory', label: "Kitchen Inventory & Stock", icon: <Boxes className="h-4 w-4" />, requiredFeature: features.juiceBar },
-      { id: 'lockers', label: isInzan ? 'Smart Lockers (Inzan Hardware)' : 'Lockers & Smart Locks', icon: <Lock className="h-4 w-4" />, requiredFeature: isInzan ? true : features.locker },
-      { id: 'guests', label: 'Guest Invites & Leads', icon: <UserCheck className="h-4 w-4" /> },
+      { id: 'juicebar', label: "Earth's Kitchen Orders", count: juiceOrders.length, icon: <Coffee className="h-4 w-4" />, requiredFeature: features.juiceBar !== false },
+      { id: 'kitchen_inventory', label: "Kitchen Inventory & Stock", icon: <Boxes className="h-4 w-4" />, requiredFeature: features.juiceBar !== false && features.kitchenInventory !== false },
+      { id: 'lockers', label: useSmartLockers ? 'Smart Lockers (Hardware Bridge)' : 'Lockers & Smart Locks', icon: <Lock className="h-4 w-4" />, requiredFeature: useSmartLockers || features.locker !== false },
+      { id: 'guests', label: 'Guest Invites & Leads', icon: <UserCheck className="h-4 w-4" />, requiredFeature: features.guestInvites !== false },
     ];
     return list.filter(t => t.requiredFeature !== false);
-  }, [features, juiceOrders.length, isInzan]);
+  }, [features, juiceOrders.length, useSmartLockers]);
 
   const [activeTab, setActiveTab] = useState<'juicebar' | 'kitchen_inventory' | 'lockers' | 'guests'>('juicebar');
 
@@ -365,8 +367,8 @@ export default function ClubOperations() {
       )}
 
       {/* Lockers management tab */}
-      {activeTab === 'lockers' && isInzan && <InzanLockerConsole />}
-      {activeTab === 'lockers' && !isInzan && (
+      {activeTab === 'lockers' && useSmartLockers && <InzanLockerConsole />}
+      {activeTab === 'lockers' && !useSmartLockers && (
         <div className="space-y-6">
           {/* Section: Pending Locker Requests */}
           {lockerRequests.length > 0 && (

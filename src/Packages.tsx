@@ -49,7 +49,11 @@ export const PACKAGE_CATEGORIES = INZAN_PACKAGE_CATEGORIES;
 export default function Packages() {
   const { currentUser, branches, features, packages, addPackage, updatePackage, togglePackageHold, deletePackage, restorePackage } = useAppContext();
   const { categoryNames } = usePackageCategories();
-  const isInzan = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
+  const isInzanTenant = isTenantInzan() || getTenantId().toLowerCase().includes('inzan');
+  const isInzan =
+    features?.packageBenefitsEngine !== undefined || features?.secondaryPackages !== undefined
+      ? Boolean(features?.packageBenefitsEngine ?? features?.secondaryPackages ?? isInzanTenant)
+      : isInzanTenant;
   const availableCategories = isInzan ? INZAN_PACKAGE_CATEGORIES : STANDARD_PACKAGE_CATEGORIES;
   const effectiveCategories: readonly string[] = isInzan && categoryNames && categoryNames.length > 0 ? categoryNames : availableCategories;
 

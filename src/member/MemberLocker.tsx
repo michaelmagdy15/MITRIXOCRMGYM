@@ -79,16 +79,17 @@ function formatCountdownHms(expiresAt?: string | null, nowMs: number = Date.now(
 }
 
 export default function MemberLocker({ client }: { client: Client | null }) {
-  const { branding, branches: contextBranches } = useSettings();
+  const { branding, branches: contextBranches, features } = useSettings();
   const companyDisplayName = branding?.companyName || 'GYM CLUB';
   const branches =
     Array.isArray(contextBranches) && contextBranches.length > 0
       ? contextBranches
       : ['Main Branch'];
-  const isInzan =
+  const isInzanTenant =
     isTenantInzan(branding?.companyName) ||
     getTenantId().toLowerCase() === 'inzanathletics' ||
     getTenantId().toLowerCase().includes('inzan');
+  const isInzan = features?.inzanSmartLockers !== undefined ? features.inzanSmartLockers : isInzanTenant;
 
   // Non-Inzan / Firestore Locker state
   const [assignedLocker, setAssignedLocker] = useState<Locker | null>(null);

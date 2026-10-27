@@ -758,7 +758,7 @@ function AppContent() {
       id: 'bookings',
       label: 'Bookings',
       icon: ShoppingCart,
-      show: canAny(['classes.book_member', 'coaches.schedule_pt', 'payments.create'])
+      show: (features.bookings !== false) && canAny(['classes.book_member', 'coaches.schedule_pt', 'payments.create'])
     },
     {
       id: 'packages',
@@ -770,13 +770,13 @@ function AppContent() {
       id: 'requests',
       label: 'Requests',
       icon: ClipboardList,
-      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || isGeneralManagerOrCEO(currentUser) || isSalesManagerUser(currentUser))
+      show: (features.requests !== false) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || isGeneralManagerOrCEO(currentUser) || isSalesManagerUser(currentUser))
     },
     {
       id: 'pending-approvals',
       label: 'Pending Approvals',
       icon: Clock,
-      show: (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || isGeneralManagerOrCEO(currentUser) || isSalesManagerUser(currentUser) || isFitnessManagerUser(currentUser))
+      show: (features.pendingApprovals !== false) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || isGeneralManagerOrCEO(currentUser) || isSalesManagerUser(currentUser) || isFitnessManagerUser(currentUser))
     },
     {
       id: 'class-manager',
@@ -788,13 +788,13 @@ function AppContent() {
       id: 'nutrition',
       label: 'Nutrition',
       icon: Activity,
-      show: (features.nutrition === true || isInzan) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'coach' || isNutritionistUser(currentUser) || isFitnessManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser))
+      show: (features.nutrition !== undefined ? features.nutrition === true : isInzan) && (effectiveRole === 'manager' || effectiveRole === 'admin' || effectiveRole === 'super_admin' || effectiveRole === 'crm_admin' || effectiveRole === 'coach' || isNutritionistUser(currentUser) || isFitnessManagerUser(currentUser) || isGeneralManagerOrCEO(currentUser))
     },
     {
       id: 'workout-library',
       label: 'Workout Library',
       icon: Dumbbell,
-      show: true
+      show: features.workoutLibrary !== false
     },
     { id: 'tasks', label: t('nav.tasks'), icon: CheckSquare, show: (features.tasks !== false) && canAny(['tasks.view', 'tasks.manage_templates', 'tasks.assign']) },
     {
@@ -826,7 +826,7 @@ function AppContent() {
       id: 'qrcode',
       label: t('nav.qrcode'),
       icon: Smartphone,
-      show: can('settings.access') && !/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent)
+      show: (features.appQrGenerator !== false) && can('settings.access') && !/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent)
     },
     {
       id: 'quotes',
@@ -838,7 +838,7 @@ function AppContent() {
       id: 'operations',
       label: t('nav.operations'),
       icon: Coffee,
-      show: (features.operations !== false) && (features.juiceBar !== false || features.locker !== false) && canAny(['operations.pos_juice_bar', 'operations.lockers', 'operations.lost_found', 'operations.call_center', 'operations.complaints', 'operations.shift_handover'])
+      show: (features.operations !== false) && (features.juiceBar !== false || features.locker !== false || features.inzanSmartLockers === true || features.guestInvites !== false) && canAny(['operations.pos_juice_bar', 'operations.lockers', 'operations.lost_found', 'operations.call_center', 'operations.complaints', 'operations.shift_handover'])
     },
     {
       id: 'admin-hub',
@@ -1386,21 +1386,27 @@ function AppContent() {
               <Calendar />
             </TabsContent>
 
-            <TabsContent value="bookings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <Bookings />
-            </TabsContent>
+            {features.bookings !== false && (
+              <TabsContent value="bookings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <Bookings />
+              </TabsContent>
+            )}
 
             <TabsContent value="packages" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <Packages />
             </TabsContent>
 
-            <TabsContent value="requests" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <AdminRequests />
-            </TabsContent>
+            {features.requests !== false && (
+              <TabsContent value="requests" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <AdminRequests />
+              </TabsContent>
+            )}
 
-            <TabsContent value="pending-approvals" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <PendingApprovals />
-            </TabsContent>
+            {features.pendingApprovals !== false && (
+              <TabsContent value="pending-approvals" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <PendingApprovals />
+              </TabsContent>
+            )}
 
             {features.classBookingSystem === true && (
               <TabsContent value="class-manager" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
@@ -1408,19 +1414,23 @@ function AppContent() {
               </TabsContent>
             )}
 
-            {(features.nutrition === true || isInzan) && (
+            {(features.nutrition !== undefined ? features.nutrition === true : isInzan) && (
               <TabsContent value="nutrition" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
                 <NutritionModule />
               </TabsContent>
             )}
 
-            <TabsContent value="workout-library" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <ExerciseLibraryHub mode="staff" />
-            </TabsContent>
+            {features.workoutLibrary !== false && (
+              <TabsContent value="workout-library" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <ExerciseLibraryHub mode="staff" />
+              </TabsContent>
+            )}
 
-            <TabsContent value="tasks" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <Tasks />
-            </TabsContent>
+            {features.tasks !== false && (
+              <TabsContent value="tasks" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <Tasks />
+              </TabsContent>
+            )}
 
             {(canViewGlobalDashboard || canDeletePayments || can('payments.view')) && (
               <TabsContent value="payments" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">

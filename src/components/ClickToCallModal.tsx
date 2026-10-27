@@ -75,7 +75,8 @@ const QUICK_OUTCOMES = [
 ] as const;
 
 export function ClickToCallModal() {
-  const { currentUser, addInteraction, addComment } = useAppContext();
+  const { currentUser, addInteraction, addComment, features } = useAppContext();
+  const isClickToCallEnabled = features?.clickToCall !== false;
 
   // Declare all useState hooks before any useEffect (prevents TDZ minification issues)
   const [target, setTarget] = useState<ClickToCallModalTarget | null>(null);
@@ -173,6 +174,11 @@ export function ClickToCallModal() {
     const handleOpenEvent = (event: Event) => {
       const detail = (event as CustomEvent<ClickToCallModalTarget>).detail;
       if (!detail || !detail.phone) return;
+      if (!isClickToCallEnabled) {
+        const e164 = normalizeDialPhone(detail.phone);
+        if (e164) triggerLocalDeviceDialer(e164, detail.name);
+        return;
+      }
       setTarget(detail);
       setSelectedPhone(detail.phone);
       setActiveRequestId(null);
@@ -184,7 +190,7 @@ export function ClickToCallModal() {
 
     window.addEventListener('crm:open-click-to-call', handleOpenEvent);
     return () => window.removeEventListener('crm:open-click-to-call', handleOpenEvent);
-  }, []);
+  }, [isClickToCallEnabled]);
 
   // Subscribe to the active callRequest document on the laptop to track mobile acknowledgement
   useEffect(() => {
@@ -202,6 +208,7 @@ export function ClickToCallModal() {
 
   // Receiver Listener: when logged in on another device (mobile phone / app / PWA), listen for incoming click-to-call notifications
   useEffect(() => {
+    if (!isClickToCallEnabled) return;
     if (!currentUser?.id) return;
     const isStaff = ['rep', 'manager', 'admin', 'super_admin', 'crm_admin', 'coach', 'staff'].includes(
       String(currentUser.role || '').toLowerCase()
@@ -222,7 +229,7 @@ export function ClickToCallModal() {
     });
 
     return () => unsub();
-  }, [currentUser?.id, currentUser?.role]);
+  }, [currentUser?.id, currentUser?.role, isClickToCallEnabled]);
 
   const handleSaveDisposition = async () => {
     if (!target) return;
@@ -305,6 +312,10 @@ export function ClickToCallModal() {
       toast.error('Could not copy phone number');
     }
   };
+
+  if (!isClickToCallEnabled) {
+    return null;
+  }
 
   return (
     <>

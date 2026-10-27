@@ -35,7 +35,7 @@ const BASE_NAV_ITEMS: { tab: CoachTab; label: string; icon: React.ReactNode }[] 
 
 export default function CoachPortal() {
   const { currentUser, logout } = useAuth();
-  const { branding } = useSettings();
+  const { branding, features } = useSettings();
   const { theme, toggleTheme, themeLocked } = useTheme();
 
   const isInzan = useMemo(() => {
@@ -114,13 +114,17 @@ export default function CoachPortal() {
   }, [canAccessFitnessManagerBoard, currentUser?.role, currentUser?.isFitnessManager]);
 
   const navItems = useMemo(() => {
-    if (!canAccessFitnessManagerBoard) return BASE_NAV_ITEMS;
+    const baseFiltered = BASE_NAV_ITEMS.filter((item) => {
+      if (item.tab === 'library' && features?.workoutLibrary === false) return false;
+      return true;
+    });
+    if (!canAccessFitnessManagerBoard || features?.fitnessAssessmentQueue === false) return baseFiltered;
     return [
-      BASE_NAV_ITEMS[0]!,
+      baseFiltered[0]!,
       { tab: 'triage' as CoachTab, label: 'FM Triage', icon: <UserCheck className="h-5 w-5" /> },
-      ...BASE_NAV_ITEMS.slice(1),
+      ...baseFiltered.slice(1),
     ];
-  }, [canAccessFitnessManagerBoard]);
+  }, [canAccessFitnessManagerBoard, features?.workoutLibrary, features?.fitnessAssessmentQueue]);
 
   const handleStartFloor = (client?: Client | null, session?: Session | null) => {
     setFloorContext({ client: client || null, session: session || null });
