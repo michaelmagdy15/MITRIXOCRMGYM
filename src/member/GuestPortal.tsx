@@ -339,12 +339,12 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   // Primary branch for display
   const primaryBranch = branches[0] || 'Main Branch';
 
-  // Public packages: strictly exclude corporate and group company packages, and archived packages
+  // Public packages: strictly exclude corporate and company packages, and archived packages
   const publicPackages = useMemo(() => {
     return packages.filter(p => {
       const archived = p.isActive === false || p.is_active === false || !!p.archivedAt;
       const n = (p.name || '').toLowerCase();
-      const isCorporate = n.includes('corporate') || n.includes('company') || p.type === 'Group';
+      const isCorporate = n.includes('corporate') || n.includes('company') || (p.category || '').toLowerCase().includes('corporate');
       return !archived && !isCorporate;
     });
   }, [packages]);
@@ -368,7 +368,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       // 1. Branch match
       if (selectedBranchFilter !== 'all') {
         const targetBranch = selectedBranchFilter.toLowerCase();
-        const matchesBranch = branchName.includes(targetBranch) || name.includes(targetBranch);
+        const isAllBranches = branchName === 'all' || branchName === 'all branches' || (pkg as any).is_all_branches === true;
+        const isTargetMivida = targetBranch.includes('mivida') || targetBranch.includes('mvida');
+        const isPkgMivida = branchName.includes('mivida') || branchName.includes('mvida') || name.includes('mivida') || name.includes('mvida');
+        const matchesBranch = isAllBranches || branchName.includes(targetBranch) || name.includes(targetBranch) || (isTargetMivida && isPkgMivida);
         if (!matchesBranch) return false;
       }
 
@@ -424,7 +427,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const displayAdults = useMemo(() => {
     return publicPackages.filter(p => {
       const n = p.name.toLowerCase();
-      return !n.includes('kid') && !n.includes('junior') && p.type !== 'Group';
+      return !n.includes('kid') && !n.includes('junior');
     }).sort((a, b) => a.sessions - b.sessions);
   }, [publicPackages]);
 

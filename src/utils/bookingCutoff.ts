@@ -1,10 +1,10 @@
 export interface BookingWindowConfig {
-  defaultCutoffMinutes: number; // e.g., 90 or 120 minutes
+  defaultCutoffMinutes: number; // e.g., 30 or 60 minutes
   allowWalkInsViaAdminOnly: boolean; // true
 }
 
 export const DEFAULT_BOOKING_WINDOW_CONFIG: BookingWindowConfig = {
-  defaultCutoffMinutes: 120, // 2 hours default
+  defaultCutoffMinutes: 30, // 30 minutes default cutoff before session start
   allowWalkInsViaAdminOnly: true,
 };
 
@@ -79,7 +79,7 @@ export function getBookingCutoffMinutes(
 /**
  * Calculates cutoff deadline (sessionStartTime - cutoffMinutes)
  */
-export function getBookingCutoffDeadline(sessionStartTime: Date, cutoffMinutes: number = 120): Date {
+export function getBookingCutoffDeadline(sessionStartTime: Date, cutoffMinutes: number = 30): Date {
   return new Date(sessionStartTime.getTime() - cutoffMinutes * 60 * 1000);
 }
 
@@ -105,7 +105,7 @@ export function isBookingCutoffExceeded(
 /**
  * Returns user-friendly text describing the cutoff window, e.g. "2h" or "90m"
  */
-export function formatCutoffBadgeText(cutoffMinutes: number = 120): string {
+export function formatCutoffBadgeText(cutoffMinutes: number = 30): string {
   if (cutoffMinutes >= 60 && cutoffMinutes % 60 === 0) {
     return `${cutoffMinutes / 60}h`;
   }

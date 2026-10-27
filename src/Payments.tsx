@@ -26,7 +26,7 @@ import { createApprovalRequest } from './services/approvalService';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
 import { canReassignMemberSalesRep, isPaymentEditableByStaff, getRevenueScopeForUser, isPaymentInRevenueScope } from './utils/permissions';
 import { validateMembershipEligibility } from './utils/membershipRules';
-import { resolvePaymentBranch, normalizeBranchName } from './utils/branchUtils';
+import { resolvePaymentBranch, normalizeBranchName, isVirtualBranch } from './utils/branchUtils';
 import { matchesPhoneSearch } from './utils/phoneUtils';
 import { matchesFuzzyNameSearch, scoreNameMatch } from './utils/fuzzyNameSearch';
 import { toCanonicalBranchId } from './utils/memberCategories';
@@ -580,7 +580,12 @@ export default function Payments() {
       );
       const isRenewalPayment = !isGuest && !!existingActivePackage;
 
-      const effectiveBranch = normalizeBranchName(paymentBranch || newClientBranch || selectedClient?.branch || currentUser?.branch || (branches.length > 0 ? branches[0] : ''));
+      const rawBranchCandidate = (!isVirtualBranch(paymentBranch) ? paymentBranch : '') ||
+        (!isVirtualBranch(newClientBranch) ? newClientBranch : '') ||
+        (!isVirtualBranch(selectedClient?.branch) ? selectedClient?.branch : '') ||
+        (!isVirtualBranch(currentUser?.branch) ? currentUser?.branch : '') ||
+        (branches.length > 0 ? branches[0] : 'Maxim Compound');
+      const effectiveBranch = normalizeBranchName(rawBranchCandidate) || (branches.length > 0 ? branches[0] : 'Maxim Compound');
 
       const parsedPrimaryTender = useSplitTender
         ? Math.min(pricingBreakdown.amountPaid, Math.max(0, parseFloat(primaryTenderAmount) || 0))

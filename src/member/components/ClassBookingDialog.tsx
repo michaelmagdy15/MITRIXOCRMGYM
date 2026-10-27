@@ -104,11 +104,22 @@ export function ClassBookingDialog({
       // Filter out corporate/group packages
       const filtered = list.filter(p => {
         const name = (p.name || '').toLowerCase();
-        return !name.includes('corporate') && !name.includes('company') && p.type !== 'Group';
+        const archived = p.isActive === false || p.is_active === false || !!p.archivedAt;
+        const isCorporate = name.includes('corporate') || name.includes('company') || (p.category || '').toLowerCase().includes('corporate');
+        return !archived && !isCorporate;
       });
 
       // Prioritize packages matching class branch or session counts (Drop-in, 8, 12, Unlimited)
-      filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
+      const classBranchNorm = (gymClass?.branch || '').toLowerCase();
+      filtered.sort((a, b) => {
+        const aBranch = (a.branch || '').toLowerCase();
+        const bBranch = (b.branch || '').toLowerCase();
+        const aMatches = classBranchNorm ? (aBranch.includes(classBranchNorm) || aBranch === 'all' || aBranch === 'all branches') : false;
+        const bMatches = classBranchNorm ? (bBranch.includes(classBranchNorm) || bBranch === 'all' || bBranch === 'all branches') : false;
+        if (aMatches && !bMatches) return -1;
+        if (!aMatches && bMatches) return 1;
+        return (a.price || 0) - (b.price || 0);
+      });
       setAvailablePackages(filtered.slice(0, 6));
       if (filtered.length > 0) {
         setSelectedUpsellPkg(filtered[0] || null);
