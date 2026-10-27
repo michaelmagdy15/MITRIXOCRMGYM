@@ -17,6 +17,7 @@ import { format, parseISO } from 'date-fns';
 import { safeFormatDate, safeFormatTime, safeParseExpiryToEndOfDay } from '../../utils/dateUtils';
 import { isSessionBranchAllowed, getMemberCategory } from '../../utils/memberCategories';
 import { isBookingCutoffExceeded, formatCutoffBadgeText, getBookingCutoffMinutes } from '../../utils/bookingCutoff';
+import { useCart } from '../CartContext';
 
 interface ClassBookingDialogProps {
   open: boolean;
@@ -35,6 +36,7 @@ export function ClassBookingDialog({
   onBookingSuccess,
   onSwitchToStore,
 }: ClassBookingDialogProps) {
+  const { addToCart, setIsCartOpen } = useCart();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -111,7 +113,53 @@ export function ClassBookingDialog({
 
       // Prioritize packages matching class branch or session counts (Drop-in, 8, 12, Unlimited)
       const classBranchNorm = (gymClass?.branch || '').toLowerCase();
-      filtered.sort((a, b) => {
+      const classNameLower = (gymClass?.name || '').toLowerCase();
+      const classCategoryLower = (gymClass?.category || '').toLowerCase();
+      const classTierLower = (gymClass?.tier || '').toLowerCase();
+
+      const isClassPt = ((gymClass as any)?.type || '').toLowerCase() === 'pt' || 
+                        ((gymClass as any)?.type || '').toLowerCase() === 'private' || 
+                        classNameLower.includes(' pt') || 
+                        classNameLower.includes('private');
+
+      const isClassKids = classNameLower.includes('kid') || classCategoryLower.includes('kid') || classTierLower.includes('kid');
+      const isClassJuniors = classNameLower.includes('junior') || classCategoryLower.includes('junior') || classTierLower.includes('junior');
+      const isClassAdults = !isClassKids && !isClassJuniors;
+
+      const relevantPackages = filtered.filter(p => {
+        const pkgName = (p.name || '').toLowerCase();
+        const isPkgPt = p.type === 'Private' || pkgName.includes(' pt') || pkgName.includes('private');
+
+        if (isClassPt && !isPkgPt) return false;
+        if (!isClassPt && isPkgPt) return false;
+
+        const isPkgKids = pkgName.includes('kid');
+        const isPkgJuniors = pkgName.includes('junior');
+
+        if (isClassKids) {
+          if (!isPkgKids && !pkgName.includes('drop session')) return false;
+        } else if (isClassJuniors) {
+          if (!isPkgJuniors && !pkgName.includes('drop session')) return false;
+        } else if (isClassAdults) {
+          if (isPkgKids || isPkgJuniors) return false;
+        }
+
+        const pkgBranch = (p.branch || '').toLowerCase();
+        const isAllBranches = pkgBranch === 'all' || pkgBranch === 'all branches' || (p as any).is_all_branches === true;
+        const isMividaMatch = (classBranchNorm.includes('mivida') || classBranchNorm.includes('mvida')) && 
+                              (pkgBranch.includes('mivida') || pkgBranch.includes('mvida') || pkgName.includes('mivida') || pkgName.includes('mvida'));
+        const isMaximMatch = classBranchNorm.includes('maxim') && (pkgBranch.includes('maxim') || pkgName.includes('maxim'));
+        const isImpactMatch = classBranchNorm.includes('impact') && (pkgBranch.includes('impact') || pkgName.includes('impact'));
+
+        if (!isAllBranches && !isMividaMatch && !isMaximMatch && !isImpactMatch && classBranchNorm && !pkgBranch.includes(classBranchNorm)) {
+          return false;
+        }
+
+        return true;
+      });
+
+      const displayList = relevantPackages.length > 0 ? relevantPackages : filtered;
+      displayList.sort((a, b) => {
         const aBranch = (a.branch || '').toLowerCase();
         const bBranch = (b.branch || '').toLowerCase();
         const aMatches = classBranchNorm ? (aBranch.includes(classBranchNorm) || aBranch === 'all' || aBranch === 'all branches') : false;
@@ -120,9 +168,9 @@ export function ClassBookingDialog({
         if (!aMatches && bMatches) return 1;
         return (a.price || 0) - (b.price || 0);
       });
-      setAvailablePackages(filtered.slice(0, 6));
+      setAvailablePackages(displayList.slice(0, 8));
       if (filtered.length > 0) {
-        setSelectedUpsellPkg(filtered[0] || null);
+        setSelectedUpsellPkg(displayList[0] || null);
       }
     } catch (err) {
       console.error("Error loading packages for booking upsell:", err);
@@ -520,8 +568,10 @@ export function ClassBookingDialog({
                           <button
                             type="button"
                             onClick={() => {
-                              onOpenChange(false);
-                              onSwitchToStore();
+                              if (selectedUpsellPkg) addToCart(selectedUpsellPkg);
+                            setIsCartOpen(true);
+                            onOpenChange(false);
+                              onSwitchToStore(selectedUpsellPkg?.id);
                             }}
                             className="text-primary hover:underline text-[11px] flex items-center gap-1 font-semibold"
                           >
@@ -579,6 +629,8 @@ export function ClassBookingDialog({
                         <Button
                           className="w-full h-11 rounded-xl text-xs font-black uppercase tracking-wider bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 flex items-center justify-center gap-2"
                           onClick={() => {
+                            addToCart(selectedUpsellPkg);
+                            setIsCartOpen(true);
                             onOpenChange(false);
                             onSwitchToStore(selectedUpsellPkg.id);
                           }}

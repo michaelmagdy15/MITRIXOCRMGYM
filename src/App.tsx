@@ -120,6 +120,7 @@ function AppContent() {
   const [showPortalOverride, setShowPortalOverride] = React.useState<'crm' | 'store' | 'member' | null>(null);
   const [clientViewMode, setClientViewMode] = React.useState<'portal' | 'store'>('portal');
   const [memberPortalInitialTab, setMemberPortalInitialTab] = React.useState<string>('home');
+  const [storeInitialPackageId, setStoreInitialPackageId] = React.useState<string | null>(null);
   const [notificationTabCounts, setNotificationTabCounts] = React.useState<Record<string, number>>({});
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
@@ -702,7 +703,10 @@ function AppContent() {
     if (isStrike) {
       return (
         <MemberPortal 
-          onSwitchToStore={() => setClientViewMode('store')} 
+          onSwitchToStore={(packageId) => {
+            if (packageId) setStoreInitialPackageId(packageId);
+            setClientViewMode('store');
+          }} 
         />
       );
     }
@@ -716,8 +720,10 @@ function AppContent() {
     if (clientViewMode === 'store') {
       return (
         <GuestPortal 
+          initialPackageId={storeInitialPackageId}
           onSwitchToCRM={(tab) => {
             if (tab) setMemberPortalInitialTab(tab);
+            setStoreInitialPackageId(null);
             setClientViewMode('portal');
           }} 
         />
@@ -726,7 +732,8 @@ function AppContent() {
     return (
       <MemberPortal 
         initialTab={memberPortalInitialTab}
-        onSwitchToStore={() => {
+        onSwitchToStore={(packageId) => {
+          if (packageId) setStoreInitialPackageId(packageId);
           setMemberPortalInitialTab('home');
           setClientViewMode('store');
         }} 

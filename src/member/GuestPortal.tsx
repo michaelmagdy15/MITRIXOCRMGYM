@@ -143,9 +143,10 @@ interface GuestPortalProps {
   onSwitchToCRM: (tab?: string) => void;
   isLeadPending?: boolean;
   client?: Client | null;
+  initialPackageId?: string | null;
 }
 
-export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, client = null }: GuestPortalProps) {
+export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, client = null, initialPackageId = null }: GuestPortalProps) {
   const { t } = useLanguage();
   const { packages, branding, branches, coaches } = useAppContext();
   const { currentUser, logout } = useAuth();
@@ -158,8 +159,19 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const tenantId = getTenantId();
   const isStrike = tenantId.toLowerCase().includes('strike') || (branding?.companyName || '').toLowerCase().includes('strike');
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike|Inzan/i.test(navigator.userAgent) || window.innerWidth < 768;
-  const { addToCart } = useCart();
+  const { addToCart, setIsCartOpen } = useCart();
   const [preloaderState, setPreloaderState] = useState<'loading' | 'exiting' | 'hidden'>('hidden');
+
+  // Seamless pass-through: if navigated here from class booking with a specific package, auto-add to cart and open cart
+  useEffect(() => {
+    if (!initialPackageId || packages.length === 0) return;
+    const targetPkg = packages.find(p => p.id === initialPackageId);
+    if (targetPkg) {
+      addToCart(targetPkg as any);
+      setIsCartOpen(true);
+      setSelectedPackage(targetPkg as any);
+    }
+  }, [initialPackageId, packages, addToCart, setIsCartOpen]);
   
   const enabledTabs = React.useMemo(() => {
     const list = [
