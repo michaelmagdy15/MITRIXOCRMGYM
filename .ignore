@@ -1,0 +1,24 @@
+# Ripgrep / OpenCode / Cursor Search Ignore
+# Keeps terminal & AI code searches fast and low-token
+
+node_modules/
+dist/
+dist-server/
+build/
+coverage/
+graphify-out/
+src/graphify-out/
+reports/
+screenshots/
+docs/redgits_pages/
+backups/
+scratch/
+tmp/
+package-lock.json
+mobile/package-lock.json
+functions/package-lock.json
+src/data/exerciseLibraryData.ts
+*.min.js
+*.map
+*.pdf
+*.csv

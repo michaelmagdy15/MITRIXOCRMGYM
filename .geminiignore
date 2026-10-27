@@ -1,0 +1,62 @@
+# AI Agent Context & Search Ignore (Antigravity / Gemini / OpenCode / Ripgrep)
+# Prevents massive generated files, build outputs, lockfiles, and static datasets from flooding LLM token context
+
+node_modules/
+dist/
+dist-server/
+build/
+coverage/
+.git/
+.firebase/
+.netlify/
+.gemini/
+.expo/
+
+# Generated dependency graphs & Lighthouse reports (1.8MB+ raw JSON/HTML)
+graphify-out/
+src/graphify-out/
+reports/
+screenshots/
+docs/redgits_pages/
+backups/
+scratch/
+tmp/
+
+# Lockfiles & compiled bundles
+package-lock.json
+mobile/package-lock.json
+functions/package-lock.json
+*.min.js
+*.bundle.js
+*.cjs
+*.map
+
+# Massive static exercise dataset (read explicitly only when editing exercise library)
+src/data/exerciseLibraryData.ts
+
+# Binary & media assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.pdf
+*.mp3
+*.mp4
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.apk
+*.aab
+*.ipa
+*.p8
+
+# Secrets & local exports
+.env*
+!*env.example
+*service-account.json
+*-adminsdk-*.json
+*-sa-key.json
+*.csv
