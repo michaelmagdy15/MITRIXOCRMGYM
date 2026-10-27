@@ -2320,6 +2320,60 @@ export default function InzanLockerConsole() {
                 Last Synced with Firestore <code className="text-foreground">db-inzanathletics/lockers</code>:{' '}
                 <strong>{overview?.syncedAt ? new Date(overview.syncedAt).toLocaleTimeString() : 'Live'}</strong>
               </p>
+
+              {/* macOS Local Bridge & Self-Healing Tunnel Card */}
+              <div className="mt-3 p-3 rounded-xl border border-primary/30 bg-primary/5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-black text-xs text-foreground flex items-center gap-1.5">
+                    <Cpu className="h-3.5 w-3.5 text-primary" />
+                    macOS Reception Bridge (192.168.10.31:3701)
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={
+                      overview?.bridge?.online
+                        ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-400 text-[10px]'
+                        : 'border-amber-500/40 bg-amber-500/15 text-amber-400 text-[10px]'
+                    }
+                  >
+                    {overview?.bridge?.online ? 'BRIDGE ONLINE' : 'READY TO INSTALL'}
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Eliminates tunnel drops by running a persistent macOS background daemon on the reception iMac that connects directly to{' '}
+                  <code className="text-foreground font-mono">http://192.168.10.31:3701</code> and syncs via outbound HTTPS + self-healing Cloudflare Tunnel.
+                </p>
+                {overview?.bridge?.lastSeen && (
+                  <p className="text-[10px] text-emerald-400 font-mono">
+                    Last Bridge Heartbeat: {new Date(overview.bridge.lastSeen).toLocaleTimeString()}
+                    {overview.bridge.hostname ? ` • Host: ${overview.bridge.hostname}` : ''}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 pt-1">
+                  <Input
+                    readOnly
+                    value={
+                      overview?.bridge?.installCommand ||
+                      'curl -fsSL https://admin.inzanathletics.com/api/inzan/lockers/macos-bridge.sh | bash'
+                    }
+                    className="h-8 text-[11px] font-mono bg-zinc-950 border-zinc-800"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      const cmd =
+                        overview?.bridge?.installCommand ||
+                        'curl -fsSL https://admin.inzanathletics.com/api/inzan/lockers/macos-bridge.sh | bash';
+                      navigator.clipboard.writeText(cmd);
+                      toast.success('Copied macOS Terminal setup command!');
+                    }}
+                    className="h-8 text-xs font-bold shrink-0"
+                  >
+                    Copy Setup Command
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

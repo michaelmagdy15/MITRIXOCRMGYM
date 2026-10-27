@@ -125,6 +125,14 @@ export interface InzanLockerOverviewResponse {
   readers: InzanLockerReader[];
   users: InzanLockerUser[];
   syncedAt: string;
+  bridge?: {
+    online: boolean;
+    lastSeen: string | null;
+    localUrl: string;
+    tunnelUrl: string | null;
+    hostname?: string | null;
+    installCommand: string;
+  };
 }
 
 export interface InzanMemberLockerStatus {

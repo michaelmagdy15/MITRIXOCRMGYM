@@ -903,6 +903,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ uid: string }> => {
     const cleanMemberId = String(memberId || clientId).replace(/^#/, '').trim();
     const email = getMemberEmail(cleanMemberId);
+    const currentUid = auth.currentUser?.uid;
+    const safeTargetUserId = portalUserId && portalUserId !== currentUid ? portalUserId : undefined;
     const token = await auth.currentUser?.getIdToken();
 
     if (token) {
@@ -914,7 +916,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            targetUserId: portalUserId || undefined,
+            targetUserId: safeTargetUserId,
             email,
             name: clientName,
             clientId,
@@ -924,8 +926,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
-          const resolvedUid = data?.uid || portalUserId;
-          if (resolvedUid) {
+          const resolvedUid = data?.uid || safeTargetUserId;
+          if (resolvedUid && resolvedUid !== currentUid) {
             await setDoc(
               doc(db, 'users', resolvedUid),
               {

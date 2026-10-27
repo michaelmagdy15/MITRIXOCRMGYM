@@ -897,6 +897,7 @@ async function startServer() {
       const db = await getDbForRequest(req);
       
       const callerUid = (req as any).user.uid;
+      const callerEmail = String((req as any).user.email || "").toLowerCase();
       const callerDoc = await db.collection("users").doc(callerUid).get();
       const callerRole = callerDoc.data()?.role || "";
 
@@ -905,37 +906,64 @@ async function startServer() {
         "super_admin",
         "crm_admin",
         "manager",
+        "owner",
         "front_desk",
+        "frontdesk",
         "receptionist",
         "sales_manager",
         "fitness_manager",
         "general_manager",
         "ceo",
         "rep",
+        "sales_rep",
+        "sales",
+        "staff",
       ];
-      if (!ADMIN_ROLES.includes(callerRole?.toLowerCase())) {
+      const isSuperCaller =
+        callerEmail === PLATFORM_SUPER_ADMIN_EMAIL ||
+        callerEmail === "magd.gallab@gmail.com" ||
+        callerEmail.endsWith("@inzan.com");
+
+      if (!isSuperCaller && !ADMIN_ROLES.includes(callerRole?.toLowerCase())) {
         return res.status(403).json({ error: "Forbidden: Insufficient permissions to reset user passwords." });
       }
 
-      if (targetUserId === callerUid) {
+      const isClientPortalReset = Boolean(clientId || memberId);
+      let resolvedTargetUserId = String(targetUserId || "").trim();
+
+      if (resolvedTargetUserId === callerUid && !isClientPortalReset) {
         return res.status(400).json({ error: "You cannot force-reset your own password." });
       }
 
-      const targetDoc = targetUserId ? await db.collection("users").doc(targetUserId).get() : null;
-      const targetData = targetDoc?.exists ? targetDoc.data() : null;
+      let targetDoc = resolvedTargetUserId ? await db.collection("users").doc(resolvedTargetUserId).get() : null;
+      let targetData = targetDoc?.exists ? targetDoc.data() : null;
 
-      // Also check coaches collection if targetUserId is a coach's userId
+      // If resetting a Client Member Portal password and targetUserId points to the caller or a non-client staff user,
+      // detach from the staff user and target the dedicated member portal account instead.
+      if (
+        isClientPortalReset &&
+        (resolvedTargetUserId === callerUid ||
+          (targetData?.role && String(targetData.role).toLowerCase() !== "client"))
+      ) {
+        resolvedTargetUserId = "";
+        targetDoc = null;
+        targetData = null;
+      }
+
+      // Also check coaches collection if resolvedTargetUserId is a coach's userId
       let linkedCoachData: any = null;
-      if (targetUserId) {
+      if (resolvedTargetUserId && !isClientPortalReset) {
         try {
-          const coachSnap = await db.collection("coaches").where("userId", "==", targetUserId).limit(1).get();
+          const coachSnap = await db.collection("coaches").where("userId", "==", resolvedTargetUserId).limit(1).get();
           if (!coachSnap.empty) {
             linkedCoachData = coachSnap.docs[0]!.data();
           }
         } catch {}
       }
 
-      const targetEmail = String(targetData?.email || linkedCoachData?.email || fallbackEmail || "").trim().toLowerCase();
+      const targetEmail = String(
+        (isClientPortalReset ? fallbackEmail || targetData?.email : targetData?.email || linkedCoachData?.email || fallbackEmail) || ""
+      ).trim().toLowerCase();
       const targetName =
         String(
           (targetData?.name && targetData.name !== "Member" ? targetData.name : "") ||
@@ -946,14 +974,14 @@ async function startServer() {
         targetEmail.split("@")[0] ||
         "User";
 
-      let effectiveUid = targetUserId || "";
+      let effectiveUid = resolvedTargetUserId || "";
 
       try {
-        if (!targetUserId) {
+        if (!resolvedTargetUserId) {
           throw { code: "auth/user-not-found" };
         }
         // Reset the password in Firebase Auth using Admin SDK (and keep email/displayName synced if present)
-        await admin.auth().updateUser(targetUserId, {
+        await admin.auth().updateUser(resolvedTargetUserId, {
           password: DEFAULT_PASSWORD,
           ...(targetEmail ? { email: targetEmail } : {}),
           ...(targetName ? { displayName: targetName } : {}),
@@ -981,7 +1009,7 @@ async function startServer() {
         } catch (emailErr: any) {
           if (emailErr?.code === "auth/user-not-found") {
             const createdRecord = await admin.auth().createUser({
-              ...(targetUserId ? { uid: targetUserId } : {}),
+              ...(resolvedTargetUserId ? { uid: resolvedTargetUserId } : {}),
               email: targetEmail,
               password: DEFAULT_PASSWORD,
               displayName: targetName,
@@ -994,7 +1022,7 @@ async function startServer() {
       }
 
       const nowIso = new Date().toISOString();
-      if (effectiveUid !== targetUserId && targetData) {
+      if (effectiveUid !== resolvedTargetUserId && targetData) {
         await db.collection("users").doc(effectiveUid).set(
           {
             ...targetData,
@@ -1006,8 +1034,8 @@ async function startServer() {
           },
           { merge: true }
         );
-        if (targetUserId) {
-          await db.collection("users").doc(targetUserId).delete();
+        if (resolvedTargetUserId) {
+          await db.collection("users").doc(resolvedTargetUserId).delete();
         }
       } else {
         // Update Firestore user document to flag mustChangePassword and mark activated

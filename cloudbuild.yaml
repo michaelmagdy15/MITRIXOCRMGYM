@@ -21,11 +21,12 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
-      - '--min-instances=0'
-      - '--max-instances=1'
-      - '--cpu=1'
-      - '--memory=512Mi'
-      - '--concurrency=50'
+      - '--min-instances=1'
+      - '--max-instances=10'
+      - '--cpu=4'
+      - '--memory=4Gi'
+      - '--concurrency=80'
+      - '--cpu-boost'
       - '--timeout=300'
 
   # Clean up old container images to reduce GCR storage costs
