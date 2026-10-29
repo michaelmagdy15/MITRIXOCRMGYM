@@ -55,6 +55,7 @@ export const PhotoComplianceHub: React.FC<PhotoComplianceHubProps> = ({
         photoURL: member.pendingPhotoURL,
         pendingPhotoURL: '',
         photoModerationStatus: 'approved',
+        photoStatus: 'APPROVED',
         photoRejectionReason: '',
         updatedAt: new Date().toISOString(),
       });
@@ -83,6 +84,7 @@ export const PhotoComplianceHub: React.FC<PhotoComplianceHubProps> = ({
       await updateDoc(doc(db, 'clients', member.id), {
         pendingPhotoURL: '',
         photoModerationStatus: 'rejected',
+        photoStatus: 'REJECTED',
         photoRejectionReason: reason,
         updatedAt: new Date().toISOString(),
       });

@@ -452,9 +452,8 @@ export default function MemberJuiceBar({ client }: { client: Client | null }) {
 
       {/* Shopping Cart Summary Card */}
       {cartTotal > 0 && (
-        <Card className="border-primary/30 bg-card/95 dark:bg-zinc-950/80 shadow-xl relative group overflow-hidden sticky bottom-4 z-20">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 rounded-full blur-2xl" />
-          <CardHeader className="pb-2">
+        <Card className="border-2 border-primary/50 bg-white dark:bg-[#09090b] shadow-[0_-12px_40px_rgba(0,0,0,0.85)] relative group overflow-hidden sticky bottom-3 z-30 rounded-2xl">
+          <CardHeader className="pb-2 bg-muted/30 dark:bg-zinc-900/90 border-b border-border/60">
             <CardTitle className="text-sm font-bold flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <ShoppingCart className="h-4 w-4 text-primary" /> Earth's Kitchen Pre-order Cart

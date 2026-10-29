@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Client, Payment, Attendance, User, Package } from '../types';
+import { getInzanMemberCodeMeta } from '../constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -790,7 +791,7 @@ export function InzanMemberShow({
       await uploadBytes(fileRef, compressed, { contentType: 'image/jpeg' });
       const url = await getDownloadURL(fileRef);
       
-      await onUpdateClient(client.id, { photoURL: url });
+      await onUpdateClient(client.id, { photoURL: url, photoStatus: 'APPROVED', pendingPhotoURL: '' });
       
       if (isEditing) {
         setFormData(prev => ({ ...prev, photoURL: url }));
@@ -1574,6 +1575,15 @@ export function InzanMemberShow({
                 <div className="border border-border rounded-xl p-4 bg-muted/20 text-center flex flex-col justify-center items-center">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Redgits Member ID</span>
                   <span className="text-3xl font-black text-rose-500 tracking-wider mt-1">{getSafeCleanMemberId(client.memberId) || client.leadId || client.redgitsId || '—'}</span>
+                  {(() => {
+                    const codeMeta = getInzanMemberCodeMeta(client.memberId);
+                    if (!codeMeta) return null;
+                    return (
+                      <Badge variant="outline" className={`mt-2 text-[10px] font-bold px-2 py-0.5 ${codeMeta.badgeClass}`}>
+                        {codeMeta.prefix} • {codeMeta.label}
+                      </Badge>
+                    );
+                  })()}
                 </div>
 
                 {/* Member Portal Access & Password Reset Card */}

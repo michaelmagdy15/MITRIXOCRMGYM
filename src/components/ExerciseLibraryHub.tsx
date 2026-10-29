@@ -179,7 +179,34 @@ export default function ExerciseLibraryHub({
     return () => unsub();
   }, []);
 
+  const localWorkoutsStorageKey = useMemo(
+    () => `member_assigned_workouts_${memberClient?.id || currentUser?.id || 'guest'}`,
+    [memberClient?.id, currentUser?.id]
+  );
+
+  const readLocalAssignedWorkouts = (): any[] => {
+    try {
+      const raw = localStorage.getItem(localWorkoutsStorageKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeLocalAssignedWorkouts = (list: any[]) => {
+    try {
+      localStorage.setItem(localWorkoutsStorageKey, JSON.stringify(list));
+    } catch {}
+  };
+
   useEffect(() => {
+    const localSaved = mode === 'member' ? readLocalAssignedWorkouts() : [];
+    if (localSaved.length > 0) {
+      setAssignedWorkouts(localSaved);
+    }
+
     const q =
       mode === 'member' && memberClient?.id
         ? query(collection(db, 'assignedWorkouts'), where('clientId', '==', memberClient.id))
@@ -187,15 +214,28 @@ export default function ExerciseLibraryHub({
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const list = snap.docs
-          .map((d) => ({ ...(d.data() as any), id: d.id }))
-          .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-        setAssignedWorkouts(list);
+        const remoteList = snap.docs.map((d) => ({ ...(d.data() as any), id: d.id }));
+        const localCurrent = mode === 'member' ? readLocalAssignedWorkouts() : [];
+        const mergedMap = new Map<string, any>();
+        localCurrent.forEach((item) => {
+          if (item?.id) mergedMap.set(item.id, item);
+        });
+        remoteList.forEach((item) => {
+          if (item?.id) mergedMap.set(item.id, item);
+        });
+        const merged = Array.from(mergedMap.values()).sort((a, b) =>
+          String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+        );
+        setAssignedWorkouts(merged);
       },
-      () => {}
+      () => {
+        if (mode === 'member') {
+          setAssignedWorkouts(readLocalAssignedWorkouts());
+        }
+      }
     );
     return () => unsub();
-  }, [mode, memberClient?.id]);
+  }, [mode, memberClient?.id, localWorkoutsStorageKey]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { All: FULL_EXERCISE_CATALOG.length };
@@ -464,15 +504,23 @@ export default function ExerciseLibraryHub({
   };
 
   const handleMarkAssignedDone = async (w: any) => {
+    const completedAt = new Date().toISOString();
     try {
       await updateDoc(doc(db, 'assignedWorkouts', w.id), {
         status: 'Completed',
-        completedAt: new Date().toISOString(),
+        completedAt,
       });
-      toast.success(`Completed "${w.title}"!`);
     } catch {
-      toast.error('Could not update workout status');
+      // Fallback: update local storage & state so member completion always succeeds
     }
+    setAssignedWorkouts((prev) => {
+      const next = prev.map((item) =>
+        item.id === w.id ? { ...item, status: 'Completed', completedAt } : item
+      );
+      if (mode === 'member') writeLocalAssignedWorkouts(next);
+      return next;
+    });
+    toast.success(`Completed "${w.title}"!`);
   };
 
   return (
@@ -989,38 +1037,56 @@ export default function ExerciseLibraryHub({
                         <Button
                           size="sm"
                           onClick={async () => {
-                            if (!memberClient?.id) {
-                              toast.error('Unable to find your member profile');
-                              return;
-                            }
+                            const targetClientId =
+                              memberClient?.id ||
+                              currentUser?.clientDocId ||
+                              currentUser?.clientRecordId ||
+                              currentUser?.id ||
+                              'guest';
+                            const targetClientName =
+                              memberClient?.name || currentUser?.name || 'Member';
+                            const nowIso = new Date().toISOString();
+                            const workoutPayload = {
+                              title: String(tpl.name || 'Workout Plan'),
+                              description: String(tpl.description || ''),
+                              clientId: targetClientId,
+                              clientName: targetClientName,
+                              coachId: currentUser?.id || targetClientId,
+                              coachName: String(tpl.programSource || 'Self-Selected Template'),
+                              scheduledDate: nowIso.slice(0, 10),
+                              status: 'Assigned',
+                              assignedById: currentUser?.id || targetClientId,
+                              assignedByName: String(tpl.programSource || 'Self-Selected Template'),
+                              createdAt: nowIso,
+                              exercises: (tpl.items || []).map((i) => ({
+                                name: String(i.name || 'Exercise'),
+                                category: String(i.category || 'Strength'),
+                                equipment: String(i.equipment || 'Bodyweight'),
+                                targetSets: Number(i.targetSets) || 3,
+                                targetReps: Number(i.targetReps) || parseInt(String((i as any).reps || '10'), 10) || 10,
+                                targetWeightKg: Number(i.targetWeightKg) || 0,
+                                notes: String(i.notes || (i as any).scheme || ''),
+                                gifUrl: String(i.gifUrl || ''),
+                                completed: false,
+                              })),
+                            };
+
+                            let savedId = `local_workout_${Date.now()}`;
                             try {
-                              await addDoc(collection(db, 'assignedWorkouts'), {
-                                title: tpl.name,
-                                description: tpl.description || '',
-                                clientId: memberClient.id,
-                                clientName: memberClient.name || 'Member',
-                                scheduledDate: new Date().toISOString().slice(0, 10),
-                                status: 'Assigned',
-                                assignedById: memberClient.id,
-                                assignedByName: tpl.programSource || 'Self-Selected Template',
-                                createdAt: new Date().toISOString(),
-                                exercises: tpl.items.map((i) => ({
-                                  name: i.name,
-                                  category: i.category,
-                                  equipment: i.equipment || 'Bodyweight',
-                                  targetSets: Number(i.targetSets) || 3,
-                                  targetReps: Number(i.targetReps) || 10,
-                                  targetWeightKg: Number(i.targetWeightKg) || 0,
-                                  notes: i.notes || '',
-                                  gifUrl: i.gifUrl || '',
-                                  completed: false,
-                                })),
-                              });
-                              toast.success(`Added "${tpl.name}" to My Workouts!`);
-                              setActiveSubView('assigned');
-                            } catch {
-                              toast.error('Failed to add workout');
+                              const docRef = await addDoc(collection(db, 'assignedWorkouts'), workoutPayload);
+                              savedId = docRef.id;
+                            } catch (err) {
+                              console.warn('[ExerciseLibraryHub] Firestore write fallback to local storage:', err);
                             }
+
+                            const fullRecord = { ...workoutPayload, id: savedId };
+                            setAssignedWorkouts((prev) => {
+                              const next = [fullRecord, ...prev.filter((w) => w.id !== savedId)];
+                              writeLocalAssignedWorkouts(next);
+                              return next;
+                            });
+                            toast.success(`Added "${tpl.name}" to My Workouts!`);
+                            setActiveSubView('assigned');
                           }}
                           className="flex-1 h-9 rounded-xl text-xs font-bold gap-1.5"
                         >

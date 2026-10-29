@@ -4,7 +4,7 @@ import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, updateDoc,
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Bell, Calendar, Check, Gift, Info, Megaphone, Sparkles, X } from 'lucide-react';
-import { formatDistanceToNow, parseISO } from 'date-fns';
+import { formatDistanceToNow, parseISO, differenceInCalendarDays, format } from 'date-fns';
 import { toValidDate } from '../utils/dateUtils';
 import {
   initGlobalAudioUnlock,
@@ -60,6 +60,7 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
   const [clientNotifications, setClientNotifications] = useState<MemberNotification[]>([]);
   const [topLevelNotifications, setTopLevelNotifications] = useState<MemberNotification[]>([]);
   const [announcementNotifications, setAnnouncementNotifications] = useState<MemberNotification[]>([]);
+  const [autoStatusNotifications, setAutoStatusNotifications] = useState<MemberNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const hasSeenInitialClientSnap = useRef(false);
@@ -67,6 +68,48 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
   const hasSeenInitialAnnSnap = useRef(false);
 
   const uid = currentUser?.id;
+  const readStorageKey = useMemo(
+    () => `member_read_notifications_${clientId || uid || 'guest'}`,
+    [clientId, uid]
+  );
+
+  const [locallyReadIds, setLocallyReadIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(`member_read_notifications_${clientId || uid || 'guest'}`);
+      const parsed = raw ? JSON.parse(raw) : [];
+      const initial = new Set<string>(Array.isArray(parsed) ? parsed : []);
+      if (Array.isArray(currentUser?.readNotifications)) {
+        currentUser.readNotifications.forEach((id) => initial.add(String(id)));
+      }
+      return initial;
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(readStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      const next = new Set<string>(Array.isArray(parsed) ? parsed : []);
+      if (Array.isArray(currentUser?.readNotifications)) {
+        currentUser.readNotifications.forEach((id) => next.add(String(id)));
+      }
+      setLocallyReadIds(next);
+    } catch {}
+  }, [readStorageKey, currentUser?.readNotifications]);
+
+  const persistLocalReadIds = (idsToMark: string[]) => {
+    if (idsToMark.length === 0) return;
+    setLocallyReadIds((prev) => {
+      const next = new Set(prev);
+      idsToMark.forEach((id) => next.add(id));
+      try {
+        localStorage.setItem(readStorageKey, JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     initGlobalAudioUnlock();
@@ -231,29 +274,134 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!clientId) {
+      setAutoStatusNotifications([]);
+      return;
+    }
+
+    const unsubClientDoc = onSnapshot(
+      doc(db, 'clients', clientId),
+      (docSnap) => {
+        if (!docSnap.exists()) {
+          setAutoStatusNotifications([]);
+          return;
+        }
+        const clientData = docSnap.data() || {};
+        const generated: MemberNotification[] = [];
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        // 1. Check membership expiry (Expired or Expiring within 7 days)
+        const pkgs = Array.isArray(clientData.packages) ? clientData.packages : [];
+        const primaryPkg = pkgs.find((p: any) => p.status === 'Active' || p.status === 'Nearly Expired') || pkgs[0];
+        const rawExpiry = clientData.membershipExpiry || primaryPkg?.endDate;
+        const expiryDate = rawExpiry ? toValidDate(rawExpiry) : null;
+        const statusStr = String(clientData.status || '').toLowerCase();
+
+        if (statusStr === 'expired' || (expiryDate && differenceInCalendarDays(expiryDate, new Date()) < 0)) {
+          const expFormatted = expiryDate ? format(expiryDate, 'dd MMM yyyy') : 'recently';
+          generated.push({
+            id: `auto_expired_${clientId}_${rawExpiry || 'status'}`,
+            type: 'expiry_warning',
+            title: 'Membership Expired — Renew Now',
+            body: `Your gym membership expired (${expFormatted}). Visit reception or tap here to renew your package and restore club access.`,
+            read: false,
+            createdAt: new Date().toISOString(),
+            data: { target: 'profile-membership' },
+            source: 'client-subcollection',
+          });
+        } else if (expiryDate) {
+          const daysLeft = differenceInCalendarDays(expiryDate, new Date());
+          if (daysLeft >= 0 && daysLeft <= 7) {
+            const expFormatted = format(expiryDate, 'dd MMM yyyy');
+            generated.push({
+              id: `auto_expiring_${clientId}_${rawExpiry}_${daysLeft <= 3 ? '3d' : '7d'}`,
+              type: 'expiry_warning',
+              title: daysLeft === 0 ? 'Membership Expires Today!' : `Membership Expiring in ${daysLeft} Day${daysLeft === 1 ? '' : 's'}`,
+              body: `Your package (${clientData.packageType || primaryPkg?.packageName || 'Membership'}) expires on ${expFormatted}. Renew early to keep your streak and benefits active!`,
+              read: false,
+              createdAt: new Date().toISOString(),
+              data: { target: 'profile-membership' },
+              source: 'client-subcollection',
+            });
+          }
+        }
+
+        // 2. Check missing profile photo or photo moderation feedback
+        if (clientData.photoModerationStatus === 'rejected') {
+          generated.push({
+            id: `auto_photo_rejected_${clientId}_${clientData.updatedAt || todayStr}`,
+            type: 'STATUS_CHANGED',
+            title: 'Profile Photo Needs Re-upload',
+            body: `Your uploaded photo was not approved (${clientData.photoRejectionReason || 'Must be a clear face photo: no caps, no sunglasses, no inappropriate imagery'}). Tap to upload a new photo.`,
+            read: false,
+            createdAt: clientData.updatedAt || new Date().toISOString(),
+            data: { target: 'profile' },
+            source: 'client-subcollection',
+          });
+        } else if (!clientData.photoURL && !clientData.pendingPhotoURL) {
+          generated.push({
+            id: `auto_missing_photo_${clientId}`,
+            type: 'STATUS_CHANGED',
+            title: 'Action Required: Add Your Profile Picture',
+            body: 'Please upload a clear profile picture from your Profile tab (no caps or sunglasses) or take one at the reception desk.',
+            read: false,
+            createdAt: clientData.createdAt || new Date().toISOString(),
+            data: { target: 'profile' },
+            source: 'client-subcollection',
+          });
+        }
+
+        setAutoStatusNotifications(generated);
+      },
+      () => {}
+    );
+
+    return () => unsubClientDoc();
+  }, [clientId]);
+
   const notifications = useMemo(() => {
-    return [...clientNotifications, ...topLevelNotifications, ...announcementNotifications]
+    return [...autoStatusNotifications, ...clientNotifications, ...topLevelNotifications, ...announcementNotifications]
+      .map((n) => ({
+        ...n,
+        read: Boolean(n.read || locallyReadIds.has(n.id) || locallyReadIds.has(`${n.source}:${n.id}`)),
+      }))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [clientNotifications, topLevelNotifications, announcementNotifications]);
+  }, [autoStatusNotifications, clientNotifications, topLevelNotifications, announcementNotifications, locallyReadIds]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const markAsRead = async (notification: MemberNotification) => {
+    persistLocalReadIds([notification.id, `${notification.source}:${notification.id}`]);
     if (notification.read) return;
     try {
       if (notification.source === 'client-subcollection' && clientId) {
         await updateDoc(doc(db, 'clients', clientId, 'notifications', notification.id), { read: true });
       } else if (notification.source === 'top-level') {
         await updateDoc(doc(db, 'notifications', notification.id), { read: true });
+      } else if (notification.source === 'announcement' && uid) {
+        const existingRead = Array.isArray(currentUser?.readNotifications) ? currentUser.readNotifications : [];
+        if (!existingRead.includes(notification.id)) {
+          await updateDoc(doc(db, 'users', uid), {
+            readNotifications: Array.from(new Set([...existingRead, notification.id])),
+          }).catch(() => {});
+        }
       }
     } catch (err) {
-      console.error('[Member Notifications] Failed to mark notification read:', err);
+      console.warn('[Member Notifications] Could not sync read status to Firestore (saved locally):', err);
     }
   };
 
   const markAllRead = () => {
-    notifications.filter(n => !n.read).forEach((n) => {
-      markAsRead(n);
+    const unread = notifications.filter(n => !n.read);
+    if (unread.length === 0) return;
+    const allKeys: string[] = [];
+    unread.forEach((n) => {
+      allKeys.push(n.id, `${n.source}:${n.id}`);
+    });
+    persistLocalReadIds(allKeys);
+    unread.forEach((n) => {
+      void markAsRead(n);
     });
   };
 

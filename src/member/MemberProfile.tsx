@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Client } from '../types';
 import { normalizeEgyptPhone } from '../utils/phoneUtils';
+import { validateEgyptPhone, validateMemberName } from '../utils/validationRules';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -187,16 +188,21 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
     setIsUploadingPhoto(true);
     try {
       const compressed = await compressImage(file);
-      const fileRef = storageRef(storage, `member_photos/${client.id}`);
+      const fileRef = storageRef(storage, `member_photos/${client.id}_pending_${Date.now()}`);
       await uploadBytes(fileRef, compressed, { contentType: 'image/jpeg' });
       const url = await getDownloadURL(fileRef);
-      
-
 
       const clientRef = doc(db, 'clients', client.id);
-      await updateDoc(clientRef, { photoURL: url });
-      
-      toast.success('Profile photo updated successfully!');
+      await updateDoc(clientRef, {
+        pendingPhotoURL: url,
+        pendingPhotoUploadedAt: new Date().toISOString(),
+        photoModerationStatus: 'pending',
+        photoStatus: 'PENDING_APPROVAL',
+        photoRejectionReason: '',
+        updatedAt: new Date().toISOString(),
+      });
+
+      toast.success('Photo uploaded! It is pending admin approval to verify gym photo guidelines (no caps, no sunglasses, clear face).');
     } catch (err: any) {
       console.error(err);
       toast.error('Failed to upload profile photo.');
@@ -237,13 +243,24 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!client?.id || !currentUser?.id) return;
+
+    const nameCheck = validateMemberName(name);
+    if (!nameCheck.valid) {
+      setProfileError(nameCheck.error || 'Please enter a valid full name.');
+      return;
+    }
+    const phoneCheck = validateEgyptPhone(phone);
+    if (!phoneCheck.valid) {
+      setProfileError(phoneCheck.error || 'Please enter a valid 11-digit Egyptian mobile number.');
+      return;
+    }
     
     setIsUpdatingProfile(true);
     setProfileSuccess(false);
     setProfileError(null);
 
     try {
-      const updates = { name: name.trim(), phone: phone.trim() };
+      const updates = { name: nameCheck.normalized, phone: phoneCheck.normalized };
       
 
       // 1. Update clients collection
@@ -426,10 +443,20 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-extrabold tracking-tight truncate uppercase">{client?.name || 'MEMBER'}</h2>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <Badge variant="outline" className="text-[9px] font-mono bg-card/50">{client?.memberId || 'N/A'}</Badge>
+              <Badge variant="outline" className="text-[9px] font-mono bg-card/50">{client?.memberId || client?.barcode || 'N/A'}</Badge>
               <Badge className={`text-[9px] ${client?.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-200/50' : 'bg-zinc-500/10 text-zinc-500 border-zinc-200/50'}`}>
                 {client?.status || 'Unknown'}
               </Badge>
+              {client?.photoModerationStatus === 'pending' && client?.pendingPhotoURL && (
+                <Badge className="text-[9px] bg-amber-500/15 text-amber-400 border-amber-500/30">
+                  Photo Pending Admin Approval
+                </Badge>
+              )}
+              {client?.photoModerationStatus === 'rejected' && (
+                <Badge className="text-[9px] bg-rose-500/15 text-rose-400 border-rose-500/30">
+                  Photo Rejected: {client?.photoRejectionReason || 'Does not meet gym rules'}
+                </Badge>
+              )}
             </div>
             <p className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
               <CalendarDays className="h-3 w-3" /> Member since {memberSince} · {daysAsMember} days
@@ -441,6 +468,20 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
             )}
           </div>
         </div>
+        {/* Profile Photo Rules & Moderation Status Banner */}
+        <div className="mt-3 rounded-xl border border-border/40 bg-background/50 px-3 py-2 text-[11px] text-muted-foreground flex items-start gap-2">
+          <Camera className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold text-foreground">Gym Photo Guidelines:</span> Clear front-facing face photo required. No caps/hats, no sunglasses, and no shirtless/inappropriate imagery. Uploaded photos require admin approval before becoming active.
+            {client?.photoModerationStatus === 'pending' && client?.pendingPhotoURL && (
+              <div className="mt-1.5 flex items-center gap-2 text-amber-400 font-semibold">
+                <img src={client.pendingPhotoURL} alt="Pending preview" className="w-7 h-7 rounded-lg object-cover border border-amber-500/40" />
+                <span>Your new photo is awaiting admin review.</span>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Quick Stats Row */}
         <div className="grid grid-cols-3 gap-2 mt-4">
           <div className="text-center p-2.5 bg-background/40 backdrop-blur-sm rounded-xl border border-border/20 shadow-sm">

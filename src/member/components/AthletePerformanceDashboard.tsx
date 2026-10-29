@@ -1381,41 +1381,43 @@ export default function AthletePerformanceDashboard({
           if (!open && onCloseInitialLog) onCloseInitialLog();
         }}
       >
-        <DialogContent className="!w-[96vw] !max-w-[960px] max-h-[92dvh] overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-black flex items-center gap-2">
-              <Dumbbell className="h-5 w-5 text-primary" />
-              {activeAssignedWorkout
-                ? `Log Weights & Reps: ${activeAssignedWorkout.title}`
-                : 'Log Personal Training Weights & Reps'}
+        <DialogContent className="!w-[94vw] !max-w-[680px] max-h-[90dvh] overflow-y-auto overflow-x-hidden p-3.5 sm:p-6 rounded-2xl">
+          <DialogHeader className="min-w-0 pr-6 text-left">
+            <DialogTitle className="text-base sm:text-lg font-black flex items-center gap-2 leading-tight break-words">
+              <Dumbbell className="h-5 w-5 text-primary shrink-0" />
+              <span className="min-w-0 break-words">
+                {activeAssignedWorkout
+                  ? `Log Weights & Reps: ${activeAssignedWorkout.title}`
+                  : 'Log Personal Training Weights & Reps'}
+              </span>
             </DialogTitle>
-            <DialogDescription className="text-xs">
+            <DialogDescription className="text-xs leading-relaxed break-words">
               Enter the weight (kg) and reps completed for each set. Your coach can immediately view your numbers, PRs, and 1RM progression.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-1 min-w-0">
             {/* Session Metadata Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-muted/30 border">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 p-3 rounded-xl bg-muted/30 border min-w-0">
+              <div className="min-w-0">
                 <label className="text-[11px] font-bold text-muted-foreground block mb-1">Session Title</label>
                 <Input
                   value={workoutTitle}
                   onChange={(e) => setWorkoutTitle(e.target.value)}
                   placeholder="e.g. Upper Body Strength PT"
-                  className="h-9 text-xs font-semibold"
+                  className="h-9 text-xs font-semibold w-full min-w-0"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="text-[11px] font-bold text-muted-foreground block mb-1">Personal Trainer / Coach</label>
                 <Input
                   value={coachNameInput}
                   onChange={(e) => setCoachNameInput(e.target.value)}
                   placeholder="Coach Name"
-                  className="h-9 text-xs"
+                  className="h-9 text-xs w-full min-w-0"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="text-[11px] font-bold text-muted-foreground block mb-1">
                   Current Bodyweight (kg, optional)
                 </label>
@@ -1425,36 +1427,36 @@ export default function AthletePerformanceDashboard({
                   value={clientBodyweightInput}
                   onChange={(e) => setClientBodyweightInput(e.target.value)}
                   placeholder={`${effectiveBodyweight} kg`}
-                  className="h-9 text-xs font-mono"
+                  className="h-9 text-xs font-mono w-full min-w-0"
                 />
               </div>
             </div>
 
             {/* Logged Exercises & Sets */}
-            <div className="space-y-3">
+            <div className="space-y-3 min-w-0">
               {loggedExercises.map((ex, exIdx) => {
                 const prevBest = historicalPrMap.get(ex.name.trim().toLowerCase());
                 return (
-                  <Card key={ex.id} className="border rounded-2xl overflow-hidden bg-card">
-                    <div className="p-3 bg-muted/30 border-b flex items-center justify-between gap-2 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <span className="h-6 w-6 rounded-lg bg-primary/15 text-primary font-mono font-black text-xs flex items-center justify-center">
+                  <Card key={ex.id} className="border rounded-2xl overflow-hidden bg-card min-w-0">
+                    <div className="p-2.5 sm:p-3 bg-muted/30 border-b flex items-center justify-between gap-2 flex-wrap min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="h-6 w-6 rounded-lg bg-primary/15 text-primary font-mono font-black text-xs flex items-center justify-center shrink-0">
                           {exIdx + 1}
                         </span>
-                        <div>
-                          <h4 className="text-xs sm:text-sm font-bold text-foreground">{ex.name}</h4>
-                          <span className="text-[10px] text-muted-foreground">
+                        <div className="min-w-0">
+                          <h4 className="text-xs sm:text-sm font-bold text-foreground truncate">{ex.name}</h4>
+                          <span className="text-[10px] text-muted-foreground block truncate">
                             {ex.category} {ex.equipment ? `• ${ex.equipment}` : ''}
                             {ex.targetSets ? ` • Target: ${ex.targetSets}×${ex.targetReps}` : ''}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         {prevBest && (
                           <Badge variant="outline" className="text-[10px] font-mono border-amber-500/40 text-amber-500">
                             <Trophy className="h-3 w-3 mr-1" />
-                            PR: {prevBest.weight}kg × {prevBest.reps} (1RM ~{prevBest.est1RM}kg)
+                            PR: {prevBest.weight}kg × {prevBest.reps}
                           </Badge>
                         )}
                         <Button
@@ -1469,12 +1471,12 @@ export default function AthletePerformanceDashboard({
                       </div>
                     </div>
 
-                    <CardContent className="p-3 space-y-2">
-                      <div className="grid grid-cols-12 gap-2 text-[10px] font-bold uppercase text-muted-foreground px-1">
+                    <CardContent className="p-2.5 sm:p-3 space-y-2 min-w-0">
+                      <div className="grid grid-cols-12 gap-1.5 sm:gap-2 text-[10px] font-bold uppercase text-muted-foreground px-1">
                         <div className="col-span-2 sm:col-span-1 text-center">Set</div>
                         <div className="col-span-4 sm:col-span-4 text-center">Weight (kg)</div>
-                        <div className="col-span-3 sm:col-span-3 text-center">Reps</div>
-                        <div className="col-span-3 sm:col-span-4 text-right pr-2">Est. 1RM / Done</div>
+                        <div className="col-span-4 sm:col-span-3 text-center">Reps</div>
+                        <div className="col-span-2 sm:col-span-4 text-right pr-1">Done</div>
                       </div>
 
                       {ex.sets.map((set, sIdx) => {
@@ -1487,7 +1489,7 @@ export default function AthletePerformanceDashboard({
                         return (
                           <div
                             key={sIdx}
-                            className={`grid grid-cols-12 gap-2 items-center p-2 rounded-xl border ${
+                            className={`grid grid-cols-12 gap-1.5 sm:gap-2 items-center p-1.5 sm:p-2 rounded-xl border min-w-0 ${
                               set.completed
                                 ? 'bg-emerald-500/5 border-emerald-500/30'
                                 : 'bg-background border-border/60 opacity-60'
@@ -1497,7 +1499,7 @@ export default function AthletePerformanceDashboard({
                               #{set.setNumber}
                             </div>
 
-                            <div className="col-span-4 sm:col-span-4 flex items-center justify-center gap-1">
+                            <div className="col-span-4 sm:col-span-4 flex items-center justify-center gap-1 min-w-0">
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1519,7 +1521,7 @@ export default function AthletePerformanceDashboard({
                                 onChange={(e) =>
                                   handleUpdateLoggedSet(ex.id, sIdx, 'weightKg', parseFloat(e.target.value) || 0)
                                 }
-                                className="h-8 text-center font-mono font-black text-xs px-1"
+                                className="h-8 w-full min-w-0 text-center font-mono font-black text-xs px-1"
                               />
                               <button
                                 type="button"
@@ -1532,7 +1534,7 @@ export default function AthletePerformanceDashboard({
                               </button>
                             </div>
 
-                            <div className="col-span-3 sm:col-span-3 flex items-center justify-center gap-1">
+                            <div className="col-span-4 sm:col-span-3 flex items-center justify-center gap-1 min-w-0">
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1548,7 +1550,7 @@ export default function AthletePerformanceDashboard({
                                 onChange={(e) =>
                                   handleUpdateLoggedSet(ex.id, sIdx, 'reps', Math.max(1, parseInt(e.target.value, 10) || 1))
                                 }
-                                className="h-8 text-center font-mono font-black text-xs px-1"
+                                className="h-8 w-full min-w-0 text-center font-mono font-black text-xs px-1"
                               />
                               <button
                                 type="button"
@@ -1561,7 +1563,7 @@ export default function AthletePerformanceDashboard({
                               </button>
                             </div>
 
-                            <div className="col-span-3 sm:col-span-4 flex items-center justify-end gap-1.5">
+                            <div className="col-span-2 sm:col-span-4 flex items-center justify-end gap-1 min-w-0">
                               {est1RM > 0 && (
                                 <Badge variant="outline" className="text-[9px] font-mono hidden sm:inline-flex">
                                   1RM ~{est1RM}kg
@@ -1575,7 +1577,7 @@ export default function AthletePerformanceDashboard({
                               <button
                                 type="button"
                                 onClick={() => handleUpdateLoggedSet(ex.id, sIdx, 'completed', !set.completed)}
-                                className={`h-7 w-9 rounded-lg flex items-center justify-center border transition-all ${
+                                className={`h-7 w-8 sm:w-9 rounded-lg flex items-center justify-center border transition-all shrink-0 ${
                                   set.completed
                                     ? 'bg-emerald-600 text-white border-emerald-600'
                                     : 'bg-muted text-muted-foreground border-border'
@@ -1587,7 +1589,7 @@ export default function AthletePerformanceDashboard({
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveLoggedSet(ex.id, sIdx)}
-                                  className="text-muted-foreground hover:text-red-500 text-xs px-1"
+                                  className="text-muted-foreground hover:text-red-500 text-xs px-0.5 shrink-0"
                                 >
                                   ✕
                                 </button>

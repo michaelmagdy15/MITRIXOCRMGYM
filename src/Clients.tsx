@@ -574,6 +574,7 @@ export default function Clients() {
   const deferredFilterGender = useDeferredValue(filterGender);
   const deferredFilterCategory = useDeferredValue(filterCategory);
   const deferredFilterCoach = useDeferredValue(filterCoach);
+  const deferredFilterCorporate = useDeferredValue(filterCorporate);
 
   React.useEffect(() => {
     setFullPageView(false);
@@ -2007,6 +2008,7 @@ export default function Clients() {
       // Single prefix letter search (Q, C, P, O) matches only members with that memberId prefix
       if (/^[qcpo]$/.test(compactId)) {
         if (mId && new RegExp(`^${compactId}\\s*-?\\s*\\d+$`, 'i').test(mId)) return 900;
+        if (bCode && new RegExp(`^${compactId}\\s*-?\\s*\\d+$`, 'i').test(bCode)) return 850;
         if (secBarcodes.some(id => new RegExp(`^${compactId}\\s*-?\\s*\\d+$`, 'i').test(id))) return 750;
         return 0;
       }
@@ -2120,9 +2122,25 @@ export default function Clients() {
     if (deferredFilterCategory && deferredFilterCategory !== 'All') {
       if (deferredFilterCategory.startsWith('PREFIX_')) {
         const prefix = deferredFilterCategory.replace('PREFIX_', '').toUpperCase();
-        filtered = filtered.filter(m => getInzanMemberCodeMeta(m.memberId)?.prefix === prefix);
+        filtered = filtered.filter(m => getInzanMemberCodeMeta(m.memberId || m.barcode)?.prefix === prefix);
       } else {
         filtered = filtered.filter(m => getMemberCategory(m) === deferredFilterCategory);
+      }
+    }
+
+    if (deferredFilterCorporate && deferredFilterCorporate !== 'All') {
+      if (deferredFilterCorporate === 'ANY_CORPORATE') {
+        filtered = filtered.filter(m => Boolean(m.corporateCompanyId || m.corporateCompanyName));
+      } else {
+        const comp = corporateCompanies.find(c => c.id === deferredFilterCorporate);
+        const compCodeLower = (comp?.code || '').toLowerCase();
+        const compNameLower = (comp?.name || '').toLowerCase();
+        filtered = filtered.filter(m => {
+          if (m.corporateCompanyId === deferredFilterCorporate) return true;
+          const mCorpName = (m.corporateCompanyName || '').toLowerCase();
+          if (mCorpName && (mCorpName === compCodeLower || mCorpName === compNameLower)) return true;
+          return false;
+        });
       }
     }
 
@@ -2189,6 +2207,8 @@ export default function Clients() {
     deferredFilterGender,
     deferredFilterCategory,
     deferredFilterCoach,
+    deferredFilterCorporate,
+    corporateCompanies,
     deferredSortBy
   ]);
 
@@ -2426,7 +2446,7 @@ export default function Clients() {
   React.useEffect(() => {
     setCurrentPage(1);
     setSelectedClientIds([]);
-  }, [activeTab, searchTerm, filterBranch, filterRep, sortBy, filterDiscount, filterGender, filterCategory]);
+  }, [activeTab, searchTerm, filterBranch, filterRep, sortBy, filterDiscount, filterGender, filterCategory, filterCorporate]);
 
   const exportToCSV = () => {
     const headers = ['Member ID', 'Name', 'Phone', 'Branch', 'Package', 'Packages Rem.', 'Status', 'Expiry Date', 'Total Paid', 'Assigned To'];
@@ -2507,9 +2527,9 @@ export default function Clients() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {getSafeCleanMemberId(client.memberId) && <span className="text-[10px] font-bold text-muted-foreground">#{getSafeCleanMemberId(client.memberId)}</span>}
+                  {getSafeCleanMemberId(client.memberId || client.barcode) && <span className="text-[10px] font-bold text-muted-foreground">#{getSafeCleanMemberId(client.memberId || client.barcode)}</span>}
                   {(() => {
-                    const codeMeta = getInzanMemberCodeMeta(client.memberId);
+                    const codeMeta = getInzanMemberCodeMeta(client.memberId || client.barcode);
                     if (!codeMeta) return null;
                     return (
                       <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 ${codeMeta.badgeClass}`} title={codeMeta.label}>
@@ -2517,6 +2537,11 @@ export default function Clients() {
                       </Badge>
                     );
                   })()}
+                  {client.corporateCompanyName && (
+                    <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 h-4 bg-blue-500/15 text-blue-400 border-blue-500/30">
+                      🏢 {client.corporateCompanyName}
+                    </Badge>
+                  )}
                   <span className="font-semibold text-sm truncate">{client.name}</span>
                   {birthdayClientIds.has(client.id) && <Gift className="h-3.5 w-3.5 text-pink-500 shrink-0" />}
                 </div>
@@ -2625,9 +2650,9 @@ export default function Clients() {
               <TableCell className="py-3 align-top">
                 <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {getSafeCleanMemberId(client.memberId) ? (
+                    {getSafeCleanMemberId(client.memberId || client.barcode) ? (
                       <span className="font-mono text-[11px] font-bold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
-                        #{getSafeCleanMemberId(client.memberId)}
+                        #{getSafeCleanMemberId(client.memberId || client.barcode)}
                       </span>
                     ) : (client.leadId || client.redgitsId) ? (
                       <span className="font-mono text-[10px] font-bold text-amber-600/80 bg-amber-500/10 px-1.5 py-0.5 rounded">
@@ -2635,7 +2660,7 @@ export default function Clients() {
                       </span>
                     ) : null}
                     {(() => {
-                      const codeMeta = getInzanMemberCodeMeta(client.memberId);
+                      const codeMeta = getInzanMemberCodeMeta(client.memberId || client.barcode);
                       if (!codeMeta) return null;
                       return (
                         <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 ${codeMeta.badgeClass}`} title={codeMeta.label}>
@@ -2643,6 +2668,11 @@ export default function Clients() {
                         </Badge>
                       );
                     })()}
+                    {client.corporateCompanyName && (
+                      <Badge variant="outline" className="text-[9px] font-bold px-1.5 py-0 h-4 bg-blue-500/15 text-blue-400 border-blue-500/30">
+                        🏢 {client.corporateCompanyName}
+                      </Badge>
+                    )}
                     <span className="font-bold text-sm text-foreground">{client.name}</span>
                     {birthdayClientIds.has(client.id) && (
                       <Gift className="inline-block h-3.5 w-3.5 text-pink-500 shrink-0" />
@@ -3033,6 +3063,29 @@ export default function Clients() {
                   </Select>
                 </div>
               </div>
+
+              {isInzanTenant && (
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <NationalIdVerificationControl
+                    client={null}
+                    nationalId={newMemberNationalId}
+                    onNationalIdChange={setNewMemberNationalId}
+                    scanUrl={newMemberIdScanUrl}
+                    onScanUrlChange={setNewMemberIdScanUrl}
+                    idPrefix="new-member-natid"
+                  />
+                  <CorporateDealSelector
+                    companies={corporateCompanies}
+                    selectedCompanyId={newMemberCorporateId}
+                    onSelectCompany={(comp) => {
+                      setNewMemberCorporateId(comp?.id || '');
+                      applyCorporateDealToPricing(comp, setEnrollPricing);
+                    }}
+                    onOpenManager={() => setIsCorporateManagerOpen(true)}
+                  />
+                </div>
+              )}
+
               <div className="mt-8 p-5 rounded-2xl border border-dashed border-muted-foreground/30 bg-muted/10">
                 <label className="flex items-start gap-4 cursor-pointer">
                   <Checkbox
@@ -3219,6 +3272,21 @@ export default function Clients() {
         </div>
       </div>
 
+      {isInzanTenant && (
+        <>
+          <PhotoComplianceHub
+            clients={clients}
+            onSelectClient={(c) => setActiveClientId(c.id)}
+            enabled={isInzanTenant}
+          />
+          <CorporateDealsManagerModal
+            open={isCorporateManagerOpen}
+            onOpenChange={setIsCorporateManagerOpen}
+            companies={corporateCompanies}
+          />
+        </>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="flex flex-col md:flex-row items-end gap-4 mb-6 bg-card p-4 rounded-xl border shadow-sm">
           <div className="flex-1 w-full space-y-1.5">
@@ -3382,6 +3450,34 @@ export default function Clients() {
               ))}
             </select>
           </div>
+
+          {isInzanTenant && (
+            <div className="w-full md:w-[220px] space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-muted-foreground ml-1">Corporate Company</Label>
+                <button
+                  type="button"
+                  onClick={() => setIsCorporateManagerOpen(true)}
+                  className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  + Manage Deals
+                </button>
+              </div>
+              <select
+                className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring border-none"
+                value={filterCorporate}
+                onChange={(e) => setFilterCorporate(e.target.value)}
+              >
+                <option value="All">All Members</option>
+                <option value="ANY_CORPORATE">🏢 All Corporate Accounts</option>
+                {corporateCompanies.map(comp => (
+                  <option key={comp.id} value={comp.id}>
+                    {comp.code} — {comp.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar">
@@ -6810,6 +6906,28 @@ export default function Clients() {
                 <div className="p-3 bg-muted/20 border border-border/40 rounded-xl text-xs text-muted-foreground leading-relaxed">
                   💡 Current active packages will be marked as Expired. Record the difference amount as a new payment.
                 </div>
+
+                {isInzanTenant && (
+                  <div className="space-y-3 pt-1">
+                    <NationalIdVerificationControl
+                      client={clients.find(c => c.id === upgradeDialogClientId) || null}
+                      nationalId={upgradeNationalId}
+                      onNationalIdChange={setUpgradeNationalId}
+                      scanUrl={upgradeIdScanUrl}
+                      onScanUrlChange={setUpgradeIdScanUrl}
+                      idPrefix="upgrade-natid"
+                    />
+                    <CorporateDealSelector
+                      companies={corporateCompanies}
+                      selectedCompanyId={upgradeCorporateId}
+                      onSelectCompany={(comp) => {
+                        setUpgradeCorporateId(comp?.id || '');
+                        applyCorporateDealToPricing(comp, setUpgradePricing);
+                      }}
+                      onOpenManager={() => setIsCorporateManagerOpen(true)}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Right Column: Calculations & Payment */}
@@ -7046,6 +7164,28 @@ export default function Clients() {
                     onChange={e => setRenewStartDate(e.target.value)}
                   />
                 </div>
+
+                {isInzanTenant && (
+                  <div className="space-y-3 pt-1">
+                    <NationalIdVerificationControl
+                      client={clients.find(c => c.id === renewDialogClientId) || null}
+                      nationalId={renewNationalId}
+                      onNationalIdChange={setRenewNationalId}
+                      scanUrl={renewIdScanUrl}
+                      onScanUrlChange={setRenewIdScanUrl}
+                      idPrefix="renew-natid"
+                    />
+                    <CorporateDealSelector
+                      companies={corporateCompanies}
+                      selectedCompanyId={renewCorporateId}
+                      onSelectCompany={(comp) => {
+                        setRenewCorporateId(comp?.id || '');
+                        applyCorporateDealToPricing(comp, setRenewPricing);
+                      }}
+                      onOpenManager={() => setIsCorporateManagerOpen(true)}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Right Column: Price breakdown & Payment details */}
@@ -7327,6 +7467,28 @@ export default function Clients() {
                     onChange={e => setAddPackageStartDate(e.target.value)}
                   />
                 </div>
+
+                {isInzanTenant && (
+                  <div className="space-y-3 pt-1">
+                    <NationalIdVerificationControl
+                      client={clients.find(c => c.id === addPackageDialogClientId) || null}
+                      nationalId={addPackageNationalId}
+                      onNationalIdChange={setAddPackageNationalId}
+                      scanUrl={addPackageIdScanUrl}
+                      onScanUrlChange={setAddPackageIdScanUrl}
+                      idPrefix="addpkg-natid"
+                    />
+                    <CorporateDealSelector
+                      companies={corporateCompanies}
+                      selectedCompanyId={addPackageCorporateId}
+                      onSelectCompany={(comp) => {
+                        setAddPackageCorporateId(comp?.id || '');
+                        applyCorporateDealToPricing(comp, setAddPackagePricing);
+                      }}
+                      onOpenManager={() => setIsCorporateManagerOpen(true)}
+                    />
+                  </div>
+                )}
 
                 {addPackageName && addPackageStartDate && (() => {
                   const pkg = packages.find(p => p.name === addPackageName);

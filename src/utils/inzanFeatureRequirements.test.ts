@@ -98,12 +98,12 @@ describe('Inzan requirements — Payments & financials', () => {
   });
 
   it('applies custom percentage and fixed discounts', () => {
-    const pct = calculatePricing({ grossAmount: 10000, discountType: 'percentage', discountValue: 15, amountPaid: 8500 });
+    const pct = calculatePricing({ grossAmount: 10000, discountType: 'percentage', discountValue: 15, amountPaid: 8500, discountReasonText: 'Corporate discount' });
     assert.strictEqual(pct.valid, true);
     assert.strictEqual(pct.discountAmount, 1500);
     assert.strictEqual(pct.netAmount, 8500);
 
-    const fixed = calculatePricing({ grossAmount: 5000, discountType: 'amount', discountValue: 1250, amountPaid: 2000 });
+    const fixed = calculatePricing({ grossAmount: 5000, discountType: 'amount', discountValue: 1250, amountPaid: 2000, discountReasonText: 'Family discount' });
     assert.strictEqual(fixed.netAmount, 3750);
     assert.strictEqual(fixed.remainingBalance, 1750);
   });

@@ -109,33 +109,93 @@ export function useNutritionAppointments() {
   return { appointments, loading, error };
 }
 
-// Real-time hook for nutritionist profiles
+const DEFAULT_NUTRITION_SCHEDULE: NutritionistProfile['schedule'] = {
+  Sunday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+  Monday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+  Tuesday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+  Wednesday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+  Thursday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+  Friday: { enabled: false, startTime: '12:00', endTime: '18:00', appointmentDuration: 45 },
+  Saturday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+};
+
+// Real-time hook for nutritionist profiles (with automatic fallback from coaches collection for nutrition specialists)
 export function useNutritionists() {
   const [profiles, setProfiles] = useState<NutritionistProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
+    const deriveFromCoaches = async (): Promise<NutritionistProfile[]> => {
+      try {
+        const coachesSnap = await getDocs(collection(db, 'coaches'));
+        const derived: NutritionistProfile[] = [];
+        coachesSnap.docs.forEach((d) => {
+          const data = d.data() || {};
+          if (data.status === 'Inactive' || data.active === false) return;
+          const dept = String(data.department || '').toLowerCase();
+          const spec = String(data.specialty || '').toLowerCase();
+          if (dept.includes('nutrition') || spec.includes('nutrition')) {
+            derived.push({
+              id: d.id,
+              userId: data.userId || d.id,
+              name: String(data.name || 'Nutrition Specialist'),
+              email: String(data.email || ''),
+              phone: String(data.phone || ''),
+              specialties: [String(data.specialty || 'Clinical & Sports Nutrition')],
+              bio: String(data.bio || `${data.specialty || 'Nutrition Specialist'} at ${data.branch || 'Inzan Athletics'}`),
+              active: true,
+              schedule: data.schedule || DEFAULT_NUTRITION_SCHEDULE,
+              createdAt: data.createdAt || new Date().toISOString(),
+              updatedAt: data.updatedAt || new Date().toISOString(),
+            });
+          }
+        });
+        return derived;
+      } catch {
+        return [];
+      }
+    };
+
     const q = query(collection(db, 'nutritionistProfiles'));
     const unsubscribe = onSnapshot(
       q,
-      (snapshot) => {
+      async (snapshot) => {
         const data = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data()
         })) as NutritionistProfile[];
-        setProfiles(data);
-        setLoading(false);
-        setError(null);
+        if (data.filter((p) => p.active !== false).length > 0) {
+          if (active) {
+            setProfiles(data);
+            setLoading(false);
+            setError(null);
+          }
+        } else {
+          const fallback = await deriveFromCoaches();
+          if (active) {
+            setProfiles(fallback.length > 0 ? fallback : data);
+            setLoading(false);
+            setError(null);
+          }
+        }
       },
-      (err) => {
-        console.error("Error subscribing to nutritionist profiles:", err);
-        setError(err.message);
-        setLoading(false);
+      async (err) => {
+        console.warn("Error subscribing to nutritionist profiles, falling back to coaches:", err);
+        const fallback = await deriveFromCoaches();
+        if (active) {
+          setProfiles(fallback);
+          setError(fallback.length > 0 ? null : err.message);
+          setLoading(false);
+        }
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, []);
 
   return { profiles, loading, error };
@@ -151,20 +211,25 @@ export async function bookAppointment(
     const now = new Date().toISOString();
 
     await runTransaction(db, async (transaction) => {
-      // 1. Validate nutritionist profile and working hours
+      // 1. Validate nutritionist profile and working hours (supports both nutritionistProfiles and derived coach profiles)
       const profileRef = doc(db, 'nutritionistProfiles', data.nutritionistId);
       const profileSnap = await transaction.get(profileRef);
-      if (!profileSnap.exists()) {
-        throw new Error('Nutritionist profile not found.');
-      }
-      const profile = profileSnap.data() as NutritionistProfile;
+      const profile = profileSnap.exists()
+        ? (profileSnap.data() as NutritionistProfile)
+        : ({
+            id: data.nutritionistId,
+            userId: data.nutritionistId,
+            name: data.nutritionistName || 'Nutritionist',
+            active: true,
+            schedule: DEFAULT_NUTRITION_SCHEDULE,
+          } as NutritionistProfile);
       validateNutritionSlotRules({
         nutritionistId: data.nutritionistId,
         date: data.date,
         startTime: data.startTime,
         endTime: data.endTime,
-        schedule: profile.schedule,
-        active: profile.active
+        schedule: profile.schedule || DEFAULT_NUTRITION_SCHEDULE,
+        active: profile.active !== false
       });
 
       // 2. Concurrency check: read all deterministic slot reservation bucket docs

@@ -115,7 +115,12 @@ service cloud.firestore {
     }
 
     function isSafeClientSelfEdit() {
-      let allowed = ['name', 'phone', 'portalUserId', 'photoURL', 'expoPushToken', 'fcmToken', 'updatedAt', 'ptAssessmentStatus', 'ptAssessmentRequestedAt', 'guestInvitesRemaining', 'invitationsRemaining', 'invitationsUsed'];
+      let allowed = [
+        'name', 'phone', 'portalUserId', 'photoURL', 'pendingPhotoURL', 'pendingPhotoUploadedAt',
+        'photoModerationStatus', 'photoStatus', 'photoRejectionReason', 'photoUploadDate',
+        'expoPushToken', 'fcmToken', 'updatedAt', 'ptAssessmentStatus', 'ptAssessmentRequestedAt',
+        'guestInvitesRemaining', 'invitationsRemaining', 'invitationsUsed'
+      ];
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed) &&
              (!('portalUserId' in request.resource.data) || request.resource.data.portalUserId == request.auth.uid) &&
              (!('portalUserId' in resource.data) || resource.data.portalUserId == request.auth.uid);
@@ -684,7 +689,8 @@ service cloud.firestore {
 
     match /assignedWorkouts/{workoutId} {
       allow read: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
-      allow create, delete: if isTenantStaff();
+      allow create: if isTenantStaff() || (isAuthenticated() && request.resource.data.clientId != null && isOwnClientRecord(request.resource.data.clientId));
+      allow delete: if isTenantStaff() || (isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId));
       allow update: if isTenantStaff() || (
         isAuthenticated() && resource.data.clientId != null && isOwnClientRecord(resource.data.clientId) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'exercises', 'loggedExercises', 'clientNotes', 'totalVolumeKg', 'totalSets', 'totalReps', 'performanceDocId', 'updatedAt'])
@@ -852,6 +858,16 @@ service cloud.firestore {
     match /trainerTransferLogs/{docId} { allow read, write: if isTenantStaff(); }
     match /transfers/{docId} { allow read, write: if isTenantStaff(); }
     match /upgrades/{docId} { allow read, write: if isTenantStaff(); }
+
+    // CORPORATE ACCOUNTS & COMPANY DEALS
+    match /corporateAccounts/{accountId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
+    }
+    match /corporateCompanies/{companyId} {
+      allow read: if isAuthenticated();
+      allow write: if isTenantStaff();
+    }
 
     // ===============================================================
     // Platform Super Admin Bypass (Michael Mitry — God Mode)

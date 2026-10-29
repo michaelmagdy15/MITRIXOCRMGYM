@@ -61,7 +61,23 @@ function cleanMemberId(raw?: string, rId?: string): string {
   if (!s || s === '0' || s === '-' || s.toLowerCase() === 'null' || s.toLowerCase() === 'none') return '';
   if (/^code\s*\(/i.test(s)) return '';
   if (rId && s === String(rId).trim() && Number(rId) >= 10000) return '';
+  const prefixMatch = s.match(/^([qcpo])\s*-?\s*(\d+)$/i);
+  if (prefixMatch && prefixMatch[1] && prefixMatch[2]) {
+    return `${prefixMatch[1].toUpperCase()}${prefixMatch[2]}`;
+  }
   return s;
+}
+
+function getMemberCodeGroupMeta(memberId?: string): { prefix: string; group: string } | null {
+  if (!memberId) return null;
+  const m = String(memberId).trim().match(/^([QCPO])\d+$/i);
+  if (!m || !m[1]) return null;
+  const p = m[1].toUpperCase();
+  if (p === 'Q') return { prefix: 'Q', group: 'SGF / Kickboxing Member' };
+  if (p === 'C') return { prefix: 'C', group: 'Cure Clinic Clients (Physiotherapy)' };
+  if (p === 'P') return { prefix: 'P', group: 'Partners & Gym Owners Family' };
+  if (p === 'O') return { prefix: 'O', group: 'Youth Clients (PT Youth & Classes)' };
+  return null;
 }
 
 function cleanSalesRepName(raw?: string): string {
@@ -1061,6 +1077,16 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
 
     // 8. Build Staff & Trainers from /admin/staff/show
     const coachDocs: Array<{ id: string; data: Record<string, any> }> = [];
+    const nutritionProfileDocs: Array<{ id: string; data: Record<string, any> }> = [];
+    const defaultNutritionSchedule = {
+      Sunday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+      Monday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+      Tuesday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+      Wednesday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+      Thursday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+      Friday: { enabled: false, startTime: '12:00', endTime: '18:00', appointmentDuration: 45 },
+      Saturday: { enabled: true, startTime: '10:00', endTime: '20:00', appointmentDuration: 45 },
+    };
     for (const sRow of staffRows) {
       if (!Array.isArray(sRow) || sRow.length < 7) continue;
       const [sCode, sName, sMobile, , , sDept, sPos, , sSalary, , , , , , sStatus, , sNatId, sStart, , sUsername] =
@@ -1073,6 +1099,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         ensureSalesRepUser(cleanStaffName);
       }
       const cId = `redgits-staff-${sCode || slugifyName(cleanStaffName)}`;
+      const isActiveStaff = sStatus !== 'Suspend';
       coachDocs.push({
         id: cId,
         data: {
@@ -1082,7 +1109,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           phone: normalizePhone(sMobile),
           specialty: pos,
           department: dept,
-          status: sStatus === 'Suspend' ? 'Inactive' : 'Active',
+          status: isActiveStaff ? 'Active' : 'Inactive',
           salary: parseFloat(String(sSalary || '0').replace(/[^\d.]/g, '')) || 0,
           nationalId: sNatId || '',
           hireDate: sStart || nowIso.slice(0, 10),
@@ -1092,6 +1119,22 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           updatedAt: nowIso,
         },
       });
+      if (/nutrition/i.test(`${dept} ${pos}`)) {
+        nutritionProfileDocs.push({
+          id: cId,
+          data: {
+            id: cId,
+            userId: cId,
+            name: cleanStaffName,
+            phone: normalizePhone(sMobile),
+            specialty: pos || 'Clinical & Sports Nutrition',
+            bio: `${pos || 'Nutrition Specialist'} at Inzan Athletics (Garden 8)`,
+            active: isActiveStaff,
+            schedule: defaultNutritionSchedule,
+            updatedAt: nowIso,
+          },
+        });
+      }
     }
 
     // 9. Process Active Members, Expired Members (if full), and Recent Leads
@@ -1486,12 +1529,31 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           ? `${REDGITS_ORIGIN}/uploads/members/${rId}-cam.jpg`
           : undefined;
 
+      const codeGroupMeta = getMemberCodeGroupMeta(resolvedMemberId);
+      const existingSecBarcodes = Array.isArray(existingClient.secondaryBarcodes)
+        ? existingClient.secondaryBarcodes.map((b: any) => String(b).trim()).filter(Boolean)
+        : [];
+      const mergedSecondaryBarcodes = Array.from(
+        new Set(
+          [
+            ...existingSecBarcodes,
+            resolvedMemberId,
+            resolvedMemberId ? resolvedMemberId.toUpperCase() : '',
+            resolvedMemberId ? resolvedMemberId.toLowerCase() : '',
+            resolvedLeadId,
+          ].filter(Boolean)
+        )
+      );
+
       const clientData: Record<string, any> = {
         id: clientDocId,
         redgitsId: rId,
         legacyMemberId: rId,
         leadId: resolvedLeadId,
         memberId: resolvedMemberId ? resolvedMemberId : FieldValue.delete(),
+        memberCodePrefix: codeGroupMeta?.prefix || existingClient.memberCodePrefix || undefined,
+        memberCodeGroup: codeGroupMeta?.group || existingClient.memberCodeGroup || undefined,
+        secondaryBarcodes: mergedSecondaryBarcodes.length > 0 ? mergedSecondaryBarcodes : undefined,
         name,
         phone,
         redgitsMobileChecked: Boolean(phone || existingClient.redgitsMobileChecked || checkedMobileIds.has(rId)) || undefined,
@@ -1693,6 +1755,9 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     await commitDocsInBatches(inzanDb, 'users', userDocs);
     await commitDocsInBatches(inzanDb, 'packages', packageDocs);
     await commitDocsInBatches(inzanDb, 'coaches', coachDocs);
+    if (nutritionProfileDocs.length > 0) {
+      await commitDocsInBatches(inzanDb, 'nutritionistProfiles', nutritionProfileDocs);
+    }
     await commitDocsInBatches(inzanDb, 'clients', clientDocs);
     await commitDocsInBatches(inzanDb, 'payments', paymentDocs);
     await commitDocsInBatches(inzanDb, 'guestInvites', inviteDocs);

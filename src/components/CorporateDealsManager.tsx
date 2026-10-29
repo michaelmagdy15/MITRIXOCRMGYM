@@ -31,24 +31,72 @@ export function useCorporateCompanies() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(
+    let rawCompanies: CorporateCompany[] = [];
+    let rawAccounts: CorporateCompany[] = [];
+
+    const mergeAndSet = () => {
+      const mergedMap = new Map<string, CorporateCompany>();
+      mergedMap.set(DEFAULT_CIB_COMPANY.id, DEFAULT_CIB_COMPANY);
+
+      for (const acc of rawAccounts) {
+        if (!acc.id) continue;
+        mergedMap.set(acc.id, acc);
+      }
+      for (const comp of rawCompanies) {
+        if (!comp.id) continue;
+        mergedMap.set(comp.id, comp);
+      }
+
+      const list = Array.from(mergedMap.values()).filter((c) => c.active !== false);
+      setCompanies(list.length > 0 ? list : [DEFAULT_CIB_COMPANY]);
+      setLoading(false);
+    };
+
+    const unsubCompanies = onSnapshot(
       collection(db, 'corporateCompanies'),
       (snap) => {
-        const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as CorporateCompany));
-        if (list.length === 0) {
-          setCompanies([DEFAULT_CIB_COMPANY]);
-        } else {
-          const hasCib = list.some((c) => c.code?.toUpperCase() === 'CIB' || c.id === 'corp-cib');
-          setCompanies(hasCib ? list : [DEFAULT_CIB_COMPANY, ...list]);
-        }
-        setLoading(false);
+        rawCompanies = snap.docs.map((d) => ({ ...d.data(), id: d.id } as CorporateCompany));
+        mergeAndSet();
       },
       () => {
-        setCompanies([DEFAULT_CIB_COMPANY]);
-        setLoading(false);
+        mergeAndSet();
       }
     );
-    return () => unsub();
+
+    const unsubAccounts = onSnapshot(
+      collection(db, 'corporateAccounts'),
+      (snap) => {
+        rawAccounts = snap.docs.map((d) => {
+          const data = d.data() as any;
+          const benefits = data.benefits || {};
+          return {
+            id: d.id,
+            name: String(data.companyName || data.name || 'Corporate Partner'),
+            code: String(data.corporateCode || data.code || d.id).toUpperCase(),
+            active: data.isActive !== false && data.active !== false,
+            discountType: benefits.discountType === 'fixed_amount' || benefits.discountType === 'amount' ? 'amount' : 'percentage',
+            discountValue: Number(benefits.discountValue ?? data.discountValue ?? 0),
+            extraMonths: Number(data.extraMonths ?? 0),
+            extraDays: Number(benefits.extraDurationDays ?? data.extraDays ?? 0),
+            extraFreezeDays: Number(benefits.extraFreezeDays ?? data.extraFreezeDays ?? 0),
+            extraFreePtSessions: Number(benefits.extraPtSessions ?? data.extraFreePtSessions ?? 0),
+            extraInvitations: Number(benefits.extraGuestPasses ?? data.extraInvitations ?? 0),
+            notes: String(data.notes || ''),
+            createdAt: String(data.createdAt || new Date().toISOString()),
+            updatedAt: String(data.updatedAt || new Date().toISOString()),
+          } as CorporateCompany;
+        });
+        mergeAndSet();
+      },
+      () => {
+        mergeAndSet();
+      }
+    );
+
+    return () => {
+      unsubCompanies();
+      unsubAccounts();
+    };
   }, []);
 
   return { companies, loading };
