@@ -28,6 +28,7 @@
     "test:qa": "vite-node src/utils/inzanQAAutomation.test.ts",
     "test:sales-rules": "vite-node src/utils/salesAndPaymentRules.test.ts",
     "test:guest-storefront": "tsx src/utils/storefrontGuestAccess.test.ts",
+    "test:timezone": "tsx src/utils/timezoneShift.test.ts",
     "audit:frontend": "node scripts/lighthouse-audit.js",
     "audit:backend": "autocannon -c 10 -d 30 -p 10 -H \"x-audit-bypass: true\" http://localhost:3000/api/clients",
     "audit:db": "node scripts/db-audit.js",

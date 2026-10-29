@@ -757,6 +757,10 @@ function AppContent() {
   }
 
   if (!currentUser) {
+    // Inzan Athletics does not need a storefront now: direct all visitors straight to Login!
+    if (isInzan) {
+      return <Login />;
+    }
     const isExplicitLogin = showPortalOverride === 'crm' || window.location.pathname === '/login';
     if (!isExplicitLogin || showPortalOverride === 'store' || showPortalOverride === 'member') {
       return (
@@ -802,7 +806,7 @@ function AppContent() {
   }
 
   if (currentUser.role === 'client') {
-    if (clientViewMode === 'store') {
+    if (clientViewMode === 'store' && !isInzan) {
       return (
         <React.Suspense fallback={<PortalLoadingFallback />}>
         <GuestPortal 
@@ -820,7 +824,7 @@ function AppContent() {
       <React.Suspense fallback={<PortalLoadingFallback />}>
         <MemberPortal 
         initialTab={memberPortalInitialTab}
-        onSwitchToStore={(packageId) => {
+        onSwitchToStore={isInzan ? undefined : (packageId) => {
           if (packageId) setStoreInitialPackageId(packageId);
           setMemberPortalInitialTab('home');
           setClientViewMode('store');

@@ -104,7 +104,8 @@ export function evaluateTurnstileGateAccess(params: {
         allowedStartTime: resolvedRules.allowedStartTime,
         allowedEndTime: resolvedRules.allowedEndTime,
       },
-      now
+      now,
+      'Africa/Cairo'
     );
     if (!timeCheck.allowed) {
       return {

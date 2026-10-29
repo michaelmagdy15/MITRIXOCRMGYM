@@ -1,5 +1,5 @@
 import { Payment, Branch } from '../types';
-import { safeIsoDate } from './dateUtils';
+import { safeIsoDate, getGymDateString } from './dateUtils';
 
 export interface DeclaredShiftAmounts {
   cash: number;
@@ -58,6 +58,7 @@ export interface ReconciliationOptions {
   cashierName?: string;
   declared?: Partial<DeclaredShiftAmounts>;
   notes?: string;
+  timezone?: string;
 }
 
 /**
@@ -87,6 +88,7 @@ export function normalizeMethodCategory(method?: string): 'cash' | 'visa' | 'ban
  * - Uses money actually collected (amount_paid ?? amount)
  * - Computes discounts granted separately
  * - Tracks partial-payment outstanding balances
+ * - Respects target calendar date matching with optional timezone conversion.
  */
 export function calculateShiftReconciliation(
   payments: Payment[],
@@ -113,9 +115,21 @@ export function calculateShiftReconciliation(
     // 1. Soft-delete exclusion
     if (p.deleted_at !== null && p.deleted_at !== undefined) continue;
 
-    // 2. Date match (compare YYYY-MM-DD from ISO payment date)
-    const iso = p.date ? safeIsoDate(p.date, false) : '';
-    const pDate = iso.length >= 10 ? iso.substring(0, 10) : '';
+    // 2. Date match
+    let pDate = '';
+    if (typeof p.date === 'string') {
+      const trimmed = p.date.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        pDate = trimmed;
+      } else if (options.timezone) {
+        pDate = getGymDateString(trimmed, options.timezone);
+      } else {
+        pDate = trimmed.length >= 10 ? trimmed.substring(0, 10) : '';
+      }
+    } else if (p.date) {
+      pDate = options.timezone ? getGymDateString(p.date, options.timezone) : safeIsoDate(p.date).substring(0, 10);
+    }
+
     if (pDate !== targetDate) continue;
 
     // 3. Branch filter (if branch is specified)

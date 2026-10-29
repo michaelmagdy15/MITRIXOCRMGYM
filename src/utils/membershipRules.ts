@@ -15,6 +15,7 @@
 import { Client, Package } from '../types';
 import { isTenantInzan } from './inzanOrg';
 import { getTenantId } from '../firebase';
+import { getGymDateTimeParts } from './dateUtils';
 import {
   validateMemberIdCompliance,
   type MemberComplianceInput,
@@ -320,7 +321,8 @@ function parseTimeToMinutes(timeStr: string): number | null {
  */
 export function validatePackageTimeWindow(
   pkg?: Partial<Package> | null,
-  checkInTime: Date = new Date()
+  checkInTime: Date = new Date(),
+  timeZone?: string
 ): { allowed: boolean; reason?: string } {
   if (!pkg || !pkg.isTimeRestricted || !pkg.allowedStartTime || !pkg.allowedEndTime) {
     return { allowed: true };
@@ -332,14 +334,22 @@ export function validatePackageTimeWindow(
     return { allowed: true };
   }
 
-  const checkMinutes = checkInTime.getHours() * 60 + checkInTime.getMinutes();
+  let hours = checkInTime.getHours();
+  let minutes = checkInTime.getMinutes();
+  if (timeZone) {
+    const parts = getGymDateTimeParts(checkInTime, timeZone);
+    hours = parts.hours;
+    minutes = parts.minutes;
+  }
+
+  const checkMinutes = hours * 60 + minutes;
   const isWithinWindow =
     startMinutes <= endMinutes
       ? checkMinutes >= startMinutes && checkMinutes <= endMinutes
       : checkMinutes >= startMinutes || checkMinutes <= endMinutes;
 
   if (!isWithinWindow) {
-    const checkInFormatted = `${String(checkInTime.getHours()).padStart(2, '0')}:${String(checkInTime.getMinutes()).padStart(2, '0')}`;
+    const checkInFormatted = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
     return {
       allowed: false,
       reason: `Package "${pkg.name || 'Time-Restricted Package'}" only allows access between ${pkg.allowedStartTime} and ${pkg.allowedEndTime} (current time: ${checkInFormatted}).`

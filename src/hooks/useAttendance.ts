@@ -193,7 +193,7 @@ export const useAttendance = (currentUser: User | null, clients: Client[]) => {
         }
 
         const checkInNow = new Date();
-        const windowResults = activeNames.map((n) => validatePackageTimeWindow(defsByName.get(n) || null, checkInNow));
+        const windowResults = activeNames.map((n) => validatePackageTimeWindow(defsByName.get(n) || null, checkInNow, 'Africa/Cairo'));
         if (windowResults.every((r) => !r.allowed)) {
           throw new Error(windowResults[0]?.reason || `${client.name}'s package does not allow access at this time.`);
         }
