@@ -126,6 +126,28 @@ async function runTests() {
     });
     assert.strictEqual(noShow.title, 'Repeated No-Show Alert');
     assert.ok(noShow.body.includes('Ahmed Helmy'));
+
+    // Membership Expiring & Expired copy checks
+    const expiring = renderNotificationContent('membership_expiring', {
+      clientName: 'Sarah Smith',
+      gymName: 'INZAN Athletics',
+      daysRemaining: 7,
+      expiryDate: '2026-11-05'
+    });
+    assert.strictEqual(expiring.title, 'Membership Expiring Soon');
+    assert.strictEqual(
+      expiring.body,
+      'Hi Sarah Smith, your membership at INZAN Athletics will expire in 7 days on 2026-11-05. Renew now to keep your active schedule.'
+    );
+
+    const expired = renderNotificationContent('membership_expired', {
+      clientName: 'Sarah Smith'
+    });
+    assert.strictEqual(expired.title, 'Membership Expired');
+    assert.strictEqual(
+      expired.body,
+      'Hi Sarah Smith, your gym membership has expired. Renew online in the member app or visit reception to continue booking.'
+    );
   });
 
   // Test 4: Dispatch and Delivery Logging

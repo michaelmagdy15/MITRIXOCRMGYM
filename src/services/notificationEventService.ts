@@ -53,11 +53,24 @@ export function renderNotificationContent(
         body: `Thank you! Your payment of ${data.amount ? `${data.amount.toLocaleString()} LE` : 'the requested amount'} for ${data.serviceName || 'Package'} has been confirmed.`
       };
 
-    case 'membership_expiring':
+    case 'membership_expiring': {
+      const clientName = data.clientName || 'there';
+      const gymName = data.gymName || 'the gym';
+      const daysRemaining = data.daysRemaining !== undefined ? data.daysRemaining : '';
+      const expiryDate = data.expiryDate || 'soon';
       return {
         title: 'Membership Expiring Soon',
-        body: `Your gym membership will expire on ${data.expiryDate || 'soon'}. Renew today to continue booking your favorite sessions.`
+        body: `Hi ${clientName}, your membership at ${gymName} will expire in ${daysRemaining} days on ${expiryDate}. Renew now to keep your active schedule.`
       };
+    }
+
+    case 'membership_expired': {
+      const clientName = data.clientName || 'there';
+      return {
+        title: 'Membership Expired',
+        body: `Hi ${clientName}, your gym membership has expired. Renew online in the member app or visit reception to continue booking.`
+      };
+    }
 
     case 'pt_balance_low':
       return {
@@ -96,7 +109,7 @@ export function renderNotificationContent(
  */
 export async function dispatchNotificationEvent(
   params: NotificationEventParams,
-  firestoreDb = db
+  firestoreDb: any = db
 ): Promise<NotificationDeliveryLog> {
   const channels: NotificationChannel[] = params.channels && params.channels.length > 0
     ? params.channels
@@ -104,23 +117,39 @@ export async function dispatchNotificationEvent(
 
   const { title, body } = renderNotificationContent(params.eventType, params.data);
   const now = new Date().toISOString();
-  const tenantId = getTenantId();
+  const tenantId = params.tenantId || params.data?.tenantId || (firestoreDb?.databaseId && firestoreDb.databaseId !== '(default)' ? firestoreDb.databaseId : getTenantId());
+  const isAdminDb = Boolean(firestoreDb && typeof firestoreDb.collection === 'function');
 
   // 1. Idempotency check: if idempotencyKey already delivered, return existing log
   if (params.idempotencyKey) {
     try {
-      const q = query(
-        collection(firestoreDb, 'notificationDeliveryLogs'),
-        where('idempotencyKey', '==', params.idempotencyKey)
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const existing = snap.docs[0]?.data() as NotificationDeliveryLog;
-        console.warn(`[NotificationService] IdempotencyKey ${params.idempotencyKey} already delivered. Skipping duplicate.`);
-        return {
-          ...existing,
-          status: 'skipped_duplicate'
-        };
+      if (isAdminDb) {
+        const snap = await firestoreDb.collection('notificationDeliveryLogs')
+          .where('idempotencyKey', '==', params.idempotencyKey)
+          .limit(1)
+          .get();
+        if (!snap.empty) {
+          const existing = snap.docs[0]?.data() as NotificationDeliveryLog;
+          console.warn(`[NotificationService] IdempotencyKey ${params.idempotencyKey} already delivered. Skipping duplicate.`);
+          return {
+            ...existing,
+            status: 'skipped_duplicate'
+          };
+        }
+      } else {
+        const q = query(
+          collection(firestoreDb, 'notificationDeliveryLogs'),
+          where('idempotencyKey', '==', params.idempotencyKey)
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const existing = snap.docs[0]?.data() as NotificationDeliveryLog;
+          console.warn(`[NotificationService] IdempotencyKey ${params.idempotencyKey} already delivered. Skipping duplicate.`);
+          return {
+            ...existing,
+            status: 'skipped_duplicate'
+          };
+        }
       }
     } catch (err) {
       console.warn('[NotificationService] Idempotency query error:', err);
@@ -134,7 +163,7 @@ export async function dispatchNotificationEvent(
   for (const channel of channels) {
     if (channel === 'in_app') {
       try {
-        await addDoc(collection(firestoreDb, 'notifications'), cleanData({
+        const notifPayload = cleanData({
           recipientId: params.recipientId,
           clientId: params.recipientId,
           recipientType: params.recipientType,
@@ -145,7 +174,13 @@ export async function dispatchNotificationEvent(
           data: params.data,
           tenantId,
           createdAt: now
-        }));
+        });
+
+        if (isAdminDb) {
+          await firestoreDb.collection('notifications').add(notifPayload);
+        } else {
+          await addDoc(collection(firestoreDb, 'notifications'), notifPayload);
+        }
       } catch (inAppErr: any) {
         console.error('[NotificationService] In-app notification write failed:', inAppErr);
         finalStatus = 'failed';
@@ -154,9 +189,34 @@ export async function dispatchNotificationEvent(
     }
 
     if (channel === 'push') {
-      // Push via Expo proxy endpoint
+      const pushToken = params.data?.expoPushToken || params.data?.pushToken || params.data?.fcmToken;
       try {
-        if (typeof window !== 'undefined' && 'fetch' in window) {
+        if (pushToken && (pushToken.startsWith('ExponentPushToken') || pushToken.startsWith('ExpoPushToken'))) {
+          // Direct Expo push invocation (works in Node.js jobs and server-side)
+          await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              to: pushToken,
+              title,
+              body,
+              sound: 'default',
+              priority: 'high',
+              channelId: 'member-alerts',
+              interruptionLevel: 'active',
+              data: {
+                eventType: params.eventType,
+                ...params.data
+              }
+            })
+          }).catch((e) => {
+            console.warn('[NotificationService] Expo push direct network warning:', e);
+          });
+        } else if (typeof window !== 'undefined' && 'fetch' in window) {
+          // Push via Expo proxy endpoint (browser client fallback)
           await fetch('/api/proxy-push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -201,8 +261,12 @@ export async function dispatchNotificationEvent(
   };
 
   try {
-    const logDocRef = doc(firestoreDb, 'notificationDeliveryLogs', logId);
-    await setDoc(logDocRef, cleanData(deliveryLog));
+    if (isAdminDb) {
+      await firestoreDb.collection('notificationDeliveryLogs').doc(logId).set(cleanData(deliveryLog));
+    } else {
+      const logDocRef = doc(firestoreDb, 'notificationDeliveryLogs', logId);
+      await setDoc(logDocRef, cleanData(deliveryLog));
+    }
   } catch (logErr) {
     console.error('[NotificationService] Failed to write delivery log:', logErr);
   }

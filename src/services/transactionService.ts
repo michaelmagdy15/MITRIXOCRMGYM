@@ -72,6 +72,10 @@ export interface PaymentTransactionParams {
   previousPackageName?: string;
   corporateProofUrl?: string;
   discountReason?: string;
+  discountReasonText?: string;
+  discountExplanation?: string;
+  corporateCompanyId?: string;
+  corporateCompanyName?: string;
   paymentStatus?: 'paid' | 'pending' | 'failed';
   isComplimentary?: boolean;
   installments?: any[];
@@ -330,6 +334,7 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       discountedAmount: params.discountedAmount,
       corporateProofUrl: params.corporateProofUrl || undefined,
       discountReason: params.discountReason || undefined,
+      discountReasonText: params.discountReasonText || undefined,
       isUpgradePayment: false,
       isOnHold: params.isMemberOnHold || false,
       holdReason: params.isMemberOnHold ? (params.notes || 'Placed on hold at payment checkout') : undefined,
@@ -536,6 +541,10 @@ export const processPaymentTransaction = async (params: PaymentTransactionParams
       discountedAmount: params.discountedAmount,
       corporateProofUrl: params.corporateProofUrl || undefined,
       discountReason: params.discountReason || undefined,
+      discountReasonText: params.discountReasonText || params.discountExplanation || undefined,
+      discountExplanation: params.discountExplanation || params.discountReasonText || undefined,
+      corporateCompanyId: params.corporateCompanyId || undefined,
+      corporateCompanyName: params.corporateCompanyName || undefined,
       isUpgradePayment: params.isUpgradePayment || false,
       previousPackageName: params.previousPackageName,
       isOnHold: params.isMemberOnHold || false,

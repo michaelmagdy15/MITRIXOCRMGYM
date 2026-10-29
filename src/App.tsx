@@ -1,5 +1,6 @@
 import { matchesPhoneSearch } from './utils/phoneUtils';
 import { scoreNameMatch } from './utils/fuzzyNameSearch';
+import { isShortMemberIdSearchTerm } from './constants';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -23,7 +24,7 @@ import Attendance from './Attendance';
 import Login from './Login';
 import MemberCheckin from './MemberCheckin';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList, Bell, Dumbbell } from 'lucide-react';
+import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList, Bell, Dumbbell, Building2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -78,6 +79,7 @@ const ClassManager = React.lazy(() => import('./components/ClassManager').then(m
 const CoachPortal = React.lazy(() => import('./coach/CoachPortal'));
 const MemberPortal = React.lazy(() => import('./member/MemberPortal'));
 const GuestPortal = React.lazy(() => import('./member/GuestPortal'));
+const CorporateAccountManager = React.lazy(() => import('./components/CorporateAccountManager'));
 
 const ModuleLoadingFallback: React.FC = () => (
   <div className="flex h-[400px] w-full flex-col items-center justify-center gap-3">
@@ -207,13 +209,15 @@ function AppContent() {
     const cleanId = q.replace(/^#/, '');
 
     // Check for exact Member ID / Lead ID / Barcode / Package Barcode match first
+    const compactId = cleanId.replace(/\s|-/g, '');
     const exactIdMatches = clients.filter(c => {
       const mId = (c.memberId || '').toString().toLowerCase().trim();
       const lId = ((c as any).leadId || '').toString().toLowerCase().trim();
       const bCode = (c.barcode || '').toString().toLowerCase().trim();
       const secBarcodes = Array.isArray(c.secondaryBarcodes) ? c.secondaryBarcodes.map(b => String(b).toLowerCase().trim()) : [];
       const pkgBarcodes = Array.isArray(c.packages) ? c.packages.map(p => String(p.barcode || '').toLowerCase().trim()).filter(Boolean) : [];
-      return mId === cleanId || lId === cleanId || bCode === cleanId || secBarcodes.includes(cleanId) || pkgBarcodes.includes(cleanId);
+      const allIds = [mId, lId, bCode, ...secBarcodes, ...pkgBarcodes].filter(Boolean);
+      return allIds.some(id => id === cleanId || id.replace(/\s|-/g, '') === compactId);
     });
 
     if (exactIdMatches.length > 0) {
@@ -228,7 +232,7 @@ function AppContent() {
       return;
     }
 
-    const isShortMemberIdQuery = /^\d{1,6}$/.test(cleanId) && !cleanId.startsWith('01');
+    const isShortMemberIdQuery = isShortMemberIdSearchTerm(cleanId);
 
     const matches = clients
       .filter(c => (c.status || '').toLowerCase().trim() !== 'merged' && !(c as any).mergedInto)
@@ -920,6 +924,12 @@ function AppContent() {
       show: (features.quotes !== false) && canUseQuoteGenerator
     },
     {
+      id: 'corporate-accounts',
+      label: 'Corporate Deals',
+      icon: Building2,
+      show: isManagerOrSama || canAny(['packages.view', 'packages.manage', 'payments.create'])
+    },
+    {
       id: 'operations',
       label: t('nav.operations'),
       icon: Coffee,
@@ -974,7 +984,7 @@ function AppContent() {
     if (['clients', 'leads', 'nutrition', 'tasks'].includes(id)) {
       return 'PEOPLE';
     }
-    if (['payments', 'bookings', 'quotes', 'reports', 'advanced-reports'].includes(id)) {
+    if (['payments', 'bookings', 'quotes', 'corporate-accounts', 'reports', 'advanced-reports'].includes(id)) {
       return 'FINANCE';
     }
     return 'MANAGEMENT';
@@ -1564,6 +1574,14 @@ function AppContent() {
                 <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <UnconfirmedMemberships />
               </React.Suspense>
+              </TabsContent>
+            )}
+
+            {(isManagerOrSama || canAny(['packages.view', 'packages.manage', 'payments.create'])) && (
+              <TabsContent value="corporate-accounts" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
+                  <CorporateAccountManager />
+                </React.Suspense>
               </TabsContent>
             )}
 

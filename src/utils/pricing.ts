@@ -35,6 +35,8 @@ export interface PricingInput {
   amountPaid?: number;
   /** Credit from previous package payment in upgrade flow (>= 0). */
   upgradeCredit?: number;
+  /** Mandatory reason / justification text when applying a discount. */
+  discountReasonText?: string;
 }
 
 export interface PricingResult {
@@ -50,6 +52,8 @@ export interface PricingResult {
   discountValue: number;
   /** Computed discount amount (>= 0). */
   discountAmount: number;
+  /** Discount reason text if applied. */
+  discountReasonText?: string;
   /** Net amount due after discount. */
   netAmount: number;
   /** Actual money collected. */
@@ -89,6 +93,7 @@ export function calculatePricing(input: PricingInput): PricingResult {
     discountType: 'none',
     discountValue: 0,
     discountAmount: 0,
+    discountReasonText: input?.discountReasonText?.trim() || undefined,
     netAmount: 0,
     amountPaid: 0,
     remainingBalance: 0,
@@ -186,6 +191,16 @@ export function calculatePricing(input: PricingInput): PricingResult {
   result.amountPaid = amountPaid;
 
   result.remainingBalance = roundCurrency(Math.max(0, netAmount - amountPaid));
+
+  if (discountType !== 'none' && discountAmount > 0) {
+    const reasonText = input.discountReasonText?.trim();
+    if (!reasonText || reasonText.length < 3) {
+      result.valid = false;
+      result.error = 'Discount reason is mandatory when applying a discount.';
+      return result;
+    }
+  }
+
   result.valid = true;
   return result;
 }

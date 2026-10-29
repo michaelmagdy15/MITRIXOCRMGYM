@@ -409,6 +409,11 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
             const memberIdSnap = await getDocs(qMemberId);
             if (active) memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
           } catch {}
+          try {
+            const qBarcode = query(collection(db, 'clients'), where('barcode', 'in', idStringVariants));
+            const barcodeSnap = await getDocs(qBarcode);
+            if (active) barcodeSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          } catch {}
         }
 
         if (/^\d+$/.test(cleanIdTerm)) {
@@ -447,6 +452,17 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         if (/^[qcpo](?:\d*)?$/i.test(compactIdTerm)) {
           const upperPrefix = compactIdTerm.toUpperCase();
           const lowerPrefix = compactIdTerm.toLowerCase();
+          if (isSinglePrefixLetter) {
+            try {
+              const qCodePrefix = query(
+                collection(db, 'clients'),
+                where('memberCodePrefix', '==', upperPrefix),
+                limit(500)
+              );
+              const codePrefixSnap = await getDocs(qCodePrefix);
+              if (active) codePrefixSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+            } catch {}
+          }
           for (const prefixVariant of Array.from(new Set([upperPrefix, lowerPrefix]))) {
             try {
               const qPrefix = query(

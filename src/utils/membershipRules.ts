@@ -15,6 +15,13 @@
 import { Client, Package } from '../types';
 import { isTenantInzan } from './inzanOrg';
 import { getTenantId } from '../firebase';
+import {
+  validateMemberIdCompliance,
+  type MemberComplianceInput,
+  type MemberComplianceResult
+} from './nationalIdCompliance';
+
+export { validateMemberIdCompliance, type MemberComplianceInput, type MemberComplianceResult };
 
 export interface MembershipValidationResult {
   allowed: boolean;
@@ -136,6 +143,7 @@ export function isAcademyOrExemptPackage(
  */
 export function isClientUnder16OrJunior(client?: Client | null): boolean {
   if (!client) return false;
+  if ((client as any).isUnder16 === true) return true;
   
   // 1. Check memberCategory
   const cat = (client.memberCategory || '').toLowerCase();
@@ -397,4 +405,74 @@ export function validateFreezeDurationLimits(
   }
 
   return { allowed: true };
+}
+
+export interface MembershipComplianceAssertionResult {
+  compliant: boolean;
+  allowed: boolean;
+  missingFields: string[];
+  errors: string[];
+  reason?: string;
+}
+
+export class MembershipComplianceError extends Error {
+  missingFields: string[];
+  errors: string[];
+
+  constructor(message: string, missingFields: string[] = [], errors: string[] = []) {
+    super(message);
+    this.name = 'MembershipComplianceError';
+    this.missingFields = missingFields;
+    this.errors = errors;
+  }
+}
+
+/**
+ * Asserts / validates National ID and document upload compliance on memberships.
+ * Enforced on all new memberships ('new') and renewals ('renewal').
+ * Kids under 16 (where national ID may not be issued yet, or birth certificate used)
+ * can use birth certificate or guardian's national ID with flag `isUnder16`.
+ */
+export function assertMembershipCompliance(
+  member: MemberComplianceInput | Client | null | undefined,
+  actionType: 'new' | 'renewal' | string,
+  options?: { throwOnError?: boolean }
+): MembershipComplianceAssertionResult {
+  // If not 'new' or 'renewal', National ID compliance check is bypassed
+  if (actionType !== 'new' && actionType !== 'renewal') {
+    return {
+      compliant: true,
+      allowed: true,
+      missingFields: [],
+      errors: []
+    };
+  }
+
+  const isUnder16 = Boolean(
+    (member as any)?.isUnder16 === true ||
+    isClientUnder16OrJunior(member as Client)
+  );
+
+  const compliance = validateMemberIdCompliance({
+    ...(member || {}),
+    isUnder16
+  });
+
+  const result: MembershipComplianceAssertionResult = {
+    compliant: compliance.compliant,
+    allowed: compliance.compliant,
+    missingFields: compliance.missingFields,
+    errors: compliance.errors,
+    reason: compliance.errors.length > 0 ? compliance.errors.join('; ') : undefined
+  };
+
+  if (options?.throwOnError && !result.compliant) {
+    throw new MembershipComplianceError(
+      result.reason || 'Membership National ID compliance validation failed.',
+      result.missingFields,
+      result.errors
+    );
+  }
+
+  return result;
 }

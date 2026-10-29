@@ -494,8 +494,29 @@ export interface Payment {
   linkedEntitlementId?: string; // Link to an entitlement record
   corporateProofUrl?: string; // Attachment URL for corporate discount verification
   discountReason?: string; // Reason or category of discount (Corporate, Referral, Promotional)
+  discountExplanation?: string; // Mandatory explanation to the team why the discount was applied
+  discountReasonText?: string; // Mandatory written justification for applied discount
+  corporateCompanyId?: string; // Linked Corporate Company ID (e.g. corp-cib)
+  corporateCompanyName?: string; // Linked Corporate Company Name (e.g. CIB)
   /** Client-generated idempotency key. If a payment with this key exists, the transaction is not re-run. */
   operationId?: string;
+}
+
+export interface CorporateCompany {
+  id: string;
+  name: string;
+  code: string; // e.g. 'CIB'
+  active: boolean;
+  discountType: 'percentage' | 'amount';
+  discountValue: number;
+  extraMonths: number;
+  extraDays: number;
+  extraFreezeDays: number;
+  extraFreePtSessions: number;
+  extraInvitations: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type Gender = 'Male' | 'Female' | 'Other' | 'Prefer not to say';
@@ -610,10 +631,25 @@ export interface Client {
   paid?: boolean;
   createdAt?: string; // ISO string — set on creation, used for sorting
   nationalId?: string;
+  nationalIdPhotoUrl?: string; // Uploaded scanned image of the member's National ID
+  nationalIdScanUrl?: string; // Uploaded scanned image of the member's National ID
+  guardianNationalId?: string; // Guardian's Egyptian National ID for junior / under-16 members
+  guardianNationalIdScanUrl?: string; // Uploaded scanned image of Guardian's National ID
+  birthCertificateScanUrl?: string; // Uploaded scanned copy of birth certificate for under-16 members
+  isUnder16?: boolean; // Flag indicating member is under 16 years of age
+  corporateCompanyId?: string; // Corporate partnership ID (e.g. corp-cib)
+  corporateCompanyName?: string; // Corporate partnership name (e.g. CIB)
+  memberCodePrefix?: string; // Q, C, P, O prefix code
+  memberCodeGroup?: string; // Full label for Q/C/P/O group
   email?: string;
   backupPhone?: string;
   isBlacklisted?: boolean;
   photoURL?: string;
+  photoStatus?: 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED';
+  pendingPhotoURL?: string; // Uploaded photo awaiting admin moderation
+  pendingPhotoUploadedAt?: string;
+  photoModerationStatus?: 'pending' | 'approved' | 'rejected';
+  photoRejectionReason?: string;
   advertisingSource?: string;
   country?: string;
   city?: string;
@@ -890,6 +926,7 @@ export interface FeatureFlags {
   turnstileGateControl?: boolean;
   repLocking?: boolean;
   corporateDiscounts?: boolean;
+  photoComplianceAlerts?: boolean;
   // Premium Tier Modules
   callCenter?: boolean;
   lostAndFound?: boolean;
@@ -1101,4 +1138,6 @@ export interface StorefrontConfig {
   ctaTextMember: string;
   branchLocations?: BranchLocation[];
 }
+
+export * from './types/corporate';
 

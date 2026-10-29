@@ -1,7 +1,15 @@
 import React, { useState, useDeferredValue, useRef } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
-import { ASSIGNABLE_ROLES, isAssignableSalesUser, toCanonical } from './constants';
+import {
+  ASSIGNABLE_ROLES,
+  isAssignableSalesUser,
+  toCanonical,
+  getInzanMemberCodeMeta,
+  isShortMemberIdSearchTerm,
+  INZAN_MEMBER_CODE_GROUPS,
+  InzanMemberCodePrefix,
+} from './constants';
 import { useOperationId } from './hooks/useOperationId';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,7 +46,17 @@ import { matchesPhoneSearch } from './utils/phoneUtils';
 import { scoreNameMatch } from './utils/fuzzyNameSearch';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { calculatePricing, DiscountType, DiscountReason, formatCurrencyAmount } from './utils/pricing';
-import PricingDiscountControls, { PricingControlsState, DEFAULT_PRICING_STATE } from './components/PricingDiscountControls';
+import PricingDiscountControls, { PricingControlsState, DEFAULT_PRICING_STATE, validateDiscountJustification } from './components/PricingDiscountControls';
+import { useCorporateCompanies, CorporateDealsManagerModal } from './components/CorporateDealsManager';
+import { NationalIdVerificationControl, CorporateDealSelector } from './components/NationalIdVerificationControl';
+import { PhotoComplianceHub } from './components/PhotoComplianceHub';
+import {
+  validateEgyptPhone,
+  validateMemberName,
+  validateMemberNationalIdAndScan,
+  getMemberNationalIdScanUrl,
+} from './utils/validationRules';
+import { Building2 } from 'lucide-react';
 import { InzanMemberShow } from './components/InzanMemberShow';
 import { AdjustPackageDatesDialog, canOverridePackageDates } from './components/AdjustPackageDatesDialog';
 import { addAuditLog } from './services/auditService';
@@ -364,6 +382,12 @@ export default function Clients() {
   const [enrollReceiptSerial, setEnrollReceiptSerial] = useState('');
   const [enrollNotes, setEnrollNotes] = useState('');
   const [enrollPricing, setEnrollPricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
+  const [newMemberNationalId, setNewMemberNationalId] = useState('');
+  const [newMemberIdScanUrl, setNewMemberIdScanUrl] = useState('');
+  const [newMemberCorporateId, setNewMemberCorporateId] = useState('');
+  const { companies: corporateCompanies } = useCorporateCompanies();
+  const [isCorporateManagerOpen, setIsCorporateManagerOpen] = useState(false);
+  const [filterCorporate, setFilterCorporate] = useState('All');
   const canApplyDiscount = can('payments.apply_discount') || isManagerOrSama || (isInzanTenant && (currentUser?.role === 'admin' || currentUser?.role === 'manager' || currentUser?.role === 'super_admin'));
 
   const [upgradeDialogClientId, setUpgradeDialogClientId] = useState<string | null>(null);
@@ -373,6 +397,9 @@ export default function Clients() {
   const [upgradeInstapayRef, setUpgradeInstapayRef] = useState('');
   const [upgradeSalesRep, setUpgradeSalesRep] = useState('unassigned');
   const [upgradePricing, setUpgradePricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
+  const [upgradeNationalId, setUpgradeNationalId] = useState('');
+  const [upgradeIdScanUrl, setUpgradeIdScanUrl] = useState('');
+  const [upgradeCorporateId, setUpgradeCorporateId] = useState('');
 
   const [renewDialogClientId, setRenewDialogClientId] = useState<string | null>(null);
   const [renewPkgName, setRenewPkgName] = useState('');
@@ -381,6 +408,9 @@ export default function Clients() {
   const [renewInstapayRef, setRenewInstapayRef] = useState('');
   const [renewSalesRep, setRenewSalesRep] = useState('unassigned');
   const [renewPricing, setRenewPricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
+  const [renewNationalId, setRenewNationalId] = useState('');
+  const [renewIdScanUrl, setRenewIdScanUrl] = useState('');
+  const [renewCorporateId, setRenewCorporateId] = useState('');
 
   // Add Package & Record Payment dialog for existing members
   const [addPackageDialogClientId, setAddPackageDialogClientId] = useState<string | null>(null);
@@ -394,6 +424,9 @@ export default function Clients() {
   const [addPackageNotes, setAddPackageNotes] = useState('');
   const [addPackageRecordPayment, setAddPackageRecordPayment] = useState(true);
   const [addPackagePricing, setAddPackagePricing] = useState<PricingControlsState>(DEFAULT_PRICING_STATE);
+  const [addPackageNationalId, setAddPackageNationalId] = useState('');
+  const [addPackageIdScanUrl, setAddPackageIdScanUrl] = useState('');
+  const [addPackageCorporateId, setAddPackageCorporateId] = useState('');
 
   // Stable operation ids for payment flows (reset when each dialog opens)
   const { operationId: newMemberOperationId, resetOperationId: resetNewMemberOperationId } = useOperationId();
@@ -406,21 +439,64 @@ export default function Clients() {
   React.useEffect(() => { if (renewDialogClientId) resetRenewOperationId(); }, [renewDialogClientId, resetRenewOperationId]);
   React.useEffect(() => { if (addPackageDialogClientId) resetAddPackageOperationId(); }, [addPackageDialogClientId, resetAddPackageOperationId]);
 
+  const applyCorporateDealToPricing = (
+    comp: { id: string; name: string; code: string; discountType: 'percentage' | 'amount'; discountValue: number } | null,
+    setPricing: React.Dispatch<React.SetStateAction<PricingControlsState>>
+  ) => {
+    if (!comp) {
+      setPricing((prev) => ({
+        ...prev,
+        discountType: 'none',
+        discountValue: '',
+        discountReason: 'Standard',
+        discountExplanation: '',
+        corporateCompanyId: '',
+        corporateCompanyName: '',
+      }));
+      return;
+    }
+    setPricing((prev) => ({
+      ...prev,
+      discountType: comp.discountValue > 0 ? comp.discountType : 'none',
+      discountValue: comp.discountValue > 0 ? String(comp.discountValue) : '',
+      discountReason: 'Corporate',
+      discountExplanation: `Corporate Account Deal: ${comp.code} (${comp.name})`,
+      corporateCompanyId: comp.id,
+      corporateCompanyName: comp.code || comp.name,
+    }));
+  };
+
   React.useEffect(() => {
     if (renewDialogClientId) {
       const c = clients.find(cl => cl.id === renewDialogClientId);
       const rep = c?.assignedTo || c?.salesRep;
       if (rep && rep !== 'unassigned') setRenewSalesRep(rep);
+      setRenewNationalId(c?.nationalId || '');
+      setRenewIdScanUrl(getMemberNationalIdScanUrl(c));
+      const cCorpId = c?.corporateCompanyId || '';
+      setRenewCorporateId(cCorpId);
+      if (cCorpId) {
+        const comp = corporateCompanies.find(co => co.id === cCorpId) || null;
+        if (comp) applyCorporateDealToPricing(comp, setRenewPricing);
+      }
     }
-  }, [renewDialogClientId, clients]);
+  }, [renewDialogClientId, clients, corporateCompanies]);
 
   React.useEffect(() => {
     if (upgradeDialogClientId) {
       const c = clients.find(cl => cl.id === upgradeDialogClientId);
       const rep = c?.assignedTo || c?.salesRep;
       if (rep && rep !== 'unassigned') setUpgradeSalesRep(rep);
+      setUpgradeNationalId(c?.nationalId || '');
+      setUpgradeIdScanUrl(getMemberNationalIdScanUrl(c));
+      const cCorpId = c?.corporateCompanyId || '';
+      setUpgradeCorporateId(cCorpId);
+      if (cCorpId) {
+        const comp = corporateCompanies.find(co => co.id === cCorpId) || null;
+        if (comp) applyCorporateDealToPricing(comp, setUpgradePricing);
+      }
     }
-  }, [upgradeDialogClientId, clients]);
+  }, [upgradeDialogClientId, clients, corporateCompanies]);
 
   React.useEffect(() => {
     if (addPackageDialogClientId) {
@@ -431,8 +507,16 @@ export default function Clients() {
       if (existingCoach && existingCoach !== 'unassigned') {
         setAddPackageCoachName(existingCoach);
       }
+      setAddPackageNationalId(c?.nationalId || '');
+      setAddPackageIdScanUrl(getMemberNationalIdScanUrl(c));
+      const cCorpId = c?.corporateCompanyId || '';
+      setAddPackageCorporateId(cCorpId);
+      if (cCorpId) {
+        const comp = corporateCompanies.find(co => co.id === cCorpId) || null;
+        if (comp) applyCorporateDealToPricing(comp, setAddPackagePricing);
+      }
     }
-  }, [addPackageDialogClientId, clients]);
+  }, [addPackageDialogClientId, clients, corporateCompanies]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [idSearchTerm, setIdSearchTerm] = useState('');
@@ -501,14 +585,48 @@ export default function Clients() {
     }
   }, [activeTab, searchTerm, idSearchTerm, searchQuery, fetchExpiredMembers]);
 
+  const buildPackageWithCorporateDeal = (basePkg: any, corporateId?: string) => {
+    if (!basePkg || !corporateId) return basePkg;
+    const comp = corporateCompanies.find((c) => c.id === corporateId);
+    if (!comp) return basePkg;
+    const extraDaysTotal = (Number(comp.extraMonths || 0) * 30) + Number(comp.extraDays || 0);
+    const baseFreeze = Number(basePkg.freezeAllowanceDays ?? basePkg.benefits?.freezeAllowanceDays ?? 0);
+    const baseFreePt = Number(basePkg.freePtSessions ?? basePkg.benefits?.freePtSessions ?? 0);
+    const baseInvites = Number(basePkg.guestInvitations ?? basePkg.benefits?.guestInvitations ?? 0);
+
+    return {
+      ...basePkg,
+      expiryDays: (Number(basePkg.expiryDays) || 30) + extraDaysTotal,
+      freezeAllowanceDays: baseFreeze + Number(comp.extraFreezeDays || 0),
+      freePtSessions: baseFreePt + Number(comp.extraFreePtSessions || 0),
+      guestInvitations: baseInvites + Number(comp.extraInvitations || 0),
+      benefits: {
+        ...(basePkg.benefits || {}),
+        freezeAllowanceDays: baseFreeze + Number(comp.extraFreezeDays || 0),
+        freePtSessions: baseFreePt + Number(comp.extraFreePtSessions || 0),
+        guestInvitations: baseInvites + Number(comp.extraInvitations || 0),
+      },
+    };
+  };
+
   const handleAddMember = async () => {
-    if (!newMemberName || newMemberName.trim().length < 2) {
-      alert('Please enter a valid member name (at least 2 characters).');
+    const nameCheck = validateMemberName(newMemberName);
+    if (!nameCheck.valid) {
+      alert(nameCheck.error || 'Please enter a valid member name (at least 2 characters).');
       return;
     }
-    if (!newMemberPhone || newMemberPhone.trim().length < 10) {
-      alert('Please enter a valid phone number (at least 10 digits).');
+    const phoneCheck = validateEgyptPhone(newMemberPhone);
+    if (!phoneCheck.valid) {
+      alert(phoneCheck.error || 'Please enter a valid 11-digit Egyptian mobile number.');
       return;
+    }
+
+    if (isInzanTenant) {
+      const idCheck = validateMemberNationalIdAndScan(null, newMemberNationalId, newMemberIdScanUrl);
+      if (!idCheck.valid) {
+        alert(idCheck.error);
+        return;
+      }
     }
     
     if (!isInzanTenant && (newMemberCategory?.toLowerCase().includes('kids') || newMemberCategory?.toLowerCase().includes('junior')) && newMemberBranch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(newMemberBranch))) {
@@ -525,13 +643,22 @@ export default function Clients() {
         alert('Please enter a valid 12-digit Instapay reference number.');
         return;
       }
+      const discCheck = validateDiscountJustification(enrollPricing);
+      if (!discCheck.valid) {
+        alert(discCheck.error);
+        return;
+      }
     }
     
     try {
+      const selectedCorp = corporateCompanies.find(c => c.id === newMemberCorporateId) || null;
+      const initialDocs = newMemberIdScanUrl
+        ? [{ id: `doc-${Date.now()}`, name: 'National ID Scan', url: newMemberIdScanUrl, uploadDate: new Date().toISOString() }]
+        : [];
       const targetClientId = await addClient({
         id: Math.random().toString(36).substr(2, 9),
-        name: newMemberName,
-        phone: newMemberPhone,
+        name: nameCheck.normalized || newMemberName.trim(),
+        phone: phoneCheck.normalized || newMemberPhone.trim(),
         status: 'Active',
         branch: newMemberBranch || undefined,
         stage: 'Converted',
@@ -542,16 +669,23 @@ export default function Clients() {
         linkedAccount: newMemberLinked || undefined,
         gender: newMemberGender,
         memberCategory: newMemberCategory,
+        nationalId: newMemberNationalId ? newMemberNationalId.trim() : undefined,
+        nationalIdPhotoUrl: newMemberIdScanUrl || undefined,
+        documents: initialDocs.length > 0 ? initialDocs : undefined,
+        corporateCompanyId: selectedCorp?.id || undefined,
+        corporateCompanyName: selectedCorp ? (selectedCorp.code || selectedCorp.name) : undefined,
       });
 
       if (enrollInPackage && targetClientId) {
-        const pkg = packages.find(p => p.name === enrollPackageName);
-        const grossAmount = enrollAmount ? parseFloat(enrollAmount) : (pkg ? pkg.price : 0);
+        const rawPkg = packages.find(p => p.name === enrollPackageName);
+        const pkg = buildPackageWithCorporateDeal(rawPkg, newMemberCorporateId);
+        const grossAmount = enrollAmount ? parseFloat(enrollAmount) : (rawPkg ? rawPkg.price : 0);
         const enrollPricingResult = calculatePricing({
           grossAmount,
           discountType: enrollPricing.discountType,
           discountValue: enrollPricing.discountValue ? Number(enrollPricing.discountValue) : undefined,
           amountPaid: enrollPricing.amountPaid ? Number(enrollPricing.amountPaid) : undefined,
+          discountReasonText: enrollPricing.discountReasonText || enrollPricing.discountExplanation,
         });
         if (!enrollPricingResult.valid) {
           throw new Error(enrollPricingResult.error || 'Invalid pricing');
@@ -569,7 +703,7 @@ export default function Clients() {
 
         await processPaymentTransaction({
           clientId: targetClientId,
-          clientName: newMemberName,
+          clientName: nameCheck.normalized || newMemberName.trim(),
           clientBranch: newMemberBranch,
           clientStatus: 'Active',
           amount: enrollPricingResult.netAmount,
@@ -596,6 +730,10 @@ export default function Clients() {
           discountValue: enrollPricing.discountType === 'none' ? undefined : Number(enrollPricing.discountValue),
           discountedAmount: enrollPricingResult.netAmount,
           discountReason: enrollPricing.discountReason !== 'Standard' ? enrollPricing.discountReason : undefined,
+          discountReasonText: enrollPricing.discountType !== 'none' ? (enrollPricing.discountReasonText || enrollPricing.discountExplanation) : undefined,
+          discountExplanation: enrollPricing.discountType !== 'none' ? (enrollPricing.discountExplanation || enrollPricing.discountReasonText) : undefined,
+          corporateCompanyId: selectedCorp?.id || undefined,
+          corporateCompanyName: selectedCorp ? (selectedCorp.code || selectedCorp.name) : undefined,
           operationId: newMemberOperationId,
         });
       }
@@ -608,6 +746,9 @@ export default function Clients() {
       setNewMemberLinked(false);
       setNewMemberGender('Male');
       setNewMemberCategory('Adults');
+      setNewMemberNationalId('');
+      setNewMemberIdScanUrl('');
+      setNewMemberCorporateId('');
       setEnrollInPackage(false);
       setEnrollPackageName('');
       setEnrollStartDate(format(new Date(), 'yyyy-MM-dd'));
@@ -679,13 +820,45 @@ export default function Clients() {
       return;
     }
 
+    if (isInzanTenant) {
+      const idCheck = validateMemberNationalIdAndScan(client, upgradeNationalId, upgradeIdScanUrl);
+      if (!idCheck.valid) {
+        alert(idCheck.error);
+        return;
+      }
+    }
+
+    const discCheck = validateDiscountJustification(upgradePricing);
+    if (!discCheck.valid) {
+      alert(discCheck.error);
+      return;
+    }
+
     try {
+      const selectedCorp = corporateCompanies.find(c => c.id === upgradeCorporateId) || null;
+      const effectivePkg = buildPackageWithCorporateDeal(pkg, upgradeCorporateId);
+      const clientMetaUpdates: any = {};
+      if (upgradeNationalId && upgradeNationalId !== client.nationalId) {
+        clientMetaUpdates.nationalId = upgradeNationalId.trim();
+      }
+      if (upgradeIdScanUrl && upgradeIdScanUrl !== client.nationalIdPhotoUrl) {
+        clientMetaUpdates.nationalIdPhotoUrl = upgradeIdScanUrl;
+      }
+      if (selectedCorp) {
+        clientMetaUpdates.corporateCompanyId = selectedCorp.id;
+        clientMetaUpdates.corporateCompanyName = selectedCorp.code || selectedCorp.name;
+      }
+      if (Object.keys(clientMetaUpdates).length > 0) {
+        await updateClient(client.id, clientMetaUpdates);
+      }
+
       const upgradePricingResult = calculatePricing({
         grossAmount,
         upgradeCredit,
         discountType: upgradePricing.discountType,
         discountValue: upgradePricing.discountValue ? Number(upgradePricing.discountValue) : undefined,
         amountPaid: upgradePricing.amountPaid ? Number(upgradePricing.amountPaid) : undefined,
+        discountReasonText: upgradePricing.discountReasonText || upgradePricing.discountExplanation,
       });
       if (!upgradePricingResult.valid) {
         throw new Error(upgradePricingResult.error || 'Invalid pricing');
@@ -710,13 +883,17 @@ export default function Clients() {
         recordedByName: currentUser?.name || '',
         paymentDate: safeIsoDate(upgradeStartDate, true),
         startDate: safeIsoDate(upgradeStartDate, true),
-        systemPackage: pkg,
+        systemPackage: effectivePkg,
         previousPackageName: prevActive?.packageName || client.packageType,
         isUpgradePayment: true,
         discountType: upgradePricing.discountType === 'none' ? undefined : upgradePricing.discountType,
         discountValue: upgradePricing.discountType === 'none' ? undefined : Number(upgradePricing.discountValue),
         discountedAmount: upgradePricingResult.netAmount,
         discountReason: upgradePricing.discountReason !== 'Standard' ? upgradePricing.discountReason : undefined,
+        discountReasonText: upgradePricing.discountType !== 'none' ? (upgradePricing.discountReasonText || upgradePricing.discountExplanation) : undefined,
+        discountExplanation: upgradePricing.discountType !== 'none' ? (upgradePricing.discountExplanation || upgradePricing.discountReasonText) : undefined,
+        corporateCompanyId: selectedCorp?.id || undefined,
+        corporateCompanyName: selectedCorp ? (selectedCorp.code || selectedCorp.name) : undefined,
         operationId: upgradeOperationId,
       });
 
@@ -781,12 +958,44 @@ export default function Clients() {
       return;
     }
 
+    if (isInzanTenant) {
+      const idCheck = validateMemberNationalIdAndScan(client, renewNationalId, renewIdScanUrl);
+      if (!idCheck.valid) {
+        alert(idCheck.error);
+        return;
+      }
+    }
+
+    const discCheck = validateDiscountJustification(renewPricing);
+    if (!discCheck.valid) {
+      alert(discCheck.error);
+      return;
+    }
+
     try {
+      const selectedCorp = corporateCompanies.find(c => c.id === renewCorporateId) || null;
+      const effectivePkg = buildPackageWithCorporateDeal(pkg, renewCorporateId);
+      const clientMetaUpdates: any = {};
+      if (renewNationalId && renewNationalId !== client.nationalId) {
+        clientMetaUpdates.nationalId = renewNationalId.trim();
+      }
+      if (renewIdScanUrl && renewIdScanUrl !== client.nationalIdPhotoUrl) {
+        clientMetaUpdates.nationalIdPhotoUrl = renewIdScanUrl;
+      }
+      if (selectedCorp) {
+        clientMetaUpdates.corporateCompanyId = selectedCorp.id;
+        clientMetaUpdates.corporateCompanyName = selectedCorp.code || selectedCorp.name;
+      }
+      if (Object.keys(clientMetaUpdates).length > 0) {
+        await updateClient(client.id, clientMetaUpdates);
+      }
+
       const renewPricingResult = calculatePricing({
         grossAmount,
         discountType: renewPricing.discountType,
         discountValue: renewPricing.discountValue ? Number(renewPricing.discountValue) : undefined,
         amountPaid: renewPricing.amountPaid ? Number(renewPricing.amountPaid) : undefined,
+        discountReasonText: renewPricing.discountReasonText || renewPricing.discountExplanation,
       });
       if (!renewPricingResult.valid) {
         throw new Error(renewPricingResult.error || 'Invalid pricing');
@@ -811,7 +1020,7 @@ export default function Clients() {
         recordedByName: currentUser?.name || '',
         paymentDate: safeIsoDate(renewStartDate, true),
         startDate: safeIsoDate(renewStartDate, true),
-        systemPackage: pkg,
+        systemPackage: effectivePkg,
         previousPackageName: pkg.name,
         isRenewal: true,
         isUpgradePayment: false,
@@ -819,6 +1028,10 @@ export default function Clients() {
         discountValue: renewPricing.discountType === 'none' ? undefined : Number(renewPricing.discountValue),
         discountedAmount: renewPricingResult.netAmount,
         discountReason: renewPricing.discountReason !== 'Standard' ? renewPricing.discountReason : undefined,
+        discountReasonText: renewPricing.discountType !== 'none' ? (renewPricing.discountReasonText || renewPricing.discountExplanation) : undefined,
+        discountExplanation: renewPricing.discountType !== 'none' ? (renewPricing.discountExplanation || renewPricing.discountReasonText) : undefined,
+        corporateCompanyId: selectedCorp?.id || undefined,
+        corporateCompanyName: selectedCorp ? (selectedCorp.code || selectedCorp.name) : undefined,
         operationId: renewOperationId,
       });
     } catch (error) {
@@ -877,13 +1090,47 @@ export default function Clients() {
         ? (selectedAddCoach?.name || addPackageCoachName)
         : undefined;
 
+    if (isInzanTenant) {
+      const idCheck = validateMemberNationalIdAndScan(client, addPackageNationalId, addPackageIdScanUrl);
+      if (!idCheck.valid) {
+        alert(idCheck.error);
+        return;
+      }
+    }
+
+    if (addPackageRecordPayment) {
+      const discCheck = validateDiscountJustification(addPackagePricing);
+      if (!discCheck.valid) {
+        alert(discCheck.error);
+        return;
+      }
+    }
+
     try {
+      const selectedCorp = corporateCompanies.find(c => c.id === addPackageCorporateId) || null;
+      const effectivePkg = buildPackageWithCorporateDeal(pkg, addPackageCorporateId);
+      const clientMetaUpdates: any = {};
+      if (addPackageNationalId && addPackageNationalId !== client.nationalId) {
+        clientMetaUpdates.nationalId = addPackageNationalId.trim();
+      }
+      if (addPackageIdScanUrl && addPackageIdScanUrl !== client.nationalIdPhotoUrl) {
+        clientMetaUpdates.nationalIdPhotoUrl = addPackageIdScanUrl;
+      }
+      if (selectedCorp) {
+        clientMetaUpdates.corporateCompanyId = selectedCorp.id;
+        clientMetaUpdates.corporateCompanyName = selectedCorp.code || selectedCorp.name;
+      }
+      if (Object.keys(clientMetaUpdates).length > 0) {
+        await updateClient(client.id, clientMetaUpdates);
+      }
+
       if (addPackageRecordPayment) {
         const addPackagePricingResult = calculatePricing({
           grossAmount,
           discountType: addPackagePricing.discountType,
           discountValue: addPackagePricing.discountValue ? Number(addPackagePricing.discountValue) : undefined,
           amountPaid: addPackagePricing.amountPaid ? Number(addPackagePricing.amountPaid) : undefined,
+          discountReasonText: addPackagePricing.discountReasonText || addPackagePricing.discountExplanation,
         });
         if (!addPackagePricingResult.valid) {
           throw new Error(addPackagePricingResult.error || 'Invalid pricing');
@@ -911,7 +1158,7 @@ export default function Clients() {
           recordedByName: currentUser?.name || '',
           paymentDate: safeIsoDate(addPackageStartDate, true),
           startDate: safeIsoDate(addPackageStartDate, true),
-          systemPackage: pkg,
+          systemPackage: effectivePkg,
           previousPackageName: isAlreadyActive ? pkg.name : undefined,
           isRenewal: isAlreadyActive,
           isUpgradePayment: false,
@@ -919,6 +1166,10 @@ export default function Clients() {
           discountValue: addPackagePricing.discountType === 'none' ? undefined : Number(addPackagePricing.discountValue),
           discountedAmount: addPackagePricingResult.netAmount,
           discountReason: addPackagePricing.discountReason !== 'Standard' ? addPackagePricing.discountReason : undefined,
+          discountReasonText: addPackagePricing.discountType !== 'none' ? (addPackagePricing.discountReasonText || addPackagePricing.discountExplanation) : undefined,
+          discountExplanation: addPackagePricing.discountType !== 'none' ? (addPackagePricing.discountExplanation || addPackagePricing.discountReasonText) : undefined,
+          corporateCompanyId: selectedCorp?.id || undefined,
+          corporateCompanyName: selectedCorp ? (selectedCorp.code || selectedCorp.name) : undefined,
           operationId: addPackageOperationId,
         });
       } else {
@@ -1745,6 +1996,7 @@ export default function Clients() {
     const getIdMatchScore = (m: Client, idQuery: string): number => {
       const cleanId = idQuery.toLowerCase().replace(/^#/, '').trim();
       if (!cleanId) return 0;
+      const compactId = cleanId.replace(/\s|-/g, '');
       const mId = (m.memberId || '').toString().toLowerCase().trim();
       const lId = ((m as any).leadId || '').toString().toLowerCase().trim();
       const bCode = (m.barcode || '').toString().toLowerCase().trim();
@@ -1752,8 +2004,15 @@ export default function Clients() {
       const pkgBarcodes = Array.isArray(m.packages) ? m.packages.map(p => String(p.barcode || '').toLowerCase().trim()).filter(Boolean) : [];
       const allIds = [mId, lId, bCode, ...secBarcodes, ...pkgBarcodes].filter(Boolean);
 
-      if (allIds.some(id => id === cleanId)) return 1000;
-      if (allIds.some(id => id.startsWith(cleanId))) return 500;
+      // Single prefix letter search (Q, C, P, O) matches only members with that memberId prefix
+      if (/^[qcpo]$/.test(compactId)) {
+        if (mId && new RegExp(`^${compactId}\\s*-?\\s*\\d+$`, 'i').test(mId)) return 900;
+        if (secBarcodes.some(id => new RegExp(`^${compactId}\\s*-?\\s*\\d+$`, 'i').test(id))) return 750;
+        return 0;
+      }
+
+      if (allIds.some(id => id === cleanId || id.replace(/\s|-/g, '') === compactId)) return 1000;
+      if (allIds.some(id => id.startsWith(cleanId) || id.replace(/\s|-/g, '').startsWith(compactId))) return 500;
       if (allIds.some(id => id.includes(cleanId))) return 250;
       return 0;
     };
@@ -1774,9 +2033,9 @@ export default function Clients() {
     if (effectiveGeneralSearch && searchMode !== 'id') {
       const term = effectiveGeneralSearch.toLowerCase().trim();
       const cleanId = term.replace(/^#/, '');
-      const isShortNumericIdQuery = /^\d{1,6}$/.test(cleanId) && !cleanId.startsWith('01');
+      const isShortNumericIdQuery = isShortMemberIdSearchTerm(cleanId);
 
-      // Check if any member has an exact ID match for a short numeric query (e.g., 3075)
+      // Check if any member has an exact ID match for a short numeric or prefixed ID query (e.g., 3075, Q1648, C238, P21, O268)
       const hasExactIdMatch = isShortNumericIdQuery && filtered.some(m => getIdMatchScore(m, cleanId) === 1000);
 
       filtered = filtered.filter(m => {
@@ -1859,7 +2118,12 @@ export default function Clients() {
     }
 
     if (deferredFilterCategory && deferredFilterCategory !== 'All') {
-      filtered = filtered.filter(m => getMemberCategory(m) === deferredFilterCategory);
+      if (deferredFilterCategory.startsWith('PREFIX_')) {
+        const prefix = deferredFilterCategory.replace('PREFIX_', '').toUpperCase();
+        filtered = filtered.filter(m => getInzanMemberCodeMeta(m.memberId)?.prefix === prefix);
+      } else {
+        filtered = filtered.filter(m => getMemberCategory(m) === deferredFilterCategory);
+      }
     }
 
     // Coach filter
@@ -2244,6 +2508,15 @@ export default function Clients() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   {getSafeCleanMemberId(client.memberId) && <span className="text-[10px] font-bold text-muted-foreground">#{getSafeCleanMemberId(client.memberId)}</span>}
+                  {(() => {
+                    const codeMeta = getInzanMemberCodeMeta(client.memberId);
+                    if (!codeMeta) return null;
+                    return (
+                      <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 ${codeMeta.badgeClass}`} title={codeMeta.label}>
+                        {codeMeta.prefix} • {codeMeta.shortLabel}
+                      </Badge>
+                    );
+                  })()}
                   <span className="font-semibold text-sm truncate">{client.name}</span>
                   {birthdayClientIds.has(client.id) && <Gift className="h-3.5 w-3.5 text-pink-500 shrink-0" />}
                 </div>
@@ -2361,6 +2634,15 @@ export default function Clients() {
                         Lead #{client.leadId || client.redgitsId}
                       </span>
                     ) : null}
+                    {(() => {
+                      const codeMeta = getInzanMemberCodeMeta(client.memberId);
+                      if (!codeMeta) return null;
+                      return (
+                        <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 ${codeMeta.badgeClass}`} title={codeMeta.label}>
+                          {codeMeta.prefix} • {codeMeta.shortLabel}
+                        </Badge>
+                      );
+                    })()}
                     <span className="font-bold text-sm text-foreground">{client.name}</span>
                     {birthdayClientIds.has(client.id) && (
                       <Gift className="inline-block h-3.5 w-3.5 text-pink-500 shrink-0" />
@@ -2965,19 +3247,30 @@ export default function Clients() {
                   </button>
                 )}
               </div>
-              <div className="relative w-[160px] sm:w-[190px] shrink-0">
+              <div className="relative w-[170px] sm:w-[215px] shrink-0">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-primary select-none">#</span>
                 <Input
-                  placeholder="Search by ID #"
+                  placeholder="ID # (3075, Q, C, P, O)"
+                  title="Search by Member ID or Prefix Code: Q (SGF/Kickboxing), C (Cure Clinic), P (Partners/Family), O (Youth)"
                   className="pl-7 pr-7 h-11 bg-muted/30 border border-primary/20 focus-visible:ring-1 font-mono text-sm"
                   value={idSearchTerm}
-                  onChange={(e) => setIdSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setIdSearchTerm(val);
+                    // Sync with context searchQuery when general search is empty so useClients fetches Firestore IDs on-demand
+                    if (!searchTerm.trim()) {
+                      setSearchQuery(val);
+                    }
+                  }}
                   onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                 />
                 {idSearchTerm && (
                   <button
                     type="button"
-                    onClick={() => setIdSearchTerm('')}
+                    onClick={() => {
+                      setIdSearchTerm('');
+                      if (!searchTerm.trim()) setSearchQuery('');
+                    }}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     title="Clear ID filter"
                   >
@@ -3033,19 +3326,29 @@ export default function Clients() {
             </select>
           </div>
 
-          <div className="w-full md:w-[150px] space-y-1.5">
-            <Label className="text-xs font-semibold text-muted-foreground ml-1">Category</Label>
+          <div className="w-full md:w-[190px] space-y-1.5">
+            <Label className="text-xs font-semibold text-muted-foreground ml-1">Category / Code</Label>
             <select 
               className="flex h-11 w-full items-center justify-between rounded-md bg-muted/30 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring border-none"
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
             >
               <option value="All">All Categories</option>
-              <option value="Kids Only">Kids Only</option>
-              <option value="Kids Pro">Kids Pro</option>
-              <option value="Junior Only">Junior Only</option>
-              <option value="Junior Advanced">Junior Advanced</option>
-              <option value="Adults">Adults</option>
+              {isInzanTenant && (
+                <optgroup label="Member ID Prefix Codes">
+                  <option value="PREFIX_Q">Q — SGF / Kickboxing</option>
+                  <option value="PREFIX_C">C — Cure Clinic (Physio)</option>
+                  <option value="PREFIX_P">P — Partners &amp; Owners Family</option>
+                  <option value="PREFIX_O">O — Youth PT &amp; Classes</option>
+                </optgroup>
+              )}
+              <optgroup label="Age / Tier Categories">
+                <option value="Kids Only">Kids Only</option>
+                <option value="Kids Pro">Kids Pro</option>
+                <option value="Junior Only">Junior Only</option>
+                <option value="Junior Advanced">Junior Advanced</option>
+                <option value="Adults">Adults</option>
+              </optgroup>
             </select>
           </div>
           {/* Assigned Rep filter — sales manager & CRM admin only */}

@@ -643,6 +643,7 @@ export default function Bookings() {
         discountType: bookingPricing.discountType,
         discountValue: bookingPricing.discountValue ? Number(bookingPricing.discountValue) : undefined,
         amountPaid: bookingPricing.amountPaid ? Number(bookingPricing.amountPaid) : undefined,
+        discountReasonText: bookingPricing.discountReasonText || bookingPricing.discountExplanation,
       });
       if (!pricing.valid) {
         setAcceptError(pricing.error || 'Invalid pricing');
@@ -714,6 +715,8 @@ export default function Bookings() {
           discountType: pricing.discountType === 'none' ? undefined : pricing.discountType,
           discountValue: itemDiscountValue,
           discountedAmount: itemNet,
+          discountReason: bookingPricing.discountReason !== 'Standard' ? bookingPricing.discountReason : undefined,
+          discountReasonText: bookingPricing.discountType !== 'none' ? (bookingPricing.discountReasonText || bookingPricing.discountExplanation) : undefined,
           notes: `Storefront booking request approved. Method: ${selectedRequest.paymentMethod}`,
           operationId: acceptOperationId
         });

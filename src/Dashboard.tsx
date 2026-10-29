@@ -69,6 +69,7 @@ import { Textarea } from '@/components/ui/textarea';
 import TodayClassesWidget from './components/dashboard/TodayClassesWidget';
 import InzanDailyRevenueSummary from './components/dashboard/InzanDailyRevenueSummary';
 import { RetentionRadarCard } from './components/dashboard/RetentionRadarCard';
+import { MissingPhotosCard } from './components/MissingPhotosCard';
 import { isTenantInzan } from './utils/inzanOrg';
 import { getTenantId } from './firebase';
 import { getRevenueScopeForUser, isPaymentInRevenueScope, isFrontDeskUser } from './utils/permissions';
@@ -1329,6 +1330,17 @@ export default function Dashboard() {
         onSelectMember={(clientId) => {
           setActiveClientId(clientId);
           setActiveTab('clients');
+        }}
+      />
+
+      <MissingPhotosCard
+        clients={allClients}
+        onSelectMember={(clientId) => {
+          setActiveClientId(clientId);
+          setActiveTab('clients');
+        }}
+        onNavigateToApprovals={() => {
+          setActiveTab('pending-approvals');
         }}
       />
 

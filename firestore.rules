@@ -64,7 +64,9 @@ service cloud.firestore {
     // we need a helper to verify if the requesting user actually owns that client profile.
     function ownsClientProfile(clientId) {
       let clientDoc = get(/databases/$(database)/documents/clients/$(clientId));
-      return clientDoc != null && (clientDoc.data.portalUserId == request.auth.uid || clientDoc.data.memberId == request.auth.uid);
+      let userData = getUserData();
+      return (clientDoc != null && (clientDoc.data.portalUserId == request.auth.uid || clientDoc.data.memberId == request.auth.uid))
+        || (userData != null && (userData.clientDocId == clientId || userData.clientRecordId == clientId));
     }
 
 
@@ -108,8 +110,8 @@ service cloud.firestore {
       allow read: if isOwner(clientId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid) || isStaff();
       allow create: if isStaff();
       allow update: if isStaff() || (
-        (isOwner(clientId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid)) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'portalUserId', 'photoURL', 'expoPushToken', 'fcmToken', 'updatedAt', 'ptAssessmentStatus', 'ptAssessmentRequestedAt', 'guestInvitesRemaining', 'invitationsRemaining', 'invitationsUsed'])
+        (isOwner(clientId) || (isAuthenticated() && resource.data.portalUserId == request.auth.uid) || ownsClientProfile(clientId)) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'portalUserId', 'photoURL', 'pendingPhotoURL', 'pendingPhotoUploadedAt', 'photoModerationStatus', 'photoRejectionReason', 'nationalId', 'nationalIdPhotoUrl', 'expoPushToken', 'fcmToken', 'updatedAt', 'ptAssessmentStatus', 'ptAssessmentRequestedAt', 'guestInvitesRemaining', 'invitationsRemaining', 'invitationsUsed'])
       );
       allow delete: if isManager();
 
@@ -318,12 +320,36 @@ service cloud.firestore {
     }
     match /assignedWorkouts/{workoutId} {
       allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
-      allow create, delete: if isStaff();
+      allow create: if isStaff() || (isAuthenticated() && ownsClientProfile(request.resource.data.clientId));
       allow update: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+      allow delete: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
     }
     match /workoutTemplates/{templateId} {
       allow read: if isAuthenticated();
       allow write: if isStaff();
+    }
+
+    // NUTRITIONIST PROFILES, CONSULTATIONS & SLOT RESERVATIONS
+    match /nutritionistProfiles/{profileId} {
+      allow read: if true;
+      allow write: if isStaff();
+    }
+    match /nutritionConsultations/{consultationId} {
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+      allow write: if isStaff();
+    }
+    match /nutritionSlotReservations/{bucketKey} {
+      allow read: if isAuthenticated();
+      allow create, update: if isStaff() || (isAuthenticated() && ownsClientProfile(request.resource.data.clientId));
+      allow delete: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+    }
+
+    // EARTH'S KITCHEN / JUICE BAR ORDERS
+    match /juiceBarOrders/{orderId} {
+      allow read: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+      allow create: if isStaff() || (isAuthenticated() && ownsClientProfile(request.resource.data.clientId));
+      allow update: if isStaff() || (isAuthenticated() && ownsClientProfile(resource.data.clientId));
+      allow delete: if isStaff();
     }
     
     // COMPLAINTS (Tickets)
@@ -362,6 +388,17 @@ service cloud.firestore {
 
     // PERMISSION TEMPLATES
     match /permission_templates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    // CORPORATE ACCOUNTS & COMPANY DEALS
+    match /corporateAccounts/{accountId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    match /corporateCompanies/{companyId} {
       allow read: if isAuthenticated();
       allow write: if isStaff();
     }

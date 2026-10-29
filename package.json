@@ -17,6 +17,7 @@
     "test:pt": "vite-node src/utils/ptAttendance.test.ts",
     "test:transactions": "vite-node src/services/transactionService.test.ts",
     "test:notifications": "vite-node src/services/notificationEventService.test.ts",
+    "test:expiration": "vite-node src/jobs/membershipExpirationJob.test.ts",
     "test:inventory": "vite-node src/services/inventoryService.test.ts",
     "test:tasks": "vite-node src/services/taskRecurrenceService.test.ts",
     "test:equipment": "vite-node src/services/equipmentService.test.ts",

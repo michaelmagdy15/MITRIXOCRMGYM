@@ -11,7 +11,11 @@ export interface PricingControlsState {
   discountValue: string;
   amountPaid: string;
   discountReason: DiscountReason;
+  discountExplanation?: string;
+  discountReasonText: string;
   corporateProofUrl: string;
+  corporateCompanyId?: string;
+  corporateCompanyName?: string;
 }
 
 export const DEFAULT_PRICING_STATE: PricingControlsState = {
@@ -19,8 +23,35 @@ export const DEFAULT_PRICING_STATE: PricingControlsState = {
   discountValue: '',
   amountPaid: '',
   discountReason: 'Standard',
+  discountExplanation: '',
+  discountReasonText: '',
   corporateProofUrl: '',
+  corporateCompanyId: '',
+  corporateCompanyName: '',
 };
+
+export const QUICK_DISCOUNT_REASONS = [
+  'Corporate Deal',
+  'Family / Sibling',
+  'Management Discretion',
+  'Promo / Campaign',
+  'Retention / Renewal',
+  'Other',
+] as const;
+
+export function validateDiscountJustification(state: PricingControlsState): { valid: boolean; error?: string } {
+  if (!state || state.discountType === 'none' || !state.discountValue || Number(state.discountValue) <= 0) {
+    return { valid: true };
+  }
+  const explanation = String(state.discountReasonText || state.discountExplanation || '').trim();
+  if (explanation.length < 3) {
+    return {
+      valid: false,
+      error: 'Discount reason is mandatory when applying a discount.',
+    };
+  }
+  return { valid: true };
+}
 
 export interface PricingDiscountControlsProps {
   /** Catalogue/gross amount before discount. */
@@ -69,8 +100,9 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
       discountType: value.discountType,
       discountValue: value.discountValue ? Number(value.discountValue) : undefined,
       amountPaid: value.amountPaid ? Number(value.amountPaid) : undefined,
+      discountReasonText: value.discountReasonText || value.discountExplanation,
     });
-  }, [grossAmount, upgradeCredit, value.discountType, value.discountValue, value.amountPaid]);
+  }, [grossAmount, upgradeCredit, value.discountType, value.discountValue, value.amountPaid, value.discountReasonText, value.discountExplanation]);
 
   // Sync pricing to parent if external grossAmount or upgradeCredit changes
   useEffect(() => {
@@ -85,8 +117,40 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
       discountType: next.discountType,
       discountValue: next.discountValue ? Number(next.discountValue) : undefined,
       amountPaid: next.amountPaid ? Number(next.amountPaid) : undefined,
+      discountReasonText: next.discountReasonText || next.discountExplanation,
     });
     onChange(next, nextPricing);
+  };
+
+  const handleChipClick = (chip: string) => {
+    const current = (value.discountReasonText || value.discountExplanation || '').trim();
+    let nextText = '';
+    if (!current) {
+      nextText = chip;
+    } else {
+      const existingChip = QUICK_DISCOUNT_REASONS.find(
+        (c) => current === c || current.startsWith(`${c} - `) || current.startsWith(`${c}: `)
+      );
+      if (existingChip) {
+        if (existingChip === chip) return;
+        if (current === existingChip) {
+          nextText = chip;
+        } else if (current.startsWith(`${existingChip} - `)) {
+          nextText = `${chip} - ${current.slice(existingChip.length + 3)}`;
+        } else if (current.startsWith(`${existingChip}: `)) {
+          nextText = `${chip}: ${current.slice(existingChip.length + 2)}`;
+        } else {
+          nextText = `${chip} - ${current}`;
+        }
+      } else {
+        nextText = `${chip} - ${current}`;
+      }
+    }
+    updateState({
+      ...value,
+      discountReasonText: nextText,
+      discountExplanation: nextText,
+    });
   };
 
   const setField = <K extends keyof PricingControlsState>(field: K, fieldValue: PricingControlsState[K]) => {
@@ -119,6 +183,8 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
                 discountType: dt,
                 discountValue: dt === 'none' ? '' : value.discountValue,
                 discountReason: dt === 'none' ? 'Standard' : value.discountReason,
+                discountReasonText: dt === 'none' ? '' : value.discountReasonText,
+                discountExplanation: dt === 'none' ? '' : value.discountExplanation,
               };
               updateState(next);
             }}
@@ -182,7 +248,7 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
 
       {showReason && value.discountType !== 'none' && (
         <div className="space-y-1.5">
-          <Label htmlFor={discountReasonId} className="text-xs font-semibold">Discount Reason</Label>
+          <Label htmlFor={discountReasonId} className="text-xs font-semibold">Discount Category</Label>
           <Select
             value={value.discountReason}
             onValueChange={(v) => setField('discountReason', v as DiscountReason)}
@@ -197,6 +263,81 @@ export const PricingDiscountControls: React.FC<PricingDiscountControlsProps> = (
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {value.discountType !== 'none' && Number(value.discountValue) > 0 && (
+        <div className="space-y-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor={`${idPrefix}-discount-reason-text`} className="text-xs font-semibold flex items-center gap-1.5">
+              <span>Discount Reason / Justification</span>
+              <span className="text-destructive font-bold text-xs">* Required</span>
+            </Label>
+            {(value.discountReasonText || value.discountExplanation || '').trim().length >= 3 ? (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                ✓ Validated
+              </span>
+            ) : (
+              <span className="text-[10px] text-destructive font-semibold">
+                * Required
+              </span>
+            )}
+          </div>
+
+          {/* Quick-select chips/tags */}
+          <div className="space-y-1">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block">Quick Select:</span>
+            <div className="flex flex-wrap gap-1.5">
+              {QUICK_DISCOUNT_REASONS.map((chip) => {
+                const text = (value.discountReasonText || value.discountExplanation || '').trim();
+                const isSelected = text === chip || text.startsWith(`${chip} - `) || text.startsWith(`${chip}: `);
+                return (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => handleChipClick(chip)}
+                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-all font-medium cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-500 text-white border-amber-600 shadow-sm font-semibold'
+                        : 'bg-background/90 hover:bg-muted border-border/70 text-foreground/80 hover:text-foreground'
+                    }`}
+                  >
+                    {chip}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Text input / textarea for specific explanation */}
+          <div className="space-y-1">
+            <Input
+              id={`${idPrefix}-discount-reason-text`}
+              type="text"
+              placeholder="e.g. Approved by GM for CIB employee"
+              className={`h-10 rounded-xl bg-background/90 text-xs ${
+                (!value.discountReasonText && !value.discountExplanation) ||
+                (value.discountReasonText || value.discountExplanation || '').trim().length < 3
+                  ? 'border-destructive/70 ring-1 ring-destructive/30'
+                  : 'border-emerald-500/50'
+              }`}
+              value={value.discountReasonText || value.discountExplanation || ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateState({
+                  ...value,
+                  discountReasonText: val,
+                  discountExplanation: val,
+                });
+              }}
+            />
+            {((!value.discountReasonText && !value.discountExplanation) ||
+              (value.discountReasonText || value.discountExplanation || '').trim().length < 3) && (
+              <p className="text-[11px] font-medium text-destructive">
+                * Discount reason is mandatory when applying a discount (minimum 3 characters).
+              </p>
+            )}
+          </div>
         </div>
       )}
 

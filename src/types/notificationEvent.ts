@@ -6,6 +6,7 @@ export type NotificationEventType =
   | 'instructor_cancelled'
   | 'payment_confirmed'
   | 'membership_expiring'
+  | 'membership_expired'
   | 'pt_balance_low'
   | 'lead_followup_due'
   | 'frontdesk_fully_booked'
@@ -50,7 +51,13 @@ export interface NotificationEventParams {
     expiryDate?: string;
     reason?: string;
     branch?: string;
+    gymName?: string;
+    daysRemaining?: number | string;
+    expoPushToken?: string;
+    fcmToken?: string;
+    pushToken?: string;
     [key: string]: any;
   };
   idempotencyKey?: string;
+  tenantId?: string;
 }

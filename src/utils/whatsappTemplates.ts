@@ -152,6 +152,87 @@ export function buildWhatsAppWaitlistPromotionUrl({
   return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
 }
 
+export interface WhatsAppPhotoReminderParams {
+  clientName: string;
+  clientPhone?: string | null;
+  clubName?: string;
+  portalUrl?: string;
+}
+
+/**
+ * Generates a 1-tap WhatsApp URL prompting a member to upload or take a profile picture.
+ */
+export function buildWhatsAppPhotoReminderUrl({
+  clientName,
+  clientPhone,
+  clubName = 'Gym Administration',
+  portalUrl,
+}: WhatsAppPhotoReminderParams): string | null {
+  const phone = normalizeWhatsAppPhone(clientPhone);
+  if (!phone) return null;
+
+  const lines: string[] = [
+    `📸 *Profile Picture Update Reminder — ${clubName}*`,
+    ``,
+    `Hello *${clientName}*,`,
+    ``,
+    `To ensure fast, seamless check-ins and access to the gym facilities, please upload your profile picture.`,
+    ``,
+    `📋 *Photo Guidelines:*`,
+    `• Clear facial view looking directly at camera`,
+    `• No sunglasses or face-covering caps`,
+    `• Appropriate gym attire`,
+  ];
+
+  if (portalUrl) {
+    lines.push(``, `📲 Upload your photo here: ${portalUrl}`);
+  } else {
+    lines.push(``, `You can upload your photo directly in the Mobile App or ask the Front Desk team on your next visit!`);
+  }
+
+  lines.push(``, `Thank you for your cooperation! 💪`);
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
+}
+
+export interface WhatsAppPhotoRejectionParams {
+  clientName: string;
+  clientPhone?: string | null;
+  reason?: string;
+  clubName?: string;
+}
+
+/**
+ * Generates a 1-tap WhatsApp URL informing a member that their uploaded photo needs revision.
+ */
+export function buildWhatsAppPhotoRejectionUrl({
+  clientName,
+  clientPhone,
+  reason,
+  clubName = 'Gym Administration',
+}: WhatsAppPhotoRejectionParams): string | null {
+  const phone = normalizeWhatsAppPhone(clientPhone);
+  if (!phone) return null;
+
+  const lines: string[] = [
+    `📸 *Profile Photo Update Required — ${clubName}*`,
+    ``,
+    `Hello *${clientName}*,`,
+    ``,
+    `Your recently submitted profile picture could not be approved.`,
+    reason ? `⚠️ *Reason:* ${reason}` : `⚠️ *Reason:* Does not meet our profile picture guidelines.`,
+    ``,
+    `📋 *Please ensure:*`,
+    `• Clear, well-lit facial view`,
+    `• No sunglasses or face-covering caps`,
+    `• Appropriate athletic attire`,
+    ``,
+    `Please re-upload a compliant photo in the mobile app or visit the front desk to take one. Thank you! 🙌`,
+  ];
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join('\n'))}`;
+}
+
 export type WhatsAppRoutingMode = 'auto' | 'desktop' | 'web';
 
 export interface OpenWhatsAppOptions {

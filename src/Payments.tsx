@@ -15,6 +15,7 @@ import { safeFormatDate, safeAddDays, toValidDate, safeIsoDate } from './utils/d
 import { Payment, Client, RefundDetails } from './types';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
 import { calculatePricing, formatCurrencyAmount } from './utils/pricing';
+import { QUICK_DISCOUNT_REASONS } from './components/PricingDiscountControls';
 import { getEgyptDate } from './utils';
 import { holdPayment, releasePayment, getHoldStatusInfo } from './utils/holdUtils';
 import { Plus, DollarSign, CreditCard, Banknote, FileText, Smartphone, Printer, Search, Trash2, ChevronLeft, ChevronRight, User, UserPlus, Pause, Play, TrendingUp, Receipt, RotateCcw, Tag, MoreHorizontal, SlidersHorizontal, X } from 'lucide-react';
@@ -98,6 +99,7 @@ export default function Payments() {
 
   // Corporate Discount Verification State
   const [discountReason, setDiscountReason] = useState<'Standard' | 'Corporate' | 'Referral' | 'Promotional'>('Standard');
+  const [discountReasonText, setDiscountReasonText] = useState<string>('');
   const [corporateProofUrl, setCorporateProofUrl] = useState<string>('');
   const [corporateProofFileName, setCorporateProofFileName] = useState<string>('');
   const [isUploadingCorporateProof, setIsUploadingCorporateProof] = useState<boolean>(false);
@@ -361,15 +363,45 @@ export default function Payments() {
     discountType: discountType || 'none',
     discountValue: discountValue ? Number(discountValue) : undefined,
     amountPaid: amountPaid ? Number(amountPaid) : undefined,
+    discountReasonText: discountReasonText,
   });
 
+  const handleDiscountChipClick = (chip: string) => {
+    const current = (discountReasonText || '').trim();
+    let nextText = '';
+    if (!current) {
+      nextText = chip;
+    } else {
+      const existingChip = QUICK_DISCOUNT_REASONS.find(
+        (c) => current === c || current.startsWith(`${c} - `) || current.startsWith(`${c}: `)
+      );
+      if (existingChip) {
+        if (existingChip === chip) return;
+        if (current === existingChip) {
+          nextText = chip;
+        } else if (current.startsWith(`${existingChip} - `)) {
+          nextText = `${chip} - ${current.slice(existingChip.length + 3)}`;
+        } else if (current.startsWith(`${existingChip}: `)) {
+          nextText = `${chip}: ${current.slice(existingChip.length + 2)}`;
+        } else {
+          nextText = `${chip} - ${current}`;
+        }
+      } else {
+        nextText = `${chip} - ${current}`;
+      }
+    }
+    setDiscountReasonText(nextText);
+  };
+
   useEffect(() => {
-    if (pricingBreakdown.valid) {
+    if (pricingBreakdown.netAmount >= 0 && (pricingBreakdown.valid || pricingBreakdown.discountAmount > 0)) {
+      setDiscountedAmount(pricingBreakdown.netAmount.toFixed(2));
+    } else if (pricingBreakdown.valid) {
       setDiscountedAmount(pricingBreakdown.netAmount.toFixed(2));
     } else {
       setDiscountedAmount('');
     }
-  }, [pricingBreakdown.netAmount, pricingBreakdown.valid]);
+  }, [pricingBreakdown.netAmount, pricingBreakdown.valid, pricingBreakdown.discountAmount]);
 
   const handleCreateNewClient = async () => {
     if (!newClientName.trim() || !newClientPhone.trim()) return;
@@ -651,6 +683,7 @@ export default function Payments() {
         previousPackageName: isRenewalPayment ? finalPackageType : undefined,
         corporateProofUrl: discountReason === 'Corporate' ? corporateProofUrl : undefined,
         discountReason: discountReason !== 'Standard' ? discountReason : undefined,
+        discountReasonText: discountType && pricingBreakdown.discountAmount > 0 ? discountReasonText.trim() : undefined,
         installments: generatedInstallments,
         secondaryMethod: useSplitTender && parsedSecondaryTender > 0 ? secondaryMethod : undefined,
         primaryTenderAmount: useSplitTender ? parsedPrimaryTender : undefined,
@@ -699,6 +732,7 @@ export default function Payments() {
       setReceiptNumber('');
       setIsMemberOnHold(false);
       setDiscountReason('Standard');
+      setDiscountReasonText('');
       setCorporateProofUrl('');
       setCorporateProofFileName('');
       setInlineNationalId('');
@@ -1885,6 +1919,8 @@ export default function Payments() {
                         setDiscountValue('');
                         setDiscountedAmount('');
                         setAmountPaid('');
+                        setDiscountReasonText('');
+                        setDiscountReason('Standard');
                       } else {
                         setDiscountType(v as 'percentage' | 'amount');
                       }
@@ -1977,21 +2013,89 @@ export default function Payments() {
                   </div>
 
                   {discountType && (
-                    <div className="space-y-2 pt-2 border-t border-border/30">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Discount Category</Label>
-                      <Select value={discountReason} onValueChange={(v: any) => setDiscountReason(v)}>
-                        <SelectTrigger className="h-10 rounded-xl bg-background/50 border-white/10 text-xs font-medium">
-                          <SelectValue placeholder="Discount Category" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-xl border-none shadow-2xl">
-                          <SelectItem value="Standard">Standard / Manager Discretion</SelectItem>
-                          {showCorporateDiscounts && (
-                            <SelectItem value="Corporate">Corporate Partner (Proof Required)</SelectItem>
-                          )}
-                          <SelectItem value="Referral">Member Referral</SelectItem>
-                          <SelectItem value="Promotional">Seasonal / Promotional Campaign</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="space-y-3 pt-2 border-t border-border/30">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Discount Category</Label>
+                        <Select value={discountReason} onValueChange={(v: any) => setDiscountReason(v)}>
+                          <SelectTrigger className="h-10 rounded-xl bg-background/50 border-white/10 text-xs font-medium">
+                            <SelectValue placeholder="Discount Category" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl border-none shadow-2xl">
+                            <SelectItem value="Standard">Standard / Manager Discretion</SelectItem>
+                            {showCorporateDiscounts && (
+                              <SelectItem value="Corporate">Corporate Partner (Proof Required)</SelectItem>
+                            )}
+                            <SelectItem value="Referral">Member Referral</SelectItem>
+                            <SelectItem value="Promotional">Seasonal / Promotional Campaign</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {Number(discountValue) > 0 && (
+                        <div className="space-y-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="payment-discount-reason-text" className="text-xs font-semibold flex items-center gap-1.5">
+                              <span>Discount Reason / Justification</span>
+                              <span className="text-rose-500 font-bold text-xs">* Required</span>
+                            </Label>
+                            {discountReasonText.trim().length >= 3 ? (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                                ✓ Validated
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-rose-500 font-semibold">
+                                Reason Required
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quick-select chips/tags */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block">Quick Select:</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {QUICK_DISCOUNT_REASONS.map((chip) => {
+                                const text = discountReasonText.trim();
+                                const isSelected = text === chip || text.startsWith(`${chip} - `) || text.startsWith(`${chip}: `);
+                                return (
+                                  <button
+                                    key={chip}
+                                    type="button"
+                                    onClick={() => handleDiscountChipClick(chip)}
+                                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-all font-medium cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-amber-500 text-white border-amber-600 shadow-sm font-semibold'
+                                        : 'bg-background/90 hover:bg-muted border-border/70 text-foreground/80 hover:text-foreground'
+                                    }`}
+                                  >
+                                    {chip}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Text input / textarea for specific explanation */}
+                          <div className="space-y-1">
+                            <Input
+                              id="payment-discount-reason-text"
+                              type="text"
+                              placeholder="e.g. Approved by GM for CIB employee"
+                              className={`h-10 rounded-xl bg-background/90 text-xs ${
+                                !discountReasonText || discountReasonText.trim().length < 3
+                                  ? 'border-rose-500/70 ring-1 ring-rose-500/30'
+                                  : 'border-emerald-500/50'
+                              }`}
+                              value={discountReasonText}
+                              onChange={(e) => setDiscountReasonText(e.target.value)}
+                            />
+                            {(!discountReasonText || discountReasonText.trim().length < 3) && (
+                              <p className="text-[11px] font-medium text-rose-500">
+                                * Discount reason is mandatory when applying a discount (minimum 3 characters).
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {discountReason === 'Corporate' && (
                         <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 text-xs space-y-2">
@@ -2945,7 +3049,8 @@ export default function Payments() {
                               const current = Number(payment.amount) || 0;
                               if (val > 0) {
                                 const label = payment.discountType === 'percentage' ? `${val}% OFF` : `${val.toLocaleString()} LE OFF`;
-                                const reason = payment.discountReason && payment.discountReason !== 'Standard' ? ` (${payment.discountReason})` : '';
+                                const reasonText = payment.discountReasonText || (payment.discountReason && payment.discountReason !== 'Standard' ? payment.discountReason : '');
+                                const reason = reasonText ? ` (${reasonText})` : '';
                                 return (
                                   <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-semibold px-1 py-0 mt-0.5 w-fit inline-flex items-center gap-1">
                                     <Tag className="w-2.5 h-2.5" />
