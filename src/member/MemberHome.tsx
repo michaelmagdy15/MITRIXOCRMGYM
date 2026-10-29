@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { QRCodeSVG } from 'qrcode.react';
 import { db, getTenantId } from '../firebase';
 import { collection, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { format, parseISO, differenceInDays, isToday, startOfDay } from 'date-fns';
+import { format, parseISO, differenceInDays, differenceInCalendarDays, isToday, startOfDay } from 'date-fns';
 import { safeFormatDate, toValidDate } from '../utils/dateUtils';
 import { generateICSCalendar, downloadICS, CalendarEvent } from '../utils/calendarSync';
 import { toast } from 'sonner';
@@ -14,7 +14,7 @@ import {
   Sparkles, Calendar, CheckCircle2, Trophy, Activity, Dumbbell, Award, Users, 
   ShoppingBag, Bell, Clock, Flame, ChevronRight, MapPin, Zap, User, 
   TrendingUp, Star, Timer, Target, Coins, AlertCircle, Lock, Maximize2, Minimize2, CalendarPlus,
-  BellRing, Download, Smartphone, X, Megaphone, ExternalLink
+  BellRing, Download, Smartphone, X, Megaphone, ExternalLink, Camera
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -417,7 +417,7 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
   const daysToExpiry = useMemo(() => {
     if (!client?.membershipExpiry) return null;
     try {
-      return differenceInDays(parseISO(client.membershipExpiry), new Date());
+      return differenceInCalendarDays(parseISO(client.membershipExpiry), new Date());
     } catch { return null; }
   }, [client?.membershipExpiry]);
 
@@ -720,14 +720,119 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
 
       {/* ─── Expired Status Warning Banner ─── */}
       {client.status === 'Expired' && (
-        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-rose-400" />
-          <div className="space-y-0.5">
-            <p className="font-bold text-xs">Membership Expired</p>
-            <p className="text-[11px] opacity-90 leading-relaxed">
-              Your membership has expired. Please visit reception or renew your plan to continue booking.
-            </p>
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-rose-500" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-xs">Membership Expired</p>
+              <p className="text-[11px] opacity-90 leading-relaxed">
+                Your membership has expired. Renew your plan to continue booking classes and sessions.
+              </p>
+            </div>
           </div>
+          <Button
+            size="sm"
+            className="h-8 text-xs font-bold bg-rose-500 hover:bg-rose-600 text-white shrink-0 shadow-sm"
+            onClick={() => {
+              if (onSwitchToStore) onSwitchToStore();
+              else onNavigate?.('profile-membership');
+            }}
+          >
+            Renew Plan
+          </Button>
+        </div>
+      )}
+
+      {/* ─── Expiring Soon Status Warning Banner ─── */}
+      {client.status !== 'Expired' && daysToExpiry !== null && daysToExpiry >= 0 && daysToExpiry <= 7 && (
+        <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-amber-500" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-xs">Membership Expiring Soon</p>
+              <p className="text-[11px] opacity-90 leading-relaxed">
+                Your membership expires {daysToExpiry === 0 ? 'today' : daysToExpiry === 1 ? 'tomorrow' : `in ${daysToExpiry} days`}. Renew now to keep uninterrupted access.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="h-8 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shrink-0 shadow-sm"
+            onClick={() => {
+              if (onSwitchToStore) onSwitchToStore();
+              else onNavigate?.('profile-membership');
+            }}
+          >
+            Renew Plan
+          </Button>
+        </div>
+      )}
+
+      {/* ─── Profile Picture Compliance Banners ─── */}
+      {!client.photoURL && !client.pendingPhotoURL && (
+        <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
+              <Camera className="h-4 w-4" />
+            </div>
+            <div className="space-y-0.5">
+              <p className="font-bold text-xs text-foreground">Profile Picture Required</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Please upload a front-facing photo (no sunglasses, no caps) for turnstile check-in.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs font-bold border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
+            onClick={() => onNavigate?.('profile-settings')}
+          >
+            Upload Photo
+          </Button>
+        </div>
+      )}
+
+      {(client.photoModerationStatus === 'pending' || (!client.photoURL && client.pendingPhotoURL)) && (
+        <div className="p-3.5 bg-blue-500/10 border border-blue-500/20 text-blue-500 dark:text-blue-400 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            {client.pendingPhotoURL ? (
+              <img src={client.pendingPhotoURL} alt="Pending" className="h-9 w-9 rounded-xl object-cover border border-blue-500/30 shrink-0" />
+            ) : (
+              <Clock className="h-5 w-5 text-blue-500 shrink-0" />
+            )}
+            <div className="space-y-0.5">
+              <p className="font-bold text-xs">Photo Under Admin Review</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Your uploaded picture is pending gym compliance approval (no caps/sunglasses).
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-[10px] bg-blue-500/10 text-blue-500 border-blue-500/30 font-semibold shrink-0">
+            Pending
+          </Badge>
+        </div>
+      )}
+
+      {client.photoModerationStatus === 'rejected' && (
+        <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 rounded-2xl flex items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-rose-500" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-xs">Photo Rejected by Admin</p>
+              <p className="text-[11px] opacity-90 leading-relaxed">
+                {client.photoRejectionReason || 'Photo must have a clear face with no caps, hats, or sunglasses.'}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs font-bold border-rose-500/40 text-rose-500 hover:bg-rose-500/10 shrink-0"
+            onClick={() => onNavigate?.('profile-settings')}
+          >
+            Re-upload
+          </Button>
         </div>
       )}
 
@@ -1002,21 +1107,56 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
         {/* Subtle accent border */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent" />
         
-        {/* Top Header: Member Name & Prominent ID */}
+        {/* Top Header: Member Photo, Name & Prominent ID */}
         <div className="pb-3 border-b border-zinc-800/80">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                <span className="text-[11px] font-bold tracking-widest uppercase text-zinc-300">
-                  {branding?.companyName || 'STRIKE'}
-                </span>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {/* Member Photo on Pass */}
+              <div 
+                className="relative h-12 w-12 rounded-xl bg-zinc-800 border border-zinc-700/80 shrink-0 overflow-hidden flex items-center justify-center cursor-pointer group"
+                onClick={() => onNavigate?.('profile')}
+                title={client.photoURL ? 'View Profile' : 'Upload Profile Photo'}
+              >
+                {client.photoURL ? (
+                  <img src={client.photoURL} alt={client.name} className="w-full h-full object-cover" />
+                ) : client.pendingPhotoURL ? (
+                  <>
+                    <img src={client.pendingPhotoURL} alt="Pending" className="w-full h-full object-cover opacity-75" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <Clock className="h-4 w-4 text-amber-400" />
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-zinc-400 group-hover:text-emerald-400 transition-colors">
+                    <Camera className="h-4 w-4" />
+                    <span className="text-[8px] font-bold mt-0.5">+Photo</span>
+                  </div>
+                )}
               </div>
-              <h3 className="text-lg font-bold text-white tracking-tight truncate leading-snug">
-                {client.name}
-              </h3>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="text-[10px] font-bold tracking-widest uppercase text-zinc-300">
+                    {branding?.companyName || 'STRIKE'}
+                  </span>
+                  {client.photoModerationStatus === 'pending' && (
+                    <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.2 rounded font-semibold">
+                      Photo Pending
+                    </span>
+                  )}
+                  {client.photoModerationStatus === 'rejected' && (
+                    <span className="text-[9px] bg-rose-500/20 text-rose-400 px-1.5 py-0.2 rounded font-semibold">
+                      Photo Rejected
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight truncate leading-snug">
+                  {client.name}
+                </h3>
+              </div>
             </div>
-            <span className="font-mono text-2xl font-black text-white leading-none shrink-0 tracking-normal">
+            <span className="font-mono text-xl sm:text-2xl font-black text-white leading-none shrink-0 tracking-normal">
               {client.memberId ? `#${client.memberId}` : 'MEMBER'}
             </span>
           </div>

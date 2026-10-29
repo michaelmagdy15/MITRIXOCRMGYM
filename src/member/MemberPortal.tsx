@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { QrCode, Lock, Globe, UserPlus, User, LogOut, Sun, Moon, Calendar, Users, History, TrendingUp, Package, ShoppingBag, Bell, Coins, AlertCircle, Activity, Dumbbell } from 'lucide-react';
 import { auth, db, getTenantId } from '../firebase';
 import { collection, query, where, doc, documentId, getDoc, getDocs, onSnapshot, setDoc } from 'firebase/firestore';
+import { differenceInCalendarDays, parseISO } from 'date-fns';
 import { Client } from '../types';
 import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 
@@ -261,6 +262,16 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
     } else if (target === 'profile-attendance') {
       setActiveTab('profile');
       setProfileSubTab('attendance');
+    } else if (target === 'profile-settings' || target === 'profile-photo') {
+      setActiveTab('profile');
+      setProfileSubTab('settings');
+    } else if (target === 'packages' || target === 'store' || target === 'renew') {
+      if (onSwitchToStore) {
+        onSwitchToStore();
+      } else {
+        setActiveTab('profile');
+        setProfileSubTab('membership');
+      }
     } else if (target === 'juicebar') {
       if (features.juiceBar !== false) setActiveTab('juicebar');
     } else if (target === 'wallet') {
@@ -275,6 +286,71 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
       setActiveTab('workouts');
     }
   };
+
+  // Listen for deep link URL query params and custom navigation events
+  useEffect(() => {
+    const handleUrlAndParams = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlTab = params.get('tab');
+        const urlSubTab = params.get('subtab');
+        const urlAction = params.get('action');
+
+        if (urlAction === 'upload_photo') {
+          setActiveTab('profile');
+          setProfileSubTab('settings');
+          setTimeout(() => {
+            const input = document.getElementById('member-photo-upload');
+            input?.click();
+          }, 350);
+          return;
+        }
+
+        if (urlTab) {
+          handleNavigate(urlSubTab ? `${urlTab}-${urlSubTab}` : urlTab);
+        }
+      } catch (err) {
+        console.warn('[MemberPortal] Error parsing URL params:', err);
+      }
+    };
+
+    handleUrlAndParams();
+
+    const onCustomNav = (e: any) => {
+      const detail = e.detail;
+      if (!detail) return;
+      if (typeof detail === 'string') {
+        handleNavigate(detail);
+      } else if (typeof detail === 'object') {
+        const { tab, subtab, action } = detail;
+        if (action === 'upload_photo') {
+          setActiveTab('profile');
+          setProfileSubTab('settings');
+          setTimeout(() => {
+            const input = document.getElementById('member-photo-upload');
+            input?.click();
+          }, 350);
+        } else if (action === 'renew') {
+          if (onSwitchToStore) {
+            onSwitchToStore();
+          } else {
+            setActiveTab('profile');
+            setProfileSubTab('membership');
+          }
+        } else if (tab) {
+          handleNavigate(subtab ? `${tab}-${subtab}` : tab);
+        }
+      }
+    };
+
+    window.addEventListener('member:navigate-tab', onCustomNav);
+    window.addEventListener('popstate', handleUrlAndParams);
+
+    return () => {
+      window.removeEventListener('member:navigate-tab', onCustomNav);
+      window.removeEventListener('popstate', handleUrlAndParams);
+    };
+  }, [onSwitchToStore]);
 
   // 1. Fetch primary client record
   useEffect(() => {
@@ -688,13 +764,58 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
       <main className={`flex-1 overflow-y-auto px-4 py-5 pb-[calc(6.5rem+var(--safe-bottom))] mx-auto w-full overscroll-contain ${activeTab === 'workouts' ? 'max-w-5xl' : 'max-w-md'}`}>
         {activeClient?.status === 'Expired' && (
-          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-semibold flex items-center justify-between shadow-sm">
-            <span>Membership Expired</span>
-            <Button size="sm" variant="outline" className="h-7 text-xs bg-transparent border-amber-500/30 text-amber-600 dark:text-amber-400" onClick={() => setActiveTab('profile')}>
+          <div className="mb-4 p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 dark:text-rose-400 rounded-xl text-xs font-semibold flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-500" />
+              <span>Membership Expired</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs bg-rose-500 text-white hover:bg-rose-600 border-none font-bold"
+              onClick={() => {
+                if (onSwitchToStore) {
+                  onSwitchToStore();
+                } else {
+                  handleNavigate('profile-membership');
+                }
+              }}
+            >
               Renew Plan
             </Button>
           </div>
         )}
+
+        {activeClient?.status !== 'Expired' && activeClient?.membershipExpiry && (() => {
+          try {
+            const diff = differenceInCalendarDays(parseISO(activeClient.membershipExpiry), new Date());
+            if (diff >= 0 && diff <= 7) {
+              return (
+                <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-semibold flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
+                    <span>Membership expires {diff === 0 ? 'today' : diff === 1 ? 'tomorrow' : `in ${diff} days`}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs bg-amber-500 text-white hover:bg-amber-600 border-none font-bold"
+                    onClick={() => {
+                      if (onSwitchToStore) {
+                        onSwitchToStore();
+                      } else {
+                        handleNavigate('profile-membership');
+                      }
+                    }}
+                  >
+                    Renew Plan
+                  </Button>
+                </div>
+              );
+            }
+          } catch {}
+          return null;
+        })()}
 
         {activeTab === 'home' && (
           <MemberHome 

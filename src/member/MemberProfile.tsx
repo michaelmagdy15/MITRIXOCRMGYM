@@ -212,6 +212,21 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
   };
 
   useEffect(() => {
+    let timer: any = null;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('action') === 'upload_photo') {
+        timer = setTimeout(() => {
+          document.getElementById('member-photo-upload')?.click();
+        }, 400);
+      }
+    } catch {}
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!client?.id) return;
     const q = query(collection(db, 'attendance'), where('clientId', '==', client.id));
     getDocs(q).then(snap => {
@@ -471,14 +486,42 @@ export default function MemberProfile({ client, onNavigate }: { client: Client |
         {/* Profile Photo Rules & Moderation Status Banner */}
         <div className="mt-3 rounded-xl border border-border/40 bg-background/50 px-3 py-2 text-[11px] text-muted-foreground flex items-start gap-2">
           <Camera className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold text-foreground">Gym Photo Guidelines:</span> Clear front-facing face photo required. No caps/hats, no sunglasses, and no shirtless/inappropriate imagery. Uploaded photos require admin approval before becoming active.
+          <div className="flex-1 min-w-0">
+            <div>
+              <span className="font-bold text-foreground">Gym Photo Guidelines:</span> Clear front-facing face photo required. No caps/hats, no sunglasses, and no shirtless/inappropriate imagery. Uploaded photos require admin approval before becoming active.
+            </div>
             {client?.photoModerationStatus === 'pending' && client?.pendingPhotoURL && (
               <div className="mt-1.5 flex items-center gap-2 text-amber-400 font-semibold">
                 <img src={client.pendingPhotoURL} alt="Pending preview" className="w-7 h-7 rounded-lg object-cover border border-amber-500/40" />
                 <span>Your new photo is awaiting admin review.</span>
               </div>
             )}
+            {client?.photoModerationStatus === 'rejected' && (
+              <div className="mt-1.5 text-rose-500 font-semibold">
+                Rejection Note: {client.photoRejectionReason || 'Does not meet photo guidelines. Please re-upload.'}
+              </div>
+            )}
+            <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs font-bold gap-1.5 border-primary/40 hover:bg-primary/10 text-primary"
+                onClick={() => document.getElementById('member-photo-upload')?.click()}
+                disabled={isUploadingPhoto}
+              >
+                {isUploadingPhoto ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Camera className="h-3 w-3" />
+                )}
+                {client?.photoURL ? 'Change Profile Photo' : 'Upload Profile Photo'}
+              </Button>
+              {client?.photoModerationStatus === 'rejected' && (
+                <span className="text-[10px] text-rose-400 font-medium">
+                  Re-upload required to update pass
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

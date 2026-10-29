@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { collection, doc, getDocs, limit, onSnapshot, orderBy, query, updateDoc, where } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, Bell, Calendar, Check, Gift, Info, Megaphone, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, Bell, Calendar, Camera, Check, Gift, Info, Megaphone, Sparkles, X } from 'lucide-react';
 import { formatDistanceToNow, parseISO, differenceInCalendarDays, format } from 'date-fns';
 import { toValidDate } from '../utils/dateUtils';
 import {
@@ -22,7 +22,11 @@ type MemberNotificationType =
   | 'BOOKING_CANCELLED'
   | 'BOOKING_NO_SHOW'
   | 'CLASS_REMINDER'
-  | 'STATUS_CHANGED';
+  | 'STATUS_CHANGED'
+  | 'photo_moderation'
+  | 'missing_photo'
+  | 'membership_expiring'
+  | 'membership_expired';
 
 interface MemberNotification {
   id: string;
@@ -37,7 +41,11 @@ interface MemberNotification {
 
 const typeIcons: Record<string, React.ReactNode> = {
   announcement: <Megaphone className="h-4 w-4 text-blue-500" />,
-  expiry_warning: <AlertTriangle className="h-4 w-4 text-muted-foreground" />,
+  expiry_warning: <AlertTriangle className="h-4 w-4 text-amber-500" />,
+  membership_expiring: <AlertTriangle className="h-4 w-4 text-amber-500" />,
+  membership_expired: <AlertTriangle className="h-4 w-4 text-rose-500" />,
+  photo_moderation: <Camera className="h-4 w-4 text-amber-500" />,
+  missing_photo: <Camera className="h-4 w-4 text-amber-500" />,
   session_reminder: <Calendar className="h-4 w-4 text-emerald-500" />,
   birthday: <Gift className="h-4 w-4 text-pink-500" />,
   promo: <Sparkles className="h-4 w-4 text-strike-green" />,
@@ -410,7 +418,23 @@ export default function MemberNotificationBell({ clientId, onNavigate }: MemberN
     const url = String(notification.data?.url || notification.data?.deeplink || '').toLowerCase();
     const type = notification.type;
 
-    if (target.includes('membership') || url.includes('membership') || type === 'expiry_warning') return 'profile-membership';
+    if (
+      target.includes('photo') ||
+      url.includes('photo') ||
+      type === 'photo_moderation' ||
+      type === 'missing_photo'
+    ) {
+      return 'profile-settings';
+    }
+    if (
+      target.includes('membership') ||
+      url.includes('membership') ||
+      type === 'expiry_warning' ||
+      type === 'membership_expiring' ||
+      type === 'membership_expired'
+    ) {
+      return 'profile-membership';
+    }
     if (target.includes('profile') || url.includes('profile') || type === 'STATUS_CHANGED') return 'profile';
     if (target.includes('attendance') || url.includes('attendance')) return 'profile-attendance';
     if (target.includes('pt') || target.includes('session') || url.includes('session')) return 'booking-pt';

@@ -131,6 +131,53 @@ Notifications.setNotificationCategoryAsync('click_to_call', [
   },
 ]);
 
+Notifications.setNotificationCategoryAsync('membership_expiring', [
+  {
+    identifier: 'renew_expiring',
+    buttonTitle: 'Renew Membership',
+    options: { opensAppToForeground: true },
+  },
+  {
+    identifier: 'view_membership',
+    buttonTitle: 'View Plan',
+    options: { opensAppToForeground: true },
+  },
+]);
+
+Notifications.setNotificationCategoryAsync('membership_expired', [
+  {
+    identifier: 'renew_now',
+    buttonTitle: 'Renew Plan',
+    options: { opensAppToForeground: true, isDestructive: true },
+  },
+  {
+    identifier: 'view_membership',
+    buttonTitle: 'Open App',
+    options: { opensAppToForeground: true },
+  },
+]);
+
+Notifications.setNotificationCategoryAsync('photo_moderation', [
+  {
+    identifier: 'upload_photo',
+    buttonTitle: 'Upload Photo',
+    options: { opensAppToForeground: true },
+  },
+  {
+    identifier: 'view_guidelines',
+    buttonTitle: 'Guidelines',
+    options: { opensAppToForeground: true },
+  },
+]);
+
+Notifications.setNotificationCategoryAsync('missing_photo', [
+  {
+    identifier: 'upload_photo',
+    buttonTitle: 'Upload Photo',
+    options: { opensAppToForeground: true },
+  },
+]);
+
 /**
  * Safely opens the native OS phone dialer for a validated phone number.
  */
@@ -245,6 +292,41 @@ function MainApp() {
           targetUrl = `/admin/tasks?id=${data.taskId}`;
         } else if (actionId === 'complete_task' && data?.taskId) {
           targetUrl = `/admin/tasks?action=complete&id=${data.taskId}`;
+        } else if (
+          actionId === 'renew_expiring' ||
+          actionId === 'renew_now' ||
+          data?.type === 'membership_expiring' ||
+          data?.type === 'membership_expired' ||
+          data?.type === 'expiry_warning'
+        ) {
+          targetUrl = targetUrl || '/?tab=profile&subtab=membership';
+          if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+              if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('member:navigate-tab', {
+                  detail: { tab: 'profile', subtab: 'membership', action: 'renew' }
+                }));
+              }
+              true;
+            `);
+          }
+        } else if (
+          actionId === 'upload_photo' ||
+          actionId === 'view_guidelines' ||
+          data?.type === 'photo_moderation' ||
+          data?.type === 'missing_photo'
+        ) {
+          targetUrl = targetUrl || '/?tab=profile&subtab=settings&action=upload_photo';
+          if (webViewRef.current) {
+            webViewRef.current.injectJavaScript(`
+              if (typeof window !== 'undefined' && window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('member:navigate-tab', {
+                  detail: { tab: 'profile', subtab: 'settings', action: 'upload_photo' }
+                }));
+              }
+              true;
+            `);
+          }
         }
 
         // Convert relative URLs to absolute based on the tenant's PRODUCTION_URL
@@ -532,12 +614,29 @@ function MainApp() {
           // for anything that isn't a safe http(s) same-origin navigation, which closes
           // javascript:/data:/file: navigations (incl. push deep-link attempts).
           onShouldStartLoadWithRequest={(request) => {
-            if (request?.url && /^tel:/i.test(request.url)) {
-              openNativePhoneDialer(request.url.replace(/^tel:/i, ''));
+            const url = request?.url || '';
+            if (/^tel:/i.test(url)) {
+              openNativePhoneDialer(url.replace(/^tel:/i, ''));
+              return false;
+            }
+            // Handle WhatsApp, mailto, maps, and system intent links
+            if (
+              /^(whatsapp:|mailto:|sms:)/i.test(url) ||
+              /^https?:\/\/(wa\.me|api\.whatsapp\.com|maps\.google\.com|maps\.apple\.com)/i.test(url)
+            ) {
+              Linking.openURL(url).catch((err) => console.warn('[Linking] Failed to open external url:', err));
               return false;
             }
             // Allow only http(s) same-origin URLs. Main-frame and iframe loads alike.
-            return isSafeWebUrl(request.url);
+            if (isSafeWebUrl(url)) {
+              return true;
+            }
+            // External HTTP/HTTPS links: open in system browser so user is never stuck
+            if (/^https?:\/\//i.test(url)) {
+              Linking.openURL(url).catch((err) => console.warn('[Linking] Failed to open external browser:', err));
+              return false;
+            }
+            return false;
           }}
 
           // Native gestures for iOS (swipe from edge to navigate back/forward)
