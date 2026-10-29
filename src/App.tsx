@@ -12,24 +12,16 @@ import { SettingsProvider } from './contexts/SettingsContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { LanguageProvider, useLanguage } from './contexts/LanguageContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { getTenantId } from './firebase';
+import { getTenantId, auth } from './firebase';
+import { startBackgroundSync } from './services/syncManager';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import Dashboard from './Dashboard';
-import Leads from './Leads';
-import Clients from './Clients';
-import Calendar from './Calendar';
-import Payments from './Payments';
-import PTPackages from './PTPackages';
-import Packages from './Packages';
 import Attendance from './Attendance';
-import Tasks from './Tasks';
-import Settings from './Settings';
 import Login from './Login';
 import MemberCheckin from './MemberCheckin';
-import HelpPage from './HelpPage';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList, Bell, Dumbbell } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -56,6 +48,15 @@ import { isKitchenUser, isNutritionistUser, isFitnessManagerUser, isSalesManager
 
 
 // Route & Tab Level Code-Splitting (Lazy-loaded modules)
+const Clients = React.lazy(() => import('./Clients'));
+const Payments = React.lazy(() => import('./Payments'));
+const Calendar = React.lazy(() => import('./Calendar'));
+const Packages = React.lazy(() => import('./Packages'));
+const PTPackages = React.lazy(() => import('./PTPackages'));
+const Tasks = React.lazy(() => import('./Tasks'));
+const Settings = React.lazy(() => import('./Settings'));
+const HelpPage = React.lazy(() => import('./HelpPage'));
+const Leads = React.lazy(() => import('./Leads'));
 const Reports = React.lazy(() => import('./Reports'));
 const AdvancedReports = React.lazy(() => import('./AdvancedReports'));
 const AuditLogs = React.lazy(() => import('./AuditLogs'));
@@ -171,6 +172,16 @@ function AppContent() {
     window.addEventListener('crm:notification-tab-counts', handleNotificationTabCounts);
     return () => window.removeEventListener('crm:notification-tab-counts', handleNotificationTabCounts);
   }, []);
+
+  // Autonomous 60-second background delta-sync heartbeat for front-desk offline resilience
+  React.useEffect(() => {
+    if (!currentUser || effectiveRole === 'client') return;
+    const tenantId = getTenantId();
+    const stopSync = startBackgroundSync(tenantId, async () => {
+      return auth.currentUser?.getIdToken() || null;
+    }, 60000);
+    return () => stopSync();
+  }, [currentUser?.id, effectiveRole]);
 
   const isStrike = React.useMemo(() => {
     const tenantId = getTenantId();
@@ -402,7 +413,11 @@ function AppContent() {
   }
 
   if (isHelpMode) {
-    return <HelpPage />;
+    return (
+      <React.Suspense fallback={<ModuleLoadingFallback />}>
+        <HelpPage />
+      </React.Suspense>
+    );
   }
 
   if (isKitchenKioskMode) {
@@ -1444,16 +1459,22 @@ function AppContent() {
 
             {(currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin') && (
               <TabsContent value="leads" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-                <Leads />
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
+                  <Leads />
+                </React.Suspense>
               </TabsContent>
             )}
 
             <TabsContent value="clients" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <Clients />
+              <React.Suspense fallback={<ModuleLoadingFallback />}>
+                <Clients />
+              </React.Suspense>
             </TabsContent>
 
             <TabsContent value="calendar" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <Calendar />
+              <React.Suspense fallback={<ModuleLoadingFallback />}>
+                <Calendar />
+              </React.Suspense>
             </TabsContent>
 
             {features.bookings !== false && (
@@ -1465,7 +1486,9 @@ function AppContent() {
             )}
 
             <TabsContent value="packages" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <Packages />
+              <React.Suspense fallback={<ModuleLoadingFallback />}>
+                <Packages />
+              </React.Suspense>
             </TabsContent>
 
             {features.requests !== false && (
@@ -1510,13 +1533,17 @@ function AppContent() {
 
             {features.tasks !== false && (
               <TabsContent value="tasks" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-                <Tasks />
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
+                  <Tasks />
+                </React.Suspense>
               </TabsContent>
             )}
 
             {(canViewGlobalDashboard || canDeletePayments || can('payments.view')) && (
               <TabsContent value="payments" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-                <Payments />
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
+                  <Payments />
+                </React.Suspense>
               </TabsContent>
             )}
 
@@ -1556,7 +1583,9 @@ function AppContent() {
                 </React.Suspense>
                 </TabsContent>
                 <TabsContent value="settings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-                  <Settings />
+                  <React.Suspense fallback={<ModuleLoadingFallback />}>
+                    <Settings />
+                  </React.Suspense>
                 </TabsContent>
                 {!/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent) && (
                   <TabsContent value="qrcode" className="m-0 animate-in fade-in-50 duration-300 p-4 focus-visible:outline-none">

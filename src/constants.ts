@@ -169,3 +169,57 @@ export function toCanonical(name: string): string {
   return CANONICAL_NAME_LOOKUP.get(trimmed.toLowerCase()) || trimmed;
 }
 
+
+export type InzanMemberCodePrefix = 'Q' | 'C' | 'P' | 'O';
+
+export interface InzanMemberCodeMeta {
+  prefix: InzanMemberCodePrefix;
+  label: string;
+  shortLabel: string;
+  badgeClass: string;
+}
+
+export const INZAN_MEMBER_CODE_GROUPS: Record<InzanMemberCodePrefix, InzanMemberCodeMeta> = {
+  Q: {
+    prefix: 'Q',
+    label: 'SGF / Kickboxing Member',
+    shortLabel: 'SGF / Kickboxing',
+    badgeClass: 'bg-orange-500/15 text-orange-500 border-orange-500/30',
+  },
+  C: {
+    prefix: 'C',
+    label: 'Cure Clinic Clients (Physiotherapy)',
+    shortLabel: 'Cure Clinic Physio',
+    badgeClass: 'bg-cyan-500/15 text-cyan-500 border-cyan-500/30',
+  },
+  P: {
+    prefix: 'P',
+    label: 'Partners & Gym Owners Family',
+    shortLabel: 'Partners / Family',
+    badgeClass: 'bg-purple-500/15 text-purple-500 border-purple-500/30',
+  },
+  O: {
+    prefix: 'O',
+    label: 'Youth Clients (PT Youth & Classes)',
+    shortLabel: 'Youth PT & Classes',
+    badgeClass: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
+  },
+};
+
+export function getInzanMemberCodeMeta(rawMemberId?: string | number | null): InzanMemberCodeMeta | null {
+  if (rawMemberId === null || rawMemberId === undefined) return null;
+  const clean = String(rawMemberId).replace(/^#/, '').trim();
+  const match = clean.match(/^([qcpo])\s*-?\s*\d+$/i);
+  if (!match || !match[1]) return null;
+  const prefix = match[1].toUpperCase() as InzanMemberCodePrefix;
+  return INZAN_MEMBER_CODE_GROUPS[prefix] || null;
+}
+
+export function isShortMemberIdSearchTerm(rawQuery?: string | null): boolean {
+  if (!rawQuery) return false;
+  const clean = rawQuery.trim().replace(/^#/, '').trim();
+  if (!clean) return false;
+  if (/^\d{1,6}$/.test(clean) && !clean.startsWith('01')) return true;
+  if (/^[qcpo]\s*-?\s*\d{1,6}$/i.test(clean)) return true;
+  return false;
+}

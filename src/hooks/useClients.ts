@@ -329,7 +329,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
     const term = searchTerm.trim();
     const cleanIdTerm = term.replace(/^#/, '').trim();
-    if (term.length < 2 && !/^\d+$/.test(cleanIdTerm)) {
+    const isSinglePrefixLetter = /^[qcpo]$/i.test(cleanIdTerm);
+    if (term.length < 2 && !/^\d+$/.test(cleanIdTerm) && !isSinglePrefixLetter) {
       setSearchResults([]);
       return;
     }
@@ -338,6 +339,30 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     const delayDebounce = setTimeout(async () => {
       try {
         let resultsMap = new Map();
+
+        // 1. Immediately search local IndexedDB first for instant results (< 5ms)
+        const tenantId = getTenantId();
+        if (tenantId) {
+          try {
+            const localMatches = await searchMembersLocal(tenantId, term);
+            if (active && localMatches.length > 0) {
+              localMatches.forEach((m) => resultsMap.set(m.id, m));
+              setSearchResults(
+                Array.from(resultsMap.entries()).map(([id, data]) => ({
+                  ...data,
+                  id,
+                } as Omit<Client, 'comments' | 'interactions'>))
+              );
+            }
+          } catch (locSearchErr) {
+            console.warn('[useClients] Local search failed:', locSearchErr);
+          }
+        }
+
+        // If offline, stop here! We already have local results.
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return;
+        }
 
         // Query by phone exact match & phone variants (handles numbers with or without leading zero)
         const phoneVariants = getEgyptPhoneVariants(term);
@@ -365,10 +390,26 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           } catch {}
         }
 
-        // Query by memberId, leadId, or secondaryBarcodes exact match (supports both string and numeric IDs in Firestore)
-        const qMemberId = query(collection(db, 'clients'), where('memberId', '==', cleanIdTerm));
-        const memberIdSnap = await getDocs(qMemberId);
-        if (active) memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        // Query by memberId, leadId, or secondaryBarcodes (supports exact + case-insensitive Q/C/P/O prefix variants + numeric IDs)
+        const compactIdTerm = cleanIdTerm.replace(/\s|-/g, '');
+        const idStringVariants = Array.from(
+          new Set([
+            cleanIdTerm,
+            cleanIdTerm.toUpperCase(),
+            cleanIdTerm.toLowerCase(),
+            compactIdTerm,
+            compactIdTerm.toUpperCase(),
+            compactIdTerm.toLowerCase(),
+          ].filter(Boolean))
+        ).slice(0, 10);
+
+        if (idStringVariants.length > 0) {
+          try {
+            const qMemberId = query(collection(db, 'clients'), where('memberId', 'in', idStringVariants));
+            const memberIdSnap = await getDocs(qMemberId);
+            if (active) memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          } catch {}
+        }
 
         if (/^\d+$/.test(cleanIdTerm)) {
           try {
@@ -378,22 +419,48 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           } catch {}
         }
 
-        try {
-          const qSecondary = query(collection(db, 'clients'), where('secondaryBarcodes', 'array-contains', cleanIdTerm));
-          const secondarySnap = await getDocs(qSecondary);
-          if (active) secondarySnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
-        } catch {}
+        if (idStringVariants.length > 0) {
+          try {
+            const qSecondary = query(
+              collection(db, 'clients'),
+              where('secondaryBarcodes', 'array-contains-any', idStringVariants)
+            );
+            const secondarySnap = await getDocs(qSecondary);
+            if (active) secondarySnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          } catch {}
+        }
 
         try {
-          const qLeadId = query(collection(db, 'clients'), where('leadId', '==', cleanIdTerm));
-          const leadIdSnap = await getDocs(qLeadId);
-          if (active) leadIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          if (idStringVariants.length > 0) {
+            const qLeadId = query(collection(db, 'clients'), where('leadId', 'in', idStringVariants));
+            const leadIdSnap = await getDocs(qLeadId);
+            if (active) leadIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+          }
           if (/^\d+$/.test(cleanIdTerm)) {
             const qLeadIdNum = query(collection(db, 'clients'), where('leadId', '==', Number(cleanIdTerm)));
             const leadIdNumSnap = await getDocs(qLeadIdNum);
             if (active) leadIdNumSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
           }
         } catch {}
+
+        // Support prefix searches for Q, C, P, O member code groups (including expired members not yet in memory)
+        if (/^[qcpo](?:\d*)?$/i.test(compactIdTerm)) {
+          const upperPrefix = compactIdTerm.toUpperCase();
+          const lowerPrefix = compactIdTerm.toLowerCase();
+          for (const prefixVariant of Array.from(new Set([upperPrefix, lowerPrefix]))) {
+            try {
+              const qPrefix = query(
+                collection(db, 'clients'),
+                orderBy('memberId'),
+                startAt(prefixVariant),
+                endAt(prefixVariant + '\uf8ff'),
+                limit(250)
+              );
+              const prefixSnap = await getDocs(qPrefix);
+              if (active) prefixSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+            } catch {}
+          }
+        }
 
         // If any matched record was merged into another unified client record, also ensure the target unified client is loaded
         const mergedTargetIds = new Set<string>();
@@ -480,6 +547,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
   };
 
   const generateMemberId = async (): Promise<string> => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return `TEMP-${Date.now().toString(36).toUpperCase()}`;
+    }
     const counterRef = doc(db, 'counters', 'clients');
     try {
       const newId = await runTransaction(db, async (transaction) => {
@@ -494,11 +564,17 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       return newId.toString();
     } catch (error) {
       console.error('Error generating member ID:', error);
+      if (isNetworkOrOfflineError(error)) {
+        return `TEMP-${Date.now().toString(36).toUpperCase()}`;
+      }
       return Math.floor(Math.random() * 10000).toString();
     }
   };
 
   const generateLeadId = async (): Promise<string> => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return `TEMP-LEAD-${Date.now().toString(36).toUpperCase()}`;
+    }
     const counterRef = doc(db, 'counters', 'leads');
     try {
       const newId = await runTransaction(db, async (transaction) => {
@@ -513,6 +589,9 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
       return newId.toString();
     } catch (error) {
       console.error('Error generating lead ID:', error);
+      if (isNetworkOrOfflineError(error)) {
+        return `TEMP-LEAD-${Date.now().toString(36).toUpperCase()}`;
+      }
       return Math.floor(10000 + Math.random() * 90000).toString();
     }
   };
@@ -547,7 +626,63 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     }
   };
 
+  const handleOfflineClientCreate = async (
+    clientData: any,
+    tenantId: string
+  ): Promise<string> => {
+    const tempClientId = `TEMP-${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).substring(2, 6)}`;
+    const nowIso = new Date().toISOString();
+
+    if (clientData.status === 'Lead') {
+      clientData.leadId = clientData.leadId || `TEMP-LEAD-${Date.now().toString(36).toUpperCase()}`;
+      delete clientData.memberId;
+    } else {
+      clientData.memberId = clientData.memberId || `TEMP-${Date.now().toString(36).toUpperCase()}`;
+    }
+
+    const finalData = {
+      ...cleanData(clientData),
+      id: tempClientId,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      isOfflineCreated: true,
+    };
+
+    // 1. Save member to local IndexedDB
+    try {
+      await saveMembers(tenantId, [finalData]);
+    } catch (dbErr) {
+      console.warn('[useClients] Failed to save member to local IndexedDB:', dbErr);
+    }
+
+    // 2. Optimistically update in-memory state
+    if (finalData.status === 'Lead') {
+      setLeadsList((prev) => [finalData as any, ...prev]);
+    } else {
+      setMembersList((prev) => [finalData as any, ...prev]);
+    }
+
+    // 3. Enqueue client.create to outbox
+    try {
+      await enqueueOperation(tenantId, 'client.create', tempClientId, finalData);
+    } catch (outboxErr) {
+      console.warn('[useClients] Failed to enqueue client.create to outbox:', outboxErr);
+    }
+
+    // Audit log (fire and forget)
+    addAuditLog(
+      'CREATE',
+      finalData.status === 'Lead' ? 'LEAD' : 'CLIENT',
+      tempClientId,
+      `[Offline] Added new ${finalData.status === 'Lead' ? 'lead' : 'client'}: ${finalData.name}`,
+      currentUser?.name
+    ).catch(() => {});
+
+    return tempClientId;
+  };
+
   const addClient = async (client: Omit<Client, 'id' | 'createdAt'>): Promise<string> => {
+    const tenantId = getTenantId();
     try {
       const { comments, ...clientData } = client;
 
@@ -603,78 +738,98 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
       if (clientData.paid === undefined) clientData.paid = false;
 
-      if (clientData.status === 'Lead') {
-        // Leads never reserve a memberId; they get a separate sequential leadId
-        delete (clientData as any).memberId;
-        if (!clientData.leadId) {
-          clientData.leadId = await generateLeadId();
+      // Offline check: if offline or network unavailable, handle offline creation immediately
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return await handleOfflineClientCreate(clientData, tenantId);
+      }
+
+      try {
+        if (clientData.status === 'Lead') {
+          // Leads never reserve a memberId; they get a separate sequential leadId
+          delete (clientData as any).memberId;
+          if (!clientData.leadId) {
+            clientData.leadId = await generateLeadId();
+          }
+        } else if (!clientData.memberId) {
+          clientData.memberId = await generateMemberId();
         }
-      } else if (!clientData.memberId) {
-        clientData.memberId = await generateMemberId();
-      }
 
-      // Inherit sales rep from sibling if unassigned
-      let canonicalRep = clientData.salesRep;
-      if (!canonicalRep || canonicalRep.trim() === '' || canonicalRep.toLowerCase() === 'unassigned') {
-        const siblingWithRep = siblings.find(s => s.salesRep && s.salesRep.trim() !== '' && s.salesRep.toLowerCase() !== 'unassigned');
-        if (siblingWithRep) {
-          canonicalRep = siblingWithRep.salesRep;
+        // Inherit sales rep from sibling if unassigned
+        let canonicalRep = clientData.salesRep;
+        if (!canonicalRep || canonicalRep.trim() === '' || canonicalRep.toLowerCase() === 'unassigned') {
+          const siblingWithRep = siblings.find(s => s.salesRep && s.salesRep.trim() !== '' && s.salesRep.toLowerCase() !== 'unassigned');
+          if (siblingWithRep) {
+            canonicalRep = siblingWithRep.salesRep;
+          }
         }
-      }
-      clientData.salesRep = canonicalRep || 'Unassigned';
+        clientData.salesRep = canonicalRep || 'Unassigned';
 
-      const docRef = doc(collection(db, 'clients'));
-      const siblingIds = siblings.map(s => s.id);
-      const linkedClientIds = Array.from(new Set([...(clientData.linkedClientIds || []), ...siblingIds]));
+        const docRef = doc(collection(db, 'clients'));
+        const siblingIds = siblings.map(s => s.id);
+        const linkedClientIds = Array.from(new Set([...(clientData.linkedClientIds || []), ...siblingIds]));
 
-      const nowIso = new Date().toISOString();
-      if (clientData.assignedTo && clientData.assignedTo !== 'unassigned') {
-        clientData.assignedAt = clientData.assignedAt || nowIso;
-        clientData.transferredAt = clientData.transferredAt || nowIso;
-        clientData.assignedBy = clientData.assignedBy || currentUser?.name || currentUser?.id || 'System';
-      }
-
-      const finalData = {
-        ...cleanData(clientData),
-        id: docRef.id,
-        createdAt: nowIso,
-        linkedClientIds,
-      };
-
-      const batch = writeBatch(db);
-      batch.set(docRef, finalData, { merge: true });
-
-      // Link siblings bidirectionally and sync sales rep
-      for (const sibling of siblings) {
-        const sibRef = doc(db, 'clients', sibling.id);
-        const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
-        const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
-        
-        if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
-          sibUpdates.salesRep = canonicalRep;
+        const nowIso = new Date().toISOString();
+        if (clientData.assignedTo && clientData.assignedTo !== 'unassigned') {
+          clientData.assignedAt = clientData.assignedAt || nowIso;
+          clientData.transferredAt = clientData.transferredAt || nowIso;
+          clientData.assignedBy = clientData.assignedBy || currentUser?.name || currentUser?.id || 'System';
         }
-        batch.update(sibRef, sibUpdates);
-      }
 
-      await batch.commit();
+        const finalData = {
+          ...cleanData(clientData),
+          id: docRef.id,
+          createdAt: nowIso,
+          linkedClientIds,
+        };
 
-      // Auto-create portal account after Firestore write to prevent orphaned accounts
-      if (finalData.memberId) {
-        const uid = await createPortalAccount(finalData.memberId, finalData.name, finalData.phone);
-        if (uid) {
-           await updateDoc(docRef, { portalUserId: uid });
+        const batch = writeBatch(db);
+        batch.set(docRef, finalData, { merge: true });
+
+        // Link siblings bidirectionally and sync sales rep
+        for (const sibling of siblings) {
+          const sibRef = doc(db, 'clients', sibling.id);
+          const sibLinks = Array.from(new Set([...(sibling.linkedClientIds || []), docRef.id]));
+          const sibUpdates: any = { linkedClientIds: sibLinks, linkedAccount: true };
+          
+          if (canonicalRep && canonicalRep.toLowerCase() !== 'unassigned' && (!sibling.salesRep || sibling.salesRep.toLowerCase() === 'unassigned')) {
+            sibUpdates.salesRep = canonicalRep;
+          }
+          batch.update(sibRef, sibUpdates);
         }
-      }
 
-      await addAuditLog(
-        'CREATE',
-        client.status === 'Lead' ? 'LEAD' : 'CLIENT',
-        docRef.id,
-        `Added new ${client.status === 'Lead' ? 'lead' : 'client'}: ${client.name}`,
-        currentUser?.name
-      );
-      return docRef.id;
+        await batch.commit();
+
+        // Sync to local IndexedDB to keep it fresh
+        saveMembers(tenantId, [finalData]).catch(() => {});
+
+        // Auto-create portal account after Firestore write to prevent orphaned accounts
+        if (finalData.memberId) {
+          const uid = await createPortalAccount(finalData.memberId, finalData.name, finalData.phone);
+          if (uid) {
+             await updateDoc(docRef, { portalUserId: uid });
+          }
+        }
+
+        await addAuditLog(
+          'CREATE',
+          client.status === 'Lead' ? 'LEAD' : 'CLIENT',
+          docRef.id,
+          `Added new ${client.status === 'Lead' ? 'lead' : 'client'}: ${client.name}`,
+          currentUser?.name
+        );
+        return docRef.id;
+      } catch (firestoreError) {
+        if (isNetworkOrOfflineError(firestoreError)) {
+          console.warn('[useClients] Network error during client commit, saving locally and queuing outbox:', firestoreError);
+          return await handleOfflineClientCreate(clientData, tenantId);
+        }
+        throw firestoreError;
+      }
     } catch (error) {
+      if (isNetworkOrOfflineError(error)) {
+        console.warn('[useClients] Network error adding client, falling back to local DB and outbox:', error);
+        return await handleOfflineClientCreate(client, tenantId);
+      }
       handleFirestoreError(error, OperationType.CREATE, 'clients', true);
       throw error;
     }

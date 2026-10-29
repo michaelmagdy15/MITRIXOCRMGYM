@@ -62,6 +62,14 @@ export default defineConfig(({ mode }) => {
           // Raise precache limit to 5 MB so all split chunks are accepted
           maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          globIgnores: [
+            '**/ExerciseLibraryHub*',
+            '**/MemberPortal*',
+            '**/CoachPortal*',
+            '**/vendor-export*',
+            '**/vendor-charts*',
+            '**/AdvancedReports*',
+          ],
           ignoreURLParametersMatching: [/^cb$/, /^sw_reloaded$/],
           cleanupOutdatedCaches: true,
           navigateFallbackDenylist: [
@@ -75,9 +83,18 @@ export default defineConfig(({ mode }) => {
           ],
           runtimeCaching: [
             {
-              urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\/.*/i,
+              urlPattern: /^https:\/\/(firebasestorage\.googleapis\.com|lh3\.googleusercontent\.com|images\.unsplash\.com)\/.*/i,
               handler: 'CacheFirst',
-              options: { cacheName: 'firebase-storage', expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 7 } },
+              options: {
+                cacheName: 'gym-media-cache',
+                expiration: {
+                  maxEntries: 500,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
             },
           ],
         },
@@ -97,30 +114,36 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: (id) => {
+            const normalizedId = id.replace(/\\/g, '/');
             // Firebase SDK → separate cacheable chunk
-            if (id.includes('node_modules/firebase')) {
-              if (id.includes('firestore')) return 'firebase-firestore';
-              if (id.includes('auth'))      return 'firebase-auth';
-              if (id.includes('storage'))   return 'firebase-storage';
+            if (normalizedId.includes('node_modules/firebase')) {
+              if (normalizedId.includes('firestore')) return 'firebase-firestore';
+              if (normalizedId.includes('auth'))      return 'firebase-auth';
+              if (normalizedId.includes('storage'))   return 'firebase-storage';
               return 'firebase-core';
             }
             // React + UI libs → vendor chunk
-            if (id.includes('node_modules/react') ||
-                id.includes('node_modules/react-dom') ||
-                id.includes('node_modules/@radix-ui') ||
-                id.includes('node_modules/lucide-react')) {
+            if (normalizedId.includes('node_modules/react') ||
+                normalizedId.includes('node_modules/react-dom') ||
+                normalizedId.includes('node_modules/@radix-ui') ||
+                normalizedId.includes('node_modules/lucide-react')) {
               return 'vendor-react';
             }
             // Date utilities
-            if (id.includes('node_modules/date-fns')) return 'vendor-dates';
+            if (normalizedId.includes('node_modules/date-fns')) return 'vendor-dates';
             // Chart / heavy libs
-            if (id.includes('node_modules/recharts') ||
-                id.includes('node_modules/d3')) {
+            if (normalizedId.includes('node_modules/recharts') ||
+                normalizedId.includes('node_modules/d3')) {
               return 'vendor-charts';
             }
             // Export tools
-            if (id.includes('node_modules/xlsx')) return 'vendor-xlsx';
-            if (id.includes('node_modules/jspdf') || id.includes('node_modules/html2canvas')) return 'vendor-export';
+            if (normalizedId.includes('node_modules/xlsx')) return 'vendor-xlsx';
+            if (normalizedId.includes('node_modules/jspdf') ||
+                normalizedId.includes('node_modules/html2canvas') ||
+                normalizedId.includes('node_modules/pdf-lib') ||
+                normalizedId.includes('node_modules/jspdf-autotable')) {
+              return 'vendor-export';
+            }
             return;
           },
         },

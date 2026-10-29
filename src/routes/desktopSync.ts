@@ -53,7 +53,7 @@ interface SyncPushResult {
 
 interface SyncItem {
   id: string;
-  entityType: 'member' | 'attendance';
+  entityType: 'member' | 'attendance' | 'package';
   tenantId: string;
   data: any;
   serverVersion: number;
@@ -128,7 +128,8 @@ async function authenticateStaffUser(
 }
 
 /**
- * Validates device credentials against tenant's desktop_devices collection.
+ * Validates device credentials against tenant's desktop_devices collection or
+ * authenticates web front-desk staff sessions directly.
  * Enforces strict tenant isolation and device revocation.
  */
 async function authenticateDevice(
@@ -139,6 +140,57 @@ async function authenticateDevice(
   | { success: true; device: AuthenticatedDevice; deviceRef: FirebaseFirestore.DocumentReference }
   | { success: false; status: number; error: string; message: string }
 > {
+  // 1. Support Web Front-Desk clients via signed-in staff credentials
+  const staffUser = await authenticateStaffUser(req, db);
+  if (staffUser) {
+    const rawDeviceId =
+      getHeaderString(req, 'x-device-id') ||
+      (typeof req.body === 'object' && req.body?.deviceId ? String(req.body.deviceId) : undefined) ||
+      (typeof req.query.deviceId === 'string' ? req.query.deviceId : undefined);
+
+    const deviceId = (rawDeviceId && String(rawDeviceId).trim()) || `web-${staffUser.uid}`;
+    const deviceRef = db.collection('desktop_devices').doc(deviceId);
+
+    // If an explicit hardware/device ID was specified, ensure it isn't revoked
+    const existingDoc = await deviceRef.get().catch(() => null);
+    if (existingDoc && existingDoc.exists && existingDoc.data()?.status === 'revoked') {
+      return {
+        success: false,
+        status: 403,
+        error: 'DEVICE_REVOKED',
+        message: 'This device has been revoked and cannot access the sync API.',
+      };
+    }
+
+    const deviceName = `Web Front Desk (${staffUser.name || staffUser.email || staffUser.uid})`;
+    const now = new Date().toISOString();
+
+    const device: AuthenticatedDevice = {
+      deviceId,
+      deviceName,
+      appVersion: getHeaderString(req, 'x-app-version') || 'web-frontdesk',
+      tenantId: resolvedTenantId,
+      deviceToken: 'web-staff-session',
+      status: 'active',
+      registeredAt: existingDoc && existingDoc.exists ? existingDoc.data()?.registeredAt || now : now,
+      lastSeenAt: now,
+      registeredBy: {
+        uid: staffUser.uid,
+        email: staffUser.email || null,
+        name: staffUser.name || null,
+        role: staffUser.role || null,
+      },
+      platform: getHeaderString(req, 'sec-ch-ua-platform') || 'web-browser',
+      metadata: {
+        isWebClient: true,
+        userAgent: req.headers['user-agent'] || 'unknown',
+      },
+    };
+
+    return { success: true, device, deviceRef };
+  }
+
+  // 2. Hardware Desktop Device Authentication (Windows/macOS native app)
   const deviceId =
     getHeaderString(req, 'x-device-id') ||
     (typeof req.body === 'object' && req.body?.deviceId ? String(req.body.deviceId) : undefined) ||
@@ -160,7 +212,7 @@ async function authenticateDevice(
       success: false,
       status: 401,
       error: 'MISSING_DEVICE_CREDENTIALS',
-      message: 'Both deviceId and deviceToken (or X-Device-Id and X-Device-Token headers) are required.',
+      message: 'Both deviceId and deviceToken (or X-Device-Id and X-Device-Token headers or Staff Bearer Token) are required.',
     };
   }
 
@@ -547,11 +599,48 @@ desktopSyncRouter.post('/sync/push', async (req: Request, res: Response) => {
             date,
             recordedBy,
             packageName: payload.packageName || clientData?.packageType || '',
-            source: 'desktop_offline',
+            source: device.metadata?.isWebClient ? 'web_frontdesk' : 'desktop_offline',
             deviceId: device.deviceId,
             operationId,
             createdAt: now,
           };
+
+          const clientUpdates: Record<string, any> = {};
+
+          if (clientDoc.exists && clientData && payload.deductSession !== false) {
+            // Deduct from packages array if present
+            if (Array.isArray(clientData.packages) && clientData.packages.length > 0) {
+              const packagesCopy = [...clientData.packages];
+              let pkgIdx = -1;
+              if (payload.packageName) {
+                pkgIdx = packagesCopy.findIndex(
+                  (p: any) => p.packageName === payload.packageName && (p.status === 'Active' || !p.status)
+                );
+              }
+              if (pkgIdx === -1) {
+                pkgIdx = packagesCopy.findIndex((p: any) => p.status === 'Active');
+              }
+              if (pkgIdx !== -1) {
+                const targetPkg = packagesCopy[pkgIdx];
+                if (targetPkg && typeof targetPkg.sessionsRemaining === 'number' && targetPkg.sessionsRemaining > 0) {
+                  packagesCopy[pkgIdx] = {
+                    ...targetPkg,
+                    sessionsRemaining: Math.max(0, targetPkg.sessionsRemaining - 1),
+                  };
+                  clientUpdates.packages = packagesCopy;
+                }
+              }
+            }
+
+            // Deduct from client top-level sessionsRemaining if number > 0
+            if (typeof clientData.sessionsRemaining === 'number' && clientData.sessionsRemaining > 0) {
+              clientUpdates.sessionsRemaining = Math.max(0, clientData.sessionsRemaining - 1);
+            }
+
+            if (Object.keys(clientUpdates).length > 0) {
+              clientUpdates.updatedAt = now;
+            }
+          }
 
           const ledgerEntry = {
             operationId,
@@ -563,7 +652,7 @@ desktopSyncRouter.post('/sync/push', async (req: Request, res: Response) => {
             entityId: attendanceId,
             appliedAt: now,
             status: 'applied',
-            result: { attendanceId },
+            result: { attendanceId, clientUpdated: Object.keys(clientUpdates).length > 0 },
           };
 
           const auditRef = db.collection('desktop_audit_log').doc();
@@ -571,16 +660,19 @@ desktopSyncRouter.post('/sync/push', async (req: Request, res: Response) => {
             operationId,
             deviceId: device.deviceId,
             tenantId: resolvedTenantId,
-            actorUserId: op.actorUserId || 'desktop-offline',
+            actorUserId: op.actorUserId || (device.metadata?.isWebClient ? 'web-frontdesk' : 'desktop-offline'),
             action: 'CREATE',
             entityType: 'ATTENDANCE',
             entityId: attendanceId,
-            details: `Desktop offline check-in for client ${clientData?.name || clientId} at ${branch}`,
+            details: `Check-in for client ${clientData?.name || clientId} at ${branch} via ${device.deviceName}`,
             timestamp: now,
           };
 
           const batch = db.batch();
           batch.set(attendanceRef, attendanceRecord);
+          if (clientDoc.exists && Object.keys(clientUpdates).length > 0) {
+            batch.update(clientRef, clientUpdates);
+          }
           batch.set(ledgerRef, ledgerEntry);
           batch.set(auditRef, auditEntry);
           await batch.commit();
@@ -590,7 +682,7 @@ desktopSyncRouter.post('/sync/push', async (req: Request, res: Response) => {
             status: 'acknowledged',
             deduplicated: false,
             appliedAt: now,
-            result: { attendanceId },
+            result: { attendanceId, clientUpdated: Object.keys(clientUpdates).length > 0 },
           });
         } else if (op.operationType === 'member.update_notes') {
           const clientId = String(payload.clientId || op.entityId || '').trim();
@@ -680,6 +772,175 @@ desktopSyncRouter.post('/sync/push', async (req: Request, res: Response) => {
             deduplicated: false,
             appliedAt: now,
             result: { clientId, commentId: commentRef.id },
+          });
+        } else if (op.operationType === 'payment.create') {
+          // Extract requested payload fields:
+          // clientId, amount, paymentMethod, packageType, packageName, notes, date, receiptNumber
+          const rawClientId = payload.clientId || op.entityId || '';
+          const isGuest =
+            !rawClientId ||
+            rawClientId === 'guest' ||
+            rawClientId === 'WALK-IN-GUEST' ||
+            rawClientId === 'GUEST';
+          const clientId = isGuest ? (rawClientId || 'guest') : String(rawClientId).trim();
+
+          const amount = Number(payload.amount ?? payload.amount_paid ?? 0);
+          const paymentMethod = String(payload.paymentMethod || payload.method || 'Cash').trim();
+          const packageType = String(payload.packageType || payload.package_category_type || 'General').trim();
+          const packageName = String(payload.packageName || payload.packageType || '').trim();
+          const notes = String(payload.notes || '').trim();
+          const date = String(payload.date || op.createdAtUtc || now).trim();
+          const receiptNumber = String(payload.receiptNumber || payload.receiptSerial || '').trim();
+
+          let clientRef: any = null;
+          let clientDoc: any = null;
+          let clientData: any = null;
+
+          if (clientId && !isGuest) {
+            clientRef = db.collection('clients').doc(clientId);
+            clientDoc = await clientRef.get();
+            if (clientDoc.exists) {
+              clientData = clientDoc.data();
+            }
+          }
+
+          const clientName =
+            clientData?.name ||
+            payload.clientName ||
+            payload.client_name ||
+            (isGuest ? (payload.guestName || 'Guest') : 'Unknown');
+
+          // Create doc in payments collection
+          const paymentRef = db.collection('payments').doc();
+          const paymentId = paymentRef.id;
+
+          const paymentRecord: Record<string, any> = {
+            id: paymentId,
+            clientId,
+            client_name: clientName,
+            clientName,
+            amount,
+            amount_paid: Number(payload.amount_paid ?? amount),
+            method: paymentMethod,
+            paymentMethod,
+            packageType,
+            packageName,
+            notes,
+            date,
+            receiptNumber,
+            receiptSerial: receiptNumber,
+            status: payload.status || 'paid',
+            source: device.metadata?.isWebClient ? 'web_frontdesk' : 'desktop_offline',
+            deviceId: device.deviceId,
+            operationId,
+            created_at: now,
+            createdAt: now,
+          };
+
+          if (payload.recordedBy) paymentRecord.recordedBy = payload.recordedBy;
+          if (payload.sales_rep_id) paymentRecord.sales_rep_id = payload.sales_rep_id;
+          if (payload.branch) paymentRecord.branch = payload.branch;
+          if (payload.branchId) paymentRecord.branchId = payload.branchId;
+          if (payload.isPartialPayment !== undefined) paymentRecord.isPartialPayment = payload.isPartialPayment;
+          if (payload.remainingBalance !== undefined) paymentRecord.remainingBalance = payload.remainingBalance;
+          if (payload.isComplimentary !== undefined) paymentRecord.isComplimentary = payload.isComplimentary;
+          if (payload.id && String(payload.id).startsWith('temp-')) paymentRecord.offlineTempId = payload.id;
+
+          // If payload.clientId: update client's payments list or balance if applicable
+          const clientUpdates: Record<string, any> = {};
+
+          if (clientRef && clientDoc?.exists && clientData) {
+            // Update client's payments list
+            if (Array.isArray(clientData.payments)) {
+              clientUpdates.payments = [...clientData.payments, paymentId];
+            } else {
+              clientUpdates.payments = [paymentId];
+            }
+
+            // Update client balance if applicable
+            if (typeof clientData.outstandingBalance === 'number' && clientData.outstandingBalance > 0) {
+              const newBal = Math.max(0, clientData.outstandingBalance - amount);
+              clientUpdates.outstandingBalance = newBal;
+              clientUpdates.hasOutstandingBalance = newBal > 0;
+            } else if (typeof clientData.balance === 'number' && clientData.balance > 0) {
+              clientUpdates.balance = Math.max(0, clientData.balance - amount);
+            }
+
+            // Update package balance if applicable
+            if (Array.isArray(clientData.packages) && clientData.packages.length > 0) {
+              let remAmount = amount;
+              clientUpdates.packages = clientData.packages.map((pkg: any) => {
+                if (remAmount > 0 && typeof pkg.remainingBalance === 'number' && pkg.remainingBalance > 0) {
+                  const deduct = Math.min(pkg.remainingBalance, remAmount);
+                  remAmount -= deduct;
+                  return {
+                    ...pkg,
+                    remainingBalance: pkg.remainingBalance - deduct,
+                    paid: pkg.remainingBalance - deduct === 0,
+                  };
+                }
+                return pkg;
+              });
+            }
+
+            clientUpdates.paid = true;
+            clientUpdates.lastContactDate = now;
+            clientUpdates.updatedAt = now;
+          }
+
+          // Ledger entry for idempotency
+          const ledgerEntry = {
+            operationId,
+            deviceId: device.deviceId,
+            tenantId: resolvedTenantId,
+            actorUserId: op.actorUserId || null,
+            operationType: op.operationType,
+            entityType: 'payment',
+            entityId: paymentId,
+            appliedAt: now,
+            status: 'applied',
+            result: {
+              paymentId,
+              clientId: clientId || null,
+              amount,
+              clientUpdated: Object.keys(clientUpdates).length > 0,
+            },
+          };
+
+          const auditRef = db.collection('desktop_audit_log').doc();
+          const auditEntry = {
+            operationId,
+            deviceId: device.deviceId,
+            tenantId: resolvedTenantId,
+            actorUserId: op.actorUserId || (device.metadata?.isWebClient ? 'web-frontdesk' : 'desktop-offline'),
+            action: 'CREATE',
+            entityType: 'PAYMENT',
+            entityId: paymentId,
+            details: `Payment recorded of ${amount} for client ${clientData?.name || clientId || 'guest'} via ${device.deviceName}`,
+            timestamp: now,
+          };
+
+          // Atomically write payment, updates, and idempotency ledger doc
+          const batch = db.batch();
+          batch.set(paymentRef, paymentRecord);
+          if (clientRef && clientDoc?.exists && Object.keys(clientUpdates).length > 0) {
+            batch.update(clientRef, clientUpdates);
+          }
+          batch.set(ledgerRef, ledgerEntry);
+          batch.set(auditRef, auditEntry);
+          await batch.commit();
+
+          results.push({
+            operationId,
+            status: 'acknowledged',
+            deduplicated: false,
+            appliedAt: now,
+            result: {
+              paymentId,
+              clientId: clientId || null,
+              amount,
+              clientUpdated: Object.keys(clientUpdates).length > 0,
+            },
           });
         } else {
           // Unsupported operation type -> record conflict
@@ -774,6 +1035,13 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
           const data = doc.data();
           delete data.comments;
           delete data.interactions;
+          delete data.assignmentHistory;
+          delete data.callAuditTrail;
+          delete data.history;
+          delete data.documents;
+          delete data.attachments;
+          delete data.importedHistory;
+          delete data.photoCaptureLogs;
           const serverUpdatedAt = data.updatedAt || data.createdAt || data.lastContactDate || cursor;
           if (!cursor || serverUpdatedAt > cursor) {
             items.push({
@@ -798,6 +1066,13 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
           const data = doc.data();
           delete data.comments;
           delete data.interactions;
+          delete data.assignmentHistory;
+          delete data.callAuditTrail;
+          delete data.history;
+          delete data.documents;
+          delete data.attachments;
+          delete data.importedHistory;
+          delete data.photoCaptureLogs;
           items.push({
             id: doc.id,
             entityType: 'member',
@@ -867,6 +1142,63 @@ desktopSyncRouter.get('/sync/pull', async (req: Request, res: Response) => {
       }
     } catch (attendanceErr) {
       console.error('[DesktopSync] Error pulling attendance:', attendanceErr);
+    }
+
+    // Query 3: Packages catalogue
+    try {
+      if (cursor) {
+        const pkgSnap = await db
+          .collection('packages')
+          .where('updatedAt', '>', cursor)
+          .orderBy('updatedAt', 'asc')
+          .limit(limit)
+          .get()
+          .catch(async () => {
+            return db.collection('packages').limit(limit).get();
+          });
+
+        for (const doc of pkgSnap.docs) {
+          const data = doc.data();
+          delete data.history;
+          delete data.auditTrail;
+          delete data.versions;
+          delete data.changeNotes;
+          const serverUpdatedAt = data.updatedAt || data.createdAt || cursor;
+          if (!cursor || serverUpdatedAt > cursor) {
+            items.push({
+              id: doc.id,
+              entityType: 'package',
+              tenantId: resolvedTenantId,
+              data: { ...data, id: doc.id },
+              serverVersion: data.serverVersion || data.version || 1,
+              serverUpdatedAt,
+              deletedAt: data.deleted_at || data.deletedAt || (data.status === 'Archived' ? (data.archivedAt || serverUpdatedAt) : null),
+            });
+          }
+        }
+      } else {
+        // Initial sync: pull packages
+        const pkgSnap = await db.collection('packages').limit(limit).get();
+
+        for (const doc of pkgSnap.docs) {
+          const data = doc.data();
+          delete data.history;
+          delete data.auditTrail;
+          delete data.versions;
+          delete data.changeNotes;
+          items.push({
+            id: doc.id,
+            entityType: 'package',
+            tenantId: resolvedTenantId,
+            data: { ...data, id: doc.id },
+            serverVersion: data.serverVersion || data.version || 1,
+            serverUpdatedAt: data.updatedAt || data.createdAt || new Date().toISOString(),
+            deletedAt: data.deleted_at || data.deletedAt || (data.status === 'Archived' ? (data.archivedAt || data.updatedAt || new Date().toISOString()) : null),
+          });
+        }
+      }
+    } catch (packageErr) {
+      console.error('[DesktopSync] Error pulling packages:', packageErr);
     }
 
     // Sort combined feed by serverUpdatedAt ascending

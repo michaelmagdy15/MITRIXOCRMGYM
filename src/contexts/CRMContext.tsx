@@ -24,7 +24,7 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
-  collectionGroup, 
+  where, 
   addDoc, 
   deleteDoc, 
   doc, 
@@ -34,6 +34,7 @@ import {
 } from 'firebase/firestore';
 import * as clientService from '../services/clientService';
 import * as sharedService from '../services/sharedServices';
+import * as outboxProcessor from '../services/outbox/outboxProcessor';
 import { useAuth } from './AuthContext';
 import { useSettings } from './SettingsContext';
 import { cleanData } from '../utils';
@@ -44,6 +45,7 @@ interface CRMContextType {
   payments: Payment[];
   privateSessions: PrivateSession[];
   auditLogs: AuditLog[];
+  fetchAuditLogs?: () => Promise<void>;
   tasks: Task[];
   packages: Package[];
   importBatches: ImportBatch[];
@@ -85,7 +87,6 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const { searchQuery, setSalesTarget } = useSettings();
 
   const [baseClients, setBaseClients] = useState<Omit<Client, 'comments'>[]>([]);
-  const [allComments, setAllComments] = useState<Record<ClientId, Comment[]>>({});
   const [payments, setPayments] = useState<Payment[]>([]);
   const [privateSessions, setPrivateSessions] = useState<PrivateSession[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -101,9 +102,9 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       phone: c.phone != null ? String(c.phone) : '',
       memberId: c.memberId != null && c.memberId !== '' ? String(c.memberId) : undefined,
       leadId: c.leadId != null && c.leadId !== '' ? String(c.leadId) : undefined,
-      comments: allComments[c.id] || []
+      comments: (c as any).comments || []
     })) as Client[];
-  }, [baseClients, allComments]);
+  }, [baseClients]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -112,19 +113,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setBaseClients(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id as ClientId } as Omit<Client, 'comments'>)));
     });
 
-    const unsubComments = onSnapshot(collectionGroup(db, 'comments'), (snapshot) => {
-      const commentsByClient: Record<ClientId, Comment[]> = {} as any;
-      snapshot.docs.forEach(doc => {
-        const clientId = doc.ref.parent.parent?.id as ClientId | undefined;
-        if (clientId) {
-          if (!commentsByClient[clientId]) commentsByClient[clientId] = [];
-          commentsByClient[clientId]!.push({ ...doc.data(), id: doc.id } as Comment);
-        }
-      });
-      setAllComments(commentsByClient);
-    });
+    // Scope payments and sessions listeners to the last 30 days to avoid bandwidth saturation on load
+    const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const unsubPayments = onSnapshot(collection(db, 'payments'), (snapshot) => {
+    const paymentsQuery = query(
+      collection(db, 'payments'),
+      where('date', '>=', thirtyDaysAgoIso)
+    );
+    const unsubPayments = onSnapshot(paymentsQuery, (snapshot) => {
       const paymentsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id as PaymentId } as Payment));
       setPayments(paymentsData);
       
@@ -143,7 +139,11 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
     });
 
-    const unsubSessions = onSnapshot(collection(db, 'sessions'), (snapshot) => {
+    const sessionsQuery = query(
+      collection(db, 'sessions'),
+      where('date', '>=', thirtyDaysAgoIso)
+    );
+    const unsubSessions = onSnapshot(sessionsQuery, (snapshot) => {
       setPrivateSessions(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id as SessionId } as PrivateSession)));
     });
 
@@ -163,23 +163,14 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setUserTargets(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as UserTarget)));
     });
 
-    let unsubAudit: (() => void) | undefined;
-    if (['manager', 'admin', 'super_admin', 'crm_admin'].includes(effectiveRole || '')) {
-      unsubAudit = onSnapshot(query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc')), (snapshot) => {
-        setAuditLogs(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as AuditLog)));
-      });
-    }
-
     return () => {
       unsubClients();
-      unsubComments();
       unsubPayments();
       unsubSessions();
       unsubTasks();
       unsubPackages();
       unsubBatches();
       unsubTargets();
-      if (unsubAudit) unsubAudit();
     };
   }, [currentUser, effectiveRole, setSalesTarget]);
 
@@ -214,6 +205,15 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return tasks.filter(t => t.assignedTo === currentUser.id || t.createdBy === currentUser.id);
   }, [tasks, currentUser, effectiveRole]);
 
+  // On-demand audit log fetcher to avoid downloading all logs on boot
+  const fetchAuditLogs = useCallback(async () => {
+    if (!currentUser || !['manager', 'admin', 'super_admin', 'crm_admin'].includes(effectiveRole || '')) {
+      return;
+    }
+    const snap = await getDocs(query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc')));
+    setAuditLogs(snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as AuditLog)));
+  }, [currentUser, effectiveRole]);
+
   // Actions (Service Wrappers)
   const addClient = async (client: Client) => { await clientService.addClient(client); };
   const bulkAddClients = async (newClients: Client[]) => { return await clientService.bulkAddClients(newClients); };
@@ -238,7 +238,63 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await clientService.addComment(clientId, text, author);
   };
   
-  const addPayment = async (payment: Omit<Payment, 'id'>) => { await sharedService.addPayment(payment); };
+  const addPayment = async (payment: Omit<Payment, 'id'>) => {
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    const tenantId = getTenantId();
+
+    const enqueueOfflinePayment = (tempId: string) => {
+      const optimisticPayment: Payment = {
+        ...payment,
+        id: tempId as PaymentId,
+      };
+      setPayments((prev) => [optimisticPayment, ...prev]);
+      outboxProcessor.enqueueOperation(
+        tenantId,
+        'payment.create',
+        payment.clientId || 'guest',
+        payment
+      ).catch((err) => {
+        console.warn('[CRMContext] Offline payment outbox enqueue failed:', err);
+      });
+    };
+
+    if (isOffline) {
+      const tempId = `temp-pay-${Date.now().toString(36)}`;
+      enqueueOfflinePayment(tempId);
+      return;
+    }
+
+    try {
+      const writePromise = sharedService.addPayment(payment);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          const timeoutErr = new Error('Network timeout recording payment to cloud');
+          timeoutErr.name = 'TimeoutError';
+          reject(timeoutErr);
+        }, 10000);
+      });
+      await Promise.race([writePromise, timeoutPromise]);
+    } catch (err: any) {
+      const isNetworkError =
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        err?.name === 'NetworkError' ||
+        err?.name === 'TimeoutError' ||
+        err?.code === 'unavailable' ||
+        err?.code === 'deadline-exceeded' ||
+        err?.message?.toLowerCase().includes('network') ||
+        err?.message?.toLowerCase().includes('timeout') ||
+        err?.message?.toLowerCase().includes('offline') ||
+        err?.message?.toLowerCase().includes('failed to fetch');
+
+      if (isNetworkError) {
+        console.warn('[CRMContext] Network drop/timeout during payment write, falling back to offline outbox:', err);
+        const tempId = `temp-pay-${Date.now().toString(36)}`;
+        enqueueOfflinePayment(tempId);
+        return;
+      }
+      throw err;
+    }
+  };
   const deletePayment = async (id: PaymentId) => {
     if (!isSuperUser) throw new Error("Unauthorized");
     await sharedService.deletePayment(id);
@@ -392,6 +448,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     payments: visiblePayments,
     privateSessions,
     auditLogs,
+    fetchAuditLogs,
     tasks: visibleTasks,
     packages,
     importBatches,
@@ -419,7 +476,7 @@ export const CRMProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     importBackup,
     recordSessionAttendance,
     analytics
-  }), [visibleClients, visiblePayments, privateSessions, auditLogs, visibleTasks, packages, importBatches, userTargets, isSuperUser, analytics]);
+  }), [visibleClients, visiblePayments, privateSessions, auditLogs, fetchAuditLogs, visibleTasks, packages, importBatches, userTargets, isSuperUser, analytics]);
 
   return <CRMContext.Provider value={value}>{children}</CRMContext.Provider>;
 };
