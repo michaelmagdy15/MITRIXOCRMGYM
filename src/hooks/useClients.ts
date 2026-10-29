@@ -9,6 +9,7 @@ import {
   setDoc,
   runTransaction,
   writeBatch,
+  getDoc,
   getDocs,
   query,
   where,
@@ -24,6 +25,30 @@ import { cleanData } from '../utils';
 import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 import { addAuditLog } from '../services/auditService';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  getLocalDb,
+  saveMembers,
+  searchMembersLocal,
+  getMemberById,
+} from '../services/localDb';
+import { enqueueOperation } from '../services/outbox';
+
+function isNetworkOrOfflineError(error: any): boolean {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+  if (!error) return false;
+  const msg = String(error?.message || error?.code || '').toLowerCase();
+  return (
+    msg.includes('network') ||
+    msg.includes('offline') ||
+    msg.includes('unavailable') ||
+    msg.includes('timeout') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('deadline-exceeded') ||
+    msg.includes('client is offline') ||
+    msg.includes('transport errored') ||
+    msg.includes('aborted')
+  );
+}
 const FEMALE_NAMES = new Set([
   'heba', 'karma', 'maria', 'martina', 'yassmin', 'yasmin', 'yasmeen', 'menna', 'riham', 'farah',
   'loujy', 'habiba', 'maha', 'aiat', 'raghda', 'hend', 'maisoon', 'maison', 'farida', 'nadine',
@@ -156,6 +181,30 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
 
 
+  // 0. Load cached members immediately from IndexedDB so search & list works instantly (< 10ms)
+  useEffect(() => {
+    let isMounted = true;
+    const tenantId = getTenantId();
+    if (!tenantId || effectiveRole === 'client') return;
+
+    getLocalDb(tenantId)
+      .then((ldb) => ldb.getAll('members'))
+      .then((cachedMembers) => {
+        if (!isMounted) return;
+        if (cachedMembers && cachedMembers.length > 0) {
+          setMembersList((prev) => (prev.length === 0 ? (cachedMembers as any) : prev));
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('[useClients] Error loading members from local IndexedDB:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveRole]);
+
   // 1. Active Members Snapshot Listener (Active, Hold, Nearly Expired)
   useEffect(() => {
     if (!currentUser) return;
@@ -172,10 +221,19 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     const unsubClients = onSnapshot(
       q,
       (snapshot) => {
-        setMembersList(
-          snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
+        const fetched = snapshot.docs.map(
+          (d) => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>)
         );
+        setMembersList(fetched);
         setLoading(false);
+
+        // Sync fetched snapshot members into gymLocalDb in background so local DB stays fresh
+        const tenantId = getTenantId();
+        if (tenantId && fetched.length > 0) {
+          saveMembers(tenantId, fetched).catch((err) => {
+            console.warn('[useClients] Background saveMembers failed:', err);
+          });
+        }
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, 'clients-members');
@@ -198,10 +256,18 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         where('status', 'in', ['Expired', 'expired'])
       );
       const snap = await getDocs(q);
-      setExpiredMembersList(
-        snap.docs.map(d => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>))
+      const fetchedExpired = snap.docs.map(
+        (d) => ({ ...d.data(), id: d.id } as Omit<Client, 'comments' | 'interactions'>)
       );
+      setExpiredMembersList(fetchedExpired);
       setExpiredLoaded(true);
+
+      const tenantId = getTenantId();
+      if (tenantId && fetchedExpired.length > 0) {
+        saveMembers(tenantId, fetchedExpired).catch((err) => {
+          console.warn('[useClients] Background saveMembers (expired) failed:', err);
+        });
+      }
     } catch (error) {
       console.error('Error fetching expired members:', error);
     } finally {
@@ -223,7 +289,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
   // Trigger expired fetch immediately if a search query is entered (so search results find expired members)
   useEffect(() => {
-    if (searchTerm && searchTerm.trim().length >= 2 && !expiredLoaded && !loadingExpired) {
+    if (searchTerm && searchTerm.trim().length >= 1 && !expiredLoaded && !loadingExpired) {
       fetchExpiredMembers();
     }
   }, [searchTerm, expiredLoaded, loadingExpired, fetchExpiredMembers]);
@@ -253,15 +319,20 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     return () => unsubLeads();
   }, [currentUser?.id, currentUser?.role, effectiveRole]);
 
-  // 3. On-demand search query for historical/lost leads
+  // 3. On-demand search query for historical/lost leads & ID lookups
   useEffect(() => {
-    if (!currentUser || !searchTerm || searchTerm.trim().length < 2) {
+    if (!currentUser || !searchTerm || searchTerm.trim().length < 1) {
       setSearchResults([]);
       return;
     }
     if (effectiveRole === 'client' || effectiveRole === 'coach') return;
 
     const term = searchTerm.trim();
+    const cleanIdTerm = term.replace(/^#/, '').trim();
+    if (term.length < 2 && !/^\d+$/.test(cleanIdTerm)) {
+      setSearchResults([]);
+      return;
+    }
     let active = true;
 
     const delayDebounce = setTimeout(async () => {
@@ -272,7 +343,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         const phoneVariants = getEgyptPhoneVariants(term);
         const normSearchPhone = normalizeEgyptPhone(term);
 
-        if (phoneVariants.length > 0) {
+        if (phoneVariants.length > 0 && term.length >= 4) {
           try {
             const qPhone = query(
               collection(db, 'clients'),
@@ -283,7 +354,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           } catch {}
         }
 
-        if (normSearchPhone) {
+        if (normSearchPhone && term.length >= 4) {
           try {
             const qNormPhone = query(
               collection(db, 'clients'),
@@ -294,8 +365,7 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           } catch {}
         }
 
-        // Query by memberId or leadId exact match (supports both string and numeric IDs in Firestore)
-        const cleanIdTerm = term.replace(/^#/, '').trim();
+        // Query by memberId, leadId, or secondaryBarcodes exact match (supports both string and numeric IDs in Firestore)
         const qMemberId = query(collection(db, 'clients'), where('memberId', '==', cleanIdTerm));
         const memberIdSnap = await getDocs(qMemberId);
         if (active) memberIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
@@ -309,6 +379,12 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
         }
 
         try {
+          const qSecondary = query(collection(db, 'clients'), where('secondaryBarcodes', 'array-contains', cleanIdTerm));
+          const secondarySnap = await getDocs(qSecondary);
+          if (active) secondarySnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        } catch {}
+
+        try {
           const qLeadId = query(collection(db, 'clients'), where('leadId', '==', cleanIdTerm));
           const leadIdSnap = await getDocs(qLeadId);
           if (active) leadIdSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
@@ -319,17 +395,35 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
           }
         } catch {}
 
+        // If any matched record was merged into another unified client record, also ensure the target unified client is loaded
+        const mergedTargetIds = new Set<string>();
+        resultsMap.forEach((val: any) => {
+          if (val?.mergedInto && typeof val.mergedInto === 'string' && !resultsMap.has(val.mergedInto)) {
+            mergedTargetIds.add(val.mergedInto);
+          }
+        });
+        for (const targetId of mergedTargetIds) {
+          try {
+            const targetSnap = await getDoc(doc(db, 'clients', targetId));
+            if (active && targetSnap.exists()) {
+              resultsMap.set(targetSnap.id, targetSnap.data());
+            }
+          } catch {}
+        }
+
         // Query by name prefix match (capitalized prefix logic)
-        const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
-        const qName = query(
-          collection(db, 'clients'),
-          orderBy('name'),
-          startAt(capitalizedTerm),
-          endAt(capitalizedTerm + '\uf8ff'),
-          limit(30)
-        );
-        const nameSnap = await getDocs(qName);
-        if (active) nameSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        if (term.length >= 2 && !/^\d+$/.test(cleanIdTerm)) {
+          const capitalizedTerm = term.charAt(0).toUpperCase() + term.slice(1);
+          const qName = query(
+            collection(db, 'clients'),
+            orderBy('name'),
+            startAt(capitalizedTerm),
+            endAt(capitalizedTerm + '\uf8ff'),
+            limit(30)
+          );
+          const nameSnap = await getDocs(qName);
+          if (active) nameSnap.docs.forEach(d => resultsMap.set(d.id, d.data()));
+        }
 
         if (active) {
           setSearchResults(

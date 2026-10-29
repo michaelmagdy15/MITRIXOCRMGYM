@@ -24,7 +24,8 @@ export default function RenewalPipeline() {
     currentUser,
     addPayment,
     users,
-    branding, coaches, packages
+    branding, coaches, packages,
+    setActiveClientId
   } = useAppContext();
 
 
@@ -62,6 +63,8 @@ export default function RenewalPipeline() {
     const upcArr: Client[] = [];
 
     for (const c of clients) {
+      const s = (c.status || '').toLowerCase().trim();
+      if (s === 'merged' || (c as any).mergedInto) continue;
       const lifecycle = computeMemberGlobalStatus(c); if (lifecycle.globalStatus === 'GUEST' || lifecycle.globalStatus === 'HOLD') continue;
       const expiry = safeParseISO(lifecycle.latestPackageEndDate || c.membershipExpiry);
       if (!expiry) {
@@ -213,10 +216,17 @@ export default function RenewalPipeline() {
                 const daysLeft = expiryDate ? differenceInDays(expiryDate, now) : 0;
                 const lastContactDate = safeParseISO(client.lastContactDate);
 
+                const targetProfileId = (client as any).mergedInto || client.id;
+
                 return (
-                  <TableRow key={client.id} className="hover:bg-muted/40 transition-colors">
+                  <TableRow
+                    key={client.id}
+                    onClick={() => setActiveClientId(targetProfileId)}
+                    className="hover:bg-muted/40 transition-colors cursor-pointer group"
+                    title="Click to open member profile"
+                  >
                     <TableCell className="pl-6">
-                      <div className="font-medium text-foreground">{client.name}</div>
+                      <div className="font-medium text-foreground group-hover:text-primary transition-colors">{client.name}</div>
                       <div className="text-xs text-muted-foreground">#{client.memberId || 'N/A'}</div>
                     </TableCell>
                     <TableCell>
@@ -251,13 +261,16 @@ export default function RenewalPipeline() {
                         {resolveUserDisplay(client.assignedTo, users, client.salesName || 'Unassigned')}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right pr-6">
+                    <TableCell className="text-right pr-6" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-2">
                         <Button 
                           variant="outline" 
                           size="sm" 
                           className="h-8 gap-1.5 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/30 hover:bg-blue-50 dark:hover:bg-blue-500/10"
-                          onClick={() => handleMarkContacted(client)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkContacted(client);
+                          }}
                         >
                           <Phone className="w-3.5 h-3.5" />
                           Mark Contacted
@@ -266,7 +279,10 @@ export default function RenewalPipeline() {
                           variant="default" 
                           size="sm" 
                           className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                          onClick={() => handleOpenPayment(client)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPayment(client);
+                          }}
                         >
                           <DollarSign className="w-3.5 h-3.5" />
                           Renew

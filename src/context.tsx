@@ -451,15 +451,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (searchQuery) {
       const q = searchQuery.toLowerCase().trim();
       const cleanId = q.replace(/^#/, '');
-      return clients.filter(c => 
-        String(c.name || '').toLowerCase().includes(q) || 
-        scoreNameMatch(c.name, q).matched ||
-        String(c.phone || '').toLowerCase().includes(q) || 
-        matchesPhoneSearch(c.phone, q) ||
-        matchesPhoneSearch((c as any).parentPhone, q) ||
-        (c.memberId != null && String(c.memberId).toLowerCase().includes(cleanId)) ||
-        (c.leadId != null && String(c.leadId).toLowerCase().includes(cleanId))
-      );
+      const isPureIdQuery = /^\d{1,6}$/.test(cleanId) && !cleanId.startsWith('01');
+
+      const matchesExactId = (c: typeof clients[number]): boolean =>
+        (c.memberId != null && String(c.memberId).toLowerCase() === cleanId) ||
+        (c.leadId != null && String(c.leadId).toLowerCase() === cleanId) ||
+        (c.barcode != null && String(c.barcode).toLowerCase() === cleanId) ||
+        (Array.isArray(c.secondaryBarcodes) && c.secondaryBarcodes.some(b => String(b || '').toLowerCase() === cleanId)) ||
+        (Array.isArray(c.packages) && c.packages.some(p => p?.barcode && String(p.barcode).toLowerCase() === cleanId));
+
+      if (isPureIdQuery) {
+        const exactMatches = clients.filter(c => {
+          const s = (c.status || '').toLowerCase().trim();
+          if (s === 'merged' || (c as any).mergedInto) return false;
+          return matchesExactId(c);
+        });
+        if (exactMatches.length > 0) {
+          return exactMatches;
+        }
+      }
+
+      return clients.filter(c => {
+        const s = (c.status || '').toLowerCase().trim();
+        if (s === 'merged' || (c as any).mergedInto) return false;
+        return (
+          matchesExactId(c) ||
+          String(c.name || '').toLowerCase().includes(q) || 
+          scoreNameMatch(c.name, q).matched ||
+          (c.memberId != null && String(c.memberId).toLowerCase().includes(cleanId)) ||
+          (c.leadId != null && String(c.leadId).toLowerCase().includes(cleanId)) ||
+          (c.barcode != null && String(c.barcode).toLowerCase().includes(cleanId)) ||
+          (Array.isArray(c.secondaryBarcodes) && c.secondaryBarcodes.some(b => String(b || '').toLowerCase().includes(cleanId))) ||
+          (Array.isArray(c.packages) && c.packages.some(p => p?.barcode && String(p.barcode).toLowerCase().includes(cleanId))) ||
+          (!isPureIdQuery && (
+            String(c.phone || '').toLowerCase().includes(q) || 
+            matchesPhoneSearch(c.phone, q) ||
+            matchesPhoneSearch((c as any).parentPhone, q)
+          ))
+        );
+      });
     }
     let filtered = clients;
     // Only restrict to assigned clients if the user is strictly a sales representative

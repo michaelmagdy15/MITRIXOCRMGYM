@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { RefreshCw, CheckCircle2, AlertCircle, Database, Users, Package, CreditCard, UserPlus, Shield, Clock, X, ChevronDown, ChevronUp, Zap } from 'lucide-react';
 import { auth } from '../firebase';
 
@@ -257,9 +258,16 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
     <>
       {renderTrigger()}
 
-      {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl overflow-hidden text-zinc-100">
+      {isOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSyncing) {
+              setIsOpen(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-lg my-auto rounded-2xl bg-zinc-900 border border-zinc-800 shadow-2xl overflow-hidden text-zinc-100">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/60">
               <div className="flex items-center gap-3">
@@ -521,7 +529,8 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

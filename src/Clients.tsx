@@ -1,7 +1,7 @@
 import React, { useState, useDeferredValue, useRef } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
-import { ASSIGNABLE_ROLES, toCanonical } from './constants';
+import { ASSIGNABLE_ROLES, isAssignableSalesUser, toCanonical } from './constants';
 import { useOperationId } from './hooks/useOperationId';
 import CascadingPackageSelector from './components/CascadingPackageSelector';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -114,7 +114,7 @@ export const getMemberCategory = (client: Client): 'Kids Only' | 'Kids Pro' | 'J
 
 export default function Clients() {
   const { t } = useLanguage();
-  const { currentUser, users, coaches, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, resetClientPortalPassword, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can, packages } = useAppContext();
+  const { currentUser, users, coaches, payments, clients, allClients, addClient, updateClient, deleteClient, deleteMultipleClients, addComment, addInteraction, canViewGlobalDashboard, canDeleteRecords, recalculateAllPackages, isManagerOrSama, branches, branding, processPaymentTransaction, fetchClientDetails, createClientAccount, resetClientPortalPassword, activeClientId, setActiveClientId, features, attendances, loadingClients, fetchExpiredMembers, loadingExpired, expiredLoaded, can, packages, searchQuery, setSearchQuery } = useAppContext();
 
   const availableCoaches = React.useMemo(() => {
     const map = new Map<string, { id: string; userId?: string; coachDocId?: string; coachId?: string; name: string; branch?: string }>();
@@ -183,7 +183,15 @@ export default function Clients() {
       return active && (features?.ptPackages !== false || p.type !== 'Private');
     });
   }, [packages, features]);
-  const activeClient = activeClientId ? ((allClients || clients).find(c => c.id === activeClientId) || clients.find(c => c.id === activeClientId) || null) : null;
+  const rawActiveClient = activeClientId ? ((allClients || clients).find(c => c.id === activeClientId) || clients.find(c => c.id === activeClientId) || null) : null;
+  const activeClient = React.useMemo(() => {
+    if (!rawActiveClient) return null;
+    const mergedIntoId = (rawActiveClient as any).mergedInto;
+    if (mergedIntoId) {
+      return (allClients || clients).find(c => c.id === mergedIntoId) || clients.find(c => c.id === mergedIntoId) || rawActiveClient;
+    }
+    return rawActiveClient;
+  }, [rawActiveClient, allClients, clients]);
 
   // Sales reps and managers may download member contracts.
   const canDownloadContract = ['rep', 'manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser?.role || '');
@@ -427,6 +435,7 @@ export default function Clients() {
   }, [addPackageDialogClientId, clients]);
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [idSearchTerm, setIdSearchTerm] = useState('');
   const [searchMode, setSearchMode] = useState<'general' | 'id'>('general');
   const [fullPageView, setFullPageView] = useState(false);
   const [filterBranch, setFilterBranch] = useState('All');
@@ -458,6 +467,8 @@ export default function Clients() {
   const [accountRecipientId, setAccountRecipientId] = useState<string>('');
 
   const deferredSearchTerm = useDeferredValue(searchTerm);
+  const deferredIdSearchTerm = useDeferredValue(idSearchTerm);
+  const deferredGlobalSearchQuery = useDeferredValue(searchQuery);
   const deferredFilterBranch = useDeferredValue(filterBranch);
 
   // Debounce timers for member name/phone updates
@@ -485,10 +496,10 @@ export default function Clients() {
   }, [activeClientId]);
 
   React.useEffect(() => {
-    if (activeTab === 'expired' || searchTerm.trim().length >= 2) {
+    if (activeTab === 'expired' || searchTerm.trim().length >= 1 || idSearchTerm.trim().length >= 1 || searchQuery.trim().length >= 1) {
       fetchExpiredMembers();
     }
-  }, [activeTab, searchTerm, fetchExpiredMembers]);
+  }, [activeTab, searchTerm, idSearchTerm, searchQuery, fetchExpiredMembers]);
 
   const handleAddMember = async () => {
     if (!newMemberName || newMemberName.trim().length < 2) {
@@ -1710,9 +1721,13 @@ export default function Clients() {
   // Wrapped getFilteredMembers logic in a useMemo hook to prevent expensive
   // O(n) filtering and sorting on large member arrays during unrelated re-renders.
   const filteredMembers = React.useMemo(() => {
+    const effectiveGeneralSearch = (deferredSearchTerm || deferredGlobalSearchQuery || '').trim();
+    const effectiveIdSearch = (deferredIdSearchTerm || (searchMode === 'id' ? effectiveGeneralSearch : '')).trim();
+    const hasAnySearch = Boolean(effectiveGeneralSearch || effectiveIdSearch);
+
     let base: Client[] = [];
-    if (deferredSearchTerm) {
-      // When searching, search across all members so staff never miss an on-hold, active, or expired member
+    if (hasAnySearch) {
+      // When searching by name, phone, or ID, search across ALL member statuses (active, hold, nearlyExpired, expired, leads)
       base = members;
     } else {
       switch (deferredActiveTab) {
@@ -1727,49 +1742,76 @@ export default function Clients() {
 
     let filtered = base;
 
-    // Search (supports fuzzy/phonetic member name, member ID, phone, and parent phone across family members)
+    const getIdMatchScore = (m: Client, idQuery: string): number => {
+      const cleanId = idQuery.toLowerCase().replace(/^#/, '').trim();
+      if (!cleanId) return 0;
+      const mId = (m.memberId || '').toString().toLowerCase().trim();
+      const lId = ((m as any).leadId || '').toString().toLowerCase().trim();
+      const bCode = (m.barcode || '').toString().toLowerCase().trim();
+      const secBarcodes = Array.isArray(m.secondaryBarcodes) ? m.secondaryBarcodes.map(b => String(b).toLowerCase().trim()) : [];
+      const pkgBarcodes = Array.isArray(m.packages) ? m.packages.map(p => String(p.barcode || '').toLowerCase().trim()).filter(Boolean) : [];
+      const allIds = [mId, lId, bCode, ...secBarcodes, ...pkgBarcodes].filter(Boolean);
+
+      if (allIds.some(id => id === cleanId)) return 1000;
+      if (allIds.some(id => id.startsWith(cleanId))) return 500;
+      if (allIds.some(id => id.includes(cleanId))) return 250;
+      return 0;
+    };
+
+    // Search (supports dedicated ID search, exact/prefix ID priority, fuzzy/phonetic member name, and phone)
     const searchScoreMap = new Map<string, number>();
-    if (deferredSearchTerm) {
-      const term = deferredSearchTerm.toLowerCase().trim();
-      if (searchMode === 'id') {
-        const idTerm = term.replace(/^#/, '');
-        filtered = filtered.filter(m => 
-          (m.memberId && m.memberId.toString().includes(idTerm)) ||
-          (m.barcode && m.barcode.toLowerCase().includes(idTerm)) ||
-          (m.secondaryBarcodes && m.secondaryBarcodes.some(b => b.toLowerCase().includes(idTerm))) ||
-          (m.packages && m.packages.some(p => p.barcode && p.barcode.toLowerCase().includes(idTerm)))
-        );
-      } else {
-        const cleanId = term.replace(/^#/, '');
-        filtered = filtered.filter(m => {
-          const nameRes = scoreNameMatch(m.name, term);
-          if (nameRes.matched) {
-            searchScoreMap.set(m.id, nameRes.score);
-            return true;
-          }
-          if (m.memberId && m.memberId.toString().toLowerCase().includes(cleanId)) {
-            searchScoreMap.set(m.id, 100);
-            return true;
-          }
-          if (m.barcode && m.barcode.toLowerCase().includes(term)) {
-            searchScoreMap.set(m.id, 100);
-            return true;
-          }
-          if (m.secondaryBarcodes && m.secondaryBarcodes.some(b => b.toLowerCase().includes(term))) {
-            searchScoreMap.set(m.id, 100);
-            return true;
-          }
-          if (m.mergedClientIds && m.mergedClientIds.some(mid => mid.toLowerCase().includes(term))) {
-            searchScoreMap.set(m.id, 90);
-            return true;
-          }
-          if (matchesPhoneSearch(m.phone, term) || matchesPhoneSearch((m as any).parentPhone, term)) {
-            searchScoreMap.set(m.id, 100);
+    if (effectiveIdSearch) {
+      filtered = filtered.filter(m => {
+        const score = getIdMatchScore(m, effectiveIdSearch);
+        if (score > 0) {
+          searchScoreMap.set(m.id, score);
+          return true;
+        }
+        return false;
+      });
+    }
+
+    if (effectiveGeneralSearch && searchMode !== 'id') {
+      const term = effectiveGeneralSearch.toLowerCase().trim();
+      const cleanId = term.replace(/^#/, '');
+      const isShortNumericIdQuery = /^\d{1,6}$/.test(cleanId) && !cleanId.startsWith('01');
+
+      // Check if any member has an exact ID match for a short numeric query (e.g., 3075)
+      const hasExactIdMatch = isShortNumericIdQuery && filtered.some(m => getIdMatchScore(m, cleanId) === 1000);
+
+      filtered = filtered.filter(m => {
+        const idScore = getIdMatchScore(m, cleanId);
+        if (idScore === 1000) {
+          searchScoreMap.set(m.id, (searchScoreMap.get(m.id) || 0) + 1000);
+          return true;
+        }
+        // If searching a short Member ID like 3075 that matches an exact member ID, do not pollute results with phone substrings
+        if (hasExactIdMatch) {
+          if (idScore >= 500) {
+            searchScoreMap.set(m.id, (searchScoreMap.get(m.id) || 0) + idScore);
             return true;
           }
           return false;
-        });
-      }
+        }
+        if (idScore > 0) {
+          searchScoreMap.set(m.id, (searchScoreMap.get(m.id) || 0) + idScore);
+          return true;
+        }
+        const nameRes = scoreNameMatch(m.name, term);
+        if (nameRes.matched) {
+          searchScoreMap.set(m.id, (searchScoreMap.get(m.id) || 0) + nameRes.score);
+          return true;
+        }
+        if (m.mergedClientIds && m.mergedClientIds.some(mid => mid.toLowerCase().includes(term))) {
+          searchScoreMap.set(m.id, (searchScoreMap.get(m.id) || 0) + 90);
+          return true;
+        }
+        if (!isShortNumericIdQuery && (matchesPhoneSearch(m.phone, term) || matchesPhoneSearch((m as any).parentPhone, term))) {
+          searchScoreMap.set(m.id, (searchScoreMap.get(m.id) || 0) + 80);
+          return true;
+        }
+        return false;
+      });
     }
 
     // Branch
@@ -1873,6 +1915,8 @@ export default function Clients() {
     onHold,
     expired,
     deferredSearchTerm,
+    deferredIdSearchTerm,
+    deferredGlobalSearchQuery,
     searchMode,
     deferredFilterBranch,
     deferredFilterRep,
@@ -2479,7 +2523,7 @@ export default function Clients() {
                         onChange={(e) => updateClient(client.id, { assignedTo: e.target.value === 'unassigned' ? '' : e.target.value })}
                       >
                         <option value="unassigned">{t('leads.tabs.unassigned')}</option>
-                        {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === client.assignedTo)).map(rep => (
+                        {users.filter(u => isAssignableSalesUser(u) && (u.status !== 'nonworking' || u.id === client.assignedTo)).map(rep => (
                           <option key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</option>
                         ))}
                       </select>
@@ -2671,7 +2715,7 @@ export default function Clients() {
                     </SelectTrigger>
                     <SelectContent className="rounded-2xl border-none shadow-2xl">
                       <SelectItem value="unassigned" className="rounded-xl py-3 px-4">{t('leads.tabs.unassigned')}</SelectItem>
-                      {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === newMemberAssignedTo)).map(rep => (
+                      {users.filter(u => isAssignableSalesUser(u) && (u.status !== 'nonworking' || u.id === newMemberAssignedTo)).map(rep => (
                         <SelectItem key={rep.id} value={rep.id} className="rounded-xl py-3 px-4">{rep.name || rep.email}</SelectItem>
                       ))}
                     </SelectContent>
@@ -2898,30 +2942,48 @@ export default function Clients() {
           <div className="flex-1 w-full space-y-1.5">
             <Label className="text-xs font-semibold text-muted-foreground ml-1">{t('members.search_placeholder')}</Label>
             <div className="relative flex items-center gap-2">
-              <div className="flex shrink-0 rounded-lg bg-muted/50 p-0.5 text-[11px] font-semibold">
-                <button
-                  type="button"
-                  onClick={() => setSearchMode('general')}
-                  className={`px-2.5 py-1.5 rounded-md transition-colors ${searchMode === 'general' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  General
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSearchMode('id')}
-                  className={`px-2.5 py-1.5 rounded-md transition-colors ${searchMode === 'id' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  ID
-                </button>
-              </div>
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  placeholder={searchMode === 'id' ? t('members.search_by_id') : t('members.search_placeholder')} 
-                  className="pl-9 h-11 bg-muted/30 border-none focus-visible:ring-1"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder={t('members.search_placeholder')} 
+                  className="pl-9 pr-8 h-11 bg-muted/30 border-none focus-visible:ring-1"
+                  value={searchTerm || searchQuery}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    if (searchQuery) setSearchQuery('');
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                 />
+                {(searchTerm || searchQuery) && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchTerm(''); setSearchQuery(''); }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    title="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="relative w-[160px] sm:w-[190px] shrink-0">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-primary select-none">#</span>
+                <Input
+                  placeholder="Search by ID #"
+                  className="pl-7 pr-7 h-11 bg-muted/30 border border-primary/20 focus-visible:ring-1 font-mono text-sm"
+                  value={idSearchTerm}
+                  onChange={(e) => setIdSearchTerm(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                />
+                {idSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setIdSearchTerm('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    title="Clear ID filter"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -2997,7 +3059,7 @@ export default function Clients() {
               >
                 <option value="all">{t('dashboard.all_reps')}</option>
                 <option value="unassigned">{t('leads.tabs.unassigned')}</option>
-                {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).map(rep => (
+                {users.filter(u => isAssignableSalesUser(u)).map(rep => (
                   <option key={rep.id} value={rep.id}>{rep.name || rep.email}</option>
                 ))}
               </select>
@@ -3682,7 +3744,7 @@ export default function Clients() {
                           >
                             <option value="unassigned">Unassigned</option>
                             {users
-                              .filter((u) => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === activeClient.assignedTo))
+                              .filter((u) => isAssignableSalesUser(u) && (u.status !== 'nonworking' || u.id === activeClient.assignedTo))
                               .map((rep) => (
                                 <option key={rep.id} value={rep.id}>
                                   {rep.name || rep.email || 'Unknown'}
@@ -6554,7 +6616,7 @@ export default function Clients() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="unassigned">Unassigned</SelectItem>
-                                  {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === upgradeSalesRep)).map(rep => (
+                                  {users.filter(u => isAssignableSalesUser(u) && (u.status !== 'nonworking' || u.id === upgradeSalesRep)).map(rep => (
                                     <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
                                   ))}
                                 </SelectContent>
@@ -6768,7 +6830,7 @@ export default function Clients() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="unassigned">Unassigned</SelectItem>
-                              {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === renewSalesRep)).map(rep => (
+                              {users.filter(u => isAssignableSalesUser(u) && (u.status !== 'nonworking' || u.id === renewSalesRep)).map(rep => (
                                 <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
                               ))}
                             </SelectContent>
@@ -7127,7 +7189,7 @@ export default function Clients() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="unassigned">Unassigned</SelectItem>
-                                {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && (u.status !== 'nonworking' || u.id === addPackageSalesRep)).map(rep => (
+                                {users.filter(u => isAssignableSalesUser(u) && (u.status !== 'nonworking' || u.id === addPackageSalesRep)).map(rep => (
                                   <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown User'}</SelectItem>
                                 ))}
                               </SelectContent>

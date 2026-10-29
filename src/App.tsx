@@ -25,19 +25,11 @@ import Payments from './Payments';
 import PTPackages from './PTPackages';
 import Packages from './Packages';
 import Attendance from './Attendance';
-import AuditLogs from './AuditLogs';
 import Tasks from './Tasks';
 import Settings from './Settings';
 import Login from './Login';
-import Reports from './Reports';
 import MemberCheckin from './MemberCheckin';
 import HelpPage from './HelpPage';
-import Debtors from './Debtors';
-import UnconfirmedMemberships from './UnconfirmedMemberships';
-import Bookings from './Bookings';
-import NutritionModule from './NutritionModule';
-import { ClassManager } from './components/ClassManager';
-import ExerciseLibraryHub from './components/ExerciseLibraryHub';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList, Bell, Dumbbell } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -46,27 +38,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { NotificationCenter, NotificationsProvider, NotificationsPage } from './components/NotificationCenter';
 import BuildVersionFooter from './components/BuildVersionFooter';
-import CoachPortal from './coach/CoachPortal';
-import MemberPortal from './member/MemberPortal';
-import GuestPortal from './member/GuestPortal';
 import { ForcePasswordChangeDialog } from './components/ForcePasswordChangeDialog';
 import { QRCodePage } from './components/QRCodePage';
-import QuoteGenerator from './QuoteGenerator';
-import ClubOperations from './ClubOperations';
 import { CartProvider, useCart } from './member/CartContext';
 import { OfflineBanner } from './components/OfflineBanner';
 import Checkout from './member/Checkout';
 import CommandPalette from './components/CommandPalette';
 import OnboardingWizard from './OnboardingWizard';
-import AdminHub from './AdminHub';
-import AdminRequests from './admin/AdminRequests';
-import PendingApprovals from './PendingApprovals';
-import SuperAdminHub from './SuperAdminHub';
-import AdvancedReports from './AdvancedReports';
-import CallCenter from './CallCenter';
-import LostAndFound from './LostAndFound';
 import { RedgitsLiveSyncDialog } from './components/RedgitsLiveSyncDialog';
-import Complaints from './Complaints';
 import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
 import { ClickToCallModal } from './components/ClickToCallModal';
@@ -74,6 +53,46 @@ import { NotificationEnforcementGate } from './components/NotificationEnforcemen
 import { SmartPWAInstallGate } from './components/SmartPWAInstallGate';
 import KitchenKioskView from './components/KitchenKioskView';
 import { isKitchenUser, isNutritionistUser, isFitnessManagerUser, isSalesManagerUser, isSgfAcademyOwnerUser, isGeneralManagerOrCEO } from './utils/permissions';
+
+
+// Route & Tab Level Code-Splitting (Lazy-loaded modules)
+const Reports = React.lazy(() => import('./Reports'));
+const AdvancedReports = React.lazy(() => import('./AdvancedReports'));
+const AuditLogs = React.lazy(() => import('./AuditLogs'));
+const Debtors = React.lazy(() => import('./Debtors'));
+const UnconfirmedMemberships = React.lazy(() => import('./UnconfirmedMemberships'));
+const NutritionModule = React.lazy(() => import('./NutritionModule'));
+const ExerciseLibraryHub = React.lazy(() => import('./components/ExerciseLibraryHub'));
+const QuoteGenerator = React.lazy(() => import('./QuoteGenerator'));
+const ClubOperations = React.lazy(() => import('./ClubOperations'));
+const AdminHub = React.lazy(() => import('./AdminHub'));
+const SuperAdminHub = React.lazy(() => import('./SuperAdminHub'));
+const AdminRequests = React.lazy(() => import('./admin/AdminRequests'));
+const PendingApprovals = React.lazy(() => import('./PendingApprovals'));
+const CallCenter = React.lazy(() => import('./CallCenter'));
+const LostAndFound = React.lazy(() => import('./LostAndFound'));
+const Complaints = React.lazy(() => import('./Complaints'));
+const Bookings = React.lazy(() => import('./Bookings'));
+const ClassManager = React.lazy(() => import('./components/ClassManager').then(m => ({ default: m.ClassManager || m.default })));
+const CoachPortal = React.lazy(() => import('./coach/CoachPortal'));
+const MemberPortal = React.lazy(() => import('./member/MemberPortal'));
+const GuestPortal = React.lazy(() => import('./member/GuestPortal'));
+
+const ModuleLoadingFallback: React.FC = () => (
+  <div className="flex h-[400px] w-full flex-col items-center justify-center gap-3">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    <p className="text-xs font-medium text-muted-foreground animate-pulse">Loading module...</p>
+  </div>
+);
+
+const PortalLoadingFallback: React.FC = () => (
+  <div className="flex min-h-screen w-full items-center justify-center bg-background">
+    <div className="flex flex-col items-center gap-3">
+      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase animate-pulse">Loading portal...</p>
+    </div>
+  </div>
+);
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com', 'simary@inzan.com'];
 const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
@@ -175,17 +194,56 @@ function AppContent() {
     if (!searchQuery.trim()) return;
     const q = searchQuery.toLowerCase().trim();
     const cleanId = q.replace(/^#/, '');
-    
+
+    // Check for exact Member ID / Lead ID / Barcode / Package Barcode match first
+    const exactIdMatches = clients.filter(c => {
+      const mId = (c.memberId || '').toString().toLowerCase().trim();
+      const lId = ((c as any).leadId || '').toString().toLowerCase().trim();
+      const bCode = (c.barcode || '').toString().toLowerCase().trim();
+      const secBarcodes = Array.isArray(c.secondaryBarcodes) ? c.secondaryBarcodes.map(b => String(b).toLowerCase().trim()) : [];
+      const pkgBarcodes = Array.isArray(c.packages) ? c.packages.map(p => String(p.barcode || '').toLowerCase().trim()).filter(Boolean) : [];
+      return mId === cleanId || lId === cleanId || bCode === cleanId || secBarcodes.includes(cleanId) || pkgBarcodes.includes(cleanId);
+    });
+
+    if (exactIdMatches.length > 0) {
+      // Deduplicate merged records to their canonical primary profile ID
+      const canonicalIds = Array.from(new Set(exactIdMatches.map(c => (c as any).mergedInto || c.id)));
+      setActiveTab('clients');
+      if (canonicalIds.length === 1 && canonicalIds[0]) {
+        setActiveClientId(canonicalIds[0]);
+      } else {
+        setActiveClientId(null);
+      }
+      return;
+    }
+
+    const isShortMemberIdQuery = /^\d{1,6}$/.test(cleanId) && !cleanId.startsWith('01');
+
     const matches = clients
+      .filter(c => (c.status || '').toLowerCase().trim() !== 'merged' && !(c as any).mergedInto)
       .map(c => {
+        const mId = (c.memberId || '').toString().toLowerCase().trim();
+        const lId = ((c as any).leadId || '').toString().toLowerCase().trim();
+        const bCode = (c.barcode || '').toString().toLowerCase().trim();
+        const secBarcodes = Array.isArray(c.secondaryBarcodes) ? c.secondaryBarcodes.map(b => String(b).toLowerCase().trim()) : [];
+        const pkgBarcodes = Array.isArray(c.packages) ? c.packages.map(p => String(p.barcode || '').toLowerCase().trim()).filter(Boolean) : [];
+
+        if (mId.startsWith(cleanId) || lId.startsWith(cleanId) || bCode.startsWith(cleanId) || secBarcodes.some(b => b.startsWith(cleanId)) || pkgBarcodes.some(b => b.startsWith(cleanId))) {
+          return { client: c, score: 500 };
+        }
+        if (mId.includes(cleanId) || lId.includes(cleanId) || bCode.includes(cleanId) || secBarcodes.some(b => b.includes(cleanId)) || pkgBarcodes.some(b => b.includes(cleanId))) {
+          return { client: c, score: 300 };
+        }
         const nameRes = scoreNameMatch(c.name, q);
         if (nameRes.matched) return { client: c, score: nameRes.score };
         if (
-          matchesPhoneSearch(c.phone, q) ||
-          matchesPhoneSearch((c as any).parentPhone, q) ||
-          (c.memberId && c.memberId.toString().toLowerCase().includes(cleanId)) ||
-          (c.startDate && c.startDate.includes(q)) ||
-          (c.membershipExpiry && c.membershipExpiry.includes(q))
+          !isShortMemberIdQuery &&
+          (
+            matchesPhoneSearch(c.phone, q) ||
+            matchesPhoneSearch((c as any).parentPhone, q) ||
+            (c.startDate && c.startDate.includes(q)) ||
+            (c.membershipExpiry && c.membershipExpiry.includes(q))
+          )
         ) {
           return { client: c, score: 100 };
         }
@@ -199,7 +257,7 @@ function AppContent() {
       const match = matches[0];
       if (match) {
         setActiveTab('clients');
-        setActiveClientId(match.id);
+        setActiveClientId((match as any).mergedInto || match.id);
       }
     } else if (matches.length > 1) {
       setActiveTab('clients');
@@ -327,7 +385,9 @@ function AppContent() {
           </div>
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-8">
-          <SuperAdminHub />
+          <React.Suspense fallback={<ModuleLoadingFallback />}>
+            <SuperAdminHub />
+          </React.Suspense>
         </main>
       </div>
     );
@@ -681,9 +741,11 @@ function AppContent() {
     const isExplicitLogin = showPortalOverride === 'crm' || window.location.pathname === '/login';
     if (!isExplicitLogin || showPortalOverride === 'store' || showPortalOverride === 'member') {
       return (
+        <React.Suspense fallback={<PortalLoadingFallback />}>
         <GuestPortal 
           onSwitchToCRM={() => setShowPortalOverride('crm')} 
         />
+      </React.Suspense>
       );
     }
     return <Login onSwitchToMemberStore={() => setShowPortalOverride('store')} />;
@@ -702,23 +764,28 @@ function AppContent() {
   if (currentUser.role === 'coach' || currentUser.role === 'fitness_manager' || currentUser.isFitnessManager) {
     if (isStrike) {
       return (
+        <React.Suspense fallback={<PortalLoadingFallback />}>
         <MemberPortal 
           onSwitchToStore={(packageId) => {
             if (packageId) setStoreInitialPackageId(packageId);
             setClientViewMode('store');
           }} 
         />
+      </React.Suspense>
       );
     }
     // If Nutritionist or SGF Academy Owner is given role 'coach' in Firestore, let Nutritionist / SGF Owner access CRM or CoachPortal appropriately
     if (!isNutritionistUser(currentUser) && !isSgfAcademyOwnerUser(currentUser)) {
-      return <CoachPortal />;
+      return <React.Suspense fallback={<PortalLoadingFallback />}>
+        <CoachPortal />
+      </React.Suspense>;
     }
   }
 
   if (currentUser.role === 'client') {
     if (clientViewMode === 'store') {
       return (
+        <React.Suspense fallback={<PortalLoadingFallback />}>
         <GuestPortal 
           initialPackageId={storeInitialPackageId}
           onSwitchToCRM={(tab) => {
@@ -727,10 +794,12 @@ function AppContent() {
             setClientViewMode('portal');
           }} 
         />
+      </React.Suspense>
       );
     }
     return (
-      <MemberPortal 
+      <React.Suspense fallback={<PortalLoadingFallback />}>
+        <MemberPortal 
         initialTab={memberPortalInitialTab}
         onSwitchToStore={(packageId) => {
           if (packageId) setStoreInitialPackageId(packageId);
@@ -738,6 +807,7 @@ function AppContent() {
           setClientViewMode('store');
         }} 
       />
+      </React.Suspense>
     );
   }
 
@@ -1242,7 +1312,7 @@ function AppContent() {
                   className="w-full ps-9 bg-muted/50 border-none"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSearchSubmit(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchSubmit(); } }}
                 />
               </div>
 
@@ -1388,7 +1458,9 @@ function AppContent() {
 
             {features.bookings !== false && (
               <TabsContent value="bookings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <Bookings />
+              </React.Suspense>
               </TabsContent>
             )}
 
@@ -1398,31 +1470,41 @@ function AppContent() {
 
             {features.requests !== false && (
               <TabsContent value="requests" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <AdminRequests />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {features.pendingApprovals !== false && (
               <TabsContent value="pending-approvals" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <PendingApprovals />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {features.classBookingSystem === true && (
               <TabsContent value="class-manager" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <ClassManager />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {(features.nutrition !== undefined ? features.nutrition === true : isInzan) && (
               <TabsContent value="nutrition" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <NutritionModule />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {features.workoutLibrary !== false && (
               <TabsContent value="workout-library" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <ExerciseLibraryHub mode="staff" />
+              </React.Suspense>
               </TabsContent>
             )}
 
@@ -1444,26 +1526,34 @@ function AppContent() {
 
             {features.debtors === true && (
               <TabsContent value="debtors" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <Debtors />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {features.unconfirmedMemberships === true && (
               <TabsContent value="unconfirmed-memberships" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <UnconfirmedMemberships />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {isManagerOrSama && (
               <TabsContent value="reports" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <Reports />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {canAccessSettings && (
               <>
                 <TabsContent value="audit" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                  <React.Suspense fallback={<ModuleLoadingFallback />}>
                   <AuditLogs />
+                </React.Suspense>
                 </TabsContent>
                 <TabsContent value="settings" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
                   <Settings />
@@ -1478,44 +1568,58 @@ function AppContent() {
 
             {canUseQuoteGenerator && (
               <TabsContent value="quotes" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <QuoteGenerator />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {(currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin') && (
               <TabsContent value="operations" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <ClubOperations />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {isPlatformAdmin && (
               <TabsContent value="admin-hub" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <AdminHub />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {/* Premium Modules — only render when flag is enabled */}
             {features.advancedReports === true && (
               <TabsContent value="advanced-reports" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <AdvancedReports />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {features.callCenter === true && (
               <TabsContent value="call-center" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <CallCenter />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {features.lostAndFound === true && (
               <TabsContent value="lost-and-found" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <LostAndFound />
+              </React.Suspense>
               </TabsContent>
             )}
 
             {features.complaints === true && (
               <TabsContent value="complaints" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
+                <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <Complaints />
+              </React.Suspense>
               </TabsContent>
             )}
 

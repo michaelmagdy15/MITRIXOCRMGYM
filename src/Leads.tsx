@@ -3,7 +3,7 @@ import React, { useState, useDeferredValue, useRef, useEffect, useMemo } from 'r
 import { useAppContext } from './context';
 import { getTenantId } from './firebase';
 import { useLanguage } from './contexts/LanguageContext';
-import { ASSIGNABLE_ROLES } from './constants';
+import { ASSIGNABLE_ROLES, isAssignableSalesUser, isAssignableSalesName } from './constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -368,7 +368,7 @@ export default function Leads() {
   const repSummaries = useMemo(() => {
     const map = new Map<string, { value: string; label: string; userId?: string; count: number; isLegacyName?: boolean; isNonWorking?: boolean }>();
 
-    users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '')).forEach(u => {
+    users.filter(u => isAssignableSalesUser(u)).forEach(u => {
       const label = u.name || u.email || 'Unknown User';
       map.set(u.id, {
         value: u.id,
@@ -384,22 +384,26 @@ export default function Leads() {
         map.get(l.assignedTo)!.count += 1;
       } else {
         const repName = (l.salesName || l.salesRep || (l.assignedTo ? resolveUserDisplay(l.assignedTo, users, l.assignedTo) : '')).trim();
-        if (repName) {
+        if (repName && isAssignableSalesName(repName)) {
           // Check if matches an existing user by name (case-insensitive)
           const matchedUser = Array.from(map.values()).find(r => r.label.toLowerCase() === repName.toLowerCase());
           if (matchedUser) {
             matchedUser.count += 1;
           } else {
-            const key = `name:${repName}`;
-            if (!map.has(key)) {
-              map.set(key, {
-                value: key,
-                label: repName,
-                count: 0,
-                isLegacyName: true,
-              });
+            // Also check if this repName belongs to a non-sales user in users — if so, exclude from Sales dropdown
+            const nonSalesUser = users.find(u => (u.name || '').trim().toLowerCase() === repName.toLowerCase() && !isAssignableSalesUser(u));
+            if (!nonSalesUser) {
+              const key = `name:${repName}`;
+              if (!map.has(key)) {
+                map.set(key, {
+                  value: key,
+                  label: repName,
+                  count: 0,
+                  isLegacyName: true,
+                });
+              }
+              map.get(key)!.count += 1;
             }
-            map.get(key)!.count += 1;
           }
         }
       }
@@ -2507,7 +2511,7 @@ export default function Leads() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="unassigned">{t('leads.tabs.unassigned')}</SelectItem>
-                        {users.filter(u => ASSIGNABLE_ROLES.includes(u.role?.toLowerCase() || '') && u.status !== 'nonworking').map(rep => (
+                        {users.filter(u => isAssignableSalesUser(u) && u.status !== 'nonworking').map(rep => (
                           <SelectItem key={rep.id} value={rep.id}>{rep.name || rep.email || 'Unknown'}</SelectItem>
                         ))}
                       </SelectContent>

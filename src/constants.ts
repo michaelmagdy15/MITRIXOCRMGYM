@@ -21,15 +21,69 @@ export const SALES_MEMBERS = [
 ];
 
 export const ASSIGNABLE_ROLES = [
-  'admin', 
-  'super_admin', 
-  'crm_admin', 
-  'manager', 
   'sales_manager',
-  'rep', 
-  'sales_rep', 
-  'sales'
+  'rep',
+  'sales_rep',
+  'sales',
 ];
+
+const NON_SALES_REP_NAMES = new Set([
+  'admin',
+  'black-list',
+  'blacklist',
+  'inzan athletics',
+  'inzan',
+  'transfer',
+  'trasnfer',
+  'beezo',
+  'dr.nagham',
+  'dr nagham',
+  'none',
+  'null',
+  'system',
+  'unassigned',
+]);
+
+const NON_SALES_DEPARTMENTS = new Set([
+  'finance',
+  'experience',
+  'fitness',
+  'executive',
+  'operations',
+  'nutrition',
+  'kitchen',
+  'coaching',
+  'management',
+]);
+
+export function isAssignableSalesName(rawName?: string | null): boolean {
+  if (!rawName) return false;
+  const clean = rawName.trim().toLowerCase();
+  if (!clean) return false;
+  return !NON_SALES_REP_NAMES.has(clean);
+}
+
+export function isAssignableSalesUser(user: {
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  department?: string;
+  status?: string;
+} | null | undefined): boolean {
+  if (!user) return false;
+  const role = (user.role || '').trim().toLowerCase();
+  const dept = ((user as any).department || '').trim().toLowerCase();
+  const name = (user.name || '').trim().toLowerCase();
+
+  if (NON_SALES_REP_NAMES.has(name)) return false;
+  if (dept && NON_SALES_DEPARTMENTS.has(dept)) return false;
+
+  if (dept === 'sales') {
+    return role !== 'client' && role !== 'coach';
+  }
+  return ASSIGNABLE_ROLES.includes(role);
+}
 
 export const SALES_NAME_MAPPING: Record<string, string> = {
   // ---- Atef Strike ----

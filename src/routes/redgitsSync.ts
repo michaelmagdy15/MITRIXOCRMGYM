@@ -408,39 +408,60 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     let authenticatedPassword = '';
     for (const acct of candidateAccounts) {
       cookieJar.delete('ci_session');
+      cookieJar.delete('PHPSESSID');
+      cookieJar.delete('admin_remember');
       try {
         const loginPageRes = await fetch(`${REDGITS_ORIGIN}/admin/login`, {
-          headers: { 'User-Agent': USER_AGENT, Cookie: getCookieHeader() },
+          headers: {
+            'User-Agent': USER_AGENT,
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            Cookie: getCookieHeader(),
+          },
         });
         saveCookies(loginPageRes);
+        const loginPageHtml = await loginPageRes.text().catch(() => '');
+
+        // Extract dynamic honeypot fields (fake_user_*, fake_pass_*) added by RedGITS v17.13 login form
+        const formParams: Record<string, string> = {};
+        const fakeInputRegex = /<input[^>]+name=["'](fake_(?:user|pass)_[a-zA-Z0-9_]+)["']/gi;
+        let fakeMatch: RegExpExecArray | null;
+        while ((fakeMatch = fakeInputRegex.exec(loginPageHtml)) !== null) {
+          if (fakeMatch[1]) {
+            formParams[fakeMatch[1]] = '';
+          }
+        }
+        formParams.username = acct.username;
+        formParams.password = acct.password;
+        formParams.code = acct.username.toLowerCase() === 'admin' ? deviceCode : '';
+        formParams.client_info = clientInfoPayload;
 
         const loginRes = await fetch(`${REDGITS_ORIGIN}/admin/login/check_login`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
             Cookie: getCookieHeader(),
             'User-Agent': USER_AGENT,
             Referer: `${REDGITS_ORIGIN}/admin/login`,
             Origin: REDGITS_ORIGIN,
           },
-          body: new URLSearchParams({
-            username: acct.username,
-            password: acct.password,
-            code: deviceCode,
-            client_info: clientInfoPayload,
-          }).toString(),
+          body: new URLSearchParams(formParams).toString(),
           redirect: 'manual',
         });
         saveCookies(loginRes);
 
         const loginLocation = loginRes.headers.get('location') || '';
         const isLoginRedirectToLogin = loginLocation.includes('/admin/login');
-        if (!isLoginRedirectToLogin && (cookieJar.has('ci_session') || loginRes.status === 302)) {
+        if (!isLoginRedirectToLogin && (cookieJar.has('ci_session') || cookieJar.has('PHPSESSID') || (loginRes.status >= 300 && loginRes.status < 400))) {
           authenticatedAccount = acct.username;
           authenticatedPassword = acct.password;
           break;
         }
-        console.warn(`[RedGITS Sync] Login rejected for RedGITS account "${acct.username}" — trying next account.`);
+        console.warn(
+          `[RedGITS Sync] Login rejected for RedGITS account "${acct.username}" (status=${loginRes.status}, location="${loginLocation}") — trying next account.`
+        );
       } catch (loginErr: any) {
         console.warn(`[RedGITS Sync] Login request failed for "${acct.username}":`, loginErr?.message || loginErr);
       }
@@ -792,10 +813,27 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
 
     const userDocsMap = new Map<string, { id: string; data: Record<string, any> }>();
 
+    const NON_SALES_USER_PLACEHOLDERS = new Set([
+      'admin',
+      'black-list',
+      'blacklist',
+      'inzan athletics',
+      'inzan',
+      'transfer',
+      'trasnfer',
+      'beezo',
+      'dr.nagham',
+      'dr nagham',
+      'none',
+      'null',
+      'system',
+    ]);
+
     function ensureSalesRepUser(rawName?: string): { id: string; name: string } | null {
       const clean = cleanSalesRepName(rawName);
       if (!clean) return null;
       const lower = clean.toLowerCase();
+      if (NON_SALES_USER_PLACEHOLDERS.has(lower)) return null;
       const existingId = repUserIdByName.get(lower);
       if (existingId) {
         const canonicalName = repDisplayNameById.get(existingId) || clean;
@@ -818,6 +856,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           name: clean,
           email: `${slug}@inzanathletics.com`,
           role: 'rep',
+          department: 'Sales',
           status: 'working',
           branch: 'Garden 8',
           sourceSystem: 'RedGITS_v17.12',
@@ -1030,7 +1069,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       const cleanStaffName = sName.trim();
       const dept = (sDept || 'Fitness').trim();
       const pos = (sPos || sDept || 'Trainer').trim();
-      if (/sales|front|admin|manager|reception|customer|call/i.test(`${dept} ${pos}`)) {
+      if (/sales/i.test(`${dept} ${pos}`) && !/experience|finance|fitness|nutrition|kitchen/i.test(dept)) {
         ensureSalesRepUser(cleanStaffName);
       }
       const cId = `redgits-staff-${sCode || slugifyName(cleanStaffName)}`;
