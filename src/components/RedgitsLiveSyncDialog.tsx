@@ -85,7 +85,7 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
 
   const fetchStatus = async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth.currentUser?.getIdToken(true);
       const res = await fetch('/api/inzan/redgits-sync/status', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -120,7 +120,7 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
     setLastResult(null);
 
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth.currentUser?.getIdToken(true);
       if (!token) {
         throw new Error('You must be signed in to run RedGITS Live Sync.');
       }
@@ -162,6 +162,9 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
         data = {};
       }
       if (!res.ok || !data?.ok) {
+        if (res.status === 401) {
+          throw new Error('Your staff session has expired. Please sign out and sign back in, then retry the sync.');
+        }
         if (data?.error) throw new Error(data.error);
         if (res.status === 401 || res.status === 403) {
           throw new Error('Your session does not have permission to run RedGITS sync. Sign out and back in, or ask an Inzan admin.');
