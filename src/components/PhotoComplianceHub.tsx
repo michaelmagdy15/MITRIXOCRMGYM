@@ -25,12 +25,21 @@ export const PhotoComplianceHub: React.FC<PhotoComplianceHubProps> = ({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [notifyingBulk, setNotifyingBulk] = useState(false);
 
+  const isPhotoCheckMember = (client: Client) => {
+    const status = String(client.status || '').trim().toLowerCase();
+    return !client.isDeleted && ['active', 'nearly expired', 'hold', 'frozen'].includes(status);
+  };
+
+  const hasMemberPhoto = (client: Client) =>
+    Boolean(String((client as any).photoURL || (client as any).photoUrl || (client as any).avatar || '').trim());
+
+  const hasPendingPhoto = (client: Client) => Boolean(String(client.pendingPhotoURL || '').trim());
+
   const pendingPhotos = useMemo(() => {
     return clients.filter(
       (c) =>
-        !c.isDeleted &&
-        c.status !== 'Lead' &&
-        Boolean(c.pendingPhotoURL) &&
+        isPhotoCheckMember(c) &&
+        hasPendingPhoto(c) &&
         c.photoModerationStatus === 'pending'
     );
   }, [clients]);
@@ -38,10 +47,9 @@ export const PhotoComplianceHub: React.FC<PhotoComplianceHubProps> = ({
   const missingPhotos = useMemo(() => {
     return clients.filter(
       (c) =>
-        !c.isDeleted &&
-        (c.status === 'Active' || c.status === 'Nearly Expired') &&
-        !c.photoURL &&
-        !c.pendingPhotoURL
+        isPhotoCheckMember(c) &&
+        !hasMemberPhoto(c) &&
+        !hasPendingPhoto(c)
     );
   }, [clients]);
 

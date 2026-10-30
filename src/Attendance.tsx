@@ -64,6 +64,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toCanonicalBranchId } from './utils/memberCategories';
 import { toast } from 'sonner';
+
+function formatReceptionNote(value: unknown): string[] {
+  const text = String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\s+(?=(?:This package transfer|Me[kh]a change type|Call Center|Upgraded|Will pass|Coming|Interested))/gi, '\n')
+    .replace(/\s*(?=\[\d{4}-\d{2}-\d{2}\])/g, '\n')
+    .trim();
+
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 import { addAuditLog } from './services/auditService';
 import {
   parseUniversalQrCode,
@@ -2207,9 +2220,15 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                 {gatekeeperEval?.stickyNote && (
                   <div className="bg-amber-500/10 border border-amber-500/40 text-amber-800 dark:text-amber-200 p-3 rounded-xl flex items-start gap-2.5">
                     <MessageSquare className="h-4 w-4 shrink-0 mt-0.5" />
-                    <div className="text-xs">
+                    <div className="text-xs min-w-0 max-h-56 overflow-y-auto pr-1 leading-relaxed">
                       <span className="font-bold uppercase block">Front-Desk Note:</span>
-                      <span>{gatekeeperEval.stickyNote}</span>
+                      <div className="mt-1 space-y-1">
+                        {formatReceptionNote(gatekeeperEval.stickyNote).map((line, index) => (
+                          <p key={`${index}-${line.slice(0, 24)}`} className="break-words">
+                            {line.startsWith('[') ? line : `• ${line}`}
+                          </p>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}

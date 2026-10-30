@@ -38,12 +38,18 @@ export const MissingPhotosCard: React.FC<MissingPhotosCardProps> = ({
 
   // Active members
   const activeMembers = useMemo(() => {
-    return allClients.filter(c => c.status === 'Active');
+    return allClients.filter(c => {
+      const status = String(c.status || '').trim().toLowerCase();
+      return !c.isDeleted && ['active', 'nearly expired', 'hold', 'frozen'].includes(status);
+    });
   }, [allClients]);
 
-  // Active members without photoURL
+  const hasMemberPhoto = (client: Client) =>
+    Boolean(String((client as any).photoURL || (client as any).photoUrl || (client as any).avatar || '').trim());
+
+  // Current members without an approved/current photo.
   const missingPhotoMembers = useMemo(() => {
-    return activeMembers.filter(c => !c.photoURL || c.photoURL.trim() === '');
+    return activeMembers.filter(c => !hasMemberPhoto(c) && !String(c.pendingPhotoURL || '').trim());
   }, [activeMembers]);
 
   // Active members with photo awaiting admin approval

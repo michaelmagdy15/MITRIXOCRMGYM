@@ -3275,7 +3275,7 @@ export default function Clients() {
       {isInzanTenant && (
         <>
           <PhotoComplianceHub
-            clients={clients}
+            clients={allClients}
             onSelectClient={(c) => setActiveClientId(c.id)}
             enabled={isInzanTenant}
           />
