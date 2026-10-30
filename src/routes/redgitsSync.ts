@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { randomUUID } from 'node:crypto';
 import { getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
 
 export const redgitsSyncRouter = Router();
@@ -51,6 +52,14 @@ function normalizePhone(raw?: string): string {
   if (digits.startsWith('201') && (digits.length === 12 || digits.length === 11)) return '0' + digits.slice(2);
   if (digits.startsWith('1') && digits.length === 10) return '0' + digits;
   return digits;
+}
+
+function simpleHash(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return String(hash);
 }
 
 function cleanMemberId(raw?: string, rId?: string): string {
@@ -370,10 +379,27 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
 
     // 2. Authenticate with https://inzan.redgits.com (with BlockIntel device fingerprint & session cookie rotation)
     const cookieJar = new Map<string, string>();
-    const deviceId = 'fd182a91-4d82-4e11-9a15-8b3d7a109c44';
-    const installId = '7c991b22-1c30-4f88-a241-99e1c4102b11';
-    const clientFp = 'e8b1204f9a3d11c8402e7a19c5d3b201';
-    const deviceCode = 'DEV-INZAN-SYNC-01';
+    const installId = randomUUID();
+    const deviceId = installId;
+    const fingerprintParts = [
+      '',
+      '',
+      '',
+      '',
+      '',
+      '1920x1080',
+      '1',
+      '24',
+      'Africa/Cairo',
+      'Win32',
+      '8',
+      '',
+      'en-US, en',
+      '0',
+      'Google Inc.',
+    ];
+    const clientFp = simpleHash(fingerprintParts.join('|'));
+    const deviceCode = clientFp;
     cookieJar.set('device_id', deviceId);
     cookieJar.set('ua_install_id', installId);
     cookieJar.set('ua_client_fp', clientFp);
@@ -409,15 +435,32 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         .join('; ');
 
     const clientInfoPayload = JSON.stringify({
-      device_id: deviceId,
-      install_id: installId,
-      fingerprint: clientFp,
-      device_code: deviceCode,
-      user_agent: USER_AGENT,
+      installId,
       platform: 'Win32',
-      language: 'en-US',
-      screen: '1920x1080',
+      cpuCores: 8,
+      deviceMemory: '',
+      languages: 'en-US, en',
       timezone: 'Africa/Cairo',
+      screen: '1920x1080',
+      pixelRatio: '1',
+      colorDepth: 24,
+      vendor: 'Google Inc.',
+      touchPoints: 0,
+      userAgent: USER_AGENT,
+      localIps: [],
+      connection: '',
+      canvasHash: '',
+      webglHash: '',
+      audioHash: '',
+      deviceCode,
+      fingerprintHash: clientFp,
+      webglVendor: '',
+      webglRenderer: '',
+      cookieEnabled: true,
+      online: true,
+      uaBrands: '',
+      uaPlatform: 'Windows',
+      uaMobile: 'no',
     });
 
     let authenticatedAccount = '';
