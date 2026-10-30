@@ -941,6 +941,45 @@ async function verifyBridgeKey(req: Request): Promise<boolean> {
   return false;
 }
 
+// ============================================================================
+// 1B2. LEADER LEASE (so multiple macOS bridge agents can run for HA without
+// duplicating locker commands or snapshot pushes — only the lease holder is active).
+// ============================================================================
+inzanLockerRouter.post('/bridge/lease', async (req: Request, res: Response) => {
+  try {
+    if (!(await verifyBridgeKey(req))) {
+      res.status(401).json({ error: 'Unauthorized bridge key' });
+      return;
+    }
+    const { agentId, hostname } = req.body || {};
+    if (!agentId) {
+      res.status(400).json({ error: 'agentId is required' });
+      return;
+    }
+    const inzanDb = getInzanFirestore();
+    const ref = inzanDb.collection('settings').doc('inzan_locker_bridge_leader');
+    const now = Date.now();
+    const TTL_MS = 30_000;
+    let isLeader = false;
+    let leaderId: string | null = null;
+    await inzanDb.runTransaction(async (t) => {
+      const snap = await t.get(ref);
+      const d = snap.exists ? (snap.data() as any) : null;
+      if (!d || (typeof d.expiresAtMs === 'number' && d.expiresAtMs < now) || d.agentId === agentId) {
+        t.set(ref, { agentId, hostname: hostname || null, acquiredAtMs: now, expiresAtMs: now + TTL_MS }, { merge: true });
+        isLeader = true;
+      } else {
+        isLeader = false;
+        leaderId = d.agentId || null;
+      }
+    });
+    res.json({ ok: true, isLeader, leaderId, expiresAtMs: now + TTL_MS });
+  } catch (err: any) {
+    console.error('[API] [InzanLockers] POST /bridge/lease error:', err);
+    res.status(500).json({ error: err.message || 'bridge lease failed' });
+  }
+});
+
 /**
  * Exposed for the RedGITS sync router: whether the on-site macOS bridge agent is
  * currently pushing snapshots to the CRM (so RedGITS scrapes can run on the site IP).
@@ -969,28 +1008,26 @@ inzanLockerRouter.get('/redgits-agent/next', async (req: Request, res: Response)
       return;
     }
     const inzanDb = getInzanFirestore();
-    const pendingSnap = await inzanDb
-      .collection('redgitsAgentJobs')
-      .where('status', '==', 'pending')
-      .orderBy('requestedAtMs', 'asc')
-      .limit(1)
-      .get();
-    if (pendingSnap.empty) {
+    const now = Date.now();
+    const job = await inzanDb.runTransaction(async (t) => {
+      const q = inzanDb
+        .collection('redgitsAgentJobs')
+        .where('status', '==', 'pending')
+        .orderBy('requestedAtMs', 'asc')
+        .limit(1);
+      const snap = await t.get(q);
+      if (snap.empty) return null;
+      const doc = snap.docs[0];
+      if (!doc) return null;
+      const d = doc.data() as any;
+      if (!d || !d.requestedAtMs || now - d.requestedAtMs < 3000) return null;
+      t.update(doc.ref, { status: 'claimed', claimedAtMs: now });
+      return d;
+    });
+    if (!job) {
       res.json({ ok: true, job: null });
       return;
     }
-    const doc = pendingSnap.docs[0];
-    if (!doc) {
-      res.json({ ok: true, job: null });
-      return;
-    }
-    const job = doc.data() as any;
-    // Small delay so the long-polling sync request starts listening before the agent claims and finishes fast.
-    if (!job.requestedAtMs || Date.now() - job.requestedAtMs < 3000) {
-      res.json({ ok: true, job: null });
-      return;
-    }
-    await doc.ref.set({ status: 'claimed', claimedAtMs: Date.now() }, { merge: true });
     res.json({
       ok: true,
       job: {
@@ -1486,6 +1523,57 @@ def local_api(path, method="GET", body=None, is_public=False):
         return he.code, err_json
 
 
+AGENT_ID_FILE = os.path.join(os.environ.get("INZAN_BRIDGE_DIR", os.path.expanduser("~/.inzan-locker-bridge")), "agent_id")
+
+
+def get_agent_id():
+    try:
+        if os.path.exists(AGENT_ID_FILE):
+            val = open(AGENT_ID_FILE).read().strip()
+            if val:
+                return val
+    except Exception:
+        pass
+    val = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+    try:
+        os.makedirs(os.path.dirname(AGENT_ID_FILE), exist_ok=True)
+        with open(AGENT_ID_FILE, "w") as f:
+            f.write(val)
+    except Exception:
+        pass
+    return val
+
+
+AGENT_ID = get_agent_id()
+IS_LEADER = {"value": False}
+LEADER_LOCK = threading.Lock()
+
+
+def is_leader():
+    with LEADER_LOCK:
+        return IS_LEADER["value"]
+
+
+def lease_loop():
+    log(f"Starting leader lease loop (agentId={AGENT_ID})")
+    while True:
+        try:
+            status, res = http_json(
+                f"{CRM_URL}/api/inzan/lockers/bridge/lease",
+                method="POST",
+                body={"agentId": AGENT_ID, "hostname": socket.gethostname()},
+                headers={"x-inzan-bridge-key": BRIDGE_KEY},
+                timeout=10,
+            )
+            with LEADER_LOCK:
+                IS_LEADER["value"] = bool(status == 200 and isinstance(res, dict) and res.get("isLeader"))
+        except Exception as e:
+            log(f"[Lease] Warning: {e}")
+            with LEADER_LOCK:
+                IS_LEADER["value"] = False
+        time.sleep(10)
+
+
 def collect_and_push_snapshot():
     try:
         _, status_data = local_api("/api/status")
@@ -1529,7 +1617,8 @@ def collect_and_push_snapshot():
 def snapshot_loop():
     log(f"Starting Outbound Snapshot Sync Loop -> {CRM_URL}")
     while True:
-        collect_and_push_snapshot()
+        if is_leader():
+            collect_and_push_snapshot()
         PUSH_NOW_EVENT.wait(timeout=5.0)
         PUSH_NOW_EVENT.clear()
 
@@ -1537,6 +1626,9 @@ def snapshot_loop():
 def command_poll_loop():
     log(f"Starting Real-Time Command Poller Loop -> {CRM_URL}")
     while True:
+        if not is_leader():
+            time.sleep(5)
+            continue
         try:
             status, res = http_json(
                 f"{CRM_URL}/api/inzan/lockers/bridge/poll",
@@ -1796,10 +1888,12 @@ def tunnel_watchdog_loop():
 
 if __name__ == "__main__":
     log("=== Inzan Locker Bridge Agent Starting ===")
+    t_lease = threading.Thread(target=lease_loop, daemon=True)
     t_snap = threading.Thread(target=snapshot_loop, daemon=True)
     t_poll = threading.Thread(target=command_poll_loop, daemon=True)
     t_tun = threading.Thread(target=tunnel_watchdog_loop, daemon=True)
     t_redgits = threading.Thread(target=redgits_agent_loop, daemon=True)
+    t_lease.start()
     t_snap.start()
     t_poll.start()
     t_tun.start()
@@ -1820,6 +1914,7 @@ export INZAN_LOCKER_USER="\$LOCKER_USER"
 export INZAN_LOCKER_PASS="\$LOCKER_PASS"
 export INZAN_BRIDGE_KEY="\$BRIDGE_KEY"
 export INZAN_CLOUDFLARED_BIN="\$CLOUDFLARED_BIN"
+export INZAN_BRIDGE_DIR="\$BRIDGE_DIR"
 
 exec /usr/bin/caffeinate -i -s /usr/bin/python3 "\$BRIDGE_DIR/agent.py"
 EOF_RUN
