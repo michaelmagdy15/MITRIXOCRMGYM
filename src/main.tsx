@@ -11,6 +11,18 @@ import './styles/inzan-theme.css';
 // @ts-ignore
 import { registerSW } from 'virtual:pwa-register';
 
+// A deployed build can leave an already-open tab pointing at an old hashed
+// lazy chunk. Reload once so the tab picks up the current index/manifest.
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+  const key = 'mitrixo_chunk_reload_at';
+  const lastReload = Number(sessionStorage.getItem(key) || '0');
+  if (Date.now() - lastReload > 30000) {
+    sessionStorage.setItem(key, String(Date.now()));
+    window.location.reload();
+  }
+});
+
 // Register service worker for PWA features (offline support, caching)
 if ('serviceWorker' in navigator) {
   const updateSW = registerSW({

@@ -23,6 +23,10 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
     const msg = error?.message || '';
+    if (/failed to fetch dynamically imported module|importing a module script failed|unable to preload css/i.test(msg)) {
+      this.recoverFromStaleAsset();
+      return;
+    }
     if (msg.includes('INTERNAL ASSERTION FAILED') || msg.includes('b815') || msg.includes('ca9')) {
       const lastRecovery = Number(sessionStorage.getItem('last_assertion_recovery') || '0');
       if (Date.now() - lastRecovery > 8000) {
@@ -31,6 +35,14 @@ export class ErrorBoundary extends Component<Props, State> {
       }
     }
   }
+
+  private recoverFromStaleAsset = () => {
+    const key = 'mitrixo_chunk_reload_at';
+    const lastReload = Number(sessionStorage.getItem(key) || '0');
+    if (Date.now() - lastReload <= 30000) return;
+    sessionStorage.setItem(key, String(Date.now()));
+    window.location.reload();
+  };
 
   private clearFirestoreCacheAndReload = () => {
     try {
