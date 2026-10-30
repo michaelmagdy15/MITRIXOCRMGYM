@@ -80,6 +80,9 @@ async function authenticateRedgitsWithBrowser(
       timezoneId: 'Africa/Cairo',
       viewport: { width: 1920, height: 1080 },
     });
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
     const page = await context.newPage();
 
     for (const account of accounts) {
@@ -88,8 +91,13 @@ async function authenticateRedgitsWithBrowser(
         await page.locator('#username').waitFor({ state: 'visible', timeout: 15_000 });
         await page.locator('#username').fill(account.username);
         await page.locator('#password').fill(account.password);
-        await page.locator('#login-form button[type="submit"]').click();
-        await page.waitForURL((url) => !url.pathname.includes('/admin/login'), { timeout: 20_000 });
+        await Promise.all([
+          page.waitForURL((url) => !url.pathname.includes('/admin/login'), {
+            waitUntil: 'commit',
+            timeout: 20_000,
+          }),
+          page.locator('#login-form').evaluate((form) => (form as HTMLFormElement).requestSubmit()),
+        ]);
 
         for (const cookie of await context.cookies(REDGITS_ORIGIN)) {
           if (cookie.value && cookie.value !== 'deleted') cookieJar.set(cookie.name, cookie.value);
