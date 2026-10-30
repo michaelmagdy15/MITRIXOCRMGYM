@@ -83,7 +83,21 @@ async function authenticateRedgitsWithBrowser(
     await context.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
+
     const page = await context.newPage();
+    page.on('response', (response) => {
+      try {
+        const reqUrl = response.url();
+        if (!reqUrl.includes('redgits.com')) return;
+        const status = response.status();
+        const location = response.headers()['location'] || '';
+        console.log(`[RedGITS Sync] Browser response: status=${status} url=${reqUrl} location=${location}`);
+      } catch { /* ignore listener errors */ }
+    });
+    page.on('requestfailed', (request) => {
+      const failure = request.failure();
+      console.warn(`[RedGITS Sync] Browser request failed: url=${request.url()} reason=${failure?.errorText || ''}`);
+    });
 
     for (const account of accounts) {
       try {
@@ -98,6 +112,7 @@ async function authenticateRedgitsWithBrowser(
           }),
           page.locator('#login-form').evaluate((form) => (form as HTMLFormElement).requestSubmit()),
         ]);
+        console.log(`[RedGITS Sync] Browser login redirect landed on: ${page.url()}`);
 
         for (const cookie of await context.cookies(REDGITS_ORIGIN)) {
           if (cookie.value && cookie.value !== 'deleted') cookieJar.set(cookie.name, cookie.value);
@@ -106,7 +121,8 @@ async function authenticateRedgitsWithBrowser(
       } catch (error) {
         console.warn(
           `[RedGITS Sync] Browser login rejected for account "${account.username}":`,
-          error instanceof Error ? error.message : error
+          error instanceof Error ? error.message : error,
+          `finalUrl=${page.url()}`
         );
       }
     }
