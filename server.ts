@@ -71,7 +71,10 @@ if (admin.apps.length === 0) {
   if (isStandaloneMode()) {
     adminOptions.projectId = 'strike-production-f5242';
   } else {
-    adminOptions.projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || 'faa-test-guide-v2';
+    // Cloud Run's GOOGLE_CLOUD_PROJECT is the hosting project (currently
+    // bengarab), not the Firebase Auth project that issues tenant ID tokens.
+    // Inzan and the shared tenants use the central Firebase project.
+    adminOptions.projectId = process.env.FIREBASE_PROJECT_ID || 'faa-test-guide-v2';
   }
   admin.initializeApp(adminOptions);
 }
