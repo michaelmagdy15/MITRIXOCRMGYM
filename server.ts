@@ -488,7 +488,7 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 8080;
 
   // Support JSON body parsing
-  app.use(express.json());
+  app.use(express.json({ limit: '32mb' }));
 
   // Desktop sync router for Windows Offline Desktop apps (Strike & Inzan Athletics)
   app.use('/api/desktop', desktopSyncRouter);
