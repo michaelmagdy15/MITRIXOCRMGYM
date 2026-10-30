@@ -144,12 +144,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let active = true;
 
+    // Staff login may need a Firestore profile read plus role/coach hydration.
+    // Three seconds caused slow first loads to render before auth was complete.
     const safetyTimeout = setTimeout(() => {
       if (active && !isAuthReady) {
         console.warn('Auth state safety timeout triggered');
         setIsAuthReady(true);
       }
-    }, 3000);
+    }, 10000);
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
