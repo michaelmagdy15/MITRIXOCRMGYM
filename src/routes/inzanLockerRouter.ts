@@ -1012,12 +1012,14 @@ inzanLockerRouter.get('/redgits-agent/next', async (req: Request, res: Response)
     const job = await inzanDb.runTransaction(async (t) => {
       const q = inzanDb
         .collection('redgitsAgentJobs')
-        .where('status', '==', 'pending')
-        .orderBy('requestedAtMs', 'asc')
-        .limit(1);
+        .where('status', '==', 'pending');
       const snap = await t.get(q);
       if (snap.empty) return null;
-      const doc = snap.docs[0];
+      // Sort in memory to avoid requiring a Firestore composite index.
+      const docs = snap.docs
+        .map((d) => d)
+        .sort((a, b) => Number((a.data() as any)?.requestedAtMs || 0) - Number((b.data() as any)?.requestedAtMs || 0));
+      const doc = docs[0];
       if (!doc) return null;
       const d = doc.data() as any;
       if (!d || !d.requestedAtMs || now - d.requestedAtMs < 3000) return null;
