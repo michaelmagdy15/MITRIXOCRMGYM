@@ -56,9 +56,12 @@ if (isStandaloneMode()) {
   process.env.GOOGLE_CLOUD_PROJECT = 'strike-production-f5242';
   process.env.GCLOUD_PROJECT = 'strike-production-f5242';
   process.env.GCP_PROJECT = 'strike-production-f5242';
-} else if (!process.env.GOOGLE_CLOUD_PROJECT) {
-  process.env.GOOGLE_CLOUD_PROJECT = defaultProjectId;
-  process.env.GCP_PROJECT = defaultProjectId;
+} else {
+  // Cloud Run's hosting project is not the Firebase Auth project.
+  const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || defaultProjectId;
+  process.env.GOOGLE_CLOUD_PROJECT = firebaseProjectId;
+  process.env.GCLOUD_PROJECT = firebaseProjectId;
+  process.env.GCP_PROJECT = firebaseProjectId;
 }
 
 // Initialize firebase-admin
@@ -70,7 +73,9 @@ const serviceAccountPath = (saEnvPath && fs.existsSync(saEnvPath))
   : path.join(process.cwd(), 'service-account.json');
 
 if (admin.apps.length === 0) {
-  const effectiveProjectId = isStandaloneMode() ? 'strike-production-f5242' : (process.env.GOOGLE_CLOUD_PROJECT || defaultProjectId);
+  const effectiveProjectId = isStandaloneMode()
+    ? 'strike-production-f5242'
+    : (process.env.FIREBASE_PROJECT_ID || defaultProjectId);
   if (fs.existsSync(serviceAccountPath)) {
     try {
       const saKey = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));
@@ -514,4 +519,3 @@ async function awaitDatabaseReady(projectId: string, databaseId: string, accessT
   // If we time out, log it and fall back to allowing the script to try seeding anyway
   console.warn(`[Provisioning] Database did not reach ACTIVE state in time. Proceeding to seed anyway.`);
 }
-
