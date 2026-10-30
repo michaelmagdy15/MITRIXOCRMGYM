@@ -2,8 +2,10 @@ import { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
+import zlib from 'node:zlib';
 import { chromium } from 'playwright';
 import { getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
+import { isInzanBridgeOnline } from './inzanLockerRouter.js';
 
 export const redgitsSyncRouter = Router();
 
@@ -15,6 +17,31 @@ const FALLBACK_REDGITS_USER = 'trasnfer';
 const FALLBACK_REDGITS_PASS = '12122020Aa$';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+
+// On-site agent plumbing: RedGITS stalls/rejects Cloud Run datacenter IPs while the
+// gym's own IP logs in fine, so the RedGITS scrape runs on the reception Mac bridge
+// and posts gzipped raw endpoint bodies back through authenticated bridge endpoints.
+interface RedgitsAgentFetchSpec {
+  key: string; // 'dt:<endpoint>' or 'html:<path|alias>'
+  url: string;
+  body?: string;
+  referer?: string;
+}
+type AgentPayload = { dt: Record<string, string>; html: Record<string, string> } | null;
+
+// fetch() response stub lets the existing scrape helpers below read agent-delivered
+// payloads without touching their code paths.
+const payloadResponse = (text: string): globalThis.Response =>
+  ({
+    ok: true,
+    status: 200,
+    headers: {
+      getSetCookie: (): string[] => [],
+      get: () => null,
+    },
+    text: async () => text,
+    json: async () => JSON.parse(text),
+  } as unknown as globalThis.Response);
 
 interface SyncStats {
   mode: 'fast' | 'full';
@@ -535,11 +562,121 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
 
     let authenticatedAccount = '';
     let authenticatedPassword = '';
+    let agentPayload: AgentPayload = null;
+    let agentSyncId = '';
+
+    // 2a. Prefer the on-site macOS bridge agent whenever the bridge is online.
+    const bridgeState = await isInzanBridgeOnline().catch(() => ({ online: false, lastSeenIso: null }));
+    if (bridgeState.online) {
+      const enqueuedAtMs = Date.now();
+      const guestReportFromDate = mode === 'full' ? '2025-01-01' : new Date(enqueuedAtMs - 120 * 86400000).toISOString().slice(0, 10);
+      const checkInDaysBack = mode === 'full' ? 45 : 10;
+      const checkInFromDate = new Date(enqueuedAtMs - checkInDaysBack * 86400000).toISOString().slice(0, 10);
+      const checkInToDate = new Date(enqueuedAtMs + 86400000).toISOString().slice(0, 10);
+      const dtBody = (maxRows: number) =>
+        new URLSearchParams({
+          draw: '1',
+          start: '0',
+          length: String(maxRows),
+          'search[value]': '',
+          'order[0][column]': '0',
+          'order[0][dir]': 'desc',
+        }).toString();
+      const fetches: RedgitsAgentFetchSpec[] = [
+        { key: 'html:/admin/packages/show', url: `${REDGITS_ORIGIN}/admin/packages/show`, referer: `${REDGITS_ORIGIN}/admin` },
+        { key: 'dt:active', url: `${REDGITS_ORIGIN}/admin/member_data/active`, body: dtBody(50000), referer: `${REDGITS_ORIGIN}/admin/members` },
+        { key: 'html:/admin/packagelist', url: `${REDGITS_ORIGIN}/admin/packagelist`, referer: `${REDGITS_ORIGIN}/admin/members` },
+        { key: 'html:/admin/reports/nationalMembers', url: `${REDGITS_ORIGIN}/admin/reports/nationalMembers`, referer: `${REDGITS_ORIGIN}/admin` },
+        { key: 'dt:guest', url: `${REDGITS_ORIGIN}/admin/member_data/guest`, body: dtBody(450), referer: `${REDGITS_ORIGIN}/admin/members` },
+        { key: 'dt:viewinvitation', url: `${REDGITS_ORIGIN}/admin/member_data/viewinvitation`, body: dtBody(400), referer: `${REDGITS_ORIGIN}/admin/members` },
+        { key: 'html:/admin/staff/show', url: `${REDGITS_ORIGIN}/admin/staff/show`, referer: `${REDGITS_ORIGIN}/admin` },
+        { key: 'html:guest_report', url: `${REDGITS_ORIGIN}/admin/reports/guest_member?salesID=&from=${encodeURIComponent(guestReportFromDate)}&to=${encodeURIComponent('2026-12-31')}&trainer=&comefrom=&source=`, referer: `${REDGITS_ORIGIN}/admin/reports/guestmembers` },
+        { key: 'html:activities', url: `${REDGITS_ORIGIN}/admin/check/getactivitesday?fromdate=${encodeURIComponent(`${checkInFromDate} 00:00:00`)}&todate=${encodeURIComponent(`${checkInToDate} 23:59:59`)}&gender=&all=&note=`, referer: `${REDGITS_ORIGIN}/admin/check/memberactivities` },
+      ];
+      if (mode === 'full') {
+        fetches.splice(2, 0, { key: 'dt:expiredmember', url: `${REDGITS_ORIGIN}/admin/member_data/expiredmember`, body: dtBody(10000), referer: `${REDGITS_ORIGIN}/admin/members` });
+      }
+
+      const syncId = `sync_${enqueuedAtMs}_${Math.random().toString(36).slice(2, 8)}`;
+      agentSyncId = syncId;
+      try {
+        await inzanDb.collection('redgitsAgentJobs').doc(syncId).set({
+          syncId,
+          mode,
+          fetches,
+          username: candidateAccounts[0]?.username || '',
+          password: candidateAccounts[0]?.password || '',
+          status: 'pending',
+          requestedAtMs: enqueuedAtMs,
+          requestedAt: startedAt,
+          requestedBy: caller.email,
+        });
+        console.log(`[RedGITS Sync] On-site agent online (lastSeen=${bridgeState.lastSeenIso}); enqueued job ${syncId}.`);
+      } catch (jobErr: any) {
+        console.error('[RedGITS Sync] Failed to enqueue on-site agent job:', jobErr?.message || jobErr);
+      }
+
+      // Prune agent jobs older than 7 days (incl. their payload subcollections)
+      try {
+        const staleSnap = await inzanDb.collection('redgitsAgentJobs').where('requestedAtMs', '<', enqueuedAtMs - 7 * 86400000).limit(50).get();
+        await Promise.all(
+          staleSnap.docs.map(async (staleDoc) => {
+            const payloadDocs = await staleDoc.ref.collection('payloads').get();
+            payloadDocs.docs.forEach((p) => void p.ref.delete().catch(() => {}));
+            void staleDoc.ref.delete().catch(() => {});
+          })
+        );
+      } catch { /* pruning is non-critical */ }
+
+      // Cloud Run caps requests at 300s (dialog aborts slightly under it) — wait at most 210s.
+      const agentDeadline = Date.now() + 210_000;
+      while (Date.now() < agentDeadline && !agentPayload) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          const jobSnap = await inzanDb.collection('redgitsAgentJobs').doc(syncId).get();
+          const jobStatus = String((jobSnap.data() as any)?.status || 'pending');
+          if (jobStatus === 'payload_ready') {
+            agentPayload = { dt: {}, html: {} };
+            const payloadSnaps = await inzanDb.collection('redgitsAgentJobs').doc(syncId).collection('payloads').get();
+            for (const d of payloadSnaps.docs) {
+              try {
+                const text = zlib.gunzipSync(Buffer.from(String(d.data()?.gz || ''), 'base64')).toString('utf8').replace(/^\uFEFF/, '');
+                if (d.id.startsWith('dt:')) agentPayload.dt[d.id.slice(3)] = text;
+                else if (d.id.startsWith('html:')) agentPayload.html[d.id.slice(5)] = text;
+              } catch (pErr) {
+                console.warn(`[RedGITS Sync] Failed to decode agent payload ${d.id}:`, pErr);
+              }
+            }
+            console.log(`[RedGITS Sync] Received on-site agent payloads: dt=${Object.keys(agentPayload.dt).length} html=${Object.keys(agentPayload.html).length}.`);
+          } else if (jobStatus === 'failed') {
+            const failMsg = String((jobSnap.data() as any)?.lastError || 'On-site agent scrape failed.');
+            console.error(`[RedGITS Sync] On-site agent job ${syncId} failed: ${failMsg}`);
+            res.status(502).json({ error: `RedGITS on-site scrape failed: ${failMsg}` });
+            void inzanDb.collection('redgitsAgentJobs').doc(syncId).delete().catch(() => {});
+            return;
+          }
+        } catch (pollErr: any) {
+          console.warn('[RedGITS Sync] Job poll error:', pollErr?.message || pollErr);
+        }
+      }
+      if (agentPayload) {
+        authenticatedAccount = candidateAccounts[0]?.username || 'onsite-agent';
+        authenticatedPassword = candidateAccounts[0]?.password || '';
+      } else {
+        console.error(`[RedGITS Sync] On-site agent did not deliver job ${syncId} in time.`);
+        void inzanDb.collection('redgitsAgentJobs').doc(syncId).delete().catch(() => {});
+        res.status(504).json({ error: 'On-site RedGITS agent (reception Mac) did not respond in time. Verify the Mac bridge agent was re-installed after this release.' });
+        return;
+      }
+    }
+
     try {
-      authenticatedAccount = await authenticateRedgitsWithBrowser(candidateAccounts, cookieJar);
-      if (authenticatedAccount) {
-        authenticatedPassword = candidateAccounts.find((account) => account.username === authenticatedAccount)?.password || '';
-        console.log(`[RedGITS Sync] Browser login succeeded for account "${authenticatedAccount}".`);
+      if (!authenticatedAccount) {
+        authenticatedAccount = await authenticateRedgitsWithBrowser(candidateAccounts, cookieJar);
+        if (authenticatedAccount) {
+          authenticatedPassword = candidateAccounts.find((account) => account.username === authenticatedAccount)?.password || '';
+          console.log(`[RedGITS Sync] Browser login succeeded for account "${authenticatedAccount}".`);
+        }
       }
     } catch (browserErr) {
       console.warn(
@@ -631,7 +768,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           'order[0][column]': '0',
           'order[0][dir]': 'desc',
         });
-        const r = await fetch(`${REDGITS_ORIGIN}/admin/member_data/${endpoint}`, {
+        const payloadJson = agentPayload?.dt[endpoint];
+        const r = payloadJson !== undefined
+          ? payloadResponse(payloadJson)
+          : await fetch(`${REDGITS_ORIGIN}/admin/member_data/${endpoint}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -658,7 +798,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     // Helper to fetch HTML table endpoint
     const fetchHtmlTable = async (pathUrl: string): Promise<string[][]> => {
       try {
-        const r = await fetch(`${REDGITS_ORIGIN}${pathUrl}`, {
+        const payloadHtml = agentPayload?.html[pathUrl];
+        const r = payloadHtml !== undefined
+          ? payloadResponse(payloadHtml)
+          : await fetch(`${REDGITS_ORIGIN}${pathUrl}`, {
           headers: {
             Cookie: getCookieHeader(),
             'User-Agent': USER_AGENT,
@@ -690,7 +833,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
         }
       >();
       try {
-        const r = await fetch(
+        const payloadGuest = agentPayload?.html['guest_report'];
+        const r = payloadGuest !== undefined
+          ? payloadResponse(payloadGuest)
+          : await fetch(
           `${REDGITS_ORIGIN}/admin/reports/guest_member?salesID=&from=${encodeURIComponent(fromDate)}&to=${encodeURIComponent(toDate)}&trainer=&comefrom=&source=`,
           {
             headers: {
@@ -813,7 +959,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       const actUrl = `${REDGITS_ORIGIN}/admin/check/getactivitesday?fromdate=${encodeURIComponent(
         `${checkInFromDate} 00:00:00`
       )}&todate=${encodeURIComponent(`${checkInToDate} 23:59:59`)}&gender=&all=&note=`;
-      const actRes = await fetch(actUrl, {
+      const payloadActivities = agentPayload?.html['activities'];
+      const actRes = payloadActivities !== undefined
+        ? payloadResponse(payloadActivities)
+        : await fetch(actUrl, {
         headers: {
           Cookie: getCookieHeader(),
           'User-Agent': USER_AGENT,
@@ -1950,6 +2099,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     };
 
     await inzanDb.collection('settings').doc('redgits_sync_status').set(syncStats, { merge: true });
+
+    if (agentSyncId) {
+      await inzanDb.collection('redgitsAgentJobs').doc(agentSyncId).set({ status: 'applied', appliedAtMs: Date.now() }, { merge: true });
+    }
 
     res.json({
       ok: true,

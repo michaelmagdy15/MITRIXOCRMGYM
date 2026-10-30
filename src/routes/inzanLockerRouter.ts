@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import express, { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
@@ -941,6 +941,116 @@ async function verifyBridgeKey(req: Request): Promise<boolean> {
   return false;
 }
 
+/**
+ * Exposed for the RedGITS sync router: whether the on-site macOS bridge agent is
+ * currently pushing snapshots to the CRM (so RedGITS scrapes can run on the site IP).
+ */
+export async function isInzanBridgeOnline(): Promise<{ online: boolean; lastSeenIso: string | null }> {
+  try {
+    const snap = await getBridgeSnapshot();
+    if (!snap) return { online: false, lastSeenIso: null };
+    const online = Date.now() - snap.pushedAt < 90_000;
+    return { online, lastSeenIso: (snap as any).pushedAtIso || null };
+  } catch {
+    return { online: false, lastSeenIso: null };
+  }
+}
+
+// ============================================================================
+// 1C. REDGITS ON-SITE AGENT ENDPOINTS (in used by the macOS bridge agent)
+// RedGITS rejects/stalls Google datacenter IPs, so the scrape is executed on the
+// gym's site IP by agent.py; results are posted back and applied by
+// src/routes/redgitsSync.ts which enqueues jobs into `redgitsAgentJobs`.
+// ============================================================================
+inzanLockerRouter.get('/redgits-agent/next', async (req: Request, res: Response) => {
+  try {
+    if (!(await verifyBridgeKey(req))) {
+      res.status(401).json({ error: 'Unauthorized bridge key' });
+      return;
+    }
+    const inzanDb = getInzanFirestore();
+    const pendingSnap = await inzanDb
+      .collection('redgitsAgentJobs')
+      .where('status', '==', 'pending')
+      .orderBy('requestedAtMs', 'asc')
+      .limit(1)
+      .get();
+    if (pendingSnap.empty) {
+      res.json({ ok: true, job: null });
+      return;
+    }
+    const doc = pendingSnap.docs[0];
+    if (!doc) {
+      res.json({ ok: true, job: null });
+      return;
+    }
+    const job = doc.data() as any;
+    // Small delay so the long-polling sync request starts listening before the agent claims and finishes fast.
+    if (!job.requestedAtMs || Date.now() - job.requestedAtMs < 3000) {
+      res.json({ ok: true, job: null });
+      return;
+    }
+    await doc.ref.set({ status: 'claimed', claimedAtMs: Date.now() }, { merge: true });
+    res.json({
+      ok: true,
+      job: {
+        syncId: job.syncId,
+        mode: job.mode,
+        username: job.username,
+        password: job.password,
+        fetches: job.fetches || [],
+      },
+    });
+  } catch (err: any) {
+    console.error('[API] [InzanLockers] GET /redgits-agent/next error:', err);
+    res.status(500).json({ error: err.message || 'redgits-agent next failed' });
+  }
+});
+
+// Gzipped+base64 endpoint bodies, base64 lengths are each well under Firestore's 1 MiB doc cap.
+inzanLockerRouter.post('/redgits-agent/submit', express.json({ limit: '32mb' }), async (req: Request, res: Response) => {
+  try {
+    if (!(await verifyBridgeKey(req))) {
+      res.status(401).json({ error: 'Unauthorized bridge key' });
+      return;
+    }
+    const { syncId, ok, error, payloads } = req.body || {};
+    if (!syncId) {
+      res.status(400).json({ error: 'syncId is required' });
+      return;
+    }
+    const inzanDb = getInzanFirestore();
+    const jobRef = inzanDb.collection('redgitsAgentJobs').doc(String(syncId));
+    if (!ok) {
+      await jobRef.set({ status: 'failed', lastError: String(error || 'unknown on-site agent error'), finishedAtMs: Date.now() }, { merge: true });
+      res.json({ ok: true });
+      return;
+    }
+    const entries = Object.entries((payloads || {}) as Record<string, string>);
+    if (entries.length === 0) {
+      await jobRef.set({ status: 'failed', lastError: 'On-site agent delivered no payloads.', finishedAtMs: Date.now() }, { merge: true });
+      res.json({ ok: true });
+      return;
+    }
+    const batch = inzanDb.batch();
+    for (const [key, gz] of entries) {
+      const value = String(gz || '');
+      if (!value || value.length > 900_000) {
+        await jobRef.set({ status: 'failed', lastError: `Payload "${key}" missing or too large (${value.length}).`, finishedAtMs: Date.now() }, { merge: true });
+        res.json({ ok: true });
+        return;
+      }
+      batch.set(jobRef.collection('payloads').doc(key), { gz: value }, { merge: true });
+    }
+    batch.set(jobRef, { status: 'payload_ready', deliveredAtMs: Date.now(), deliveredKeys: entries.map(([k]) => k) }, { merge: true });
+    await batch.commit();
+    res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[API] [InzanLockers] POST /redgits-agent/submit error:', err);
+    res.status(500).json({ error: err.message || 'redgits-agent submit failed' });
+  }
+});
+
 inzanLockerRouter.post('/bridge/push', async (req: Request, res: Response) => {
   try {
     if (!(await verifyBridgeKey(req))) {
@@ -1232,7 +1342,12 @@ import subprocess
 import sys
 import threading
 import time
+import base64
+import gzip
+import http.cookiejar
+import uuid
 import urllib.error
+import urllib.parse
 import urllib.request
 
 CRM_URL = os.environ.get("INZAN_CRM_URL", "https://admin.inzanathletics.com").rstrip("/")
@@ -1461,6 +1576,165 @@ def command_poll_loop():
             time.sleep(2)
 
 
+# ------------------------------------------------------------------
+# RedGITS on-site agent: RedGITS stalls/rejects Google datacenter IPs,
+# so the CRM delegates the RedGITS login+scrape to us (gym site IP) and
+# applies the returned raw endpoint bodies itself.
+# ------------------------------------------------------------------
+REDGITS_ORIGIN = "https://inzan.redgits.com"
+REDGITS_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
+
+def js_hash(value):
+    h = 0
+    for ch in value:
+        h = (((h << 5) - h + ord(ch)) & 0xFFFFFFFF) | 0
+    if h >= 0x80000000:
+        h -= 0x100000000
+    return h
+
+
+def redgits_next_job():
+    status, res = http_json(
+        f"{CRM_URL}/api/inzan/lockers/redgits-agent/next",
+        method="GET",
+        headers={"x-inzan-bridge-key": BRIDGE_KEY},
+        timeout=12,
+    )
+    if status == 200 and isinstance(res, dict):
+        return res.get("job")
+    return None
+
+
+def redgits_request(opener, url, data=None, referer=None, xhr=False):
+    headers = {
+        "User-Agent": REDGITS_UA,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "identity",
+    }
+    if data is not None:
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+    if referer:
+        headers["Referer"] = referer
+    if xhr:
+        headers["X-Requested-With"] = "XMLHttpRequest"
+    req = urllib.request.Request(url, data=data, headers=headers)
+    with opener.open(req, timeout=30) as resp:
+        return resp.geturl(), resp.read()
+
+
+def run_redgits_job(job):
+    sync_id = str(job.get("syncId") or "")
+    username = str(job.get("username") or "")
+    password = str(job.get("password") or "")
+    if not sync_id:
+        log("[RedGITS Agent] Job without syncId; ignoring")
+        return
+
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+
+    _, login_page = redgits_request(opener, f"{REDGITS_ORIGIN}/admin/login")
+    fake_names = re.findall(r'name="(fake_[a-zA-Z0-9_]+)"', login_page.decode("utf-8", errors="replace"))
+    install_id = str(uuid.uuid4()).upper()
+    fp_src = "|".join(["", "", "", "", "", "1920x1080", "1", "24", "Africa/Cairo", "Win32", "8", "", "en-US, en", "0", "Google Inc."])
+    client_fp = str(js_hash(fp_src))
+    device_code = client_fp
+    client_info = json.dumps({
+        "installId": install_id,
+        "platform": "Win32",
+        "cpuCores": 8,
+        "deviceMemory": "",
+        "languages": "en-US, en",
+        "timezone": "Africa/Cairo",
+        "screen": "1920x1080",
+        "pixelRatio": "1",
+        "colorDepth": 24,
+        "vendor": "Google Inc.",
+        "touchPoints": 0,
+        "userAgent": REDGITS_UA,
+        "localIps": [],
+        "connection": "",
+        "canvasHash": "",
+        "webglHash": "",
+        "audioHash": "",
+        "deviceCode": device_code,
+        "fingerprintHash": client_fp,
+        "webglVendor": "",
+        "webglRenderer": "",
+        "cookieEnabled": True,
+        "online": True,
+        "uaBrands": "",
+        "uaPlatform": "Windows",
+        "uaMobile": "no",
+    })
+
+    form = {}
+    for name in fake_names:
+        form[name] = ""
+    form["username"] = username
+    form["password"] = password
+    form["code"] = device_code if username.lower() == "admin" else ""
+    form["client_info"] = client_info
+    final_url, _ = redgits_request(
+        opener,
+        f"{REDGITS_ORIGIN}/admin/login/check_login",
+        data=urllib.parse.urlencode(form).encode("utf-8"),
+        referer=f"{REDGITS_ORIGIN}/admin/login",
+    )
+    if "/admin/login" in final_url:
+        raise RuntimeError("RedGITS login was rejected from the site network")
+    log(f"[RedGITS Agent] RedGITS login OK -> {final_url}")
+
+    payloads = {}
+    for spec in job.get("fetches") or []:
+        key = str(spec.get("key") or "")
+        if not key:
+            continue
+        is_dt = key.startswith("dt:")
+        data = str(spec.get("body") or "").encode("utf-8") if is_dt and spec.get("body") else None
+        _, raw = redgits_request(opener, str(spec.get("url") or ""), data=data, referer=str(spec.get("referer") or f"{REDGITS_ORIGIN}/admin"), xhr=is_dt)
+        payloads[key] = base64.b64encode(gzip.compress(raw)).decode("utf-8")
+        log(f"[RedGITS Agent] Fetched {key}: {len(raw)} raw bytes")
+
+    status, _ = http_json(
+        f"{CRM_URL}/api/inzan/lockers/redgits-agent/submit",
+        method="POST",
+        body={"syncId": sync_id, "ok": True, "payloads": payloads},
+        headers={"x-inzan-bridge-key": BRIDGE_KEY},
+        timeout=120,
+    )
+    if status != 200:
+        raise RuntimeError(f"Submit returned HTTP {status}")
+    log(f"[RedGITS Agent] Delivered payloads for {sync_id}")
+
+
+def redgits_agent_loop():
+    log("Starting RedGITS on-site agent loop")
+    while True:
+        try:
+            job = redgits_next_job()
+            if job and job.get("syncId"):
+                log(f"[RedGITS Agent] Received job {job.get('syncId')} mode={job.get('mode')}")
+                try:
+                    run_redgits_job(job)
+                except Exception as job_err:
+                    log(f"[RedGITS Agent] Job {job.get('syncId')} failed: {job_err}")
+                    try:
+                        http_json(
+                            f"{CRM_URL}/api/inzan/lockers/redgits-agent/submit",
+                            method="POST",
+                            body={"syncId": job.get("syncId"), "ok": False, "error": str(job_err)[:500]},
+                            headers={"x-inzan-bridge-key": BRIDGE_KEY},
+                            timeout=30,
+                        )
+                    except Exception:
+                        pass
+        except Exception as e:
+            log(f"[RedGITS Agent] Warning: {e}")
+        time.sleep(4)
+
+
 def tunnel_watchdog_loop():
     if not CLOUDFLARED_BIN or not os.path.exists(CLOUDFLARED_BIN):
         log("[TunnelWatchdog] cloudflared binary not found; running in pure Outbound HTTPS Bridge mode.")
@@ -1525,9 +1799,11 @@ if __name__ == "__main__":
     t_snap = threading.Thread(target=snapshot_loop, daemon=True)
     t_poll = threading.Thread(target=command_poll_loop, daemon=True)
     t_tun = threading.Thread(target=tunnel_watchdog_loop, daemon=True)
+    t_redgits = threading.Thread(target=redgits_agent_loop, daemon=True)
     t_snap.start()
     t_poll.start()
     t_tun.start()
+    t_redgits.start()
     while True:
         time.sleep(60)
 EOF_PY
