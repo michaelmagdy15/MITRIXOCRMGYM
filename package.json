@@ -54,6 +54,7 @@
     "firebase-admin": "^13.8.0",
     "google-auth-library": "^10.7.0",
     "html5-qrcode": "^2.3.8",
+    "idb": "^8.0.4",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.546.0",
