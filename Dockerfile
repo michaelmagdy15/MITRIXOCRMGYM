@@ -17,6 +17,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+RUN apk add --no-cache chromium nss freetype harfbuzz ca-certificates ttf-freefont
 # Dedicated deployments explicitly set STANDALONE_MODE and STANDALONE_TENANT_ID.
 # The shared image must not silently route central tenants into Strike's project.
 ENV PORT=8080

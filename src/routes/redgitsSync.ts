@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
+import { chromium } from 'playwright';
 import { getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
 
 export const redgitsSyncRouter = Router();
@@ -60,6 +61,51 @@ function simpleHash(value: string): string {
     hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
   }
   return String(hash);
+}
+
+async function authenticateRedgitsWithBrowser(
+  accounts: Array<{ username: string; password: string }>,
+  cookieJar: Map<string, string>
+): Promise<string> {
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+
+  try {
+    const context = await browser.newContext({
+      userAgent: USER_AGENT,
+      locale: 'en-US',
+      timezoneId: 'Africa/Cairo',
+      viewport: { width: 1920, height: 1080 },
+    });
+    const page = await context.newPage();
+
+    for (const account of accounts) {
+      try {
+        await page.goto(`${REDGITS_ORIGIN}/admin/login`, { waitUntil: 'domcontentloaded', timeout: 20_000 });
+        await page.locator('#username').waitFor({ state: 'visible', timeout: 15_000 });
+        await page.locator('#username').fill(account.username);
+        await page.locator('#password').fill(account.password);
+        await page.locator('#login-form button[type="submit"]').click();
+        await page.waitForURL((url) => !url.pathname.includes('/admin/login'), { timeout: 20_000 });
+
+        for (const cookie of await context.cookies(REDGITS_ORIGIN)) {
+          if (cookie.value && cookie.value !== 'deleted') cookieJar.set(cookie.name, cookie.value);
+        }
+        return account.username;
+      } catch (error) {
+        console.warn(
+          `[RedGITS Sync] Browser login rejected for account "${account.username}":`,
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+    return '';
+  } finally {
+    await browser.close();
+  }
 }
 
 function cleanMemberId(raw?: string, rId?: string): string {
@@ -465,7 +511,21 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
 
     let authenticatedAccount = '';
     let authenticatedPassword = '';
+    try {
+      authenticatedAccount = await authenticateRedgitsWithBrowser(candidateAccounts, cookieJar);
+      if (authenticatedAccount) {
+        authenticatedPassword = candidateAccounts.find((account) => account.username === authenticatedAccount)?.password || '';
+        console.log(`[RedGITS Sync] Browser login succeeded for account "${authenticatedAccount}".`);
+      }
+    } catch (browserErr) {
+      console.warn(
+        '[RedGITS Sync] Browser login unavailable; falling back to HTTP login:',
+        browserErr instanceof Error ? browserErr.message : browserErr
+      );
+    }
+
     for (const acct of candidateAccounts) {
+      if (authenticatedAccount) break;
       cookieJar.delete('ci_session');
       cookieJar.delete('PHPSESSID');
       cookieJar.delete('admin_remember');
