@@ -287,31 +287,51 @@ export function isPackageMatchingFilter(
   const pkgCategoryNorm = pkg.category ? normalizeTierCategory(pkg.category) : null;
 
   let matchesTier = false;
+  const isGoldenYouth = nameLower.includes('golden package');
+  const isWelcomeYouth = nameLower.includes('welcome session');
+  const isFighterTeam = nameLower.includes('fighter team');
+  const isExtraProYouth = nameLower.includes('extra') && nameLower.includes('pro');
+  const isExtraStandardYouth = nameLower.includes('extra') && !nameLower.includes('pro');
+  const isAnyYouthProgram = isGoldenYouth || isWelcomeYouth || isFighterTeam || isExtraProYouth || isExtraStandardYouth || nameLower.includes('kid') || nameLower.includes('junior');
+
   if (targetNorm.tier === 'Junior Only') {
     matchesTier =
+      isGoldenYouth ||
+      isWelcomeYouth ||
+      isExtraStandardYouth ||
       pkgTierNorm?.tier === 'Junior Only' ||
       pkgCategoryNorm?.slug === 'junior_only' ||
       (nameLower.includes('junior') && !nameLower.includes('advanced') && !nameLower.includes('pro'));
   } else if (targetNorm.tier === 'Junior Advanced') {
     matchesTier =
+      isGoldenYouth ||
+      isFighterTeam ||
+      isExtraProYouth ||
       pkgTierNorm?.tier === 'Junior Advanced' ||
       pkgCategoryNorm?.slug === 'junior_advanced' ||
       (nameLower.includes('junior') && (nameLower.includes('advanced') || nameLower.includes('pro')));
   } else if (targetNorm.tier === 'Kids Only') {
     matchesTier =
+      isGoldenYouth ||
+      isWelcomeYouth ||
+      isExtraStandardYouth ||
       pkgTierNorm?.tier === 'Kids Only' ||
       pkgCategoryNorm?.slug === 'kids_only' ||
       (nameLower.includes('kid') && !nameLower.includes('pro'));
   } else if (targetNorm.tier === 'Kids Pro') {
     matchesTier =
+      isGoldenYouth ||
+      isFighterTeam ||
+      isExtraProYouth ||
       pkgTierNorm?.tier === 'Kids Pro' ||
       pkgCategoryNorm?.slug === 'kids_pro' ||
       (nameLower.includes('kid') && nameLower.includes('pro'));
   } else if (targetNorm.tier === 'Adults') {
     matchesTier =
-      pkgTierNorm?.tier === 'Adults' ||
-      pkgCategoryNorm?.slug === 'adults' ||
-      (!nameLower.includes('kid') && !nameLower.includes('junior'));
+      !isAnyYouthProgram &&
+      (pkgTierNorm?.tier === 'Adults' ||
+        pkgCategoryNorm?.slug === 'adults' ||
+        (!nameLower.includes('kid') && !nameLower.includes('junior')));
   } else if (targetNorm.tier === 'PT') {
     matchesTier = isPtPkg;
   }
@@ -333,6 +353,17 @@ export function isPackageMatchingFilter(
 
   const sBranchNorm = normalizeBranchName(selectedBranch);
   if (!selectedBranch || selectedBranch === 'All Branches' || selectedBranch === 'ALL' || sBranchNorm === 'all') {
+    return true;
+  }
+
+  const rawBranches: string[] = Array.isArray(pkg.branches)
+    ? pkg.branches
+    : String(pkg.branch || pkg.branch_id || pkg.branchId || '')
+        .split(/[,/&]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+  if (rawBranches.some((b) => normalizeBranchName(b) === sBranchNorm)) {
     return true;
   }
 

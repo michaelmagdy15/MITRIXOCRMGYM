@@ -796,7 +796,8 @@ export default function Clients() {
     const pkg = packages.find(p => p.name === upgradePkgName);
     if (!pkg) return;
 
-    const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
+    const pkgNameLower = pkg.name.toLowerCase();
+    const isKidsPackage = pkgNameLower.includes('kids') || pkgNameLower.includes('junior') || pkgNameLower.includes('welcome session') || pkgNameLower.includes('golden package') || pkgNameLower.includes('fighter team') || pkgNameLower.includes('extra ') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
     if (!isInzanTenant && isKidsPackage && client.branch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(client.branch))) {
       alert("Kids and Junior packages/memberships can only be booked at Maxim, Mivida, or Playa branches.");
       return;
@@ -937,7 +938,8 @@ export default function Clients() {
     const pkg = packages.find(p => p.name === renewPkgName);
     if (!pkg) return;
 
-    const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
+    const pkgNameLower = pkg.name.toLowerCase();
+    const isKidsPackage = pkgNameLower.includes('kids') || pkgNameLower.includes('junior') || pkgNameLower.includes('welcome session') || pkgNameLower.includes('golden package') || pkgNameLower.includes('fighter team') || pkgNameLower.includes('extra ') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
     if (!isInzanTenant && isKidsPackage && client.branch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(client.branch))) {
       alert("Kids and Junior packages/memberships can only be booked at Maxim, Mivida, or Playa branches.");
       return;
@@ -1056,7 +1058,8 @@ export default function Clients() {
     const pkg = packages.find(p => p.name === addPackageName);
     if (!pkg) return;
 
-    const isKidsPackage = pkg.name.toLowerCase().includes('kids') || pkg.name.toLowerCase().includes('junior') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
+    const pkgNameLower = pkg.name.toLowerCase();
+    const isKidsPackage = pkgNameLower.includes('kids') || pkgNameLower.includes('junior') || pkgNameLower.includes('welcome session') || pkgNameLower.includes('golden package') || pkgNameLower.includes('fighter team') || pkgNameLower.includes('extra ') || client.memberCategory?.toLowerCase().includes('kids') || client.memberCategory?.toLowerCase().includes('junior');
     if (!isInzanTenant && isKidsPackage && client.branch && !['maxim', 'mivida', 'playa'].includes(normalizeBranchName(client.branch))) {
       alert("Kids and Junior packages/memberships can only be booked at Maxim, Mivida, or Playa branches.");
       return;

@@ -16,55 +16,101 @@ import { getTenantId, db } from '../firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { format, addDays, parseISO, isToday, isSameDay, startOfDay } from 'date-fns';
 
+const STRIKE_STORAGE_IMG = {
+  adult10s: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fadult-10s.jpg?alt=media&token=4887c4d0-6b8d-48bd-a565-5d5f0026d496",
+  adult20s: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fadult-20s.jpg?alt=media&token=20c9cab3-abf7-4a2b-bb6a-06ebb877d24d",
+  adult30s: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fadult-30s.jpg?alt=media&token=6e0913f5-8470-44c5-99e9-a9a2a852b85c",
+  adult5s: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fadult-5s.jpg?alt=media&token=3daae182-e32d-47b6-9141-5708d79242d5",
+  adult6m: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fadult-6m.jpg?alt=media&token=be71852a-e754-464f-8450-e9e950719313",
+  adultDrop: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fadult-drop.jpg?alt=media&token=1089f09b-eb78-4a15-bc2f-7082ea7f6595",
+  bannerAdults: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fbanner-adults.jpg?alt=media&token=d69a8f65-c2c8-4451-bc45-37b0561ac626",
+  bannerImpact: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fbanner-impact.jpg?alt=media&token=bb798c8a-1c8e-49b5-944c-40d1ea17c9b8",
+  bannerJuniors: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fbanner-juniors.jpg?alt=media&token=f0f13264-05f2-40ba-853a-dd133679a1f7",
+  bannerKids: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fbanner-kids.jpg?alt=media&token=f770d0af-8bcd-4986-8118-50fa18b4632a",
+  extraKids: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fextra-kids.jpg?alt=media&token=a9bffcb9-1517-4864-9f18-d00f05c70886",
+  extraPro: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fextra-pro.jpg?alt=media&token=d8fef2a6-e9a5-41a2-8eab-5d1ee98d54ec",
+  fighterTeam12m: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Ffighter-team-12m.jpg?alt=media&token=5fe271bd-4756-43e8-b831-a75e56543b76",
+  fighterTeam3m: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Ffighter-team-3m.jpg?alt=media&token=4a57977a-0402-45da-af00-ef146751091c",
+  fighterTeam6m: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Ffighter-team-6m.jpg?alt=media&token=8623f200-a90a-4423-9187-3838c93734c2",
+  goldenPackage: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fgolden-package.jpg?alt=media&token=5583fa25-67e5-4501-aa57-2357420d1369",
+  heroAdults: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fhero-adults.jpg?alt=media&token=e19d4f0a-3622-4451-a8a9-7cf5b5cd7205",
+  heroImpact: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fhero-impact.jpg?alt=media&token=6ea7d734-8fb6-4ced-8a1e-2cf5cbb6e531",
+  heroKidsJuniors: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fhero-kids-juniors.jpg?alt=media&token=77f24c77-34a0-4de2-a643-564c85cac206",
+  kidsMivida10: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fkids-mivida-10.jpg?alt=media&token=e8c7ebab-dd6c-4493-b3d0-8a2d70979c52",
+  kidsMivida20: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fkids-mivida-20.jpg?alt=media&token=88ca10ef-c03a-426c-82d6-b1e08eaa0436",
+  kidsMivida30: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fkids-mivida-30.jpg?alt=media&token=48c70db6-767b-4708-aa22-311b84dd88fd",
+  program1Welcome: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fprogram-1-welcome.jpg?alt=media&token=62a94a16-25b4-4c4f-889c-a65fc07a7310",
+  program2KidsJuniors: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fprogram-2-kids-juniors.jpg?alt=media&token=31109a85-b23b-476e-8a27-4d24589c397f",
+  program3KidsJuniorsPro: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fprogram-3-kids-juniors-pro.jpg?alt=media&token=72dd882d-5aac-4254-8a73-c749937f829d",
+  pt10s: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fpt-10s.jpg?alt=media&token=6780dd1d-551b-4186-a35a-fc665aca0575",
+  pt20s: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fpt-20s.jpg?alt=media&token=07708820-5750-403c-bd75-71828cab8634",
+  pt30s: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fpt-30s.jpg?alt=media&token=86e0adfc-36a5-4f13-b81b-ce375a604949",
+  pt5s: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fpt-5s.jpg?alt=media&token=865ee9c8-0f7d-49c5-8e31-273707a1f497",
+  ptDrop: "https://firebasestorage.googleapis.com/v0/b/strike-production-f5242.firebasestorage.app/o/strike-packages%2Fpt-drop.jpg?alt=media&token=dfc8d8c7-f29b-4510-a6da-1ba6c6492832",
+};
+
 export function getPackageImage(packageName: string, sessions: number): string {
   const lowerName = packageName.toLowerCase();
 
+  // Special New Strike Programs
+  if (lowerName.includes('golden')) {
+    return STRIKE_STORAGE_IMG.goldenPackage;
+  }
+  if (lowerName.includes('fighter')) {
+    if (lowerName.includes('12 month')) return STRIKE_STORAGE_IMG.fighterTeam12m;
+    if (lowerName.includes('6 month')) return STRIKE_STORAGE_IMG.fighterTeam6m;
+    return STRIKE_STORAGE_IMG.fighterTeam3m;
+  }
+  if (lowerName.includes('welcome') || lowerName.includes('program (1)')) {
+    return STRIKE_STORAGE_IMG.program1Welcome;
+  }
+  if (lowerName.includes('program (2)') || lowerName.includes('2 month (20s)')) {
+    return STRIKE_STORAGE_IMG.program2KidsJuniors;
+  }
+  if (lowerName.includes('program (3)') || lowerName.includes('3 month (30s)')) {
+    return STRIKE_STORAGE_IMG.program3KidsJuniorsPro;
+  }
+  if (lowerName.includes('extra')) {
+    if (lowerName.includes('pro')) return STRIKE_STORAGE_IMG.extraPro;
+    return STRIKE_STORAGE_IMG.extraKids;
+  }
+  if (lowerName.includes('mivida') && lowerName.includes('kid')) {
+    if (sessions === 10) return STRIKE_STORAGE_IMG.kidsMivida10;
+    if (sessions === 20) return STRIKE_STORAGE_IMG.kidsMivida20;
+    if (sessions === 30) return STRIKE_STORAGE_IMG.kidsMivida30;
+    return STRIKE_STORAGE_IMG.kidsMivida10;
+  }
+  if (lowerName.includes('pt') || lowerName.includes('private')) {
+    if (sessions === 1) return STRIKE_STORAGE_IMG.ptDrop;
+    if (sessions === 5) return STRIKE_STORAGE_IMG.pt5s;
+    if (sessions === 10) return STRIKE_STORAGE_IMG.pt10s;
+    if (sessions === 20) return STRIKE_STORAGE_IMG.pt20s;
+    if (sessions === 30) return STRIKE_STORAGE_IMG.pt30s;
+    return STRIKE_STORAGE_IMG.pt10s;
+  }
+
   // 1. Adults (Maxim, Impact)
   if (!lowerName.includes('kid') && !lowerName.includes('junior')) {
-    if (lowerName.includes('impact')) {
-      if (sessions === 10) return "/Adults (Mivida, Maxim, Impact)/Impact/Impact 10.jpg";
-      if (sessions === 20) return "/Adults (Mivida, Maxim, Impact)/Impact/Impact 20.jpg";
-      if (sessions === 30) return "/Adults (Mivida, Maxim, Impact)/Impact/Impact 30.jpg";
-      return "/Adults (Mivida, Maxim, Impact)/Impact/Impact 10.jpg";
-    } else {
-      if (sessions === 10) return "/Adults (Mivida, Maxim, Impact)/Maxim/ADLUT 10.jpg";
-      if (sessions === 20) return "/Adults (Mivida, Maxim, Impact)/Maxim/ADLUT 20.jpg";
-      if (sessions === 30) return "/Adults (Mivida, Maxim, Impact)/Maxim/ADLUT 30.jpg";
-      return "/Adults (Mivida, Maxim, Impact)/Maxim/ADLUT.jpg";
-    }
+    if (sessions === 1) return STRIKE_STORAGE_IMG.adultDrop;
+    if (sessions === 5) return STRIKE_STORAGE_IMG.adult5s;
+    if (sessions === 10) return STRIKE_STORAGE_IMG.adult10s;
+    if (sessions === 20) return STRIKE_STORAGE_IMG.adult20s;
+    if (sessions === 30) return STRIKE_STORAGE_IMG.adult30s;
+    if (sessions >= 90 || lowerName.includes('6 month')) return STRIKE_STORAGE_IMG.adult6m;
+    return STRIKE_STORAGE_IMG.adult10s;
   }
 
   // 2. Juniors
   if (lowerName.includes('junior')) {
     const isPro = lowerName.includes('pro') || lowerName.includes('advanced');
-    if (isPro) {
-      if (sessions === 10) return "/Juniors-Juniors Pro/Juniors 10 sessions (pro).jpg";
-      if (sessions === 20) return "/Juniors-Juniors Pro/Juniors 20 sessions (pro).jpg";
-      if (sessions === 30) return "/Juniors-Juniors Pro/Juniors 30 sessions (pro).jpg";
-      return "/Juniors-Juniors Pro/Juniors 10 sessions (pro).jpg";
-    } else {
-      if (sessions === 10) return "/Juniors-Juniors Pro/Juniors 10 sessions .jpg";
-      if (sessions === 20) return "/Juniors-Juniors Pro/Juniors 20sessions .jpg";
-      if (sessions === 30) return "/Juniors-Juniors Pro/Juniors 30 sessions .jpg";
-      if (sessions <= 12) return "/Juniors-Juniors Pro/Juniors 10 sessions .jpg";
-      return "/Juniors-Juniors Pro/Juniors 20sessions .jpg";
-    }
+    if (isPro) return STRIKE_STORAGE_IMG.program3KidsJuniorsPro;
+    return STRIKE_STORAGE_IMG.program2KidsJuniors;
   }
 
   // 3. Kids
   const isPro = lowerName.includes('pro');
-  if (isPro) {
-    if (sessions === 10) return "/Kids Pro- Kids/Kids 10 sessions (pro).jpg";
-    if (sessions === 20) return "/Kids Pro- Kids/Kids 20 sessions (pro).jpg";
-    if (sessions === 30) return "/Kids Pro- Kids/Kids 30 sessions (pro).jpg";
-    return "/Kids Pro- Kids/Kids 10 sessions (pro).jpg";
-  } else {
-    if (sessions === 10) return "/Kids Pro- Kids/Kids 10 sessions.jpg";
-    if (sessions === 20) return "/Kids Pro- Kids/Kids 20 sessions.jpg";
-    if (sessions === 30) return "/Kids Pro- Kids/Kids 30 sessions.jpg";
-    if (sessions <= 10) return "/Kids Pro- Kids/Kids 10 sessions.jpg";
-    return "/Kids Pro- Kids/Kids 20 sessions.jpg";
-  }
+  if (isPro) return STRIKE_STORAGE_IMG.program3KidsJuniorsPro;
+  return STRIKE_STORAGE_IMG.kidsMivida20;
 }
 
 const BoxingGlovesIcon = ({ className }: { className?: string }) => (
@@ -161,6 +207,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|mitrixogymcrmCRM|Strike|Inzan/i.test(navigator.userAgent) || window.innerWidth < 768;
   const { addToCart, setIsCartOpen } = useCart();
   const [preloaderState, setPreloaderState] = useState<'loading' | 'exiting' | 'hidden'>('hidden');
+  const [extraTierTab, setExtraTierTab] = useState<'kids' | 'pro'>('kids');
 
   // Seamless pass-through: if navigated here from class booking with a specific package, auto-add to cart and open cart
   useEffect(() => {
@@ -218,14 +265,14 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
 
   const getSlideImage = (slideId: string | undefined, customUrl: string | undefined, index: number) => {
     if (customUrl) return customUrl;
-    if (index === 0) return isStrike ? "/strike_slide_outdoor.png" : "/mitrixogymcrm_sessions_slide.png";
-    if (index === 1) return isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png";
-    return isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png";
+    if (index === 0) return isStrike ? STRIKE_STORAGE_IMG.heroAdults : "/mitrixogymcrm_sessions_slide.png";
+    if (index === 1) return isStrike ? STRIKE_STORAGE_IMG.heroKidsJuniors : "/mitrixogymcrm_kids_boxing.png";
+    return isStrike ? STRIKE_STORAGE_IMG.heroImpact : "/impact_sister_company.png";
   };
 
   const getBannerImage = () => {
     if (bannerSection?.imageUrl) return bannerSection.imageUrl;
-    return isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png";
+    return isStrike ? STRIKE_STORAGE_IMG.bannerImpact : "/impact_sister_company.png";
   };
 
   // Refs for scrolling to sections
@@ -327,14 +374,90 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
   
   type AgeCategory = 'kids' | 'juniors' | 'adults' | 'pt';
   
+  const isYouthProgramName = (n: string) =>
+    n.includes('kid') ||
+    n.includes('junior') ||
+    n.includes('welcome session') ||
+    n.includes('golden package') ||
+    n.includes('fighter team') ||
+    n.includes('extra ');
+
+  // Intentional, logical ordering for Strike packages
+  const getPackageSortOrder = (pkg: Package): number => {
+    const n = (pkg.name || '').toLowerCase();
+    // 1. Golden Bundle first
+    if (n.includes('golden package')) return 10;
+    // 2. Core Youth Progression (Program 1 -> 2 -> 3)
+    if (n.includes('welcome session') || n.includes('program (1)')) return 20;
+    if (n.includes('2 month (20s)') || n.includes('program (2)')) return 30;
+    if (n.includes('3 month (30s)') || n.includes('program (3)')) return 40;
+    // 3. Program 4 Fighter Team (3m -> 6m -> 12m)
+    if (n.includes('fighter team')) {
+      if (n.includes('3 month')) return 50;
+      if (n.includes('6 month')) return 51;
+      if (n.includes('12 month')) return 52;
+      return 55;
+    }
+    // 4. Mivida Kids (10 -> 20 -> 30)
+    if (n.includes('kids mivida')) {
+      return 100 + (pkg.sessions || 0);
+    }
+    // 5. Extra Sessions (Kids 5->10->15, then Pro 5->10->15)
+    if (n.includes('extra ')) {
+      const isPro = n.includes('pro');
+      return (isPro ? 250 : 200) + (pkg.sessions || 0);
+    }
+    // 6. Adult Group Training (Drop -> 5 -> 10 -> 20 -> 30 -> 6 Month)
+    const isPT = n.includes('pt') || n.includes('private') || pkg.type === 'Private';
+    if (!isYouthProgramName(n) && !isPT) {
+      if (n.includes('drop') || pkg.sessions === 1) return 301;
+      if (pkg.sessions === 5) return 305;
+      if (pkg.sessions === 10) return 310;
+      if (pkg.sessions === 20) return 320;
+      if (pkg.sessions === 30) return 330;
+      if (n.includes('6 month') || pkg.sessions >= 90) return 360;
+      return 300 + (pkg.sessions || 0);
+    }
+    // 7. Private Coaching PT (Drop -> 5 -> 10 -> 20 -> 30)
+    if (isPT) {
+      if (n.includes('drop') || pkg.sessions === 1) return 401;
+      return 400 + (pkg.sessions || 0);
+    }
+    return 500 + (pkg.sessions || 0);
+  };
+
+  const formatCleanPackageName = (rawName: string): string => {
+    return rawName.replace(/\s*-\s*NEW$/i, '').trim();
+  };
+
+  const formatSessionsLabel = (pkg: Package): string => {
+    const n = (pkg.name || '').toLowerCase();
+    if (n.includes('12 month')) return '12 Months Membership';
+    if (n.includes('6 month') && !n.includes('golden')) return '6 Months Membership';
+    if (n.includes('golden package')) return '55 Sessions (5 + 20 + 30)';
+    if (pkg.sessions === 1) return '1 Drop-In Session';
+    return `${pkg.sessions} Sessions`;
+  };
+
+  const formatValidityLabel = (pkg: Package): string => {
+    if (pkg.expiryDays === 365) return '12 Months (365d)';
+    if (pkg.expiryDays === 180) return '6 Months (180d)';
+    if (pkg.expiryDays === 90) return '3 Months (90d)';
+    if (pkg.expiryDays === 80) return '80 Days (~3m)';
+    if (pkg.expiryDays === 60) return '2 Months (60d)';
+    if (pkg.expiryDays === 1) return '1 Day Validity';
+    return `${pkg.expiryDays} Days Validity`;
+  };
+
   // Helper to get age category from package name
   const getAgeCategory = (pkgName: string): AgeCategory | null => {
     const n = pkgName.toLowerCase();
     if (n.includes('corporate') || n.includes('company')) return null;
     if (n.includes('kid') && !n.includes('junior')) return 'kids';
     if (n.includes('junior')) return 'juniors';
+    if (isYouthProgramName(n)) return 'kids';
     if (n.includes('private') || n.includes('pt') || n.includes('1-on-1')) return 'pt';
-    if (!n.includes('kid') && !n.includes('junior') && n.includes('group') === false) return 'adults';
+    if (!isYouthProgramName(n) && n.includes('group') === false) return 'adults';
     return 'adults';
   };
   
@@ -393,6 +516,10 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
         if (selectedCategoryFilter === 'pt') {
           const isPT = name.includes('private') || name.includes('pt') || pkg.type === 'Private';
           if (!isPT) return false;
+        } else if (selectedCategoryFilter === 'kids') {
+          if (!isYouthProgramName(name)) return false;
+        } else if (selectedCategoryFilter === 'juniors') {
+          if (!isYouthProgramName(name) || name.includes('kids mivida')) return false;
         } else if (cat !== selectedCategoryFilter) {
           return false;
         }
@@ -418,31 +545,804 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
       }
 
       return true;
-    }).sort((a, b) => (a.price || 0) - (b.price || 0));
+    }).sort((a, b) => getPackageSortOrder(a) - getPackageSortOrder(b));
   }, [publicPackages, selectedBranchFilter, selectedCategoryFilter, selectedDurationFilter, packageSearchQuery]);
 
   // Packages for each age category (across all locations)
   const displayKids = useMemo(() => {
     return publicPackages.filter(p => {
       const n = p.name.toLowerCase();
-      return n.includes('kid') && !n.includes('junior');
-    }).sort((a, b) => a.sessions - b.sessions);
+      return isYouthProgramName(n);
+    }).sort((a, b) => getPackageSortOrder(a) - getPackageSortOrder(b));
   }, [publicPackages]);
 
   const displayJuniors = useMemo(() => {
     return publicPackages.filter(p => {
       const n = p.name.toLowerCase();
-      return n.includes('junior');
-    }).sort((a, b) => a.sessions - b.sessions);
+      return (n.includes('junior') || n.includes('welcome session') || n.includes('golden package') || n.includes('fighter team') || n.includes('extra ')) && !n.includes('kids mivida');
+    }).sort((a, b) => getPackageSortOrder(a) - getPackageSortOrder(b));
   }, [publicPackages]);
 
   const displayAdults = useMemo(() => {
     return publicPackages.filter(p => {
       const n = p.name.toLowerCase();
-      return !n.includes('kid') && !n.includes('junior');
-    }).sort((a, b) => a.sessions - b.sessions);
+      return !isYouthProgramName(n);
+    }).sort((a, b) => getPackageSortOrder(a) - getPackageSortOrder(b));
   }, [publicPackages]);
 
+  // Structured sub-groups for clean visual presentation
+  const youthGoldenPkg = useMemo(() => displayKids.find(p => p.name.toLowerCase().includes('golden package')), [displayKids]);
+  const youthCorePrograms = useMemo(
+    () =>
+      displayKids.filter(p => {
+        const n = p.name.toLowerCase();
+        return (
+          n.includes('welcome session') ||
+          n.includes('2 month (20s)') ||
+          n.includes('3 month (30s)') ||
+          n.includes('program (1)') ||
+          n.includes('program (2)') ||
+          n.includes('program (3)')
+        );
+      }),
+    [displayKids]
+  );
+  const youthFighterTeam = useMemo(() => displayKids.filter(p => p.name.toLowerCase().includes('fighter team')), [displayKids]);
+  const youthMividaKids = useMemo(() => displayKids.filter(p => p.name.toLowerCase().includes('kids mivida')), [displayKids]);
+  const youthExtraSessions = useMemo(() => displayKids.filter(p => p.name.toLowerCase().includes('extra ')), [displayKids]);
+
+  const adultGroupPackages = useMemo(
+    () => displayAdults.filter(p => p.type !== 'Private' && !p.name.toLowerCase().includes('pt') && !p.name.toLowerCase().includes('private')),
+    [displayAdults]
+  );
+  const adultPtPackages = useMemo(
+    () => displayAdults.filter(p => p.type === 'Private' || p.name.toLowerCase().includes('pt') || p.name.toLowerCase().includes('private')),
+    [displayAdults]
+  );
+
+  const getProgramStepBadge = (pkg: Package): { label: string; colorClass: string } | null => {
+    const n = (pkg.name || '').toLowerCase();
+    if (n.includes('golden package')) {
+      return { label: 'GOLDEN BUNDLE • PROGRAMS 1+2+3', colorClass: 'bg-amber-500 text-black border-amber-400' };
+    }
+    if (n.includes('welcome session') || n.includes('program (1)')) {
+      return { label: 'PROGRAM 1 • NEW MEMBERS', colorClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' };
+    }
+    if (n.includes('2 month (20s)') || n.includes('program (2)')) {
+      return { label: 'PROGRAM 2 • FOUNDATION', colorClass: 'bg-sky-500/15 text-sky-400 border-sky-500/30' };
+    }
+    if (n.includes('3 month (30s)') || n.includes('program (3)')) {
+      return { label: 'PROGRAM 3 • PRO LEVEL', colorClass: 'bg-purple-500/15 text-purple-400 border-purple-500/30' };
+    }
+    if (n.includes('fighter team')) {
+      return { label: 'PROGRAM 4 • FIGHTER TEAM', colorClass: 'bg-primary/15 text-primary border-primary/30' };
+    }
+    if (n.includes('kids mivida')) {
+      return { label: 'MIVIDA COMPOUND', colorClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30' };
+    }
+    if (n.includes('extra ')) {
+      return {
+        label: n.includes('pro') ? 'ADD-ON • PRO LEVEL' : 'ADD-ON • KIDS & JUNIORS',
+        colorClass: 'bg-zinc-800 text-zinc-300 border-zinc-700',
+      };
+    }
+    if (pkg.type === 'Private' || n.includes('pt') || n.includes('private')) {
+      const perSession = pkg.sessions > 0 ? Math.round(pkg.price / pkg.sessions) : pkg.price;
+      return {
+        label: `1-ON-1 PT • ${perSession.toLocaleString()} LE / SESSION`,
+        colorClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+      };
+    }
+    if (n.includes('6 month')) {
+      return { label: 'BEST VALUE • 6 MONTHS', colorClass: 'bg-primary/15 text-primary border-primary/30' };
+    }
+    if (n.includes('drop') || pkg.sessions === 1) {
+      return { label: 'SINGLE PASS', colorClass: 'bg-zinc-800 text-zinc-300 border-zinc-700' };
+    }
+    return { label: 'GROUP TRAINING • ALL BRANCHES', colorClass: 'bg-primary/10 text-primary border-primary/20' };
+  };
+
+  const renderPremiumPackageCard = (pkg: Package, isFeaturedGold = false) => {
+    const stepBadge = getProgramStepBadge(pkg);
+    const hasFreeze = (pkg.freezeAllowanceDays ?? pkg.benefits?.freezeAllowanceDays ?? 0) > 0;
+    const freezeDays = pkg.freezeAllowanceDays ?? pkg.benefits?.freezeAllowanceDays ?? 0;
+
+    return (
+      <div
+        key={pkg.id}
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('button')) return;
+          setSelectedPackage(pkg);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            if ((e.target as HTMLElement).closest('button')) return;
+            setSelectedPackage(pkg);
+          }
+        }}
+        className={`relative rounded-2xl p-4 flex gap-4 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+          isFeaturedGold
+            ? 'bg-gradient-to-br from-amber-500/15 via-card to-card border-2 border-amber-500/50 shadow-[0_8px_30px_rgba(245,158,11,0.15)]'
+            : 'bg-card border border-border/80 shadow-sm md:hover:border-primary/40'
+        }`}
+      >
+        <div
+          className={`h-20 w-20 rounded-2xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border ${
+            isFeaturedGold ? 'border-amber-400/50 ring-2 ring-amber-500/20' : 'border-white/10'
+          }`}
+        >
+          <img
+            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
+            alt={pkg.name}
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="flex-1 flex flex-col justify-center min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap mb-1">
+            {stepBadge && (
+              <span className={`inline-flex items-center text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border ${stepBadge.colorClass}`}>
+                {isFeaturedGold && <Star className="h-2.5 w-2.5 mr-1 fill-current" />}
+                {stepBadge.label}
+              </span>
+            )}
+            {hasFreeze && (
+              <span className="inline-flex items-center text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                ❄️ {freezeDays === 30 ? '1 Month Freeze' : `${freezeDays}d Freeze`}
+              </span>
+            )}
+          </div>
+          <h3 className={`font-black text-xs sm:text-sm uppercase leading-snug ${isFeaturedGold ? 'text-amber-400' : 'text-foreground'}`}>
+            {formatCleanPackageName(pkg.name)}
+          </h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5 font-semibold">
+            {formatSessionsLabel(pkg)} • {formatValidityLabel(pkg)}
+          </p>
+          <div className="mt-2.5 flex items-center justify-between gap-2">
+            <div className="flex flex-col">
+              <span className={`font-black text-base leading-none ${isFeaturedGold ? 'text-amber-400' : 'text-primary'}`}>
+                {pkg.price.toLocaleString()} {t('payments.currency_le')}
+              </span>
+              {isFeaturedGold && (
+                <span className="text-[9px] text-amber-400/80 font-bold mt-0.5">
+                  Save 1,500 LE vs buying Programs 1, 2 & 3 separately
+                </span>
+              )}
+            </div>
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedPackage(pkg);
+              }}
+              className={`h-8 px-4 text-xs font-extrabold rounded-xl shrink-0 ${
+                isFeaturedGold
+                  ? 'bg-amber-500 text-black hover:bg-amber-400 shadow-sm'
+                  : 'bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20'
+              }`}
+            >
+              <Info className="h-3 w-3 mr-1" /> Details
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderYouthAcademySection = (bannerTitle?: string, bannerSubtitle?: string, bannerImageUrl?: string) => {
+    const filteredExtras = youthExtraSessions.filter(pkg => {
+      const isPro = pkg.name.toLowerCase().includes('pro');
+      return extraTierTab === 'pro' ? isPro : !isPro;
+    });
+
+    return (
+      <div ref={kidsSectionRef} className="px-4 pt-3 space-y-6">
+        {/* Section Title */}
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-amber-400 block mb-0.5">
+              YOUTH ACADEMY • COMPLEX & MIVIDA
+            </span>
+            <h2 className="text-xl font-black tracking-tight uppercase leading-none">
+              {bannerTitle || 'Kids & Juniors Programs'}
+            </h2>
+          </div>
+          <Badge variant="outline" className="text-[10px] font-bold border-amber-500/30 text-amber-400">
+            4-Step Path
+          </Badge>
+        </div>
+
+        {/* 1. GOLDEN PACKAGE — FULL-BLEED VIP PASS CARD */}
+        {youthGoldenPkg && (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => setSelectedPackage(youthGoldenPkg)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(youthGoldenPkg);
+            }}
+            className="relative rounded-3xl overflow-hidden border-2 border-amber-400/60 shadow-[0_12px_40px_rgba(245,158,11,0.22)] cursor-pointer active:scale-[0.99] transition-all group"
+          >
+            <div className="relative h-44 w-full overflow-hidden">
+              <img
+                src={youthGoldenPkg.imageUrl || getPackageImage(youthGoldenPkg.name, youthGoldenPkg.sessions)}
+                alt="Golden Package"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/65 to-black/20" />
+              <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1 bg-amber-400 text-black text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full shadow-md">
+                  <Star className="h-3 w-3 fill-current" /> Golden Bundle • Best Value
+                </span>
+                <span className="inline-flex items-center gap-1 bg-sky-500/90 text-white text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full shadow-md">
+                  ❄️ 1 Month Freeze Included
+                </span>
+              </div>
+              <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-widest text-amber-300">
+                    All-In-One Youth Pass • Complex (Maxim Compound)
+                  </p>
+                  <h3 className="text-white font-black text-lg sm:text-xl uppercase tracking-tight leading-tight">
+                    Golden Package (Programs 1 + 2 + 3)
+                  </h3>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Breakdown Bar Inside Golden Card */}
+            <div className="bg-gradient-to-b from-zinc-950 to-zinc-900 p-4 space-y-3.5">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 py-2 px-1.5">
+                  <span className="text-[9px] font-bold uppercase text-amber-300/80 block">Step 1</span>
+                  <span className="text-xs font-black text-white block">5 Welcome</span>
+                </div>
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 py-2 px-1.5">
+                  <span className="text-[9px] font-bold uppercase text-amber-300/80 block">Step 2</span>
+                  <span className="text-xs font-black text-white block">20 Foundation</span>
+                </div>
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 py-2 px-1.5">
+                  <span className="text-[9px] font-bold uppercase text-amber-300/80 block">Step 3</span>
+                  <span className="text-xs font-black text-white block">30 Pro Level</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 border-t border-white/10">
+                <div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-amber-400">
+                      {youthGoldenPkg.price.toLocaleString()} {t('payments.currency_le')}
+                    </span>
+                    <span className="text-xs text-zinc-500 line-through font-bold">10,000 LE</span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 font-semibold">
+                    55 Total Sessions • 6 Months (180d) Validity • Save 1,500 LE
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedPackage(youthGoldenPkg);
+                  }}
+                  className="bg-amber-400 text-black hover:bg-amber-300 font-black text-xs rounded-xl h-9 px-4 shrink-0"
+                >
+                  Select Pass <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2. VISUAL 3-STEP PROGRESSION ROADMAP (Programs 1 -> 2 -> 3) */}
+        {youthCorePrograms.length > 0 && (
+          <div className="rounded-3xl bg-card border p-4 space-y-3.5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-primary block">
+                  STEP-BY-STEP PROGRESSION
+                </span>
+                <h3 className="text-sm font-black uppercase text-foreground">
+                  Or Start Individual Programs (1 → 3)
+                </h3>
+              </div>
+              <Badge variant="outline" className="text-[9px] font-bold border-zinc-700 text-muted-foreground">
+                Complex / Maxim
+              </Badge>
+            </div>
+
+            <div className="relative pl-4 space-y-3 before:content-[''] before:absolute before:left-[15px] before:top-4 before:bottom-4 before:w-0.5 before:bg-gradient-to-b before:from-emerald-500 before:via-sky-500 before:to-purple-500">
+              {youthCorePrograms.map((pkg, idx) => {
+                const stepColors = [
+                  { ring: 'bg-emerald-500 text-black', tag: 'STEP 01 • NEW MEMBER WELCOME', text: 'text-emerald-400' },
+                  { ring: 'bg-sky-500 text-black', tag: 'STEP 02 • 2-MONTH FOUNDATION', text: 'text-sky-400' },
+                  { ring: 'bg-purple-500 text-white', tag: 'STEP 03 • 3-MONTH PRO LEVEL', text: 'text-purple-400' },
+                ][idx] || { ring: 'bg-primary text-white', tag: `STEP 0${idx + 1}`, text: 'text-primary' };
+
+                return (
+                  <div
+                    key={pkg.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedPackage(pkg)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(pkg);
+                    }}
+                    className="relative flex items-center gap-3 bg-muted/30 hover:bg-muted/60 border border-border/70 rounded-2xl p-3 transition-all cursor-pointer active:scale-[0.98]"
+                  >
+                    <div className={`-ml-5 h-7 w-7 rounded-full font-black text-[10px] flex items-center justify-center shrink-0 shadow-md ring-4 ring-card ${stepColors.ring}`}>
+                      0{idx + 1}
+                    </div>
+                    <div className="h-14 w-14 rounded-xl overflow-hidden shrink-0 border border-white/10 bg-zinc-900">
+                      <img
+                        src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
+                        alt={pkg.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-[9px] font-black uppercase tracking-wider block ${stepColors.text}`}>
+                        {stepColors.tag}
+                      </span>
+                      <h4 className="font-black text-xs uppercase text-foreground truncate">
+                        {formatCleanPackageName(pkg.name)}
+                      </h4>
+                      <p className="text-[10px] text-muted-foreground font-semibold">
+                        {pkg.sessions} Sessions • {formatValidityLabel(pkg)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-black text-sm text-foreground block">
+                        {pkg.price.toLocaleString()}
+                      </span>
+                      <span className="text-[9px] text-primary font-extrabold uppercase flex items-center justify-end">
+                        {t('payments.currency_le')} <ChevronRight className="h-3 w-3" />
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 3. PROGRAM (4) FIGHTER TEAM — 3-COLUMN VISUAL TIER GRID (3M | 6M | 12M) */}
+        {youthFighterTeam.length > 0 && (
+          <div ref={juniorSectionRef} className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-primary block">
+                  PROGRAM (4) • NEW & RENEW
+                </span>
+                <h3 className="text-sm font-black uppercase text-foreground">
+                  Fighter Team Memberships (Kids Pro & Juniors Pro)
+                </h3>
+              </div>
+              <Badge variant="outline" className="text-[9px] font-bold border-primary/30 text-primary">
+                Complex
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              {youthFighterTeam.map((pkg, idx) => {
+                const months = pkg.expiryDays >= 360 ? 12 : pkg.expiryDays >= 170 ? 6 : 3;
+                const monthlyAvg = Math.round(pkg.price / months);
+                const isBest = months === 12;
+
+                return (
+                  <div
+                    key={pkg.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedPackage(pkg)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(pkg);
+                    }}
+                    className={`rounded-2xl overflow-hidden border flex flex-col justify-between cursor-pointer active:scale-[0.97] transition-all ${
+                      isBest
+                        ? 'border-primary bg-gradient-to-b from-primary/15 to-card shadow-md'
+                        : 'border-border/80 bg-card hover:border-primary/40'
+                    }`}
+                  >
+                    <div className="relative h-24 w-full overflow-hidden">
+                      <img
+                        src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
+                        alt={pkg.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+                      {isBest && (
+                        <span className="absolute top-1.5 right-1.5 bg-primary text-white text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md">
+                          PRO PICK
+                        </span>
+                      )}
+                      <div className="absolute bottom-1.5 left-2.5">
+                        <span className="text-white font-black text-lg leading-none block">{months} MO</span>
+                        <span className="text-white/70 text-[9px] font-bold uppercase">{pkg.expiryDays} Days</span>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 text-center space-y-1">
+                      <div className="font-black text-xs sm:text-sm text-primary">
+                        {pkg.price.toLocaleString()} {t('payments.currency_le')}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground font-semibold">
+                        ~{monthlyAvg.toLocaleString()} LE / mo
+                      </div>
+                      <div className="pt-1">
+                        <span className="inline-block w-full py-1 rounded-lg bg-primary/10 text-primary text-[9px] font-black uppercase">
+                          Select
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 4. MIVIDA COMPOUND — 3-COLUMN KIDS SESSION PACKS (10S | 20S | 30S) */}
+        {youthMividaKids.length > 0 && (
+          <div className="rounded-3xl bg-card border p-4 space-y-3 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-400 block">
+                  MIVIDA COMPOUND BRANCH
+                </span>
+                <h3 className="text-sm font-black uppercase text-foreground">
+                  Kids Group Packages (Mivida)
+                </h3>
+              </div>
+              <Badge variant="outline" className="text-[9px] font-bold border-amber-500/30 text-amber-400">
+                Unchanged Rates
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              {youthMividaKids.map((pkg) => {
+                const perSess = Math.round(pkg.price / pkg.sessions);
+                const isBest = pkg.sessions === 30;
+                return (
+                  <div
+                    key={pkg.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedPackage(pkg)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(pkg);
+                    }}
+                    className={`rounded-2xl overflow-hidden border flex flex-col justify-between cursor-pointer active:scale-[0.97] transition-all ${
+                      isBest ? 'border-amber-500/60 bg-amber-500/5' : 'border-border/80 bg-muted/20'
+                    }`}
+                  >
+                    <div className="relative h-20 w-full overflow-hidden">
+                      <img
+                        src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
+                        alt={pkg.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                      <div className="absolute bottom-1.5 left-2.5">
+                        <span className="text-white font-black text-base leading-none block">
+                          {pkg.sessions} <span className="text-[10px] font-bold">SESSIONS</span>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-2.5 text-center space-y-0.5">
+                      <span className="text-[9px] text-muted-foreground font-bold block">
+                        {pkg.expiryDays} Days Validity
+                      </span>
+                      <span className="font-black text-xs sm:text-sm text-foreground block">
+                        {pkg.price.toLocaleString()} {t('payments.currency_le')}
+                      </span>
+                      <span className="text-[9px] text-amber-400 font-bold block">
+                        {perSess} LE / session
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 5. INTERACTIVE EXTRA SESSIONS TOP-UP WIDGET (Toggle Kids vs Pro + 3 Tiles) */}
+        {youthExtraSessions.length > 0 && (
+          <div className="rounded-3xl bg-card border p-4 space-y-3.5 shadow-sm">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground block">
+                  NEED EXTRA SESSIONS?
+                </span>
+                <h3 className="text-sm font-black uppercase text-foreground">
+                  Quick Session Top-Ups (Complex)
+                </h3>
+              </div>
+              <div className="flex items-center bg-muted p-1 rounded-xl border border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setExtraTierTab('kids')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all ${
+                    extraTierTab === 'kids'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Kids (K)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExtraTierTab('pro')}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase transition-all ${
+                    extraTierTab === 'pro'
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Pro Level
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              {filteredExtras.map((pkg) => {
+                const perSess = Math.round(pkg.price / pkg.sessions);
+                return (
+                  <div
+                    key={pkg.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedPackage(pkg)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(pkg);
+                    }}
+                    className="rounded-2xl border border-border/80 bg-muted/25 hover:border-primary/50 p-3 text-center space-y-1 cursor-pointer active:scale-[0.97] transition-all"
+                  >
+                    <span className="inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      +{pkg.sessions} Sessions
+                    </span>
+                    <div className="font-black text-sm text-foreground pt-0.5">
+                      {pkg.price.toLocaleString()} {t('payments.currency_le')}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground font-semibold">
+                      {perSess} LE / session
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAdultSection = (bannerTitle?: string, bannerSubtitle?: string, bannerImageUrl?: string) => {
+    const adultSixMonth = adultGroupPackages.find(p => p.name.toLowerCase().includes('6 month') || p.sessions >= 90);
+    const adultDropIn = adultGroupPackages.find(p => p.sessions === 1 || p.name.toLowerCase().includes('drop'));
+    const adultSessionPacks = adultGroupPackages.filter(p => p !== adultSixMonth && p !== adultDropIn);
+
+    const ptDropIn = adultPtPackages.find(p => p.sessions === 1 || p.name.toLowerCase().includes('drop'));
+    const ptSessionPacks = adultPtPackages.filter(p => p !== ptDropIn);
+
+    return (
+      <div ref={adultSectionRef} className="px-4 pt-3 space-y-6">
+        <div className="flex items-end justify-between">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-primary block mb-0.5">
+              MIVIDA • COMPLEX • IMPACT
+            </span>
+            <h2 className="text-xl font-black tracking-tight uppercase leading-none">
+              {bannerTitle || 'Adults & Private Coaching'}
+            </h2>
+          </div>
+          <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">
+            All Branches
+          </Badge>
+        </div>
+
+        {/* 1. ADULT GROUP TRAINING — BENTO GRID + 6-MONTH SPOTLIGHT */}
+        {adultGroupPackages.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <div>
+                <h3 className="text-sm font-black uppercase text-foreground">
+                  Adult Group Training (GT)
+                </h3>
+                <p className="text-[10px] text-muted-foreground">
+                  Valid across Mivida, Complex (Maxim Compound) & Impact
+                </p>
+              </div>
+              {adultDropIn && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedPackage(adultDropIn)}
+                  className="text-[10px] font-black uppercase px-3 py-1.5 rounded-xl bg-muted border border-border hover:border-primary/40 text-foreground shrink-0"
+                >
+                  Drop-In: {adultDropIn.price.toLocaleString()} LE →
+                </button>
+              )}
+            </div>
+
+            {/* 2x2 Visual Session Cards (5S, 10S, 20S, 30S) */}
+            <div className="grid grid-cols-2 gap-3">
+              {adultSessionPacks.map((pkg) => {
+                const perSess = Math.round(pkg.price / pkg.sessions);
+                const isPopular = pkg.sessions === 20 || pkg.sessions === 30;
+                return (
+                  <div
+                    key={pkg.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedPackage(pkg)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(pkg);
+                    }}
+                    className={`rounded-2xl overflow-hidden border flex flex-col justify-between cursor-pointer active:scale-[0.98] transition-all ${
+                      isPopular ? 'border-primary/50 bg-card shadow-md' : 'border-border/80 bg-card'
+                    }`}
+                  >
+                    <div className="relative h-28 w-full overflow-hidden">
+                      <img
+                        src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
+                        alt={pkg.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/35 to-transparent" />
+                      {pkg.sessions === 20 && (
+                        <span className="absolute top-2 right-2 bg-primary text-white text-[8px] font-black uppercase px-2 py-0.5 rounded-full">
+                          POPULAR
+                        </span>
+                      )}
+                      {pkg.sessions === 30 && (
+                        <span className="absolute top-2 right-2 bg-amber-400 text-black text-[8px] font-black uppercase px-2 py-0.5 rounded-full">
+                          BEST RATE
+                        </span>
+                      )}
+                      <div className="absolute bottom-2 left-3 right-3 flex items-baseline justify-between">
+                        <div>
+                          <span className="text-white font-black text-2xl leading-none">{pkg.sessions}</span>
+                          <span className="text-white/80 text-[10px] font-extrabold uppercase ml-1">Sessions</span>
+                        </div>
+                        <span className="text-white/70 text-[9px] font-bold">{pkg.expiryDays}d</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 flex items-center justify-between">
+                      <div>
+                        <span className="font-black text-sm text-primary block leading-none">
+                          {pkg.price.toLocaleString()} {t('payments.currency_le')}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground font-semibold mt-0.5 block">
+                          {perSess} LE / session
+                        </span>
+                      </div>
+                      <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                        <ChevronRight className="h-4 w-4" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 6-Month Unlimited Adult Spotlight Bar */}
+            {adultSixMonth && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedPackage(adultSixMonth)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(adultSixMonth);
+                }}
+                className="relative rounded-2xl overflow-hidden border border-primary/40 bg-gradient-to-r from-zinc-950 via-zinc-900 to-zinc-950 p-4 flex items-center gap-4 cursor-pointer active:scale-[0.99] shadow-md"
+              >
+                <div className="h-16 w-16 rounded-xl overflow-hidden shrink-0 border border-primary/30">
+                  <img
+                    src={adultSixMonth.imageUrl || getPackageImage(adultSixMonth.name, adultSixMonth.sessions)}
+                    alt={adultSixMonth.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary text-white mb-1">
+                    6 MONTHS MEMBERSHIP • 180 DAYS
+                  </span>
+                  <h4 className="text-white font-black text-sm uppercase truncate">
+                    {formatCleanPackageName(adultSixMonth.name)}
+                  </h4>
+                  <p className="text-zinc-400 text-[10px] font-semibold">
+                    All-Access Group Training • Mivida, Complex & Impact
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="font-black text-base text-primary block">
+                    {adultSixMonth.price.toLocaleString()} {t('payments.currency_le')}
+                  </span>
+                  <span className="text-[9px] text-zinc-400 font-bold">~1,966 LE / mo</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 2. 1-ON-1 PRIVATE COACHING (PT) — PER-SESSION RATE COMPARISON GRID */}
+        {adultPtPackages.length > 0 && (
+          <div className="rounded-3xl bg-card border p-4 space-y-3.5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-amber-400 block">
+                  1-ON-1 PERSONAL TRAINING • ALL BRANCHES
+                </span>
+                <h3 className="text-sm font-black uppercase text-foreground">
+                  Private Coaching Packages (PT)
+                </h3>
+              </div>
+              {ptDropIn && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedPackage(ptDropIn)}
+                  className="text-[10px] font-black uppercase px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 shrink-0"
+                >
+                  1 PT Drop-In: {ptDropIn.price.toLocaleString()} LE →
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {ptSessionPacks.map((pkg) => {
+                const perSess = Math.round(pkg.price / pkg.sessions);
+                const savingsPct = Math.round(((900 - perSess) / 900) * 100);
+                return (
+                  <div
+                    key={pkg.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedPackage(pkg)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(pkg);
+                    }}
+                    className="rounded-2xl border border-border/80 hover:border-amber-500/50 bg-muted/20 overflow-hidden flex flex-col justify-between cursor-pointer active:scale-[0.98] transition-all"
+                  >
+                    <div className="relative h-24 w-full overflow-hidden">
+                      <img
+                        src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
+                        alt={pkg.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
+                      {savingsPct > 0 && (
+                        <span className="absolute top-2 right-2 bg-amber-400 text-black text-[8px] font-black uppercase px-2 py-0.5 rounded-full">
+                          SAVE {savingsPct}%
+                        </span>
+                      )}
+                      <div className="absolute bottom-2 left-3">
+                        <span className="text-white font-black text-xl leading-none">{pkg.sessions} PT</span>
+                        <span className="text-white/70 text-[9px] font-bold block">{pkg.expiryDays} Days Validity</span>
+                      </div>
+                    </div>
+                    <div className="p-2.5 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-black text-amber-400 block">
+                          {perSess} LE / session
+                        </span>
+                        <span className="text-xs font-extrabold text-foreground">
+                          Total: {pkg.price.toLocaleString()} {t('payments.currency_le')}
+                        </span>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-amber-400 shrink-0" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
   // Active offers from storefront config
   const activeOffers = storefrontConfig.offers.filter(o => o.enabled).sort((a, b) => a.order - b.order);
 
@@ -796,58 +1696,7 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-3">
-                    {filteredCatalogPackages.map(pkg => (
-                      <div
-                        key={pkg.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          if ((e.target as HTMLElement).closest('button')) return;
-                          setSelectedPackage(pkg);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            if ((e.target as HTMLElement).closest('button')) return;
-                            setSelectedPackage(pkg);
-                          }
-                        }}
-                        className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      >
-                        <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                          <img
-                            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
-                            alt={pkg.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 flex flex-col justify-center min-w-0">
-                          <h3 className="font-extrabold text-xs text-foreground uppercase truncate">{pkg.name}</h3>
-                          {getPackageTypeLabel(pkg.name) && (
-                            <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                              {getPackageTypeLabel(pkg.name)}
-                            </p>
-                          )}
-                          <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">
-                            {pkg.sessions} Sessions • {pkg.expiryDays} Days Validity
-                          </p>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="font-black text-sm text-primary">
-                              {pkg.price.toLocaleString()} {t('payments.currency_le')}
-                            </span>
-                            <Button
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedPackage(pkg);
-                              }}
-                              className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                            >
-                              <Info className="h-3 w-3 mr-1" /> View Details
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                    {filteredCatalogPackages.map(pkg => renderPremiumPackageCard(pkg, pkg.name.toLowerCase().includes('golden package')))}
                   </div>
                 )}
               </div>
@@ -894,255 +1743,36 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             )}
 
             {/* DYNAMIC SECTIONS FROM CONFIG */}
-            {storefrontConfig?.sections && storefrontConfig.sections.length > 0 ? (
+            {!isFilterActive && (storefrontConfig?.sections && storefrontConfig.sections.length > 0 ? (
               (() => {
                 const list = [...storefrontConfig.sections];
-                if (!list.some(s => s.type === 'packages-juniors')) {
-                  list.push({
-                    id: 'auto-sec-juniors',
-                    type: 'packages-juniors',
-                    title: 'Junior Packages',
-                    enabled: true,
-                    order: 1.5
-                  });
-                }
                 return list
                   .filter(sec => sec.enabled !== false)
                   .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
                   .map((section) => {
-                  if (section.type === 'packages-kids' && displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids')) {
+                  if (section.type === 'packages-kids' && displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids' || selectedCategoryFilter === 'juniors')) {
                     return (
-                      <div key={section.id} ref={kidsSectionRef} className="px-4 pt-2">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-lg font-black tracking-tight uppercase">
-                            {section.title || "Kids Packages"}
-                          </h2>
-                          <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
-                        </div>
-                        
-                        {/* Kids Category Banner */}
-                        {(section.imageUrl || isStrike) && (
-                          <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
-                            <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
-                              <h3 className="text-white font-extrabold text-sm uppercase">{section.title || "Kids Sparring & Kickboxing"}</h3>
-                              <p className="text-white/60 text-[10px] mt-0.5">{section.subtitle || "Build confidence, discipline, and stamina."}</p>
-                            </div>
-                            <img 
-                              src={section.imageUrl || (isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png")} 
-                              alt="Kids Boxing" 
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 gap-3">
-                          {displayKids.map(pkg => (
-                            <div 
-                              key={pkg.id} 
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => {
-                                if ((e.target as HTMLElement).closest('button')) return;
-                                setSelectedPackage(pkg);
-                              }} 
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  if ((e.target as HTMLElement).closest('button')) return;
-                                  setSelectedPackage(pkg);
-                                }
-                              }}
-                              className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            >
-                              <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                                <img 
-                                  src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
-                                  alt={pkg.name} 
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                              <div className="flex-1 flex flex-col justify-center">
-                                <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
-                                {getPackageTypeLabel(pkg.name) && (
-                                  <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                                    {getPackageTypeLabel(pkg.name)}
-                                  </p>
-                                )}
-                                <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
-                                <div className="mt-2 flex items-center justify-between">
-                                  <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                                  <Button 
-                                    size="sm" 
-                                    onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                                    className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                                  >
-                                    <Info className="h-3 w-3 mr-1" /> View Details
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <React.Fragment key={section.id}>
+                        {renderYouthAcademySection(section.title, section.subtitle, section.imageUrl)}
+                      </React.Fragment>
                     );
                   }
 
-                  if (section.type === 'packages-juniors' && displayJuniors.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'juniors')) {
-                    return (
-                      <div key={section.id} ref={juniorSectionRef} className="px-4 pt-2">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-lg font-black tracking-tight uppercase">
-                            {section.title || "Junior Packages"}
-                          </h2>
-                          <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
-                        </div>
-                        
-                        {/* Juniors Category Banner */}
-                        {(section.imageUrl || isStrike) && (
-                          <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
-                            <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
-                              <h3 className="text-white font-extrabold text-sm uppercase">{section.title || "Junior Training"}</h3>
-                              <p className="text-white/60 text-[10px] mt-0.5">{section.subtitle || "Advanced youth technique and speed."}</p>
-                            </div>
-                            <img 
-                              src={section.imageUrl || (isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png")} 
-                              alt="Junior Training" 
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 gap-3">
-                          {displayJuniors.map(pkg => (
-                            <div 
-                              key={pkg.id} 
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => {
-                                if ((e.target as HTMLElement).closest('button')) return;
-                                setSelectedPackage(pkg);
-                              }} 
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  if ((e.target as HTMLElement).closest('button')) return;
-                                  setSelectedPackage(pkg);
-                                }
-                              }}
-                              className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            >
-                              <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                                <img 
-                                  src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
-                                  alt={pkg.name} 
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                              <div className="flex-1 flex flex-col justify-center">
-                                <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
-                                {getPackageTypeLabel(pkg.name) && (
-                                  <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                                    {getPackageTypeLabel(pkg.name)}
-                                  </p>
-                                )}
-                                <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
-                                <div className="mt-2 flex items-center justify-between">
-                                  <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                                  <Button 
-                                    size="sm" 
-                                    onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                                    className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                                  >
-                                    <Info className="h-3 w-3 mr-1" /> View Details
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
+                  if (section.type === 'packages-juniors') {
+                    // Consolidated into the structured Youth Academy section above so packages are never duplicated
+                    return null;
                   }
 
-                  if (section.type === 'packages-adults' && displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults')) {
+                  if (section.type === 'packages-adults' && displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults' || selectedCategoryFilter === 'pt')) {
                     return (
-                      <div key={section.id} ref={adultSectionRef} className="px-4 pt-2">
-                        <div className="flex items-center justify-between mb-4">
-                          <h2 className="text-lg font-black tracking-tight uppercase">
-                            {section.title || "Adult Packages"}
-                          </h2>
-                          <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">{branding.companyName}</Badge>
-                        </div>
-
-                        {/* Adults Category Banner */}
-                        {(section.imageUrl || isStrike) && (
-                          <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
-                            <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
-                              <h3 className="text-white font-extrabold text-sm uppercase">{section.title || "Adult Fitness & Conditioning"}</h3>
-                              <p className="text-white/60 text-[10px] mt-0.5">{section.subtitle || "Premium boxing, fitness, and training."}</p>
-                            </div>
-                            <img 
-                              src={section.imageUrl || (isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png")} 
-                              alt="Adult Fitness" 
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 gap-3">
-                          {displayAdults.map(pkg => (
-                            <div 
-                              key={pkg.id} 
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => {
-                                if ((e.target as HTMLElement).closest('button')) return;
-                                setSelectedPackage(pkg);
-                              }} 
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  if ((e.target as HTMLElement).closest('button')) return;
-                                  setSelectedPackage(pkg);
-                                }
-                              }}
-                              className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all items-center cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                            >
-                              <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                                <img 
-                                  src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
-                                  alt={pkg.name} 
-                                  className="w-full h-full object-cover"
-                                />
-                              </div>
-                              <div className="flex-1 flex flex-col justify-center min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <Badge variant="outline" className="text-[8px] font-bold border-zinc-700 text-zinc-400 uppercase tracking-widest px-1.5 py-0">{pkg.type || 'Adults'}</Badge>
-                                </div>
-                                <h3 className="font-extrabold text-xs text-foreground uppercase mt-1 truncate">{pkg.name}</h3>
-                                {getPackageTypeLabel(pkg.name) && (
-                                  <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                                    {getPackageTypeLabel(pkg.name)}
-                                  </p>
-                                )}
-                                <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
-                                <div className="mt-2 flex items-center justify-between">
-                                  <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                                  <Button 
-                                    size="sm" 
-                                    onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                                    className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                                  >
-                                    <Info className="h-3 w-3 mr-1" /> View Details
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      <React.Fragment key={section.id}>
+                        {renderAdultSection(section.title, section.subtitle, section.imageUrl)}
+                      </React.Fragment>
                     );
                   }
 
                   if (section.type === 'banner' && selectedCategoryFilter === 'all') {
-                    const bannerImg = section.imageUrl || (isStrike ? "/strike_impact_outdoor.png" : "/impact_sister_company.png");
+                    const bannerImg = section.imageUrl || (isStrike ? STRIKE_STORAGE_IMG.bannerImpact : "/impact_sister_company.png");
                     return (
                       <div key={section.id} className="px-4 my-6">
                         <div className="rounded-3xl overflow-hidden relative shadow-xl border">
@@ -1176,146 +1806,9 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             ) : (
               <>
                 {/* Fallback to default sections if config has none */}
-                {displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids') && (
-                <div ref={kidsSectionRef} className="px-4 pt-2">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-black tracking-tight uppercase">Kids Packages</h2>
-                    <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
-                  </div>
-                  
-                  {/* Kids Category Banner */}
-                  <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
-                    <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
-                      <h3 className="text-white font-extrabold text-sm uppercase">Kids Sparring & Kickboxing</h3>
-                      <p className="text-white/60 text-[10px] mt-0.5">Build confidence, discipline, and stamina.</p>
-                    </div>
-                    <img 
-                      src={isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png"} 
-                      alt="Kids Boxing" 
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3">
-                    {displayKids.map(pkg => (
-                      <div 
-                        key={pkg.id} 
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          if ((e.target as HTMLElement).closest('button')) return;
-                          setSelectedPackage(pkg);
-                        }} 
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            if ((e.target as HTMLElement).closest('button')) return;
-                            setSelectedPackage(pkg);
-                          }
-                        }}
-                        className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      >
-                        <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                          <img 
-                            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
-                            alt={pkg.name} 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 flex flex-col justify-center">
-                          <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
-                          {getPackageTypeLabel(pkg.name) && (
-                            <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                              {getPackageTypeLabel(pkg.name)}
-                            </p>
-                          )}
-                          <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                            <Button 
-                              size="sm" 
-                              onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                              className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                            >
-                              <Info className="h-3 w-3 mr-1" /> View Details
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                )}
-
-                {/* Juniors Fallback */}
-                {displayJuniors.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'juniors') && (
-                <div ref={juniorSectionRef} className="px-4 pt-2">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-black tracking-tight uppercase">Junior Packages</h2>
-                    <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary">{primaryBranch}</Badge>
-                  </div>
-                  
-                  {/* Juniors Category Banner */}
-                  <div className="rounded-2xl h-36 overflow-hidden relative border mb-4 shadow-md">
-                    <div className="absolute inset-0 bg-black/60 z-10 flex flex-col justify-end p-4">
-                      <h3 className="text-white font-extrabold text-sm uppercase">Junior Training</h3>
-                      <p className="text-white/60 text-[10px] mt-0.5">Advanced youth technique and speed.</p>
-                    </div>
-                    <img 
-                      src={isStrike ? "/strike_kids_outdoor.png" : "/mitrixogymcrm_kids_boxing.png"} 
-                      alt="Junior Training" 
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3">
-                    {displayJuniors.map(pkg => (
-                      <div 
-                        key={pkg.id} 
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          if ((e.target as HTMLElement).closest('button')) return;
-                          setSelectedPackage(pkg);
-                        }} 
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            if ((e.target as HTMLElement).closest('button')) return;
-                            setSelectedPackage(pkg);
-                          }
-                        }}
-                        className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      >
-                        <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                          <img 
-                            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
-                            alt={pkg.name} 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 flex flex-col justify-center">
-                          <h3 className="font-extrabold text-xs text-foreground uppercase">{pkg.name}</h3>
-                          {getPackageTypeLabel(pkg.name) && (
-                            <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                              {getPackageTypeLabel(pkg.name)}
-                            </p>
-                          )}
-                          <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                            <Button 
-                              size="sm" 
-                              onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                              className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                            >
-                              <Info className="h-3 w-3 mr-1" /> View Details
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                )}
+                {displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids' || selectedCategoryFilter === 'juniors') &&
+                  renderYouthAcademySection()
+                }
 
                 {/* 3. IMPACT SISTER COMPANY */}
                 {selectedCategoryFilter === 'all' && (
@@ -1345,67 +1838,11 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                 )}
 
                 {/* 4. ADULT PACKAGES */}
-                {displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults') && (
-                <div ref={adultSectionRef} className="px-4 pt-2">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-black tracking-tight uppercase">Adult Packages</h2>
-                    <Badge variant="secondary" className="text-[10px] font-bold bg-primary/10 text-primary uppercase">{branding.companyName}</Badge>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3">
-                    {displayAdults.map(pkg => (
-                      <div 
-                        key={pkg.id} 
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          if ((e.target as HTMLElement).closest('button')) return;
-                          setSelectedPackage(pkg);
-                        }} 
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            if ((e.target as HTMLElement).closest('button')) return;
-                            setSelectedPackage(pkg);
-                          }
-                        }}
-                        className="bg-card border rounded-2xl p-4 flex gap-4 shadow-sm md:hover:border-primary/30 transition-all items-center cursor-pointer active:scale-[0.98] sf-card-stagger outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                      >
-                        <div className="h-16 w-16 rounded-xl bg-zinc-900 overflow-hidden shrink-0 flex items-center justify-center border border-white/5">
-                          <img 
-                            src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)} 
-                            alt={pkg.name} 
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 flex flex-col justify-center min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <Badge variant="outline" className="text-[8px] font-bold border-zinc-700 text-zinc-400 uppercase tracking-widest px-1.5 py-0">{pkg.type || 'Adults'}</Badge>
-                          </div>
-                          <h3 className="font-extrabold text-xs text-foreground uppercase mt-1 truncate">{pkg.name}</h3>
-                          {getPackageTypeLabel(pkg.name) && (
-                            <p className="text-[10px] text-primary font-bold tracking-wide uppercase mt-0.5">
-                              {getPackageTypeLabel(pkg.name)}
-                            </p>
-                          )}
-                          <p className="text-[10px] text-muted-foreground mt-0.5">{pkg.sessions} Sessions • {pkg.expiryDays} Days Validity</p>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="font-black text-sm text-primary">{pkg.price.toLocaleString()} {t('payments.currency_le')}</span>
-                            <Button 
-                              size="sm" 
-                              onClick={(e) => { e.stopPropagation(); setSelectedPackage(pkg); }} 
-                              className="h-8 px-4 text-xs font-bold rounded-xl bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 shrink-0"
-                            >
-                              <Info className="h-3 w-3 mr-1" /> View Details
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                )}
+                {displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults' || selectedCategoryFilter === 'pt') &&
+                  renderAdultSection()
+                }
               </>
-            )}
+            ))}
 
             {/* 6. OFFERS & DISCOUNTS SECTION */}
             {activeOffers.length > 0 && (

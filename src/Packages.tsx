@@ -437,7 +437,6 @@ export default function Packages() {
       return `${pkg.name} ${cat} ${h} ${pkg.type || ''} ${pkg.price} ${pkg.expiryDays}`.toLowerCase().includes(q);
     })
     .sort((a, b) => {
-      if (!isInzan || sortBy === 'default') return 0;
       if (sortBy === 'price-asc') return (a.price || 0) - (b.price || 0);
       if (sortBy === 'price-desc') return (b.price || 0) - (a.price || 0);
       if (sortBy === 'duration-desc') return (b.expiryDays || 0) - (a.expiryDays || 0);
@@ -451,7 +450,35 @@ export default function Packages() {
         if (cA !== cB) return cA.localeCompare(cB);
         return (a.price || 0) - (b.price || 0);
       }
-      return 0;
+      // Default logical sort order
+      const getOrder = (pkg: Package): number => {
+        const n = (pkg.name || '').toLowerCase();
+        if (n.includes('golden package')) return 10;
+        if (n.includes('welcome session') || n.includes('program (1)')) return 20;
+        if (n.includes('2 month (20s)') || n.includes('program (2)')) return 30;
+        if (n.includes('3 month (30s)') || n.includes('program (3)')) return 40;
+        if (n.includes('fighter team')) {
+          if (n.includes('3 month')) return 50;
+          if (n.includes('6 month')) return 51;
+          if (n.includes('12 month')) return 52;
+          return 55;
+        }
+        if (n.includes('kids mivida')) return 100 + (pkg.sessions || 0);
+        if (n.includes('extra ')) return (n.includes('pro') ? 250 : 200) + (pkg.sessions || 0);
+        const isPT = n.includes('pt') || n.includes('private') || pkg.type === 'Private';
+        if (!isPT) {
+          if (n.includes('drop') || pkg.sessions === 1) return 301;
+          if (pkg.sessions === 5) return 305;
+          if (pkg.sessions === 10) return 310;
+          if (pkg.sessions === 20) return 320;
+          if (pkg.sessions === 30) return 330;
+          if (n.includes('6 month') || pkg.sessions >= 90) return 360;
+          return 300 + (pkg.sessions || 0);
+        }
+        if (n.includes('drop') || pkg.sessions === 1) return 401;
+        return 400 + (pkg.sessions || 0);
+      };
+      return getOrder(a) - getOrder(b);
     });
 
   return (
