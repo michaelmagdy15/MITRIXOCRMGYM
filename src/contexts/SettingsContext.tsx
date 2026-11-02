@@ -291,7 +291,40 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       }
 
       if (settings.features) setFeatures(prev => ({ ...prev, ...settings.features }));
-      if (settings.storefront) setStorefrontConfig(prev => ({ ...prev, ...settings.storefront }));
+      if (settings.storefront) {
+        setStorefrontConfig(prev => ({ ...prev, ...settings.storefront }));
+        const remoteCacheVer = settings.storefront.forceCacheResetVersion;
+        if (remoteCacheVer && typeof window !== 'undefined') {
+          try {
+            const currentVer = localStorage.getItem('strike_remote_cache_version');
+            if (currentVer !== remoteCacheVer) {
+              localStorage.setItem('strike_remote_cache_version', remoteCacheVer);
+              const cleanupTasks: Promise<unknown>[] = [];
+              if ('serviceWorker' in navigator) {
+                cleanupTasks.push(
+                  navigator.serviceWorker.getRegistrations().then(regs =>
+                    Promise.all(regs.map(r => r.unregister()))
+                  ).catch(() => {})
+                );
+              }
+              if ('caches' in window) {
+                cleanupTasks.push(
+                  caches.keys().then(keys =>
+                    Promise.all(keys.map(k => caches.delete(k)))
+                  ).catch(() => {})
+                );
+              }
+              Promise.all(cleanupTasks).finally(() => {
+                if (!window.location.search.includes(`rc=${encodeURIComponent(remoteCacheVer)}`)) {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('rc', remoteCacheVer);
+                  window.location.replace(url.toString());
+                }
+              });
+            }
+          } catch (_) {}
+        }
+      }
       if (settings.bookingWindow) {
         setBookingWindow(prev => ({ ...prev, ...settings.bookingWindow }));
       } else if (settings['booking-window']) {
