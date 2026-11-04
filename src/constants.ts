@@ -21,6 +21,7 @@ export const SALES_MEMBERS = [
 ];
 
 export const ASSIGNABLE_ROLES = [
+  'manager',
   'sales_manager',
   'rep',
   'sales_rep',

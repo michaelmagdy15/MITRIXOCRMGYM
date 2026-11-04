@@ -271,9 +271,11 @@ export default function Payments() {
 
   const adminUsers = React.useMemo(
     () =>
-      users.filter(
-        u => (u.role || '').trim().toLowerCase() === 'admin' && u.status !== 'nonworking'
-      ),
+      users.filter(u => {
+        if (u.status === 'nonworking') return false;
+        const role = (u.role || '').trim().toLowerCase();
+        return role === 'admin' || role === 'manager';
+      }),
     [users]
   );
 
@@ -286,7 +288,7 @@ export default function Payments() {
           if (isInzan) {
             return isAssignableSalesUser(u);
           }
-          return ['rep', 'sales_rep', 'sales'].includes(role);
+          return ['rep', 'sales_rep', 'sales', 'manager'].includes(role);
         })
         .sort((a, b) => (a.status === 'working' ? -1 : 1) - (b.status === 'working' ? -1 : 1)),
     [users, isInzan]
