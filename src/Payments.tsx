@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
-import { SALES_NAME_MAPPING, toCanonical } from './constants';
+import { SALES_NAME_MAPPING, toCanonical, isAssignableSalesUser } from './constants';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -271,10 +271,25 @@ export default function Payments() {
 
   const adminUsers = React.useMemo(
     () =>
-      users.filter(u =>
-        ['admin', 'super_admin', 'crm_admin', 'manager', 'rep', 'sales_rep', 'sales'].includes(u.role?.toLowerCase() || '')
+      users.filter(
+        u => (u.role || '').trim().toLowerCase() === 'admin' && u.status !== 'nonworking'
       ),
     [users]
+  );
+
+  const salesRepUsers = React.useMemo(
+    () =>
+      users
+        .filter(u => {
+          if (u.status === 'nonworking') return false;
+          const role = (u.role || '').trim().toLowerCase();
+          if (isInzan) {
+            return isAssignableSalesUser(u);
+          }
+          return ['rep', 'sales_rep', 'sales'].includes(role);
+        })
+        .sort((a, b) => (a.status === 'working' ? -1 : 1) - (b.status === 'working' ? -1 : 1)),
+    [users, isInzan]
   );
 
   const uniqueSalesNames = React.useMemo(() => {
@@ -282,47 +297,59 @@ export default function Payments() {
 
     const addName = (rawName: string) => {
       if (!rawName) return;
-      // Normalize aliases ("El Goo" → "Youssef Emad") so duplicates collapse.
-      const cleanName = toCanonical(rawName);
-      const lowerName = cleanName.toLowerCase();
-      if (!nameMap.has(lowerName)) {
-        nameMap.set(lowerName, cleanName);
+      const trimmed = rawName.trim();
+      if (!trimmed) return;
+      // Preserve full name for Sama Mahmoud so she is distinct from Admin Sama Hany,
+      // while normalizing other aliases ("El Goo" → "Youssef Emad", "mostafa Mahmoud" → "Mustafa Mahmoud").
+      const cleanName =
+        trimmed.toLowerCase() === 'sama mahmoud' ? 'Sama Mahmoud' : toCanonical(trimmed);
+      const dedupeKey = toCanonical(trimmed).toLowerCase();
+      if (!nameMap.has(dedupeKey)) {
+        nameMap.set(dedupeKey, cleanName);
       } else {
-        const existing = nameMap.get(lowerName)!;
-        if (cleanName.length > 0 && existing.length > 0 && cleanName !== existing && cleanName.charAt(0) === cleanName.charAt(0).toUpperCase() && existing.charAt(0) !== existing.charAt(0).toUpperCase()) {
-          nameMap.set(lowerName, cleanName);
+        const existing = nameMap.get(dedupeKey)!;
+        if (
+          cleanName.length > 0 &&
+          existing.length > 0 &&
+          cleanName !== existing &&
+          cleanName.charAt(0) === cleanName.charAt(0).toUpperCase() &&
+          existing.charAt(0) !== existing.charAt(0).toUpperCase()
+        ) {
+          nameMap.set(dedupeKey, cleanName);
         }
       }
     };
 
-    adminUsers.forEach(u => addName(u.name || u.email || u.id));
-    payments.forEach(p => {
-      if (p.salesName) {
-        const resolved = resolveUserDisplay(p.salesName, users, p.salesName);
-        if (resolved) addName(resolved);
-      }
-    });
+    salesRepUsers.forEach(u => addName(u.name || u.email || u.id));
     return Array.from(nameMap.values()).sort((a, b) => a.localeCompare(b));
-  }, [adminUsers, users, payments]);
+  }, [salesRepUsers]);
 
   useEffect(() => {
-    if (recordedById === '' && users.length > 0) {
-      const sama = users.find(u => u.name?.toLowerCase().includes('sama'));
-      setRecordedById(sama?.id || currentUser?.id || '');
+    if (adminUsers.length > 0 && (!recordedById || !adminUsers.some(u => u.id === recordedById))) {
+      const currentAdmin = adminUsers.find(u => u.id === currentUser?.id);
+      const samaAdmin = adminUsers.find(u => u.name?.toLowerCase().includes('sama'));
+      setRecordedById(currentAdmin?.id || samaAdmin?.id || adminUsers[0]?.id || '');
     }
-  }, [users]);
+  }, [adminUsers, currentUser?.id, recordedById]);
 
   useEffect(() => {
     if (clientId) {
       const client = clients.find(c => c.id === clientId);
-      if (client?.assignedTo) {
-        const resolved = resolveUserDisplay(client.assignedTo, users);
-        setSalesName(resolved || '');
+      const assignedRaw = client?.assignedTo || client?.salesRep || client?.salesName;
+      if (assignedRaw) {
+        const resolved = resolveUserDisplay(assignedRaw, users, client?.salesName || '');
+        const canonicalResolved = toCanonical(resolved || '').toLowerCase();
+        const matchedRepName = uniqueSalesNames.find(
+          n =>
+            toCanonical(n).toLowerCase() === canonicalResolved ||
+            n.toLowerCase() === (resolved || '').trim().toLowerCase()
+        );
+        setSalesName(matchedRepName || '');
       } else {
         setSalesName('');
       }
     }
-  }, [clientId, clients]);
+  }, [clientId, clients, users, uniqueSalesNames]);
 
   const handleDeletePayment = async (id: string) => {
     const payment = payments.find(p => p.id === id);
@@ -574,7 +601,7 @@ export default function Payments() {
 
     const finalAmount = pricingBreakdown.netAmount;
 
-    const salesRepUser = users.find(u => {
+    const salesRepUser = salesRepUsers.find(u => {
       const name = u.name || u.email || u.id;
       return toCanonical(name).toLowerCase() === toCanonical(salesName).toLowerCase();
     });
@@ -598,10 +625,11 @@ export default function Payments() {
       // "When a sales rep is assigned to a member they will always be locked to them even when renewing.
       // The only person that can change a member that is assigned to a sales rep is the sales manager only."
       const clientRepId = selectedClient?.assignedTo || selectedClient?.salesRep;
+      const validClientRepUser = clientRepId ? salesRepUsers.find(u => u.id === clientRepId) : undefined;
       const isClientRepLocked = isInzan && Boolean(clientRepId && clientRepId !== 'unassigned');
       const canReassignRep = isInzan ? canReassignMemberSalesRep(currentUser) : true;
 
-      const effectiveSalesRepId = (isClientRepLocked && !canReassignRep) ? clientRepId! : (salesRepId || clientRepId || '');
+      const effectiveSalesRepId = (isClientRepLocked && !canReassignRep) ? clientRepId! : (salesRepId || validClientRepUser?.id || '');
       const effectiveSalesName = (isClientRepLocked && !canReassignRep)
         ? resolveUserDisplay(clientRepId!, users, selectedClient?.salesName || '')
         : (salesName || '');
@@ -720,8 +748,9 @@ export default function Payments() {
       setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
       setStartDate(format(new Date(), 'yyyy-MM-dd'));
       setEndDate('');
-      const sama = users.find(u => u.name?.toLowerCase().includes('sama'));
-      setRecordedById(sama?.id || currentUser?.id || '');
+      const currentAdmin = adminUsers.find(u => u.id === currentUser?.id);
+      const samaAdmin = adminUsers.find(u => u.name?.toLowerCase().includes('sama'));
+      setRecordedById(currentAdmin?.id || samaAdmin?.id || adminUsers[0]?.id || '');
       setSalesName('');
       setDiscountType('');
       setDiscountValue('');
@@ -3224,7 +3253,15 @@ export default function Payments() {
                                       setEditNotes(payment.notes || '');
                                       setEditBranch(resolvePaymentBranch(payment, client) !== 'Unknown' ? resolvePaymentBranch(payment, client) : '');
                                       setEditMethod(payment.method);
-                                      setEditSalesName(payment.salesName || '');
+                                        const rawEditRep = payment.salesName || resolveUserDisplay(payment.sales_rep_id, users, '');
+                                        const matchedEditRep = rawEditRep
+                                          ? uniqueSalesNames.find(
+                                              n =>
+                                                toCanonical(n).toLowerCase() === toCanonical(rawEditRep).toLowerCase() ||
+                                                n.toLowerCase() === rawEditRep.trim().toLowerCase()
+                                            )
+                                          : '';
+                                        setEditSalesName(matchedEditRep || '');
                                       setEditCoachName(payment.coachName || '');
                                       setEditClientName(client?.name || payment.clientName || payment.client_name || payment.guestName || (payment as any).guest_name || '');
                                       setEditClientPhone(client?.phone || (client?.memberId ? String(client.memberId) : ''));
@@ -3508,7 +3545,7 @@ export default function Payments() {
                                     </Button>
                                     <Button
                                       onClick={async () => {
-                                        const salesRepUser = users.find(u =>
+                                        const salesRepUser = salesRepUsers.find(u =>
                                           u.id === editSalesName ||
                                           (toCanonical(u.name || u.email || '').toLowerCase() === toCanonical(editSalesName || '').toLowerCase())
                                         );
