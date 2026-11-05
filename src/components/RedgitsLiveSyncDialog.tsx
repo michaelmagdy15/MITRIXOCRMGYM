@@ -170,7 +170,7 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
           throw new Error('Your session does not have permission to run RedGITS sync. Sign out and back in, or ask an Inzan admin.');
         }
         if (res.status === 502 || res.status === 503 || res.status === 504) {
-          throw new Error(`The server timed out talking to RedGITS (HTTP ${res.status}). Please try again in a minute.`);
+          throw new Error(`The legacy RedGITS server (inzan.redgits.com) timed out or is temporarily busy (HTTP ${res.status}). Your CRM database is safe and fully up to date with existing members. Please try again in a few minutes.`);
         }
         throw new Error(`Sync failed with HTTP ${res.status}`);
       }
@@ -224,10 +224,11 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
           type="button"
           onClick={() => setIsOpen(true)}
           title="Sync live members, leads, packages & payments directly from inzan.redgits.com"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition-all shadow-sm"
+          className="inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 rounded-lg text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition-all shadow-sm shrink-0"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-          <span>Sync RedGITS</span>
+          <span className="hidden sm:inline">Sync RedGITS</span>
+          <span className="sm:hidden text-[10px]">Sync</span>
         </button>
       );
     }

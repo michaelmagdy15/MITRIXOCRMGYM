@@ -708,7 +708,10 @@ export default function Clients() {
     }
 
     if (isInzanTenant) {
-      const idCheck = validateMemberNationalIdAndScan(null, newMemberNationalId, newMemberIdScanUrl);
+      const idCheck = validateMemberNationalIdAndScan(null, newMemberNationalId, newMemberIdScanUrl, {
+        requireScan: features?.requireNationalIdUpload === true,
+        requireNationalId: features?.requireNationalIdNumber === true,
+      });
       if (!idCheck.valid) {
         alert(idCheck.error);
         return;
@@ -937,7 +940,10 @@ export default function Clients() {
     }
 
     if (isInzanTenant) {
-      const idCheck = validateMemberNationalIdAndScan(client, upgradeNationalId, upgradeIdScanUrl);
+      const idCheck = validateMemberNationalIdAndScan(client, upgradeNationalId, upgradeIdScanUrl, {
+        requireScan: features?.requireNationalIdUpload === true,
+        requireNationalId: features?.requireNationalIdNumber === true,
+      });
       if (!idCheck.valid) {
         alert(idCheck.error);
         return;
@@ -1076,7 +1082,10 @@ export default function Clients() {
     }
 
     if (isInzanTenant) {
-      const idCheck = validateMemberNationalIdAndScan(client, renewNationalId, renewIdScanUrl);
+      const idCheck = validateMemberNationalIdAndScan(client, renewNationalId, renewIdScanUrl, {
+        requireScan: features?.requireNationalIdUpload === true,
+        requireNationalId: features?.requireNationalIdNumber === true,
+      });
       if (!idCheck.valid) {
         alert(idCheck.error);
         return;
@@ -1209,7 +1218,10 @@ export default function Clients() {
         : undefined;
 
     if (isInzanTenant) {
-      const idCheck = validateMemberNationalIdAndScan(client, addPackageNationalId, addPackageIdScanUrl);
+      const idCheck = validateMemberNationalIdAndScan(client, addPackageNationalId, addPackageIdScanUrl, {
+        requireScan: features?.requireNationalIdUpload === true,
+        requireNationalId: features?.requireNationalIdNumber === true,
+      });
       if (!idCheck.valid) {
         alert(idCheck.error);
         return;
@@ -3211,6 +3223,8 @@ export default function Clients() {
                     scanUrl={newMemberIdScanUrl}
                     onScanUrlChange={setNewMemberIdScanUrl}
                     idPrefix="new-member-natid"
+                    required={features?.requireNationalIdUpload === true}
+                    requireIdNumber={features?.requireNationalIdNumber === true}
                   />
                   <CorporateDealSelector
                     companies={corporateCompanies}
@@ -7054,6 +7068,8 @@ export default function Clients() {
                       scanUrl={upgradeIdScanUrl}
                       onScanUrlChange={setUpgradeIdScanUrl}
                       idPrefix="upgrade-natid"
+                      required={features?.requireNationalIdUpload === true}
+                      requireIdNumber={features?.requireNationalIdNumber === true}
                     />
                     <CorporateDealSelector
                       companies={corporateCompanies}
@@ -7345,6 +7361,8 @@ export default function Clients() {
                       scanUrl={renewIdScanUrl}
                       onScanUrlChange={setRenewIdScanUrl}
                       idPrefix="renew-natid"
+                      required={features?.requireNationalIdUpload === true}
+                      requireIdNumber={features?.requireNationalIdNumber === true}
                     />
                     <CorporateDealSelector
                       companies={corporateCompanies}
@@ -7648,6 +7666,8 @@ export default function Clients() {
                       scanUrl={addPackageIdScanUrl}
                       onScanUrlChange={setAddPackageIdScanUrl}
                       idPrefix="addpkg-natid"
+                      required={features?.requireNationalIdUpload === true}
+                      requireIdNumber={features?.requireNationalIdNumber === true}
                     />
                     <CorporateDealSelector
                       companies={corporateCompanies}

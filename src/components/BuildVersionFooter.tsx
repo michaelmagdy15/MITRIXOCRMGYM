@@ -2,21 +2,18 @@ import React from 'react';
 import buildInfo from '../buildInfo';
 
 /**
- * Displays build version at the bottom of the page
- * Helps users verify they're on the latest deployment
+ * Displays system release version and last update date at the bottom of the page.
+ * Displays fixed release date rather than dynamic clock time.
  */
 export default function BuildVersionFooter() {
-  const buildDate = new Date(buildInfo.timestamp);
-  const formattedBuildDate = Number.isNaN(buildDate.getTime())
-    ? 'Unknown date'
-    : `${buildDate.toLocaleDateString()} ${buildDate.toLocaleTimeString()}`;
-
   return (
     <div
-      className="hidden md:block fixed bottom-0 right-0 text-[10px] text-muted-foreground bg-muted/30 px-3 py-1 rounded-tl-md border-t border-l border-muted-foreground/20 font-mono"
-      title={`Latest system update: ${formattedBuildDate}`}
+      className="hidden md:block fixed bottom-0 right-0 text-[10px] text-muted-foreground bg-muted/40 backdrop-blur-sm px-3 py-1 rounded-tl-md border-t border-l border-muted-foreground/20 font-mono z-40 select-none shadow-sm"
+      title={`System Version ${buildInfo.systemVersion} • Commit ${buildInfo.commit} • Released ${buildInfo.lastUpdated}`}
     >
-      Latest update • {formattedBuildDate} • {buildInfo.version}
+      <span className="font-semibold text-foreground/80">System v{buildInfo.systemVersion}</span>
+      <span className="mx-1.5 opacity-50">•</span>
+      <span>Last Updated: {buildInfo.lastUpdated}</span>
     </div>
   );
 }

@@ -1255,47 +1255,49 @@ export function InzanMemberShow({
   return (
     <div className="flex flex-col w-full h-full min-h-0 overflow-hidden bg-background text-foreground">
       {/* Top Navigation Bar with Back Button */}
-      <div className="bg-muted/30 px-6 py-2.5 flex items-center justify-between border-b border-border flex-shrink-0 gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="bg-muted/30 px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between border-b border-border flex-shrink-0 gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <Button
             variant="outline"
             size="sm"
             onClick={onClose}
-            className="h-8 px-3 text-xs font-bold gap-1.5 border-border bg-card hover:bg-muted shadow-sm shrink-0"
+            className="h-8 px-2.5 sm:px-3 text-xs font-bold gap-1.5 border-border bg-card hover:bg-muted shadow-sm shrink-0"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Members
+            <span className="hidden sm:inline">Back to Members</span>
+            <span className="sm:hidden">Back</span>
           </Button>
           <div className="h-4 w-px bg-border hidden sm:block shrink-0" />
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth flex-1 min-w-0 py-0.5">
             {[
-              { id: 'member_data', label: 'Overview (Member Details & Actions)' },
-              { id: 'package_data', label: 'Packages & Benefits' },
-              { id: 'financials', label: 'Financials' },
-              { id: 'freezing', label: 'Freezing' },
-              { id: 'activities', label: 'Activities' },
-              { id: 'files', label: 'Files' },
-              { id: 'comments', label: 'Comments Log' },
-              { id: 'transfers', label: 'Transfer History' },
-              { id: 'entitlements', label: 'Entitlements' }
+              { id: 'member_data', label: 'Overview', fullLabel: 'Overview (Details & Actions)' },
+              { id: 'package_data', label: 'Packages', fullLabel: 'Packages & Benefits' },
+              { id: 'financials', label: 'Financials', fullLabel: 'Financials' },
+              { id: 'freezing', label: 'Freezing', fullLabel: 'Freezing' },
+              { id: 'activities', label: 'Activities', fullLabel: 'Activities' },
+              { id: 'files', label: 'Files', fullLabel: 'Files' },
+              { id: 'comments', label: 'Comments', fullLabel: 'Comments Log' },
+              { id: 'transfers', label: 'Transfers', fullLabel: 'Transfer History' },
+              { id: 'entitlements', label: 'Entitlements', fullLabel: 'Entitlements' }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as TabType)}
-                className={`px-3 py-1 text-xs font-bold rounded transition-all duration-150 whitespace-nowrap ${
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all duration-150 whitespace-nowrap shrink-0 ${
                   activeTab === tab.id
-                    ? 'bg-primary text-primary-foreground shadow'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
               >
-                {tab.label}
+                <span className="hidden md:inline">{tab.fullLabel}</span>
+                <span className="md:hidden">{tab.label}</span>
               </button>
             ))}
           </div>
         </div>
         <button 
           onClick={onClose}
-          className="text-muted-foreground hover:text-foreground font-black text-sm p-1 ml-2 shrink-0"
+          className="text-muted-foreground hover:text-foreground font-black text-sm p-1 ml-1 sm:ml-2 shrink-0"
           title="Close"
         >
           ✕
@@ -1303,114 +1305,109 @@ export function InzanMemberShow({
       </div>
 
       {/* Inzan Carbon Header Section */}
-      <div className="bg-zinc-950 px-6 py-2 flex items-center justify-between flex-shrink-0 text-white border-b border-zinc-800 shadow-sm">
-        <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-zinc-300">
-          <UserIcon className="h-4 w-4 text-zinc-400" />
-          <span>Member Profile Management</span>
+      <div className="bg-zinc-950 px-3 sm:px-6 py-2 flex items-center justify-between flex-shrink-0 text-white border-b border-zinc-800 shadow-sm flex-wrap gap-2 text-xs">
+        <div className="flex items-center gap-2 font-mono uppercase tracking-wider text-zinc-300">
+          <UserIcon className="h-4 w-4 text-zinc-400 shrink-0" />
+          <span className="truncate">Member Profile Management</span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-xs font-mono font-bold text-zinc-300">
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+          <span className="font-mono font-bold text-zinc-300">
             ID: {(() => { const clean = getSafeCleanMemberId(client.memberId); return clean ? (clean.startsWith('#') ? clean : `#${clean}`) : (client.leadId || client.redgitsId || client.id); })()}
           </span>
-          <span className="text-[11px] font-mono text-zinc-400">TENANT: INZAN ATHLETICS</span>
+          <span className="text-[11px] font-mono text-zinc-400 hidden xs:inline">TENANT: INZAN ATHLETICS</span>
         </div>
       </div>
 
       {/* Main Container */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-3.5 sm:p-6">
         {/* View Header with Action Buttons */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-border pb-5">
-          <div className="flex items-center gap-4 text-left">
-            {client.photoURL ? (
-              <div className="relative h-14 w-14 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground shrink-0 overflow-hidden">
-                <UserIcon className="h-7 w-7" />
-                <img
-                  src={client.photoURL}
-                  alt={client.name}
-                  className="absolute inset-0 h-full w-full rounded-full object-cover"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="h-14 w-14 rounded-full bg-muted border border-border flex items-center justify-center text-muted-foreground shrink-0">
-                <UserIcon className="h-7 w-7" />
-              </div>
-            )}
-            <div>
-              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                View Member Info - ( {client.name} )
-                {client.colorLabel && (
-                  <span className={`inline-block h-3 w-3 rounded-full ml-1`} style={{ backgroundColor: client.colorLabel }} />
-                )}
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    openClickToCallModal({
-                      clientId: client.id,
-                      memberId: client.memberId,
-                      name: client.name,
-                      phone: client.phone,
-                      backupPhone: client.backupPhone,
-                      status: client.status,
-                      branch: client.branch,
-                      packageType: client.packageType,
-                      source: client.source,
-                    })
-                  }
-                  className="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                  title="Click to Call"
-                >
-                  <Phone className="h-3 w-3" />
-                  {client.phone}
-                </button>{' '}
-                · {client.branch || 'No branch'} ·{' '}
-                {isLeadAccount ? (
-                  <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/10 border border-amber-500/30 uppercase">
-                    Lead / Prospect
-                  </Badge>
-                ) : (
-                  <Badge className={client.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/10 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/10 border border-rose-500/20'}>
-                    {client.status}
-                  </Badge>
-                )}
-                {isLeadAccount && (
-                  <Button
-                    size="sm"
-                    onClick={() => handleAddPackageClick()}
-                    className="ml-2 h-6 px-2 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 border-b border-border pb-5">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 text-left">
+            <div className="flex items-center gap-3.5 min-w-0">
+              {client.photoURL ? (
+                <div className="relative h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground shrink-0 overflow-hidden">
+                  <UserIcon className="h-6 w-6 sm:h-7 sm:w-7" />
+                  <img
+                    src={client.photoURL}
+                    alt={client.name}
+                    className="absolute inset-0 h-full w-full rounded-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-full bg-muted border border-border flex items-center justify-center text-muted-foreground shrink-0">
+                  <UserIcon className="h-6 w-6 sm:h-7 sm:w-7" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2 flex-wrap">
+                  <span className="truncate">View Member Info - ( {client.name} )</span>
+                  {client.colorLabel && (
+                    <span className="inline-block h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: client.colorLabel }} />
+                  )}
+                </h2>
+                <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground mt-0.5">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openClickToCallModal({
+                        clientId: client.id,
+                        memberId: client.memberId,
+                        name: client.name,
+                        phone: client.phone,
+                        backupPhone: client.backupPhone,
+                        status: client.status,
+                        branch: client.branch,
+                        packageType: client.packageType,
+                        source: client.source,
+                      })
+                    }
+                    className="inline-flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                    title="Click to Call"
                   >
-                    Convert to Member / Buy Package
-                  </Button>
-                )}
-                {unpaidAmount > 0 && (
-                  <Badge className="bg-red-500/10 text-red-500 hover:bg-red-500/10 border border-red-500/20 ml-2">
-                    Unpaid: {unpaidAmount.toLocaleString()} LE
-                  </Badge>
-                )}
-              </p>
+                    <Phone className="h-3 w-3" />
+                    {client.phone}
+                  </button>
+                  <span>·</span>
+                  <span>{client.branch || 'Main Branch'}</span>
+                  <span>·</span>
+                  {isLeadAccount ? (
+                    <Badge className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/10 border border-amber-500/30 uppercase text-[10px]">
+                      Lead / Prospect
+                    </Badge>
+                  ) : (
+                    <Badge className={client.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/10 border border-emerald-500/20 text-[10px]' : 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/10 border border-rose-500/20 text-[10px]'}>
+                      {client.status}
+                    </Badge>
+                  )}
+                  {unpaidAmount > 0 && (
+                    <Badge className="bg-red-500/10 text-red-500 hover:bg-red-500/10 border border-red-500/20 text-[10px]">
+                      Unpaid: {unpaidAmount.toLocaleString()} LE
+                    </Badge>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
 
-          {/* Large Member ID Display */}
-          <div 
-            onClick={() => {
-              const idToCopy = client.memberId ? String(client.memberId).replace(/^#/, '') : client.id;
-              if (idToCopy) {
-                navigator.clipboard.writeText(idToCopy);
-                toast.success(`Member ID copied: ${idToCopy}`);
-              }
-            }}
-            title="Click to copy Member ID"
-            className="px-5 py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border rounded-xl flex flex-col items-center sm:items-start justify-center shrink-0 shadow-sm"
-          >
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Member ID</span>
-            <span className="text-xl sm:text-2xl font-black font-mono tracking-wider text-foreground">
-              {(() => { const clean = getSafeCleanMemberId(client.memberId); return clean ? (clean.startsWith('#') ? clean : `#${clean}`) : `Lead #${client.leadId || client.redgitsId || client.id || '—'}`; })()}
-            </span>
+            {/* Member ID Display Card */}
+            <div 
+              onClick={() => {
+                const idToCopy = client.memberId ? String(client.memberId).replace(/^#/, '') : client.id;
+                if (idToCopy) {
+                  navigator.clipboard.writeText(idToCopy);
+                  toast.success(`Member ID copied: ${idToCopy}`);
+                }
+              }}
+              title="Click to copy Member ID"
+              className="px-3.5 py-1.5 sm:px-4 sm:py-2 bg-muted/60 hover:bg-muted/90 transition-colors cursor-pointer border border-border rounded-xl flex sm:flex-col items-center sm:items-start justify-between sm:justify-center shrink-0 shadow-sm gap-2 w-full sm:w-auto"
+            >
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block">Member ID</span>
+              <span className="text-base sm:text-xl font-black font-mono tracking-wider text-foreground">
+                {(() => { const clean = getSafeCleanMemberId(client.memberId); return clean ? (clean.startsWith('#') ? clean : `#${clean}`) : `Lead #${client.leadId || client.redgitsId || client.id || '—'}`; })()}
+              </span>
+            </div>
           </div>
 
           {/* Buttons bar */}
@@ -3440,8 +3437,8 @@ export function InzanMemberShow({
               </Button>
             </div>
 
-            <div className="rounded-xl border border-border bg-background overflow-hidden">
-              <Table>
+            <div className="rounded-xl border border-border bg-background overflow-hidden overflow-x-auto shadow-sm">
+              <Table className="min-w-[680px]">
                 <TableHeader className="bg-muted/20 border-b border-border">
                   <TableRow>
                     <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Date</TableHead>
@@ -3494,8 +3491,8 @@ export function InzanMemberShow({
               </Badge>
             </div>
 
-            <div className="rounded-xl border border-border bg-background overflow-hidden">
-              <Table>
+            <div className="rounded-xl border border-border bg-background overflow-hidden overflow-x-auto shadow-sm">
+              <Table className="min-w-[680px]">
                 <TableHeader className="bg-muted/20 border-b border-border">
                   <TableRow>
                     <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Check-In Date & Time</TableHead>

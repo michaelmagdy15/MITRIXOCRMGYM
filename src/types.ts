@@ -927,6 +927,8 @@ export interface FeatureFlags {
   splitTenderPayments?: boolean;
   webcamPhotoCapture?: boolean;
   turnstileGateControl?: boolean;
+  requireNationalIdUpload?: boolean;
+  requireNationalIdNumber?: boolean;
   repLocking?: boolean;
   corporateDiscounts?: boolean;
   photoComplianceAlerts?: boolean;

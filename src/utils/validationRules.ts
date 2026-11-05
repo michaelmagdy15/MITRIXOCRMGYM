@@ -380,25 +380,46 @@ export function getMemberNationalIdScanUrl(client?: Partial<Client> | null, over
   return '';
 }
 
+export interface NationalIdValidationOptions {
+  requireScan?: boolean;
+  requireNationalId?: boolean;
+}
+
 export function validateMemberNationalIdAndScan(
   client?: Partial<Client> | null,
   overrideNationalId?: string,
-  overrideScanUrl?: string
+  overrideScanUrl?: string,
+  options?: NationalIdValidationOptions
 ): { valid: boolean; nationalId: string; scanUrl: string; error?: string } {
   const effectiveNatId = (overrideNationalId !== undefined ? overrideNationalId : client?.nationalId) || '';
-  const natCheck = validateEgyptianNationalId(effectiveNatId);
   const scanUrl = getMemberNationalIdScanUrl(client, overrideScanUrl);
 
-  if (!natCheck.valid) {
+  const requireScan = options?.requireScan === true;
+  const requireNationalId = options?.requireNationalId === true;
+
+  // 1. National ID Number validation
+  if (effectiveNatId.trim()) {
+    // If an ID was entered, validate its 14-digit Egyptian checksum
+    const natCheck = validateEgyptianNationalId(effectiveNatId);
+    if (!natCheck.valid) {
+      return {
+        valid: false,
+        nationalId: effectiveNatId,
+        scanUrl,
+        error: natCheck.error || 'A valid 14-digit National ID number is required.',
+      };
+    }
+  } else if (requireNationalId) {
     return {
       valid: false,
-      nationalId: effectiveNatId,
+      nationalId: '',
       scanUrl,
-      error: natCheck.error || 'A valid 14-digit National ID number is required before enrolling or renewing.',
+      error: 'A valid 14-digit National ID number is required before enrolling or renewing.',
     };
   }
 
-  if (!scanUrl) {
+  // 2. Scanned Document photo validation
+  if (requireScan && !scanUrl) {
     return {
       valid: false,
       nationalId: effectiveNatId,

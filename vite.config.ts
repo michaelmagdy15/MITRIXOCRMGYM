@@ -68,7 +68,6 @@ export default defineConfig(({ mode }) => {
             '**/CoachPortal*',
             '**/vendor-export*',
             '**/vendor-charts*',
-            '**/AdvancedReports*',
           ],
           ignoreURLParametersMatching: [/^cb$/, /^sw_reloaded$/],
           cleanupOutdatedCaches: true,

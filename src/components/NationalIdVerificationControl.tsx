@@ -6,7 +6,7 @@ import {
   validateEgyptNationalId,
   getMemberNationalIdScanUrl,
 } from '../utils/validationRules';
-import { ShieldCheck, Upload, CheckCircle2, AlertTriangle, Building2, Loader2, Eye } from 'lucide-react';
+import { ShieldCheck, Upload, CheckCircle2, AlertTriangle, Building2, Loader2, Eye, FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,8 @@ interface NationalIdVerificationControlProps {
   scanUrl: string;
   onScanUrlChange: (url: string) => void;
   idPrefix?: string;
+  required?: boolean;
+  requireIdNumber?: boolean;
 }
 
 export const NationalIdVerificationControl: React.FC<NationalIdVerificationControlProps> = ({
@@ -27,12 +29,14 @@ export const NationalIdVerificationControl: React.FC<NationalIdVerificationContr
   scanUrl,
   onScanUrlChange,
   idPrefix = 'nat-id',
+  required = false,
+  requireIdNumber = false,
 }) => {
   const [uploading, setUploading] = useState(false);
   const effectiveNatId = nationalId || client?.nationalId || '';
   const effectiveScanUrl = scanUrl || getMemberNationalIdScanUrl(client);
   const natCheck = validateEgyptNationalId(effectiveNatId);
-  const isComplete = natCheck.valid && Boolean(effectiveScanUrl);
+  const isComplete = (effectiveNatId ? natCheck.valid : !requireIdNumber) && (required ? Boolean(effectiveScanUrl) : true);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -57,36 +61,46 @@ export const NationalIdVerificationControl: React.FC<NationalIdVerificationContr
       className={`rounded-2xl border p-4 space-y-3 ${
         isComplete
           ? 'border-emerald-500/40 bg-emerald-500/5'
-          : 'border-amber-500/50 bg-amber-500/5'
+          : required
+          ? 'border-amber-500/50 bg-amber-500/5'
+          : 'border-border bg-card/40'
       }`}
     >
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">
-          {isComplete ? (
+          {isComplete && (effectiveNatId || effectiveScanUrl) ? (
             <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-          ) : (
+          ) : required ? (
             <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+          ) : (
+            <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
           )}
           <span className="text-xs font-bold uppercase tracking-wider">
-            National ID + Scanned ID Verification (Mandatory)
+            National ID &amp; Document Scan {required ? '(Mandatory)' : '(Optional)'}
           </span>
         </div>
         <Badge
           variant="outline"
           className={
-            isComplete
+            isComplete && (effectiveNatId || effectiveScanUrl)
               ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10 text-[10px]'
-              : 'border-amber-500/40 text-amber-400 bg-amber-500/10 text-[10px]'
+              : required
+              ? 'border-amber-500/40 text-amber-400 bg-amber-500/10 text-[10px]'
+              : 'border-muted-foreground/30 text-muted-foreground bg-muted/20 text-[10px]'
           }
         >
-          {isComplete ? 'Verified & Complete' : 'Required Before Save'}
+          {isComplete && (effectiveNatId || effectiveScanUrl)
+            ? 'Verified & Complete'
+            : required
+            ? 'Required Before Save'
+            : 'Optional'}
         </Badge>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-input`} className="text-xs font-semibold flex items-center justify-between">
-            <span>14-Digit National ID Number *</span>
+            <span>14-Digit National ID {requireIdNumber ? '*' : '(Optional)'}</span>
             {natCheck.valid && natCheck.birthDate && (
               <span className="text-[10px] font-mono text-emerald-400">DOB: {natCheck.birthDate}</span>
             )}
@@ -102,14 +116,14 @@ export const NationalIdVerificationControl: React.FC<NationalIdVerificationContr
               effectiveNatId && !natCheck.valid ? 'border-rose-500/70' : ''
             }`}
           />
-          {!natCheck.valid && (
+          {effectiveNatId && !natCheck.valid && (
             <p className="text-[10px] text-rose-500 font-medium">{natCheck.error}</p>
           )}
         </div>
 
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold flex items-center justify-between">
-            <span>Scanned National ID Image *</span>
+            <span>Scanned National ID Image {required ? '*' : '(Optional)'}</span>
             {effectiveScanUrl && (
               <a
                 href={effectiveScanUrl}

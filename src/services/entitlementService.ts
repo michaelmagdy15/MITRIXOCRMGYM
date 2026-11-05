@@ -91,7 +91,12 @@ export const evaluateClientRecord = (
   }
 
   // Check client-level membership expiry with end-of-day tolerance
-  if (client.membershipExpiry) {
+  // For PT sessions, active PT packages have independent validity and take precedence.
+  const hasActivePtPkg = serviceType === 'pt' && Array.isArray(client.packages) && client.packages.some(
+    (p: any) => p?.status === 'Active' && (/pt|private|trainer/i.test(`${p?.category || ''} ${p?.packageName || ''}`) || (typeof p?.sessionsRemaining === 'number' && p.sessionsRemaining > 0))
+  );
+
+  if (client.membershipExpiry && !hasActivePtPkg) {
     const expDate = safeParseExpiryToEndOfDay(client.membershipExpiry);
     if (expDate && expDate.getTime() < now) {
       return { canBook: false, reason: 'Your membership has expired. Please renew your package.' };

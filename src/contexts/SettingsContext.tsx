@@ -131,6 +131,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     splitTenderPayments: true,
     webcamPhotoCapture: true,
     turnstileGateControl: false,
+    requireNationalIdUpload: false,
+    requireNationalIdNumber: false,
     repLocking: isDefaultInzan,
     corporateDiscounts: isDefaultInzan,
     callCenter: true,

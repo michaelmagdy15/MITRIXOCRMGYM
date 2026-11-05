@@ -190,12 +190,27 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
 
   // Compute available coach slots for selected bookingDate
   const dateDaySlots = useMemo(() => {
-    if (!selectedCoachId || !bookingDate || !coachSchedule) return null;
+    if (!selectedCoachId || !bookingDate) return null;
     const parsed = new Date(`${bookingDate}T00:00:00`);
     if (isNaN(parsed.getTime())) return null;
     const dayMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const dayKey = dayMap[parsed.getDay()] || 'monday';
-    const dayCfg = coachSchedule[dayKey];
+    const effectiveSchedule = coachSchedule || {
+      [dayKey]: {
+        enabled: true,
+        startTime: '09:00',
+        endTime: '21:00',
+        slotDurationMinutes: 60,
+        blockedSlots: [],
+      }
+    };
+    const dayCfg = effectiveSchedule[dayKey] || {
+      enabled: true,
+      startTime: '09:00',
+      endTime: '21:00',
+      slotDurationMinutes: 60,
+      blockedSlots: [],
+    };
     if (!dayCfg || !dayCfg.enabled) {
       return { enabled: false, dayKey, slots: [] };
     }
@@ -308,7 +323,17 @@ export default function MemberSessions({ client, onSwitchToStore }: { client: Cl
     e.preventDefault();
     if (!selectedCoachId || !bookingDate || !bookingTime || !client.id) return;
 
-    if (client.status === 'Expired') {
+    const hasActivePtEntitlement =
+      freePtRemaining > 0 ||
+      (Array.isArray(client.packages) &&
+        client.packages.some(
+          (p: any) =>
+            p?.status === 'Active' &&
+            (/pt|private|trainer/i.test(`${p?.category || ''} ${p?.packageName || ''}`) ||
+              (typeof p?.sessionsRemaining === 'number' && p.sessionsRemaining > 0))
+        ));
+
+    if (client.status === 'Expired' && !hasActivePtEntitlement) {
       const isTenantInzan = getTenantId().toLowerCase().includes('inzan');
       const gymName = branding?.companyName || (isInzan ? 'Inzan Athletics' : 'STRIKE');
       setBookingError(`Your membership is expired. You must head to the ${gymName} branch to renew before booking sessions.`);

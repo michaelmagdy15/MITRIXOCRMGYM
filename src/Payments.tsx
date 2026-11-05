@@ -522,12 +522,12 @@ export default function Payments() {
     const resolvedGuestName = (guestClientName || clientSearch).trim();
     const selectedClient = !isGuest ? clients.find(c => c.id === clientId) : null;
 
-    // Inzan Mandatory Verification Gate: National ID Enforcement
-    if (isInzan) {
+    // Inzan Verification Gate: National ID Enforcement (Controlled by policy flag)
+    if (isInzan && features?.requireNationalIdNumber === true) {
       const effectiveId = (!isGuest ? (selectedClient?.nationalId || inlineNationalId) : inlineNationalId) || '';
       if (!isValidNationalIdOrPassport(effectiveId)) {
         setAlertTitle('National ID Required');
-        setAlertDescription('Inzan policy strictly requires a verified Egyptian National ID (14 digits) or Passport before completing payment. Please enter and verify the National ID.');
+        setAlertDescription('Gym policy requires a verified Egyptian National ID (14 digits) or Passport before completing payment. Please enter and verify the National ID.');
         setAlertOpen(true);
         return;
       }

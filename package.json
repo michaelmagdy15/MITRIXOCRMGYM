@@ -1,7 +1,7 @@
 {
   "name": "mitrixogymcrm",
   "private": true,
-  "version": "1.12",
+  "version": "12.5",
   "type": "module",
   "scripts": {
     "dev": "vite",

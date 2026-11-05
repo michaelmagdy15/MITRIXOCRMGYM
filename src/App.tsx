@@ -48,38 +48,68 @@ import KitchenKioskView from './components/KitchenKioskView';
 import { isKitchenUser, isNutritionistUser, isFitnessManagerUser, isSalesManagerUser, isSgfAcademyOwnerUser, isGeneralManagerOrCEO } from './utils/permissions';
 
 
-// Route & Tab Level Code-Splitting (Lazy-loaded modules)
-const Clients = React.lazy(() => import('./Clients'));
-const Payments = React.lazy(() => import('./Payments'));
-const Calendar = React.lazy(() => import('./Calendar'));
-const Packages = React.lazy(() => import('./Packages'));
-const PTPackages = React.lazy(() => import('./PTPackages'));
-const Tasks = React.lazy(() => import('./Tasks'));
-const Settings = React.lazy(() => import('./Settings'));
-const HelpPage = React.lazy(() => import('./HelpPage'));
-const Leads = React.lazy(() => import('./Leads'));
-const Reports = React.lazy(() => import('./Reports'));
-const AdvancedReports = React.lazy(() => import('./AdvancedReports'));
-const AuditLogs = React.lazy(() => import('./AuditLogs'));
-const Debtors = React.lazy(() => import('./Debtors'));
-const UnconfirmedMemberships = React.lazy(() => import('./UnconfirmedMemberships'));
-const NutritionModule = React.lazy(() => import('./NutritionModule'));
-const ExerciseLibraryHub = React.lazy(() => import('./components/ExerciseLibraryHub'));
-const QuoteGenerator = React.lazy(() => import('./QuoteGenerator'));
-const ClubOperations = React.lazy(() => import('./ClubOperations'));
-const AdminHub = React.lazy(() => import('./AdminHub'));
-const SuperAdminHub = React.lazy(() => import('./SuperAdminHub'));
-const AdminRequests = React.lazy(() => import('./admin/AdminRequests'));
-const PendingApprovals = React.lazy(() => import('./PendingApprovals'));
-const CallCenter = React.lazy(() => import('./CallCenter'));
-const LostAndFound = React.lazy(() => import('./LostAndFound'));
-const Complaints = React.lazy(() => import('./Complaints'));
-const Bookings = React.lazy(() => import('./Bookings'));
-const ClassManager = React.lazy(() => import('./components/ClassManager').then(m => ({ default: m.ClassManager || m.default })));
-const CoachPortal = React.lazy(() => import('./coach/CoachPortal'));
-const MemberPortal = React.lazy(() => import('./member/MemberPortal'));
-const GuestPortal = React.lazy(() => import('./member/GuestPortal'));
-const CorporateAccountManager = React.lazy(() => import('./components/CorporateAccountManager'));
+function lazyRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T } | any>
+): React.LazyExoticComponent<T> {
+  return React.lazy(async () => {
+    try {
+      const module = await factory();
+      if (!module) throw new Error('Module export is undefined');
+      if (module.default) return module;
+      const keys = Object.keys(module || {});
+      const fallback = keys.length > 0 ? (module as any)[keys[0] as string] : module;
+      return { default: fallback };
+    } catch (err: any) {
+      console.warn('[lazyRetry] Chunk load failed, clearing stale caches:', err);
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        } catch (_) {}
+      }
+      const reloadKey = 'mitrixo_lazy_retry_' + window.location.pathname;
+      const last = Number(sessionStorage.getItem(reloadKey) || '0');
+      if (Date.now() - last > 8000) {
+        sessionStorage.setItem(reloadKey, String(Date.now()));
+        window.location.reload();
+      }
+      throw err;
+    }
+  });
+}
+
+// Route & Tab Level Code-Splitting (Lazy-loaded modules with auto stale-chunk recovery)
+const Clients = lazyRetry(() => import('./Clients'));
+const Payments = lazyRetry(() => import('./Payments'));
+const Calendar = lazyRetry(() => import('./Calendar'));
+const Packages = lazyRetry(() => import('./Packages'));
+const PTPackages = lazyRetry(() => import('./PTPackages'));
+const Tasks = lazyRetry(() => import('./Tasks'));
+const Settings = lazyRetry(() => import('./Settings'));
+const HelpPage = lazyRetry(() => import('./HelpPage'));
+const Leads = lazyRetry(() => import('./Leads'));
+const Reports = lazyRetry(() => import('./Reports'));
+const AdvancedReports = lazyRetry(() => import('./AdvancedReports'));
+const AuditLogs = lazyRetry(() => import('./AuditLogs'));
+const Debtors = lazyRetry(() => import('./Debtors'));
+const UnconfirmedMemberships = lazyRetry(() => import('./UnconfirmedMemberships'));
+const NutritionModule = lazyRetry(() => import('./NutritionModule'));
+const ExerciseLibraryHub = lazyRetry(() => import('./components/ExerciseLibraryHub'));
+const QuoteGenerator = lazyRetry(() => import('./QuoteGenerator'));
+const ClubOperations = lazyRetry(() => import('./ClubOperations'));
+const AdminHub = lazyRetry(() => import('./AdminHub'));
+const SuperAdminHub = lazyRetry(() => import('./SuperAdminHub'));
+const AdminRequests = lazyRetry(() => import('./admin/AdminRequests'));
+const PendingApprovals = lazyRetry(() => import('./PendingApprovals'));
+const CallCenter = lazyRetry(() => import('./CallCenter'));
+const LostAndFound = lazyRetry(() => import('./LostAndFound'));
+const Complaints = lazyRetry(() => import('./Complaints'));
+const Bookings = lazyRetry(() => import('./Bookings'));
+const ClassManager = lazyRetry(() => import('./components/ClassManager').then(m => ({ default: m.ClassManager || m.default })));
+const CoachPortal = lazyRetry(() => import('./coach/CoachPortal'));
+const MemberPortal = lazyRetry(() => import('./member/MemberPortal'));
+const GuestPortal = lazyRetry(() => import('./member/GuestPortal'));
+const CorporateAccountManager = lazyRetry(() => import('./components/CorporateAccountManager'));
 
 const ModuleLoadingFallback: React.FC = () => (
   <div className="flex h-[400px] w-full flex-col items-center justify-center gap-3">
@@ -789,7 +819,7 @@ function AppContent() {
       return (
         <React.Suspense fallback={<PortalLoadingFallback />}>
         <MemberPortal 
-          onSwitchToStore={(packageId) => {
+          onSwitchToStore={(packageId?: string) => {
             if (packageId) setStoreInitialPackageId(packageId);
             setClientViewMode('store');
           }} 
@@ -811,7 +841,7 @@ function AppContent() {
         <React.Suspense fallback={<PortalLoadingFallback />}>
         <GuestPortal 
           initialPackageId={storeInitialPackageId}
-          onSwitchToCRM={(tab) => {
+          onSwitchToCRM={(tab?: any) => {
             if (tab) setMemberPortalInitialTab(tab);
             setStoreInitialPackageId(null);
             setClientViewMode('portal');
@@ -824,7 +854,7 @@ function AppContent() {
       <React.Suspense fallback={<PortalLoadingFallback />}>
         <MemberPortal 
         initialTab={memberPortalInitialTab}
-        onSwitchToStore={isInzan ? undefined : (packageId) => {
+        onSwitchToStore={isInzan ? undefined : (packageId?: string) => {
           if (packageId) setStoreInitialPackageId(packageId);
           setMemberPortalInitialTab('home');
           setClientViewMode('store');

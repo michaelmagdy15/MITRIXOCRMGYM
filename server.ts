@@ -6427,6 +6427,11 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
     // Serve static assets, but do not serve index.html statically (index: false)
     app.use(express.static(distPath, { index: false }));
 
+    // Never return index.html for missing JS/CSS/static assets (prevents MIME type script execution crash)
+    app.all(["/assets/*", "/*.js", "/*.css", "/*.map", "/*.wasm", "/*.json", "/*.png", "/*.jpg", "/*.jpeg", "/*.svg", "/*.ico"], (req, res) => {
+      res.status(404).type('text/plain').send('Static asset not found');
+    });
+
     // Explicitly serve standalone HTML files so they never fall through to index.html
     app.get(["/quote-generator.html", "/help-guide.html", "/privacy.html"], (req, res, next) => {
       const filePath = path.join(distPath, req.path);

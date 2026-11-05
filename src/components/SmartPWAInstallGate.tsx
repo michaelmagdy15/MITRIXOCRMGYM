@@ -43,6 +43,13 @@ export function SmartPWAInstallGate() {
   const [isInstalling, setIsInstalling] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [isPermanentlyDismissed, setIsPermanentlyDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem('pwa_gate_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [showProfileGuide, setShowProfileGuide] = useState(false);
 
   const tenantId = (typeof window !== 'undefined' ? getTenantId() : 'default').toLowerCase();
@@ -185,6 +192,10 @@ export function SmartPWAInstallGate() {
     return null;
   }
 
+  if (isPermanentlyDismissed) {
+    return null;
+  }
+
   if (!isMobile && !forceInstallParam) {
     return null;
   }
@@ -209,13 +220,29 @@ export function SmartPWAInstallGate() {
               </p>
             </div>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setMinimized(false)}
-            className="h-9 px-3.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-extrabold text-xs shrink-0"
-          >
-            Install App
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              size="sm"
+              onClick={() => setMinimized(false)}
+              className="h-9 px-3.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-extrabold text-xs shrink-0"
+            >
+              Install App
+            </Button>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem('pwa_gate_dismissed', 'true');
+                } catch {}
+                setIsPermanentlyDismissed(true);
+              }}
+              className="h-8 w-8 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 flex items-center justify-center text-xs transition-colors shrink-0"
+              title="Dismiss prompt"
+              aria-label="Dismiss prompt"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       </div>
     );

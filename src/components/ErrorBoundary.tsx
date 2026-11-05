@@ -23,7 +23,9 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
     const msg = error?.message || '';
-    if (/failed to fetch dynamically imported module|importing a module script failed|unable to preload css|mime type|expected a javascript-or-wasm module/i.test(msg)) {
+    if (
+      /failed to fetch dynamically imported module|importing a module script failed|unable to preload css|mime type|expected a javascript-or-wasm module|reading 'default'|cannot read propert.*default/i.test(msg)
+    ) {
       this.recoverFromStaleAsset();
       return;
     }
@@ -39,9 +41,19 @@ export class ErrorBoundary extends Component<Props, State> {
   private recoverFromStaleAsset = () => {
     const key = 'mitrixo_chunk_reload_at';
     const lastReload = Number(sessionStorage.getItem(key) || '0');
-    if (Date.now() - lastReload <= 30000) return;
+    if (Date.now() - lastReload <= 10000) return;
     sessionStorage.setItem(key, String(Date.now()));
-    window.location.reload();
+
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    if (win) {
+      if ('caches' in win) {
+        win.caches.keys().then((names: string[]) => Promise.all(names.map((n: string) => win.caches.delete(n)))).finally(() => {
+          win.location.reload();
+        });
+        return;
+      }
+      win.location.reload();
+    }
   };
 
   private clearFirestoreCacheAndReload = () => {
