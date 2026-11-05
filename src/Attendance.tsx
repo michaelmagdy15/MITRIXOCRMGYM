@@ -1228,6 +1228,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       (c) =>
         c.id === lookupToken ||
         (c.memberId && String(c.memberId).toLowerCase().trim() === tokenLower) ||
+        ((c as any).memberCode && String((c as any).memberCode).toLowerCase().trim() === tokenLower) ||
+        ((c as any).redgitsId && String((c as any).redgitsId).toLowerCase().trim() === tokenLower) ||
         (c.phone && c.phone === lookupToken) ||
         (c.barcode && String(c.barcode).toLowerCase().trim() === tokenLower) ||
         (c.cardId && String(c.cardId).toLowerCase().trim() === tokenLower) ||
