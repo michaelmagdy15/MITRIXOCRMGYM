@@ -160,7 +160,7 @@ export default function CallCenter() {
   const [searchResults, setSearchResults] = useState<Client[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [reminderDate, setReminderDate] = useState('');
-  const [targetSegment, setTargetSegment] = useState<'Active' | 'Expired' | 'Last Seen' | 'Leads'>('Active');
+  const [targetSegment, setTargetSegment] = useState<'Active' | 'Expired' | 'Last Seen' | 'Leads' | 'Churn Radar'>('Active');
   const [targetDateFrom, setTargetDateFrom] = useState('');
   const [targetDateTo, setTargetDateTo] = useState('');
 
@@ -244,6 +244,13 @@ export default function CallCenter() {
       if (targetSegment === 'Active' && lifecycle.globalStatus !== 'ACTIVE' && lifecycle.globalStatus !== 'EXPIRING_SOON') return false;
       if (targetSegment === 'Expired' && (lifecycle.globalStatus !== 'EXPIRED' || lifecycle.hasActiveOrUpcomingPackage)) return false;
       if (targetSegment === 'Leads' && status !== 'lead') return false;
+      if (targetSegment === 'Churn Radar') {
+        if (lifecycle.globalStatus !== 'ACTIVE') return false;
+        const lastSeen = lastAttendanceByClient.get(client.id);
+        if (!lastSeen) return false;
+        const daysSinceLastVisit = Math.floor((Date.now() - new Date(lastSeen).getTime()) / (1000 * 60 * 60 * 24));
+        return daysSinceLastVisit >= 14 && daysSinceLastVisit <= 45;
+      }
 
       if (targetSegment === 'Last Seen') {
         if (status === 'lead' || status === 'hold') return false;
@@ -501,6 +508,7 @@ export default function CallCenter() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Active">Active Members</SelectItem>
+                      <SelectItem value="Churn Radar">🚨 Churn Radar (At-Risk Drop-offs)</SelectItem>
                       <SelectItem value="Expired">Expired Members</SelectItem>
                       <SelectItem value="Last Seen">Non-Attendees (Last Seen)</SelectItem>
                       <SelectItem value="Leads">Leads</SelectItem>
@@ -547,7 +555,9 @@ export default function CallCenter() {
                         </span>
                       </span>
                       <span className="shrink-0 text-right text-xs text-muted-foreground">
-                        {targetSegment === 'Last Seen'
+                        {targetSegment === 'Churn Radar'
+                          ? `⚠️ Absent ${Math.floor((Date.now() - new Date(lastAttendanceByClient.get(client.id) || Date.now()).getTime()) / 86400000)}d`
+                          : targetSegment === 'Last Seen'
                           ? `Last seen: ${lastAttendanceByClient.get(client.id) || 'Never'}`
                           : targetSegment === 'Leads'
                             ? `Created: ${formatDate(client.createdAt)}`

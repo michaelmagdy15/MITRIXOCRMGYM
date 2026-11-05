@@ -50,10 +50,12 @@ import {
   Edit,
   Trash2,
   Search,
-  UserPlus
+  UserPlus,
+  Copy
 } from 'lucide-react';
 import { PTPackageRecord, Branch } from './types';
 import { isTenantInzan } from './utils/inzanOrg';
+import { BulkScheduleCloner } from './components/BulkScheduleCloner';
 
 interface GymClass {
   id: string;
@@ -113,6 +115,7 @@ export default function CalendarView() {
   
   // Booking Dialog State
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
   const [bookClientId, setBookClientId] = useState('');
   const [bookTrainerId, setBookTrainerId] = useState('');
   const [bookBranch, setBookBranch] = useState<Branch | ''>('');
@@ -543,6 +546,15 @@ export default function CalendarView() {
           >
             <Plus className="h-4 w-4" />
             {language === 'ar' ? 'إضافة حصة جديدة' : 'Add Class / Event'}
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setIsCloneModalOpen(true)}
+            className="rounded-xl font-bold text-sm h-10 px-3 flex items-center gap-1.5 shadow-sm border-dashed"
+          >
+            <Copy className="h-4 w-4 text-primary" />
+            Clone Schedule
           </Button>
 
           {features?.ptPackages !== false && (
@@ -1668,6 +1680,13 @@ export default function CalendarView() {
           );
         })()}
       </Dialog>
+      <BulkScheduleCloner
+        open={isCloneModalOpen}
+        onOpenChange={setIsCloneModalOpen}
+        existingClasses={gymClasses}
+        currentUser={currentUser}
+      />
+
       {/* Strike Weekly Timetable Modal */}
       {isStrike && (
         <Dialog open={isStrikeTimetableOpen} onOpenChange={setIsStrikeTimetableOpen}>

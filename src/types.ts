@@ -125,6 +125,7 @@ export interface Coach {
   userId?: string; // links to users collection when coach has a login account
   phone?: string;
   isFitnessManager?: boolean;
+  specialties?: string[];
 }
 
 export interface PendingAccount {
@@ -720,6 +721,7 @@ export interface ClientPackage {
   freezeDaysUsed?: number; // Cumulative days frozen against the package's freeze allowance
   subscriptionType?: 'new' | 'renew' | 'renewal' | 'upgrade' | 'wrongentry';
   isPendingConfirmation?: boolean;
+  price?: number;
   salesRepName?: string;
   trainerName?: string;
   createdBy?: string;

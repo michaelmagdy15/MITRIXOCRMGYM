@@ -13,9 +13,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Coffee, Lock, UserCheck, Search, Plus, Key, RefreshCw, XCircle, CheckCircle2, AlertCircle, Trash2, MapPin, ExternalLink, Boxes } from 'lucide-react';
+import { Coffee, Lock, UserCheck, Search, Plus, Key, RefreshCw, XCircle, CheckCircle2, AlertCircle, Trash2, MapPin, ExternalLink, Boxes, Receipt } from 'lucide-react';
 import { JuiceBarOrder, Locker, LockerRequest, GuestInvite } from './types';
 import { useSettings } from './contexts/SettingsContext';
+import { PettyCashRegister } from './components/PettyCashRegister';
 
 const DEFAULT_BRANCHES = ['Maxim Compound', 'Mivida Compound', 'Impact by Strike', 'Playa North Cost'];
 
@@ -41,11 +42,12 @@ export default function ClubOperations() {
       { id: 'kitchen_inventory', label: "Kitchen Inventory & Stock", icon: <Boxes className="h-4 w-4" />, requiredFeature: features.juiceBar !== false && features.kitchenInventory !== false },
       { id: 'lockers', label: useSmartLockers ? 'Smart Lockers (Hardware Bridge)' : 'Lockers & Smart Locks', icon: <Lock className="h-4 w-4" />, requiredFeature: useSmartLockers || features.locker !== false },
       { id: 'guests', label: 'Guest Invites & Leads', icon: <UserCheck className="h-4 w-4" />, requiredFeature: features.guestInvites !== false },
+      { id: 'petty_cash', label: 'Petty Cash & Expenses', icon: <Receipt className="h-4 w-4" />, requiredFeature: true },
     ];
     return list.filter(t => t.requiredFeature !== false);
   }, [features, juiceOrders.length, useSmartLockers]);
 
-  const [activeTab, setActiveTab] = useState<'juicebar' | 'kitchen_inventory' | 'lockers' | 'guests'>('juicebar');
+  const [activeTab, setActiveTab] = useState<'juicebar' | 'kitchen_inventory' | 'lockers' | 'guests' | 'petty_cash'>('juicebar');
 
   // Auto-transition if activeTab is disabled
   useEffect(() => {
@@ -601,6 +603,10 @@ export default function ClubOperations() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {activeTab === 'petty_cash' && (
+        <PettyCashRegister />
       )}
 
       {/* Approve Locker Request Dialog */}

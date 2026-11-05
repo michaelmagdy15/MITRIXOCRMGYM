@@ -19,6 +19,7 @@ import { db, auth, getTenantId } from './firebase';
 import { format, parseISO } from 'date-fns';
 import PayoutCalculator from './components/PayoutCalculator';
 import { FitnessAssessmentQueue } from './components/FitnessAssessmentQueue';
+import { GymPayrollHub } from './components/GymPayrollHub';
 
 export default function Coaches() {
   const { currentUser, canAccessSettings, ptPackageRecords, clients, payments, users, features, coaches, addCoach, updateCoach, deleteCoach, createPortalAccountForCoach } = useAppContext();
@@ -29,7 +30,7 @@ export default function Coaches() {
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   const [coachToDelete, setCoachToDelete] = useState<string | null>(null);
   const [editingCoach, setEditingCoach] = useState<Coach | null>(null);
-  const [activeCoachTab, setActiveCoachTab] = useState<'coaches' | 'assessments'>('coaches');
+  const [activeCoachTab, setActiveCoachTab] = useState<'coaches' | 'assessments' | 'payroll'>('coaches');
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -302,20 +303,26 @@ export default function Coaches() {
     <div className="space-y-4">
       {isInzan && (
         <Tabs value={activeCoachTab} onValueChange={(v: any) => setActiveCoachTab(v)} className="w-full">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-xl grid-cols-3">
             <TabsTrigger value="coaches" className="flex items-center gap-2">
               <Users className="w-4 h-4" /> Trainers & Coaches
             </TabsTrigger>
             <TabsTrigger value="assessments" className="flex items-center gap-2">
-              <Briefcase className="w-4 h-4" /> Assessment Triage Queue
+              <Briefcase className="w-4 h-4" /> Assessment Queue
+            </TabsTrigger>
+            <TabsTrigger value="payroll" className="flex items-center gap-2">
+              <DollarSign className="w-4 h-4" /> Monthly Payroll
             </TabsTrigger>
           </TabsList>
         </Tabs>
       )}
 
-      {isInzan && activeCoachTab === 'assessments' ? (
+      {activeCoachTab === 'assessments' ? (
         <FitnessAssessmentQueue currentUser={currentUser} coaches={coaches} />
+      ) : activeCoachTab === 'payroll' ? (
+        <GymPayrollHub coaches={coaches} onManageCoach={openManage} />
       ) : (
+
         <>
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold tracking-tight">Coach Management</h2>

@@ -241,3 +241,60 @@ export function parseDiscountValue(raw: string): number {
   if (!Number.isFinite(parsed)) return NaN;
   return parsed;
 }
+
+export interface ProrationDetails {
+  totalDays: number;
+  daysUsed: number;
+  daysRemaining: number;
+  prorationRatio: number;
+  proratedCredit: number;
+  isProrated: boolean;
+}
+
+/**
+ * Calculates exact proration credit for a package upgrade.
+ * Computes unused calendar days value against original purchase price.
+ */
+export function calculateProratedUpgradeCredit(
+  previousPrice: number,
+  startDateStr?: string | Date,
+  endDateStr?: string | Date,
+  upgradeDateStr?: string | Date
+): ProrationDetails {
+  if (!previousPrice || previousPrice <= 0 || !startDateStr || !endDateStr) {
+    return {
+      totalDays: 0,
+      daysUsed: 0,
+      daysRemaining: 0,
+      prorationRatio: 0,
+      proratedCredit: 0,
+      isProrated: false,
+    };
+  }
+
+  const start = new Date(startDateStr);
+  const end = new Date(endDateStr);
+  const now = upgradeDateStr ? new Date(upgradeDateStr) : new Date();
+
+  // Reset times to midnight for precise calendar day calculation
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
+
+  const MS_PER_DAY = 1000 * 60 * 60 * 24;
+  const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / MS_PER_DAY));
+  const daysUsed = Math.max(0, Math.min(totalDays, Math.round((now.getTime() - start.getTime()) / MS_PER_DAY)));
+  const daysRemaining = Math.max(0, totalDays - daysUsed);
+
+  const prorationRatio = daysRemaining / totalDays;
+  const proratedCredit = roundCurrency(previousPrice * prorationRatio);
+
+  return {
+    totalDays,
+    daysUsed,
+    daysRemaining,
+    prorationRatio,
+    proratedCredit,
+    isProrated: true,
+  };
+}

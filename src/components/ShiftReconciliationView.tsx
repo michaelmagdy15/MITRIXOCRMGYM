@@ -15,6 +15,7 @@ import {
 } from '../utils/shiftReconciliation';
 import { downloadFile } from '../utils/download';
 import { addAuditLog } from '../services/auditService';
+import { fetchExpenses } from '../services/expenseService';
 import { db } from '../firebase';
 import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { cleanData } from '../utils';
@@ -31,7 +32,8 @@ import {
   Calendar,
   Layers,
   FileCheck,
-  SendHorizontal
+  SendHorizontal,
+  Receipt
 } from 'lucide-react';
 
 interface ShiftReconciliationViewProps {
@@ -55,6 +57,22 @@ export function ShiftReconciliationView({ onClose }: ShiftReconciliationViewProp
   const [operationalNotes, setOperationalNotes] = useState<string>('');
   const [managerSignOffNotes, setManagerSignOffNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [shiftPettyCash, setShiftPettyCash] = useState<number>(0);
+
+  React.useEffect(() => {
+    fetchExpenses({
+      branch: selectedBranch,
+      startDate: shiftDate,
+      endDate: shiftDate,
+    })
+      .then((list) => {
+        const total = list.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+        setShiftPettyCash(total);
+      })
+      .catch((err) => {
+        console.warn('Failed to load shift expenses:', err);
+      });
+  }, [shiftDate, selectedBranch]);
 
   const isManagerOrAdmin =
     currentUser?.role === 'manager' ||
@@ -282,7 +300,12 @@ export function ShiftReconciliationView({ onClose }: ShiftReconciliationViewProp
             </div>
             <div>
               <div className="text-xs text-muted-foreground">System Expected</div>
-              <div className="font-bold text-sm">{report.system.cash.toLocaleString()} LE</div>
+              <div className="font-bold text-sm">{(report.system.cash - shiftPettyCash).toLocaleString()} LE</div>
+              {shiftPettyCash > 0 && (
+                <div className="text-[10px] text-rose-500 font-medium">
+                  (-{shiftPettyCash.toLocaleString()} LE petty cash out)
+                </div>
+              )}
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Declared Cash (LE)</Label>
@@ -296,16 +319,22 @@ export function ShiftReconciliationView({ onClose }: ShiftReconciliationViewProp
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Variance</div>
-              <Badge
-                variant="outline"
-                className={
-                  report.variance.cash === 0
-                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                    : 'bg-rose-500/10 text-rose-600 border-rose-500/20'
-                }
-              >
-                {report.variance.cash > 0 ? `+${report.variance.cash} LE` : `${report.variance.cash} LE`}
-              </Badge>
+              {(() => {
+                const effectiveExpectedCash = report.system.cash - shiftPettyCash;
+                const effectiveCashVariance = (parseFloat(declaredCash) || 0) - effectiveExpectedCash;
+                return (
+                  <Badge
+                    variant="outline"
+                    className={
+                      effectiveCashVariance === 0
+                        ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-600 border-rose-500/20'
+                    }
+                  >
+                    {effectiveCashVariance > 0 ? `+${effectiveCashVariance} LE` : `${effectiveCashVariance} LE`}
+                  </Badge>
+                );
+              })()}
             </div>
           </div>
 

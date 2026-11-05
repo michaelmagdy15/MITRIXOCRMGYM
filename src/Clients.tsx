@@ -45,7 +45,7 @@ import { resolvePaymentCategory } from './utils/paymentCategories';
 import { matchesPhoneSearch } from './utils/phoneUtils';
 import { scoreNameMatch } from './utils/fuzzyNameSearch';
 import { resolveUserDisplay } from './utils/resolveUserDisplay';
-import { calculatePricing, DiscountType, DiscountReason, formatCurrencyAmount } from './utils/pricing';
+import { calculatePricing, calculateProratedUpgradeCredit, DiscountType, DiscountReason, formatCurrencyAmount } from './utils/pricing';
 import PricingDiscountControls, { PricingControlsState, DEFAULT_PRICING_STATE, validateDiscountJustification } from './components/PricingDiscountControls';
 import { useCorporateCompanies, CorporateDealsManagerModal } from './components/CorporateDealsManager';
 import { NationalIdVerificationControl, CorporateDealSelector } from './components/NationalIdVerificationControl';
@@ -62,6 +62,7 @@ import { AdjustPackageDatesDialog, canOverridePackageDates } from './components/
 import { addAuditLog } from './services/auditService';
 import { resolveCoachAssignmentInfo, notifyCoachClientAssigned } from './services/transactionService';
 import { openClickToCallModal } from './services/clickToCallService';
+import { creditPoints } from './services/pointsService';
 import { ClientAuditLogs } from './components/ClientAuditLogs';
 import { canReassignMemberSalesRep, isFrontDeskUser, isSalesManagerUser } from './utils/permissions';
 import { validateMembershipEligibility, validateFreezeDurationLimits } from './utils/membershipRules';
@@ -454,6 +455,7 @@ export default function Clients() {
   const [newMemberLinked, setNewMemberLinked] = useState(false);
   const [newMemberGender, setNewMemberGender] = useState<'Male' | 'Female' | 'Other' | 'Prefer not to say'>('Male');
   const [newMemberCategory, setNewMemberCategory] = useState<'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults'>('Adults');
+  const [newMemberReferredBy, setNewMemberReferredBy] = useState('');
   // Walk-in enrollment states
   const [enrollInPackage, setEnrollInPackage] = useState(false);
   const [enrollPackageName, setEnrollPackageName] = useState('');
@@ -753,12 +755,33 @@ export default function Clients() {
         linkedAccount: newMemberLinked || undefined,
         gender: newMemberGender,
         memberCategory: newMemberCategory,
+        referredBy: newMemberReferredBy.trim() || undefined,
+        referredByName: newMemberReferredBy.trim() || undefined,
         nationalId: newMemberNationalId ? newMemberNationalId.trim() : undefined,
         nationalIdPhotoUrl: newMemberIdScanUrl || undefined,
         documents: initialDocs.length > 0 ? initialDocs : undefined,
         corporateCompanyId: selectedCorp?.id || undefined,
         corporateCompanyName: selectedCorp ? (selectedCorp.code || selectedCorp.name) : undefined,
       });
+
+      if (newMemberReferredBy.trim()) {
+        const refQuery = newMemberReferredBy.trim().toLowerCase();
+        const referringMember = clients.find(c => 
+          c.id === newMemberReferredBy.trim() || 
+          c.memberId === newMemberReferredBy.trim() || 
+          (c.name && c.name.toLowerCase() === refQuery) ||
+          (c.phone && c.phone === newMemberReferredBy.trim())
+        );
+        if (referringMember) {
+          creditPoints(
+            referringMember.id,
+            100,
+            'referral',
+            `Referral loyalty bonus: referred new member ${nameCheck.normalized || newMemberName.trim()}`,
+            currentUser?.id || 'system'
+          ).catch(err => console.warn('Referral reward failed:', err));
+        }
+      }
 
       if (enrollInPackage && targetClientId) {
         const rawPkg = packages.find(p => p.name === enrollPackageName);
@@ -830,6 +853,7 @@ export default function Clients() {
       setNewMemberLinked(false);
       setNewMemberGender('Male');
       setNewMemberCategory('Adults');
+      setNewMemberReferredBy('');
       setNewMemberNationalId('');
       setNewMemberIdScanUrl('');
       setNewMemberCorporateId('');
@@ -888,7 +912,14 @@ export default function Clients() {
     
     const prevActive = (client.packages || []).find(p => p.status === 'Active');
     const prevSysPkg = prevActive ? packages.find(p => p.name === prevActive.packageName) : null;
-    const upgradeCredit = prevSysPkg ? prevSysPkg.price : 0;
+    const prevPrice = prevSysPkg ? prevSysPkg.price : (prevActive?.price || 0);
+    const proration = calculateProratedUpgradeCredit(
+      prevPrice,
+      prevActive?.startDate,
+      prevActive?.endDate,
+      upgradeStartDate
+    );
+    const upgradeCredit = proration.isProrated ? proration.proratedCredit : prevPrice;
     const grossAmount = pkg.price;
 
     const clientAssignedRep = client.assignedTo || client.salesRep;
@@ -3159,6 +3190,15 @@ export default function Clients() {
                       <SelectItem value="Adults" className="rounded-xl py-3 px-4">Adults</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Referred By (Optional)</Label>
+                  <Input
+                    placeholder="Referring member name, ID, or phone"
+                    value={newMemberReferredBy}
+                    onChange={(e) => setNewMemberReferredBy(e.target.value)}
+                    className="h-14 rounded-2xl bg-background/50 border-white/10 px-5 text-base"
+                  />
                 </div>
               </div>
 
@@ -7149,25 +7189,58 @@ export default function Clients() {
                           );
                         })()}
 
-                        <PricingDiscountControls
-                          grossAmount={(() => {
-                            const pkg = packages.find(p => p.name === upgradePkgName);
-                            return pkg?.price || 0;
-                          })()}
-                          upgradeCredit={(() => {
-                            const pkg = packages.find(p => p.name === upgradePkgName);
-                            const upgradeClient = upgradeDialogClientId ? clients.find(c => c.id === upgradeDialogClientId) : null;
-                            const currentActivePkg = upgradeClient?.packages?.find(p => p.status === 'Active');
-                            const currentSysPkg = currentActivePkg ? packages.find(p => p.name === currentActivePkg.packageName) : null;
-                            return currentSysPkg ? currentSysPkg.price : 0;
-                          })()}
-                          value={upgradePricing}
-                          onChange={setUpgradePricing}
-                          canApplyDiscount={canApplyDiscount}
-                          showAmountPaid
-                          showReason
-                          idPrefix="upgrade"
-                        />
+                        {(() => {
+                          const upgradeClient = upgradeDialogClientId ? clients.find(c => c.id === upgradeDialogClientId) : null;
+                          const currentActivePkg = upgradeClient?.packages?.find(p => p.status === 'Active');
+                          const currentSysPkg = currentActivePkg ? packages.find(p => p.name === currentActivePkg.packageName) : null;
+                          const prevPrice = currentSysPkg ? currentSysPkg.price : (currentActivePkg?.price || 0);
+                          const proration = calculateProratedUpgradeCredit(
+                            prevPrice,
+                            currentActivePkg?.startDate,
+                            currentActivePkg?.endDate,
+                            upgradeStartDate
+                          );
+
+                          return (
+                            <>
+                              {proration.isProrated && proration.totalDays > 0 && (
+                                <div className="p-3 bg-muted/60 rounded-xl border border-border/80 text-xs space-y-1.5 mb-2">
+                                  <div className="flex items-center justify-between font-semibold">
+                                    <span className="text-foreground">Proration Calculation</span>
+                                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                                      {Math.round(proration.prorationRatio * 100)}% remaining
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-2 pt-1 text-[11px] text-muted-foreground">
+                                    <div>Total: <span className="font-semibold text-foreground">{proration.totalDays}d</span></div>
+                                    <div>Used: <span className="font-semibold text-foreground">{proration.daysUsed}d</span></div>
+                                    <div>Remaining: <span className="font-semibold text-foreground">{proration.daysRemaining}d</span></div>
+                                  </div>
+                                  <div className="flex items-center justify-between pt-1.5 border-t border-border/50 text-[11px]">
+                                    <span className="text-muted-foreground">Prorated Credit Applied:</span>
+                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                      -{formatCurrencyAmount(proration.proratedCredit)}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                              <PricingDiscountControls
+                                grossAmount={(() => {
+                                  const pkg = packages.find(p => p.name === upgradePkgName);
+                                  return pkg?.price || 0;
+                                })()}
+                                upgradeCredit={proration.isProrated ? proration.proratedCredit : prevPrice}
+                                value={upgradePricing}
+                                onChange={setUpgradePricing}
+                                canApplyDiscount={canApplyDiscount}
+                                showAmountPaid
+                                showReason
+                                idPrefix="upgrade"
+                              />
+                            </>
+                          );
+                        })()}
                       </div>
                     );
                   }

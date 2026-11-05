@@ -55,6 +55,7 @@ export interface PointsTransaction {
     | 'cash_transfer_out'
     | 'cash_transfer_in'
     | 'service_redemption'
+    | 'referral'
     | 'juice_bar';
   description: string;
   referenceId?: string;
