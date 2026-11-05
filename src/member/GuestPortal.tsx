@@ -753,7 +753,79 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
           </Badge>
         </div>
 
-        {/* 1. GOLDEN PACKAGE — FULL-BLEED VIP PASS CARD */}
+        {/* 1. VISUAL 3-STEP PROGRESSION ROADMAP (Programs 1 -> 2 -> 3) */}
+        {youthCorePrograms.length > 0 && (
+          <div className="rounded-3xl bg-card border p-4 space-y-3.5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-widest text-primary block">
+                  STEP-BY-STEP PROGRESSION
+                </span>
+                <h3 className="text-sm font-black uppercase text-foreground">
+                  Youth Boxing Pathway (Programs 1 → 3)
+                </h3>
+              </div>
+              <Badge variant="outline" className="text-[9px] font-bold border-zinc-700 text-muted-foreground">
+                Complex / Maxim
+              </Badge>
+            </div>
+
+            <div className="relative pl-4 space-y-3 before:content-[''] before:absolute before:left-[15px] before:top-4 before:bottom-4 before:w-0.5 before:bg-gradient-to-b before:from-emerald-500 before:via-sky-500 before:to-purple-500">
+              {youthCorePrograms.map((pkg, idx) => {
+                const stepColors = [
+                  { ring: 'bg-emerald-500 text-black', tag: 'STEP 01 • NEW MEMBER WELCOME', text: 'text-emerald-400' },
+                  { ring: 'bg-sky-500 text-black', tag: 'STEP 02 • 2-MONTH FOUNDATION', text: 'text-sky-400' },
+                  { ring: 'bg-purple-500 text-white', tag: 'STEP 03 • 3-MONTH PRO LEVEL', text: 'text-purple-400' },
+                ][idx] || { ring: 'bg-primary text-white', tag: `STEP 0${idx + 1}`, text: 'text-primary' };
+
+                return (
+                  <div
+                    key={pkg.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedPackage(pkg)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(pkg);
+                    }}
+                    className="relative flex items-center gap-3 bg-muted/30 hover:bg-muted/60 border border-border/70 rounded-2xl p-3 transition-all cursor-pointer active:scale-[0.98]"
+                  >
+                    <div className={`-ml-5 h-7 w-7 rounded-full font-black text-[10px] flex items-center justify-center shrink-0 shadow-md ring-4 ring-card ${stepColors.ring}`}>
+                      0{idx + 1}
+                    </div>
+                    <div className="h-14 w-14 rounded-xl overflow-hidden shrink-0 border border-white/10 bg-zinc-900">
+                      <img
+                        src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
+                        alt={pkg.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-[9px] font-black uppercase tracking-wider block ${stepColors.text}`}>
+                        {stepColors.tag}
+                      </span>
+                      <h4 className="font-black text-xs uppercase text-foreground truncate">
+                        {formatCleanPackageName(pkg.name)}
+                      </h4>
+                      <p className="text-[10px] text-muted-foreground font-semibold">
+                        {pkg.sessions} Sessions • {formatValidityLabel(pkg)}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-black text-sm text-foreground block">
+                        {pkg.price.toLocaleString()}
+                      </span>
+                      <span className="text-[9px] text-primary font-extrabold uppercase flex items-center justify-end">
+                        {t('payments.currency_le')} <ChevronRight className="h-3 w-3" />
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 2. GOLDEN PACKAGE — ALL-IN-ONE VALUE BUNDLE */}
         {youthGoldenPkg && (
           <div
             role="button"
@@ -831,78 +903,6 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   Select Pass <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
                 </Button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* 2. VISUAL 3-STEP PROGRESSION ROADMAP (Programs 1 -> 2 -> 3) */}
-        {youthCorePrograms.length > 0 && (
-          <div className="rounded-3xl bg-card border p-4 space-y-3.5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-primary block">
-                  STEP-BY-STEP PROGRESSION
-                </span>
-                <h3 className="text-sm font-black uppercase text-foreground">
-                  Or Start Individual Programs (1 → 3)
-                </h3>
-              </div>
-              <Badge variant="outline" className="text-[9px] font-bold border-zinc-700 text-muted-foreground">
-                Complex / Maxim
-              </Badge>
-            </div>
-
-            <div className="relative pl-4 space-y-3 before:content-[''] before:absolute before:left-[15px] before:top-4 before:bottom-4 before:w-0.5 before:bg-gradient-to-b before:from-emerald-500 before:via-sky-500 before:to-purple-500">
-              {youthCorePrograms.map((pkg, idx) => {
-                const stepColors = [
-                  { ring: 'bg-emerald-500 text-black', tag: 'STEP 01 • NEW MEMBER WELCOME', text: 'text-emerald-400' },
-                  { ring: 'bg-sky-500 text-black', tag: 'STEP 02 • 2-MONTH FOUNDATION', text: 'text-sky-400' },
-                  { ring: 'bg-purple-500 text-white', tag: 'STEP 03 • 3-MONTH PRO LEVEL', text: 'text-purple-400' },
-                ][idx] || { ring: 'bg-primary text-white', tag: `STEP 0${idx + 1}`, text: 'text-primary' };
-
-                return (
-                  <div
-                    key={pkg.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelectedPackage(pkg)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') setSelectedPackage(pkg);
-                    }}
-                    className="relative flex items-center gap-3 bg-muted/30 hover:bg-muted/60 border border-border/70 rounded-2xl p-3 transition-all cursor-pointer active:scale-[0.98]"
-                  >
-                    <div className={`-ml-5 h-7 w-7 rounded-full font-black text-[10px] flex items-center justify-center shrink-0 shadow-md ring-4 ring-card ${stepColors.ring}`}>
-                      0{idx + 1}
-                    </div>
-                    <div className="h-14 w-14 rounded-xl overflow-hidden shrink-0 border border-white/10 bg-zinc-900">
-                      <img
-                        src={pkg.imageUrl || getPackageImage(pkg.name, pkg.sessions)}
-                        alt={pkg.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className={`text-[9px] font-black uppercase tracking-wider block ${stepColors.text}`}>
-                        {stepColors.tag}
-                      </span>
-                      <h4 className="font-black text-xs uppercase text-foreground truncate">
-                        {formatCleanPackageName(pkg.name)}
-                      </h4>
-                      <p className="text-[10px] text-muted-foreground font-semibold">
-                        {pkg.sessions} Sessions • {formatValidityLabel(pkg)}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="font-black text-sm text-foreground block">
-                        {pkg.price.toLocaleString()}
-                      </span>
-                      <span className="text-[9px] text-primary font-extrabold uppercase flex items-center justify-end">
-                        {t('payments.currency_le')} <ChevronRight className="h-3 w-3" />
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         )}
@@ -1746,10 +1746,19 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
             {!isFilterActive && (storefrontConfig?.sections && storefrontConfig.sections.length > 0 ? (
               (() => {
                 const list = [...storefrontConfig.sections];
+                const defaultTypeRank = (type: string) => (type === 'packages-adults' ? 1 : type === 'banner' ? 2 : type === 'packages-kids' ? 3 : 4);
                 return list
                   .filter(sec => sec.enabled !== false)
-                  .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                  .sort((a, b) => ((a.order ?? defaultTypeRank(a.type)) - (b.order ?? defaultTypeRank(b.type))))
                   .map((section) => {
+                  if (section.type === 'packages-adults' && displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults' || selectedCategoryFilter === 'pt')) {
+                    return (
+                      <React.Fragment key={section.id}>
+                        {renderAdultSection(section.title, section.subtitle, section.imageUrl)}
+                      </React.Fragment>
+                    );
+                  }
+
                   if (section.type === 'packages-kids' && displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids' || selectedCategoryFilter === 'juniors')) {
                     return (
                       <React.Fragment key={section.id}>
@@ -1761,14 +1770,6 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   if (section.type === 'packages-juniors') {
                     // Consolidated into the structured Youth Academy section above so packages are never duplicated
                     return null;
-                  }
-
-                  if (section.type === 'packages-adults' && displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults' || selectedCategoryFilter === 'pt')) {
-                    return (
-                      <React.Fragment key={section.id}>
-                        {renderAdultSection(section.title, section.subtitle, section.imageUrl)}
-                      </React.Fragment>
-                    );
                   }
 
                   if (section.type === 'banner' && selectedCategoryFilter === 'all') {
@@ -1805,12 +1806,12 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
               })()
             ) : (
               <>
-                {/* Fallback to default sections if config has none */}
-                {displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids' || selectedCategoryFilter === 'juniors') &&
-                  renderYouthAcademySection()
+                {/* 1. ADULT PACKAGES (Featured First for High Intent) */}
+                {displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults' || selectedCategoryFilter === 'pt') &&
+                  renderAdultSection()
                 }
 
-                {/* 3. IMPACT SISTER COMPANY */}
+                {/* 2. IMPACT SISTER COMPANY */}
                 {selectedCategoryFilter === 'all' && (
                   <div className="px-4 my-6">
                     <div className="rounded-3xl overflow-hidden relative shadow-xl border">
@@ -1837,9 +1838,9 @@ export default function GuestPortal({ onSwitchToCRM, isLeadPending = false, clie
                   </div>
                 )}
 
-                {/* 4. ADULT PACKAGES */}
-                {displayAdults.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'adults' || selectedCategoryFilter === 'pt') &&
-                  renderAdultSection()
+                {/* 3. YOUTH BOXING ACADEMY (KIDS & JUNIORS) */}
+                {displayKids.length > 0 && (selectedCategoryFilter === 'all' || selectedCategoryFilter === 'kids' || selectedCategoryFilter === 'juniors') &&
+                  renderYouthAcademySection()
                 }
               </>
             ))}

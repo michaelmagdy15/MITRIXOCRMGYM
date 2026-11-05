@@ -17,7 +17,7 @@ export const SALES_MEMBERS = [
   'Mustafa Mahmoud',
   'Omar Ehab',
   'Khaled FK',
-  'Sama'
+  'Sama Mahmoud'
 ];
 
 export const ASSIGNABLE_ROLES = [
@@ -147,12 +147,12 @@ export const SALES_NAME_MAPPING: Record<string, string> = {
   'khaled': 'Khaled FK',
   'khaledfk3000': 'Khaled FK',
 
-  // ---- Sama ----
-  'Sama': 'Sama',
-  'sama': 'Sama',
-  'Sama Mahmoud': 'Sama',
-  'sama mahmoud': 'Sama',
-  'olaessam307': 'Sama',
+  // ---- Sama Mahmoud (Rep) ----
+  'Sama': 'Sama Mahmoud',
+  'sama': 'Sama Mahmoud',
+  'Sama Mahmoud': 'Sama Mahmoud',
+  'sama mahmoud': 'Sama Mahmoud',
+  'olaessam307': 'Sama Mahmoud',
 
   // ---- Legacy / other names ----
   'Abdallah Atef': 'Abdallah Atef',

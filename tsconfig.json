@@ -49,6 +49,7 @@
     "dist",
     "dist-server",
     "scratch",
+    "scripts",
     "**/*.test.ts"
   ]
 }

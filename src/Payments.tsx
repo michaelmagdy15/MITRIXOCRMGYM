@@ -274,7 +274,8 @@ export default function Payments() {
       users.filter(u => {
         if (u.status === 'nonworking') return false;
         const role = (u.role || '').trim().toLowerCase();
-        return role === 'admin' || role === 'manager';
+        // Admins only: admin, super_admin, crm_admin, plus manager (e.g. Atef Strike)
+        return ['admin', 'super_admin', 'crm_admin', 'manager'].includes(role);
       }),
     [users]
   );
@@ -288,6 +289,7 @@ export default function Payments() {
           if (isInzan) {
             return isAssignableSalesUser(u);
           }
+          // Sales reps only: rep, sales_rep, sales, plus manager (Atef Strike)
           return ['rep', 'sales_rep', 'sales', 'manager'].includes(role);
         })
         .sort((a, b) => (a.status === 'working' ? -1 : 1) - (b.status === 'working' ? -1 : 1)),
@@ -329,8 +331,7 @@ export default function Payments() {
   useEffect(() => {
     if (adminUsers.length > 0 && (!recordedById || !adminUsers.some(u => u.id === recordedById))) {
       const currentAdmin = adminUsers.find(u => u.id === currentUser?.id);
-      const samaAdmin = adminUsers.find(u => u.name?.toLowerCase().includes('sama'));
-      setRecordedById(currentAdmin?.id || samaAdmin?.id || adminUsers[0]?.id || '');
+      setRecordedById(currentAdmin?.id || adminUsers[0]?.id || '');
     }
   }, [adminUsers, currentUser?.id, recordedById]);
 
@@ -751,8 +752,7 @@ export default function Payments() {
       setStartDate(format(new Date(), 'yyyy-MM-dd'));
       setEndDate('');
       const currentAdmin = adminUsers.find(u => u.id === currentUser?.id);
-      const samaAdmin = adminUsers.find(u => u.name?.toLowerCase().includes('sama'));
-      setRecordedById(currentAdmin?.id || samaAdmin?.id || adminUsers[0]?.id || '');
+      setRecordedById(currentAdmin?.id || adminUsers[0]?.id || '');
       setSalesName('');
       setDiscountType('');
       setDiscountValue('');
