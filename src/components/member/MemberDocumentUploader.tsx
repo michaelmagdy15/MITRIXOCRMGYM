@@ -3,6 +3,7 @@ import { Client, ClientDocument } from '../../types';
 import { storage, getTenantId } from '../../firebase';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { safeFormatDate } from '../../utils/dateUtils';
+import { compressDocumentImage, blobToDataUrl } from '../../utils/imageUtils';
 import { addAuditLog } from '../../services/auditService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -127,15 +128,24 @@ export function MemberDocumentUploader({
 
       if (uploadMode === 'device' && selectedFile) {
         const file = selectedFile;
+        // Compress image files down to crisp ~150-300KB JPEGs
+        const preparedBlob = await compressDocumentImage(file);
         const safeName = file.name.replace(/[^\w.-]+/g, '_').slice(-80);
         const fileRef = storageRef(
           storage,
           `tenants/${getTenantId()}/member_documents/${client.id}/${crypto.randomUUID()}_${safeName}`
         );
-        await uploadBytes(fileRef, file, {
-          contentType: file.type || 'application/octet-stream',
-        });
-        resolvedUrl = await getDownloadURL(fileRef);
+
+        try {
+          await uploadBytes(fileRef, preparedBlob, {
+            contentType: preparedBlob.type || file.type || 'application/octet-stream',
+          });
+          resolvedUrl = await getDownloadURL(fileRef);
+        } catch (storageError) {
+          console.warn('[MemberDocumentUploader] Storage upload failed, falling back to local compressed data URL:', storageError);
+          // Zero-failure fallback: save compressed DataURL directly so document is never lost
+          resolvedUrl = await blobToDataUrl(preparedBlob);
+        }
       }
 
       const newDoc: ClientDocument = {

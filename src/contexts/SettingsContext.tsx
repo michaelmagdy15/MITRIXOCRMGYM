@@ -130,7 +130,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
     advancedPermissionMatrix: true,
     splitTenderPayments: true,
     webcamPhotoCapture: true,
-    turnstileGateControl: isDefaultInzan,
+    turnstileGateControl: false,
     repLocking: isDefaultInzan,
     corporateDiscounts: isDefaultInzan,
     callCenter: true,

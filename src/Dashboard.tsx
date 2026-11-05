@@ -243,32 +243,35 @@ export default function Dashboard() {
     return contextPayments.filter(p => isPaymentInRevenueScope(p, revenueScope));
   }, [contextPayments, isInzan, revenueScope]);
 
-  const pendingConfirmationCount = React.useMemo(() => {
-    let count = 0;
-    allClients.forEach(client => {
-      if (client.packages) {
-        client.packages.forEach(pkg => {
-          if (pkg.isPendingConfirmation === true) {
-            count++;
-          }
-        });
+  const { frozenMembers, frozenCount, unconfirmedClientsList, pendingConfirmationCount } = React.useMemo(() => {
+    const frozen: typeof allClients = [];
+    const unconfirmed: typeof allClients = [];
+    let pendingCount = 0;
+
+    for (const c of allClients) {
+      if (c.status === 'Hold') {
+        frozen.push(c);
       }
-    });
-    return count;
-  }, [allClients]);
+      if (Array.isArray(c.packages)) {
+        let hasPending = false;
+        for (const pkg of c.packages) {
+          if (pkg.isPendingConfirmation === true) {
+            pendingCount++;
+            hasPending = true;
+          }
+        }
+        if (hasPending) {
+          unconfirmed.push(c);
+        }
+      }
+    }
 
-  const unconfirmedClientsList = React.useMemo(() => {
-    return allClients.filter(client =>
-      Array.isArray(client.packages) && client.packages.some(pkg => pkg.isPendingConfirmation === true)
-    );
-  }, [allClients]);
-
-  const frozenCount = React.useMemo(() => {
-    return allClients.filter(c => c.status === 'Hold').length;
-  }, [allClients]);
-
-  const frozenMembers = React.useMemo(() => {
-    return allClients.filter(c => c.status === 'Hold');
+    return {
+      frozenMembers: frozen,
+      frozenCount: frozen.length,
+      unconfirmedClientsList: unconfirmed,
+      pendingConfirmationCount: pendingCount,
+    };
   }, [allClients]);
 
   const handleUnfreeze = async (clientId: string, clientName: string) => {
@@ -474,7 +477,12 @@ export default function Dashboard() {
   const payments = React.useMemo(() => {
     let filtered = allPayments;
     if (selectedBranch !== 'all') {
-      const branchClientIds = new Set(allClients.filter(c => c.branch === selectedBranch).map(c => c.id));
+      const branchClientIds = new Set<string>();
+      for (const c of allClients) {
+        if (c.branch === selectedBranch) {
+          branchClientIds.add(c.id);
+        }
+      }
       filtered = filtered.filter(p => {
         const pBranch = resolvePaymentBranch(p, clientMap.get(p.clientId));
         return pBranch === selectedBranch || branchClientIds.has(p.clientId);
@@ -1237,12 +1245,12 @@ export default function Dashboard() {
         
         <Card {...statCardProps('leads')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.active_leads')}</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm sm:text-base font-semibold text-foreground/90">{t('dashboard.active_leads')}</CardTitle>
+            <Users className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalLeads}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight">{totalLeads}</div>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground mt-1">
               {t('dashboard.needs_follow_up')}
             </p>
           </CardContent>
@@ -1250,12 +1258,12 @@ export default function Dashboard() {
         
         <Card {...statCardProps('expiring')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.expiring_soon')}</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <CardTitle className="text-sm sm:text-base font-semibold text-foreground/90">{t('dashboard.expiring_soon')}</CardTitle>
+            <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{nearlyExpired}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-amber-600">{nearlyExpired}</div>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground mt-1">
               {t('dashboard.ending_30d')}
             </p>
           </CardContent>
@@ -1263,12 +1271,12 @@ export default function Dashboard() {
 
         <Card {...statCardProps('expired')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.total_expired')}</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <CardTitle className="text-sm sm:text-base font-semibold text-foreground/90">{t('dashboard.total_expired')}</CardTitle>
+            <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">{expired}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-destructive">{expired}</div>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground mt-1">
               {t('dashboard.expired_memberships')}
             </p>
           </CardContent>
@@ -1276,30 +1284,30 @@ export default function Dashboard() {
         
         <Card {...statCardProps('birthdays')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.upcoming_birthdays')}</CardTitle>
-            <Gift className="h-4 w-4 text-pink-500" />
+            <CardTitle className="text-sm sm:text-base font-semibold text-foreground/90">{t('dashboard.upcoming_birthdays')}</CardTitle>
+            <Gift className="h-4 w-4 sm:h-5 sm:w-5 text-pink-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{upcomingBirthdays.length}</div>
-            <p className="text-xs text-muted-foreground">{t('dashboard.next_7_days')}</p>
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight">{upcomingBirthdays.length}</div>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground mt-1">{t('dashboard.next_7_days')}</p>
           </CardContent>
         </Card>
 
         <Card {...statCardProps('new')}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.new_members')}</CardTitle>
-            <UserPlus className="h-4 w-4 text-emerald-500" />
+            <CardTitle className="text-sm sm:text-base font-semibold text-foreground/90">{t('dashboard.new_members')}</CardTitle>
+            <UserPlus className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">{newMembersCount}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-600">{newMembersCount}</div>
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground mt-1">
               {t('dashboard.joined_in')} {format(selectedMonth, 'MMM yyyy')}
             </p>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setStatDrilldown('returning'); }}
               onKeyDown={(e) => e.stopPropagation()}
-              className="mt-3 pt-3 border-t w-full flex justify-between text-xs text-muted-foreground hover:text-foreground transition-colors"
+              className="mt-3 pt-3 border-t w-full flex justify-between text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <span>{t('dashboard.returning_active')}</span>
               <span className="font-semibold text-foreground">{returningMembersCount}</span>
@@ -1310,12 +1318,12 @@ export default function Dashboard() {
         {features?.frozenMembers === true && (
           <Card {...statCardProps('frozen')}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Frozen Members</CardTitle>
-              <Snowflake className="h-4 w-4 text-sky-500" />
+              <CardTitle className="text-sm sm:text-base font-semibold text-foreground/90">Frozen Members</CardTitle>
+              <Snowflake className="h-4 w-4 sm:h-5 sm:w-5 text-sky-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-sky-600">{frozenCount}</div>
-              <p className="text-xs text-muted-foreground">Currently paused packages</p>
+              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-sky-600">{frozenCount}</div>
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground mt-1">Currently paused packages</p>
             </CardContent>
           </Card>
         )}
@@ -1323,12 +1331,12 @@ export default function Dashboard() {
         {features?.unconfirmedMemberships === true && (
           <Card {...statCardProps('unconfirmed')}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Unconfirmed Queue</CardTitle>
-              <Clock className="h-4 w-4 text-amber-500" />
+              <CardTitle className="text-sm sm:text-base font-semibold text-foreground/90">Unconfirmed Queue</CardTitle>
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-amber-600">{pendingConfirmationCount}</div>
-              <p className="text-xs text-muted-foreground">Pending confirmation</p>
+              <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-amber-600">{pendingConfirmationCount}</div>
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground mt-1">Pending confirmation</p>
             </CardContent>
           </Card>
         )}

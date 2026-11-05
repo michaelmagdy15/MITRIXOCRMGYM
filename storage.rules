@@ -97,7 +97,7 @@ service firebase.storage {
                        || request.resource.contentType == 'application/pdf'
                        || request.resource.contentType == 'application/msword'
                        || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      allow delete: if false;
+      allow delete: if isTenantStaff(tenantId);
     }
 
     // Master class profile images — tenant-scoped, images only.
@@ -107,7 +107,7 @@ service firebase.storage {
       allow create, update: if isTenantStaff(tenantId)
                    && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
-      allow delete: if false;
+      allow delete: if isTenantStaff(tenantId);
     }
 
     // Package images (Packages.tsx upload path) — images only, staff/admin/owner.

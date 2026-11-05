@@ -712,6 +712,7 @@ export interface ClientPackage {
   sessionsTotal?: number | 'unlimited';
   totalSessions?: number | 'unlimited';
   sessionsRemaining?: number | 'unlimited';
+  sessionsUsed?: number;
   status: 'Active' | 'Expired' | 'Cancelled' | 'Pending' | 'Hold' | 'Frozen';
   isOnHold?: boolean; // True if package is temporarily paused
   holdReason?: string; // Reason for holding the package

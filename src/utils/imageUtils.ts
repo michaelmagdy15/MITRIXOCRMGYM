@@ -60,3 +60,67 @@ export async function compressImage(file: File): Promise<Blob> {
     img.src = objectUrl;
   });
 }
+
+/**
+ * Compresses document images (ID cards, waivers, contracts) ensuring text remains sharp
+ * while reducing large 5-15MB camera uploads down to lightweight ~150KB-300KB JPEGs.
+ */
+export async function compressDocumentImage(file: File, maxPx = 1600): Promise<Blob> {
+  if (!file.type.startsWith('image/')) {
+    return file;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      let { width, height } = img;
+      if (width > maxPx || height > maxPx) {
+        if (width > height) {
+          height = Math.round((height / width) * maxPx);
+          width = maxPx;
+        } else {
+          width = Math.round((width / height) * maxPx);
+          height = maxPx;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          resolve(blob || file);
+        },
+        'image/jpeg',
+        0.82
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
+export function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}

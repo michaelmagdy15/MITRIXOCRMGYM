@@ -1294,7 +1294,7 @@ function AppContent() {
         {/* Main Content Pane */}
         <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
           {/* Header */}
-          <header className="border-b bg-card/95 backdrop-blur-xl shadow-sm flex items-center justify-between px-3 sm:px-6 flex-shrink-0 pt-[var(--safe-top)] min-h-[calc(3.75rem+var(--safe-top))]">
+          <header className="border-b bg-card/95 backdrop-blur-xl shadow-sm flex items-center justify-between px-3 sm:px-6 flex-shrink-0 pt-[var(--safe-top)] ps-[max(0.75rem,var(--safe-left))] pe-[max(0.75rem,var(--safe-right))] min-h-[calc(3.75rem+var(--safe-top))]">
             <div className="flex items-center space-x-4 flex-1">
               {/* Hamburger button on mobile */}
               <Button 
@@ -1455,7 +1455,7 @@ function AppContent() {
           </div>
 
           {/* Main scrollable viewport */}
-          <main className="flex-grow overflow-y-auto p-3 sm:p-4 lg:p-6 xl:p-8 min-w-0">
+          <main className="flex-grow overflow-y-auto p-3 sm:p-4 lg:p-6 xl:p-8 min-w-0 pb-[max(1rem,var(--safe-bottom))] ps-[max(0.75rem,var(--safe-left))] pe-[max(0.75rem,var(--safe-right))]">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 sm:space-y-6">
             <TabsContent value="notifications" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
               <NotificationsPage />

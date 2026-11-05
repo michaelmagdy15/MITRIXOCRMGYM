@@ -1745,15 +1745,17 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         <div className="flex flex-wrap items-center gap-2">
           {!isKiosk && (
             <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsTurnstileConfigOpen(true)}
-                className="gap-1.5 font-medium border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
-              >
-                <Unlock className="w-4 h-4" />
-                {turnstileConfig.enabled ? 'Turnstile: Online' : 'Turnstile Gate'}
-              </Button>
+              {features?.turnstileGateControl === true && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsTurnstileConfigOpen(true)}
+                  className="gap-1.5 font-medium border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+                >
+                  <Unlock className="w-4 h-4" />
+                  {turnstileConfig.enabled ? 'Turnstile: Online' : 'Turnstile Gate'}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 size="sm"

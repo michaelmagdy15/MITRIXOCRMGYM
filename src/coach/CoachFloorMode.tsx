@@ -1170,18 +1170,60 @@ export default function CoachFloorMode({ initialClient, initialSession, onExit }
         !activeSession ||
         (!(activeSession as any).deductedOnBook && activeSession.status === 'Scheduled');
 
-      const currentRemaining = selectedClient.sessionsRemaining ?? selectedClient.ptSessionsRemaining;
-      if (shouldDeductSession && typeof currentRemaining === 'number' && currentRemaining > 0) {
-        const nextBal = currentRemaining - 1;
-        await updateDoc(doc(db, 'clients', selectedClient.id), {
-          sessionsRemaining: nextBal
+      if (shouldDeductSession) {
+        let pkgDeducted = false;
+        const currentPackages = Array.isArray(selectedClient.packages) ? [...selectedClient.packages] : [];
+        const updatedPackages = currentPackages.map(pkg => {
+          if (!pkgDeducted && pkg.status === 'Active' && (pkg.type === 'PT' || (pkg.packageName && /\bpt\b/i.test(pkg.packageName)))) {
+            const rem = typeof pkg.sessionsRemaining === 'number' ? pkg.sessionsRemaining : 0;
+            if (rem > 0) {
+              pkgDeducted = true;
+              return {
+                ...pkg,
+                sessionsRemaining: Math.max(0, rem - 1),
+                sessionsUsed: (pkg.sessionsUsed || 0) + 1
+              };
+            }
+          }
+          return pkg;
+        });
+
+        const currentRem = typeof selectedClient.sessionsRemaining === 'number' 
+          ? selectedClient.sessionsRemaining 
+          : (typeof selectedClient.ptSessionsRemaining === 'number' ? selectedClient.ptSessionsRemaining : 0);
+        
+        const nextRem = Math.max(0, currentRem - 1);
+        const updates: any = {
+          sessionsRemaining: nextRem,
+          lastWorkoutAt: new Date().toISOString()
+        };
+        if (typeof selectedClient.ptSessionsRemaining === 'number') {
+          updates.ptSessionsRemaining = Math.max(0, selectedClient.ptSessionsRemaining - 1);
+        }
+        if (pkgDeducted) {
+          updates.packages = updatedPackages;
+        }
+
+        await updateDoc(doc(db, 'clients', selectedClient.id), updates);
+
+        // Also record an attendance record so front-desk sees the floor workout
+        await addDoc(collection(db, 'attendances'), {
+          clientId: selectedClient.id,
+          clientName: selectedClient.name || 'Member',
+          date: new Date().toISOString(),
+          type: 'PT',
+          serviceName: 'Personal Training (Floor Mode)',
+          coachId: currentUser.id,
+          coachName: currentUser.name || 'Coach',
+          branch: selectedClient.branch || 'Main',
+          status: 'Attended'
         });
 
         await addDoc(collection(db, 'auditLogs'), {
           action: 'UPDATE',
           entityType: 'CLIENT',
           entityId: selectedClient.id,
-          details: `Floor Mode: 1 PT session deducted for ${selectedClient.name} (${durationMins}m, ${totalVolume}kg volume). Remaining: ${nextBal}`,
+          details: `Floor Mode: 1 PT session deducted for ${selectedClient.name} (${durationMins}m, ${totalVolume}kg volume). Remaining: ${nextRem}`,
           timestamp: new Date().toISOString(),
           userId: currentUser.id,
           userName: currentUser.name || 'Coach'
