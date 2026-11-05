@@ -2261,7 +2261,15 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       nm.includes('session')
                     );
                   };
+                  const todayIsoStr = new Date().toISOString().slice(0, 10);
                   const primaryPkg =
+                    allClientPkgs.find(
+                      (p) =>
+                        (p.status === 'Active' || p.status === 'Hold') &&
+                        !isSecondaryLike(p) &&
+                        !p.isQueuedRenewal &&
+                        (!p.startDate || String(p.startDate).slice(0, 10) <= todayIsoStr)
+                    ) ||
                     allClientPkgs.find((p) => (p.status === 'Active' || p.status === 'Hold') && !isSecondaryLike(p)) ||
                     allClientPkgs.find((p) => !isSecondaryLike(p)) ||
                     allClientPkgs[0] ||
@@ -2312,16 +2320,35 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                   let daysLeft = 0;
                   if (rawEnd) {
                     const endMs = new Date(rawEnd).getTime();
+                    const startMs = rawStart ? new Date(rawStart).getTime() : NaN;
+                    const nowMs = Date.now();
                     if (!isNaN(endMs)) {
-                      daysLeft = Math.max(0, Math.ceil((endMs - Date.now()) / 86400000));
+                      if (!isNaN(startMs) && startMs > nowMs + 86400000) {
+                        const rawPkgDays = Math.max(0, Math.round((endMs - startMs) / 86400000));
+                        const lowerPkg = String(resolvedPkgName).toLowerCase();
+                        const isAnnual =
+                          lowerPkg.includes('annual') ||
+                          lowerPkg.includes('year') ||
+                          lowerPkg.includes('12') ||
+                          lowerPkg.includes('basic') ||
+                          lowerPkg.includes('premium') ||
+                          (rawPkgDays >= 360 && rawPkgDays <= 370);
+                        daysLeft = isAnnual ? Math.min(365, rawPkgDays) : rawPkgDays;
+                      } else {
+                        daysLeft = Math.max(0, Math.ceil((endMs - nowMs) / 86400000));
+                      }
                     }
                   } else if (typeof m.daysRemaining === 'number' && m.daysRemaining > 0) {
                     daysLeft = m.daysRemaining;
                   }
 
+                  const hasActiveFreezeWindow =
+                    m.freezeEndDate && String(m.freezeEndDate).slice(0, 10) >= todayIsoStr &&
+                    (!m.freezeStartDate || String(m.freezeStartDate).slice(0, 10) <= todayIsoStr);
+
                   const isMemberFrozen =
                     m.status === 'Hold' ||
-                    Boolean(m.isFrozen) ||
+                    Boolean(hasActiveFreezeWindow) ||
                     Boolean(gatekeeperEval?.isFrozen) ||
                     primaryPkg?.status === 'Hold' ||
                     Boolean(primaryPkg?.isOnHold);
@@ -2498,7 +2525,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                         </div>
                         <div className="space-y-0.5">
                           <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
-                            {t('attendance.packages_left')}
+                            Visits / Sessions Left
                           </Label>
                           {lastScannedMember.sessionsRemaining === 'unlimited' ? (
                             <p className="text-sm font-extrabold text-emerald-600">
@@ -2512,7 +2539,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                                   : 'text-green-600'
                               }`}
                             >
-                              {lastScannedMember.sessionsRemaining} {t('attendance.packages_unit')}
+                              {lastScannedMember.sessionsRemaining} visits
                             </p>
                           )}
                         </div>

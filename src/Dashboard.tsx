@@ -70,6 +70,7 @@ import TodayClassesWidget from './components/dashboard/TodayClassesWidget';
 import InzanDailyRevenueSummary from './components/dashboard/InzanDailyRevenueSummary';
 import { RetentionRadarCard } from './components/dashboard/RetentionRadarCard';
 import { MissingPhotosCard } from './components/MissingPhotosCard';
+import DashboardKpiDrilldownPage, { type DrilldownKpiKey } from './components/DashboardKpiDrilldownPage';
 import { isTenantInzan } from './utils/inzanOrg';
 import { getTenantId } from './firebase';
 import { getRevenueScopeForUser, isPaymentInRevenueScope, isFrontDeskUser } from './utils/permissions';
@@ -227,7 +228,7 @@ const SalesTargetDialog = React.memo(function SalesTargetDialog({
 });
 
 export default function Dashboard() {
-  const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, can, branches, branding, allClients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId } = useAppContext();
+  const { salesTarget, updateSalesTarget, updateUserTarget, currentUser, userTargets, users, canViewGlobalDashboard, canAccessSettings, can, branches, branding, allClients: contextClients, payments: contextPayments, attendances, features, setActiveTab, setActiveClientId, updateClient } = useAppContext();
   const { t, language, isRtl } = useLanguage();
   // Use context data directly instead of creating duplicate Firestore listeners.
   // Context 'clients' and 'payments' are already filtered for the current user's visibility.
@@ -254,6 +255,12 @@ export default function Dashboard() {
       }
     });
     return count;
+  }, [allClients]);
+
+  const unconfirmedClientsList = React.useMemo(() => {
+    return allClients.filter(client =>
+      Array.isArray(client.packages) && client.packages.some(pkg => pkg.isPendingConfirmation === true)
+    );
   }, [allClients]);
 
   const frozenCount = React.useMemo(() => {
@@ -303,8 +310,8 @@ export default function Dashboard() {
   const [pushTitle, setPushTitle] = useState('');
   const [pushBody, setPushBody] = useState('');
   const [isSendingPush, setIsSendingPush] = useState(false);
-  // Stat-card drill-down: which member list is open in the dialog (null = closed).
-  const [statDrilldown, setStatDrilldown] = useState<null | 'leads' | 'expiring' | 'expired' | 'birthdays' | 'new' | 'returning'>(null);
+  // Stat-card drill-down: which dedicated KPI page is open (null = main dashboard).
+  const [statDrilldown, setStatDrilldown] = useState<null | DrilldownKpiKey>(null);
 
   const handleSendAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -908,36 +915,8 @@ export default function Dashboard() {
     };
   }, [clients, selectedMonth]);
 
-  // Stat-card drill-down: title + member list for the currently opened card.
-  const drilldownConfig = React.useMemo(() => {
-    switch (statDrilldown) {
-      case 'leads': return { title: t('dashboard.active_leads'), items: leadsList };
-      case 'expiring': return { title: t('dashboard.expiring_soon'), items: nearlyExpiredList };
-      case 'expired': return { title: t('dashboard.total_expired'), items: expiredList };
-      case 'birthdays': return { title: t('dashboard.upcoming_birthdays'), items: upcomingBirthdays };
-      case 'new': return { title: `${t('dashboard.new_members')} — ${format(selectedMonth, 'MMM yyyy')}`, items: newMembersList };
-      case 'returning': return { title: t('dashboard.returning_active'), items: returningMembersList };
-      default: return null;
-    }
-  }, [statDrilldown, t, leadsList, nearlyExpiredList, expiredList, upcomingBirthdays, newMembersList, returningMembersList, selectedMonth]);
-
-  const getDrilldownDetail = (client: any): string => {
-    switch (statDrilldown) {
-      case 'expiring':
-      case 'expired':
-        return client.membershipExpiry ? `${t('members.table.expiry_date') || 'Expiry'}: ${safeFormatDate(client.membershipExpiry, 'dd MMM yyyy', 'Unknown')}` : (client.packageType || '');
-      case 'birthdays':
-        return client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'dd MMM', 'Unknown') : '';
-      case 'new':
-      case 'returning':
-        return client.startDate ? `${safeFormatDate(client.startDate, 'dd MMM yyyy', 'Unknown')}${client.packageType ? ` · ${client.packageType}` : ''}` : (client.packageType || '');
-      default:
-        return client.phone || client.packageType || '';
-    }
-  };
-
   // Keyboard/touch-friendly props for clickable stat cards.
-  const statCardProps = (key: NonNullable<typeof statDrilldown>) => ({
+  const statCardProps = (key: DrilldownKpiKey) => ({
     role: 'button' as const,
     tabIndex: 0,
     className: 'cursor-pointer hover:border-primary/50 active:scale-[0.98] transition-all',
@@ -969,6 +948,57 @@ export default function Dashboard() {
       return { branch, counts };
     });
   }, [attendances, branches, selectedBranch]);
+
+  if (statDrilldown !== null) {
+    return (
+      <DashboardKpiDrilldownPage
+        activeKey={statDrilldown}
+        onSelectKey={(key) => setStatDrilldown(key)}
+        onBack={() => setStatDrilldown(null)}
+        leadsList={leadsList}
+        nearlyExpiredList={nearlyExpiredList}
+        expiredList={expiredList}
+        upcomingBirthdays={upcomingBirthdays}
+        newMembersList={newMembersList}
+        returningMembersList={returningMembersList}
+        frozenMembersList={frozenMembers}
+        unconfirmedClientsList={unconfirmedClientsList}
+        allClients={allClients}
+        payments={payments}
+        users={users}
+        branches={branches}
+        selectedMonth={selectedMonth}
+        clubName={branding?.companyName || (isInzan ? 'Inzan Athletics' : 'Strike Boxing Club')}
+        onOpenProfile={(clientId) => {
+          setStatDrilldown(null);
+          setActiveTab('clients');
+          setActiveClientId(clientId);
+        }}
+        onCallMember={(client) => {
+          if (client.phone) {
+            window.open(`tel:${client.phone}`, '_self');
+          }
+        }}
+        onUnfreezeMember={handleUnfreeze}
+        onConfirmPackage={async (client, pkgIndex) => {
+          if (!updateClient || !Array.isArray(client.packages)) return;
+          const updatedPkgs = [...client.packages];
+          const targetPkg = updatedPkgs[pkgIndex];
+          if (!targetPkg) return;
+          updatedPkgs[pkgIndex] = {
+            ...targetPkg,
+            isPendingConfirmation: false,
+          } as any;
+          await updateClient(client.id, { packages: updatedPkgs });
+          toast.success(`Confirmed package for ${client.name}`);
+        }}
+        onOpenUnconfirmedModule={() => {
+          setStatDrilldown(null);
+          setActiveTab('unconfirmed-memberships');
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1246,10 +1276,7 @@ export default function Dashboard() {
         </Card>
 
         {features?.frozenMembers === true && (
-          <Card className="cursor-pointer hover:border-primary/50 transition-all" onClick={() => {
-            const el = document.getElementById('frozen-members-section');
-            if (el) el.scrollIntoView({ behavior: 'smooth' });
-          }}>
+          <Card {...statCardProps('frozen')}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Frozen Members</CardTitle>
               <Snowflake className="h-4 w-4 text-sky-500" />
@@ -1262,9 +1289,7 @@ export default function Dashboard() {
         )}
 
         {features?.unconfirmedMemberships === true && (
-          <Card className="cursor-pointer hover:border-primary/50 transition-all" onClick={() => {
-            setActiveTab('unconfirmed-memberships');
-          }}>
+          <Card {...statCardProps('unconfirmed')}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Unconfirmed Queue</CardTitle>
               <Clock className="h-4 w-4 text-amber-500" />
@@ -1276,45 +1301,6 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
-
-      <Dialog open={statDrilldown !== null} onOpenChange={(open) => { if (!open) setStatDrilldown(null); }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between gap-2 pr-6">
-              <span>{drilldownConfig?.title}</span>
-              <Badge variant="secondary">{drilldownConfig?.items.length ?? 0}</Badge>
-            </DialogTitle>
-          </DialogHeader>
-          {drilldownConfig && drilldownConfig.items.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">No members in this list.</p>
-          ) : drilldownConfig ? (
-            <PaginatedList
-              key={statDrilldown ?? 'none'}
-              items={drilldownConfig.items}
-              itemsPerPage={10}
-              renderItem={(client) => (
-                <div key={client.id} className="flex items-center justify-between gap-2 p-2 border rounded-md">
-                  <div className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStatDrilldown(null);
-                        setActiveTab('clients');
-                        setActiveClientId(client.id);
-                      }}
-                      className="text-primary hover:underline font-semibold text-sm text-left block truncate"
-                    >
-                      {client.name}
-                    </button>
-                    <p className="text-xs text-muted-foreground truncate">{getDrilldownDetail(client)}</p>
-                  </div>
-                  {client.status && <Badge variant="outline" className="shrink-0 text-[10px]">{client.status}</Badge>}
-                </div>
-              )}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
 
       {canViewGlobalDashboard && !hideFinancialTargetsForFrontDesk && (
         <InzanDailyRevenueSummary payments={payments} users={users} />

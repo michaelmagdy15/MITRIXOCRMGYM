@@ -371,7 +371,7 @@ export function InzanMemberShow({
     );
   };
 
-  const getDaysRemainingToRenew = (endDateStr?: string | null): number => {
+  const getDaysRemainingToRenew = (endDateStr?: string | null, startDateStr?: string | null, pkgNameStr?: string | null): number => {
     if (!endDateStr) return Number((client as any).daysRemaining || 0);
     const endDt = toValidDate(endDateStr);
     if (!endDt) return Number((client as any).daysRemaining || 0);
@@ -379,6 +379,21 @@ export function InzanMemberShow({
     todayStart.setHours(0, 0, 0, 0);
     const endStart = new Date(endDt);
     endStart.setHours(0, 0, 0, 0);
+
+    const startDt = startDateStr ? toValidDate(startDateStr) : null;
+    if (startDt) {
+      const startStart = new Date(startDt);
+      startStart.setHours(0, 0, 0, 0);
+      if (startStart.getTime() > todayStart.getTime()) {
+        const durDays = Math.max(0, Math.round((endStart.getTime() - startStart.getTime()) / 86400000));
+        const lowerName = String(pkgNameStr || client.packageType || '').toLowerCase();
+        if (durDays >= 360 && durDays <= 366 && (lowerName.includes('year') || lowerName.includes('annual') || lowerName.includes('basic') || lowerName.includes('premium') || lowerName.includes('12'))) {
+          return 365;
+        }
+        return durDays;
+      }
+    }
+
     return Math.max(0, Math.round((endStart.getTime() - todayStart.getTime()) / 86400000));
   };
 
@@ -1067,7 +1082,17 @@ export function InzanMemberShow({
   };
 
   // Get mapped data
-  const clientPayments = payments.filter(p => p.clientId === client.id);
+  const clientPayments = React.useMemo(() => {
+    const cMemberId = client.memberId ? String(client.memberId).trim() : '';
+    const cRgId = (client as any).redgitsId ? String((client as any).redgitsId).trim() : '';
+    return payments.filter(p => {
+      if ((p as any).deleted_at) return false;
+      if (p.clientId === client.id) return true;
+      if (cMemberId && String((p as any).memberId || '').trim() === cMemberId && String((p as any).clientName || '').toLowerCase().trim() === (client.name || '').toLowerCase().trim()) return true;
+      if (cRgId && String((p as any).redgitsId || '').trim() === cRgId) return true;
+      return false;
+    });
+  }, [payments, client.id, client.memberId, client.name, (client as any).redgitsId]);
   const clientAttendances = React.useMemo(() => {
     const topLevel = attendances.filter(a => a.clientId === client.id);
     const seenDates = new Set<string>();
@@ -2258,7 +2283,9 @@ export function InzanMemberShow({
         {(() => {
           const rawC = client as any;
           const allPkgs = Array.isArray(client.packages) ? client.packages : [];
+          const todayIso = new Date().toISOString().slice(0, 10);
           const primaryPkg =
+            allPkgs.find(p => !isSecondaryPackageItem(p) && p.status === 'Active' && !(p as any).isQueuedRenewal && (!p.startDate || String(p.startDate).slice(0, 10) <= todayIso)) ||
             allPkgs.find(p => !isSecondaryPackageItem(p) && (p.status === 'Active' || (p.status as any) === 'Frozen' || p.status === 'Hold')) ||
             allPkgs.find(p => !isSecondaryPackageItem(p)) ||
             (client.packageType && !isSecondaryPackageItem({ packageName: client.packageType })
@@ -2288,7 +2315,8 @@ export function InzanMemberShow({
               : null);
 
           const primaryExpiry = primaryPkg?.endDate || client.membershipExpiry || (client as any).expiryDate;
-          const daysToRenew = getDaysRemainingToRenew(primaryExpiry);
+          const primaryStart = primaryPkg?.startDate || client.startDate || (client as any).joinDate;
+          const daysToRenew = getDaysRemainingToRenew(primaryExpiry, primaryStart, primaryPkg?.packageName);
           const b = resolvePackageBenefits(primaryPkg || allPkgs[0] || {});
 
           const paidPtTotal = Number(rawC.paidPtSessionsTotal ?? (activeSecondaryPkg as any)?.totalSessions ?? (activeSecondaryPkg as any)?.sessionsTotal ?? 0);
@@ -2554,11 +2582,12 @@ export function InzanMemberShow({
                   {allPackages.map((pkg, idx) => {
                     const b = resolvePackageBenefits(pkg);
                     const editState = getSameDayEditState(pkg);
-                    const isActive = pkg.status === 'Active';
+                    const isQueued = (pkg as any).status === 'Queued' || Boolean((pkg as any).isQueuedRenewal);
+                    const isActive = pkg.status === 'Active' || isQueued;
                     const isSecondary = isSecondaryPackageItem(pkg);
                     const isEditingThisPkg = editingPkgId === pkg.id;
                     const isTransferringThisPkg = transferPkgId === pkg.id;
-                    const pkgDaysLeft = getDaysRemainingToRenew(pkg.endDate);
+                    const pkgDaysLeft = getDaysRemainingToRenew(pkg.endDate, pkg.startDate, pkg.packageName);
                     const filteredCatalogPackages = packages.filter(cp => {
                       if (!pkgSearchFilter.trim()) return true;
                       const q = pkgSearchFilter.trim().toLowerCase();
@@ -2592,9 +2621,13 @@ export function InzanMemberShow({
                                 {isSecondary ? 'Secondary Package (PT / Add-On)' : 'Primary Package (Membership)'}
                               </Badge>
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
-                                isActive ? 'text-emerald-500 bg-emerald-500/10' : 'text-muted-foreground bg-muted'
+                                isQueued
+                                  ? 'text-sky-600 bg-sky-500/15 border border-sky-500/30'
+                                  : isActive
+                                  ? 'text-emerald-500 bg-emerald-500/10'
+                                  : 'text-muted-foreground bg-muted'
                               }`}>
-                                {pkg.status}
+                                {isQueued ? 'Early Renewal / Queued' : pkg.status}
                               </span>
                               {editState.canSameDayEdit ? (
                                 <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-bold">
@@ -2612,10 +2645,12 @@ export function InzanMemberShow({
                             <h4 className="text-lg font-bold text-foreground mt-2">{pkg.packageName}</h4>
                           </div>
                           <div className="text-right">
-                            <span className={`text-xl sm:text-2xl font-black ${isSecondary ? 'text-indigo-500' : 'text-emerald-500'}`}>
+                            <span className={`text-xl sm:text-2xl font-black ${isSecondary ? 'text-indigo-500' : isQueued ? 'text-sky-500' : 'text-emerald-500'}`}>
                               {isSecondary
                                 ? `${pkg.sessionsRemaining ?? 0} / ${(pkg as any).totalSessions ?? pkg.sessionsTotal ?? pkg.sessionsRemaining ?? 0} Sessions`
-                                : isActive
+                                : isQueued
+                                  ? `${pkgDaysLeft} Days (Starts ${safeFormatDate(pkg.startDate, 'dd MMM yyyy')})`
+                                  : isActive
                                   ? `${pkgDaysLeft} Days to Renew`
                                   : 'Expired'}
                             </span>
@@ -3145,8 +3180,10 @@ export function InzanMemberShow({
                 <TableHeader className="bg-muted/20 border-b border-border">
                   <TableRow>
                     <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Date</TableHead>
+                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Package / Pay For</TableHead>
                     <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Amount</TableHead>
                     <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Method</TableHead>
+                    <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Receipt / SN</TableHead>
                     <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Sales Rep</TableHead>
                     <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
                   </TableRow>
@@ -3154,23 +3191,25 @@ export function InzanMemberShow({
                 <TableBody>
                   {clientPayments.length > 0 ? (
                     [...clientPayments]
-                      .sort((a, b) => (toValidDate(b.created_at)?.getTime() || 0) - (toValidDate(a.created_at)?.getTime() || 0))
-                      .map(p => (
-                        <TableRow key={p.id} className="hover:bg-muted/50 border-b border-border/50 transition-colors">
-                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(p.created_at, 'dd MMM yyyy HH:mm')}</TableCell>
-                          <TableCell className="py-3 px-4 text-xs font-bold text-emerald-500">{p.amount} LE</TableCell>
-                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">{p.method}</TableCell>
-                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">
-                            {users.find(u => u.id === p.sales_rep_id)?.name || 'unassigned'}
-                          </TableCell>
-                          <TableCell className="py-3 px-4 text-xs text-muted-foreground">
-                            {p.recordedBy || 'System'}
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      .sort((a, b) => (toValidDate((b as any).date || b.created_at)?.getTime() || 0) - (toValidDate((a as any).date || a.created_at)?.getTime() || 0))
+                      .map(p => {
+                        const pAny = p as any;
+                        const salesDisplay = pAny.salesName || users.find(u => u.id === p.sales_rep_id)?.name || (client as any).salesName || '—';
+                        return (
+                          <TableRow key={p.id} className="hover:bg-muted/50 border-b border-border/50 transition-colors">
+                            <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">{safeFormatDate(pAny.date || p.created_at, 'dd MMM yyyy HH:mm')}</TableCell>
+                            <TableCell className="py-3 px-4 text-xs font-semibold text-foreground">{pAny.packageName || p.packageType || 'Membership'}</TableCell>
+                            <TableCell className="py-3 px-4 text-xs font-bold text-emerald-500">{Number(p.amount || p.amount_paid || 0).toLocaleString()} LE</TableCell>
+                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{p.method || pAny.paymentMethod || 'Cash'}</TableCell>
+                            <TableCell className="py-3 px-4 text-xs font-mono text-muted-foreground">{pAny.serialNumber || pAny.codeNo || '—'}</TableCell>
+                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{salesDisplay}</TableCell>
+                            <TableCell className="py-3 px-4 text-xs text-muted-foreground">{p.recordedBy || pAny.recordedByName || 'System'}</TableCell>
+                          </TableRow>
+                        );
+                      })
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">
+                      <TableCell colSpan={7} className="py-6 text-center text-xs text-muted-foreground">
                         No financial records found for this member.
                       </TableCell>
                     </TableRow>
@@ -3398,7 +3437,17 @@ export function InzanMemberShow({
             <div className="space-y-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Historical Freezing Activity</h4>
               {(() => {
-                const logs: any[] = Array.isArray((client as any).freezeLogs) ? (client as any).freezeLogs : [];
+                const rawLogs: any[] = [
+                  ...(Array.isArray((client as any).freezeLogs) ? (client as any).freezeLogs : []),
+                  ...(Array.isArray((client as any).freezeHistory) ? (client as any).freezeHistory : []),
+                ];
+                const seenFreezeKeys = new Set<string>();
+                const logs = rawLogs.filter(l => {
+                  const k = `${l.startDate || ''}_${l.endDate || ''}_${l.days || ''}`;
+                  if (seenFreezeKeys.has(k)) return false;
+                  seenFreezeKeys.add(k);
+                  return true;
+                });
                 if (logs.length === 0) {
                   return (
                     <div className="bg-muted/5 p-6 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs">
@@ -3415,7 +3464,7 @@ export function InzanMemberShow({
                           <th className="p-2.5">Package</th>
                           <th className="p-2.5">Freeze Window</th>
                           <th className="p-2.5">Days</th>
-                          <th className="p-2.5">Reason</th>
+                          <th className="p-2.5">Reason / Type</th>
                           <th className="p-2.5">Staff</th>
                           <th className="p-2.5">Date Logged</th>
                         </tr>
@@ -3428,9 +3477,9 @@ export function InzanMemberShow({
                               {safeFormatDate(log.startDate, 'dd MMM yyyy')} → {safeFormatDate(log.endDate, 'dd MMM yyyy')}
                             </td>
                             <td className="p-2.5 font-bold text-cyan-600">{log.days}d</td>
-                            <td className="p-2.5 text-muted-foreground">{log.reason || '—'}</td>
-                            <td className="p-2.5 text-muted-foreground">{log.appliedBy || 'Staff'}</td>
-                            <td className="p-2.5 text-muted-foreground text-[10px]">{safeFormatDate(log.appliedAt, 'dd MMM yyyy HH:mm')}</td>
+                            <td className="p-2.5 text-muted-foreground">{log.reason || log.freezeType || 'Normal Freezing'}</td>
+                            <td className="p-2.5 text-muted-foreground">{log.appliedBy || log.createdBy || 'Staff'}</td>
+                            <td className="p-2.5 text-muted-foreground text-[10px]">{safeFormatDate(log.appliedAt || log.createdAt, 'dd MMM yyyy HH:mm')}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -3491,86 +3540,212 @@ export function InzanMemberShow({
                 {isSavingComment ? '...' : 'Add'}
               </Button>
             </div>
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {client.comments && client.comments.length > 0 ? (
-                [...client.comments].reverse().map((c, i) => (
+            <div className="space-y-2 max-h-[450px] overflow-y-auto">
+              {(() => {
+                const explicitComments = Array.isArray(client.comments) ? [...client.comments].reverse() : [];
+                const parsedLegacyComments: Array<{ id: string; text: string; date: string; author: string }> = [];
+                const legacyStr = String(client.legacyNotes || '').trim();
+                if (legacyStr) {
+                  // Parse Call Center (N): [YYYY-MM-DD] text (Author) | ...
+                  const ccMatch = legacyStr.match(/Call Center\s*\(\d+\):\s*([\s\S]*?)(?:\n\n|$)/i);
+                  if (ccMatch && ccMatch[1]) {
+                    const parts = ccMatch[1].split('|').map(s => s.trim()).filter(Boolean);
+                    parts.forEach((part, idx) => {
+                      const m = part.match(/^\[([^\]]+)\]\s*(.*?)(?:\(([^)]+)\))?$/);
+                      if (m) {
+                        parsedLegacyComments.push({
+                          id: `cc_${idx}`,
+                          date: m[1]!.trim(),
+                          text: `[Call Center] ${m[2]!.trim()}`,
+                          author: m[3]?.trim() || 'Call Center',
+                        });
+                      } else {
+                        parsedLegacyComments.push({
+                          id: `cc_${idx}`,
+                          date: '',
+                          text: `[Call Center] ${part}`,
+                          author: 'Call Center',
+                        });
+                      }
+                    });
+                  }
+                  // Also include non-Call-Center lines from legacyNotes
+                  const otherLines = legacyStr
+                    .split('\n')
+                    .map(l => l.trim())
+                    .filter(l => l && !l.startsWith('Call Center') && !l.startsWith('Freezes ('));
+                  otherLines.forEach((line, idx) => {
+                    const dateMatch = line.match(/on\s+(\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}:\d{2})?|\d{2}-\d{2}-\d{4}(?:\s+\d{2}:\d{2}:\d{2})?)/i);
+                    const byMatch = line.match(/\bby\s+([A-Za-z\s]+)$/i);
+                    parsedLegacyComments.push({
+                      id: `sys_${idx}`,
+                      date: dateMatch ? dateMatch[1]! : '',
+                      text: line,
+                      author: byMatch ? byMatch[1]!.trim() : 'RedGITS History',
+                    });
+                  });
+                }
+                const allTimeline = [...explicitComments, ...parsedLegacyComments];
+                if (allTimeline.length === 0) {
+                  return (
+                    <div className="bg-muted/5 p-8 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs">
+                      No comments recorded.
+                    </div>
+                  );
+                }
+                return allTimeline.map((c, i) => (
                   <div key={c.id || i} className="bg-muted/10 border border-border rounded-lg p-3">
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-bold text-foreground">#{client.comments!.length - i} — {c.author}</span>
-                      <span className="text-[10px] text-muted-foreground">{safeFormatDate(c.date, 'dd MMM yyyy HH:mm')}</span>
+                      <span className="text-xs font-bold text-foreground">#{allTimeline.length - i} — {c.author || 'Staff'}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {c.date ? safeFormatDate(c.date, 'dd MMM yyyy HH:mm', c.date) : ''}
+                      </span>
                     </div>
-                    <p className="text-xs text-foreground/80">{c.text}</p>
+                    <p className="text-xs text-foreground/85">{c.text}</p>
                   </div>
-                ))
-              ) : (
-                <div className="bg-muted/5 p-8 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs">
-                  No comments recorded.
-                </div>
-              )}
+                ));
+              })()}
             </div>
           </div>
         )}
 
         {activeTab === 'transfers' && (
           <div className="space-y-6 text-left">
-            <div>
-              <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3 mb-3">Sales Rep Transfer History</h3>
-              <div className="rounded-xl border border-border bg-background overflow-hidden">
-                <Table>
-                  <TableHeader className="bg-muted/20 border-b border-border">
-                    <TableRow>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">#</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">From Sales</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">To Sales</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created On</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {salesTransfers.length > 0 ? salesTransfers.map((t, i) => (
-                      <TableRow key={t.id} className="hover:bg-muted/50 border-b border-border/50">
-                        <TableCell className="py-3 px-4 text-xs">{i + 1}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs">{t.fromSalesName}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs font-bold text-foreground">{t.toSalesName}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdByName || t.createdBy}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(t.createdAt, 'yyyy-MM-dd HH:mm')}</TableCell>
-                      </TableRow>
-                    )) : (
-                      <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No sales transfer records.</TableCell></TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-            <div>
-              <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3 mb-3">Trainer Transfer History</h3>
-              <div className="rounded-xl border border-border bg-background overflow-hidden">
-                <Table>
-                  <TableHeader className="bg-muted/20 border-b border-border">
-                    <TableRow>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">#</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">From Trainer</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">To Trainer</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
-                      <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created On</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {trainerTransfers.length > 0 ? trainerTransfers.map((t, i) => (
-                      <TableRow key={t.id} className="hover:bg-muted/50 border-b border-border/50">
-                        <TableCell className="py-3 px-4 text-xs">{i + 1}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs">{t.fromTrainerName}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs font-bold text-foreground">{t.toTrainerName}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdByName || t.createdBy}</TableCell>
-                        <TableCell className="py-3 px-4 text-xs text-muted-foreground">{safeFormatDate(t.createdAt, 'yyyy-MM-dd HH:mm')}</TableCell>
-                      </TableRow>
-                    )) : (
-                      <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No trainer transfer records.</TableCell></TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+            {(() => {
+              const rawClient = client as any;
+              const mergedSalesTransfers: any[] = [
+                ...salesTransfers,
+                ...(Array.isArray(rawClient.salesTransferHistory) ? rawClient.salesTransferHistory : []),
+                ...(Array.isArray(rawClient.salesTransfers) ? rawClient.salesTransfers : []),
+              ];
+              const seenSt = new Set<string>();
+              const uniqueSalesTransfers = mergedSalesTransfers.filter(t => {
+                const k = `${t.fromSalesName || ''}_${t.toSalesName || ''}_${t.createdAt || ''}`;
+                if (seenSt.has(k)) return false;
+                seenSt.add(k);
+                return true;
+              });
+
+              const mergedTrainerTransfers: any[] = [
+                ...trainerTransfers,
+                ...(Array.isArray(rawClient.trainerTransferHistory) ? rawClient.trainerTransferHistory : []),
+                ...(Array.isArray(rawClient.trainerTransfers) ? rawClient.trainerTransfers : []),
+              ];
+              const seenTt = new Set<string>();
+              const uniqueTrainerTransfers = mergedTrainerTransfers.filter(t => {
+                const k = `${t.fromTrainerName || ''}_${t.toTrainerName || ''}_${t.createdAt || ''}`;
+                if (seenTt.has(k)) return false;
+                seenTt.add(k);
+                return true;
+              });
+
+              // Parse package transfers from legacyNotes if present
+              const pkgTransfers: Array<{ text: string; date: string; by: string }> = [];
+              const legacyLines = String(client.legacyNotes || '').split('\n').map(l => l.trim()).filter(Boolean);
+              for (const line of legacyLines) {
+                if (/package transfer/i.test(line)) {
+                  const dtM = line.match(/on\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/i);
+                  const byM = line.match(/By\s+(.+)$/i);
+                  pkgTransfers.push({
+                    text: line,
+                    date: dtM ? dtM[1]! : '',
+                    by: byM ? byM[1]!.trim() : 'Staff',
+                  });
+                }
+              }
+
+              return (
+                <>
+                  <div>
+                    <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3 mb-3">Sales Rep Transfer History</h3>
+                    <div className="rounded-xl border border-border bg-background overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-muted/20 border-b border-border">
+                          <TableRow>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">#</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">From Sales</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">To Sales</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created On</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {uniqueSalesTransfers.length > 0 ? uniqueSalesTransfers.map((t, i) => (
+                            <TableRow key={t.id || i} className="hover:bg-muted/50 border-b border-border/50">
+                              <TableCell className="py-3 px-4 text-xs">{i + 1}</TableCell>
+                              <TableCell className="py-3 px-4 text-xs">{t.fromSalesName}</TableCell>
+                              <TableCell className="py-3 px-4 text-xs font-bold text-foreground">{t.toSalesName}</TableCell>
+                              <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdByName || t.createdBy || 'Admin'}</TableCell>
+                              <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">{safeFormatDate(t.createdAt, 'yyyy-MM-dd HH:mm', t.createdAt)}</TableCell>
+                            </TableRow>
+                          )) : (
+                            <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No sales transfer records.</TableCell></TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+
+                  {pkgTransfers.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3 mb-3">Package Transfer Logs</h3>
+                      <div className="rounded-xl border border-border bg-background overflow-hidden">
+                        <Table>
+                          <TableHeader className="bg-muted/20 border-b border-border">
+                            <TableRow>
+                              <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">#</TableHead>
+                              <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Transfer Details</TableHead>
+                              <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
+                              <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created On</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pkgTransfers.map((pt, idx) => (
+                              <TableRow key={idx} className="hover:bg-muted/50 border-b border-border/50">
+                                <TableCell className="py-3 px-4 text-xs">{idx + 1}</TableCell>
+                                <TableCell className="py-3 px-4 text-xs font-semibold text-foreground">{pt.text}</TableCell>
+                                <TableCell className="py-3 px-4 text-xs text-muted-foreground">{pt.by}</TableCell>
+                                <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">{pt.date || '—'}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <h3 className="text-sm font-bold uppercase text-primary border-b border-border pb-3 mb-3">Trainer Transfer History</h3>
+                    <div className="rounded-xl border border-border bg-background overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-muted/20 border-b border-border">
+                          <TableRow>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">#</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">From Trainer</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">To Trainer</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created By</TableHead>
+                            <TableHead className="text-muted-foreground text-[10px] uppercase font-bold py-3 px-4">Created On</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {uniqueTrainerTransfers.length > 0 ? uniqueTrainerTransfers.map((t, i) => (
+                            <TableRow key={t.id || i} className="hover:bg-muted/50 border-b border-border/50">
+                              <TableCell className="py-3 px-4 text-xs">{i + 1}</TableCell>
+                              <TableCell className="py-3 px-4 text-xs">{t.fromTrainerName}</TableCell>
+                              <TableCell className="py-3 px-4 text-xs font-bold text-foreground">{t.toTrainerName}</TableCell>
+                              <TableCell className="py-3 px-4 text-xs text-muted-foreground">{t.createdByName || t.createdBy || 'Admin'}</TableCell>
+                              <TableCell className="py-3 px-4 text-xs text-muted-foreground font-mono">{safeFormatDate(t.createdAt, 'yyyy-MM-dd HH:mm', t.createdAt)}</TableCell>
+                            </TableRow>
+                          )) : (
+                            <TableRow><TableCell colSpan={5} className="py-6 text-center text-xs text-muted-foreground">No trainer transfer records.</TableCell></TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
