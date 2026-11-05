@@ -36,7 +36,7 @@ import { MessageCircle, Tag } from 'lucide-react';
 import RenewalPipeline from './components/RenewalPipeline';
 import ResyncAssignments from './components/ResyncAssignments';
 import ResyncPayments from './components/ResyncPayments';
-import { writeBatch, doc, collection, addDoc } from 'firebase/firestore';
+import { writeBatch, doc, collection, addDoc, getDoc, getDocs, query, where, limit } from 'firebase/firestore';
 import { db, getTenantId } from './firebase';
 import { cleanData } from './utils';
 import { generateClientContract } from './utils/pdfGenerator';
@@ -201,7 +201,90 @@ export default function Clients() {
       return active && (features?.ptPackages !== false || p.type !== 'Private');
     });
   }, [packages, features]);
-  const rawActiveClient = activeClientId ? ((allClients || clients).find(c => c.id === activeClientId) || clients.find(c => c.id === activeClientId) || null) : null;
+  const [fetchedFallbackClient, setFetchedFallbackClient] = useState<Client | null>(null);
+
+  const rawActiveClient = React.useMemo(() => {
+    if (!activeClientId) return null;
+    const pool = allClients && allClients.length > 0 ? allClients : clients;
+    const rawTarget = String(activeClientId).trim();
+    const cleanTarget = rawTarget.replace(/^#/, '');
+    const rgTarget = rawTarget.replace(/^redgits-/, '');
+    const found =
+      pool.find(
+        c =>
+          c.id === rawTarget ||
+          String(c.memberId || '').replace(/^#/, '').trim() === cleanTarget ||
+          String((c as any).redgitsId || '').trim() === rgTarget
+      ) ||
+      clients.find(
+        c =>
+          c.id === rawTarget ||
+          String(c.memberId || '').replace(/^#/, '').trim() === cleanTarget ||
+          String((c as any).redgitsId || '').trim() === rgTarget
+      );
+    if (found) return found;
+    if (
+      fetchedFallbackClient &&
+      (fetchedFallbackClient.id === rawTarget ||
+        String(fetchedFallbackClient.memberId || '').replace(/^#/, '').trim() === cleanTarget ||
+        String((fetchedFallbackClient as any).redgitsId || '').trim() === rgTarget)
+    ) {
+      return fetchedFallbackClient;
+    }
+    return null;
+  }, [activeClientId, allClients, clients, fetchedFallbackClient]);
+
+  React.useEffect(() => {
+    if (!activeClientId) {
+      setFetchedFallbackClient(null);
+      return;
+    }
+    const pool = allClients && allClients.length > 0 ? allClients : clients;
+    const rawTarget = String(activeClientId).trim();
+    const cleanTarget = rawTarget.replace(/^#/, '');
+    const rgTarget = rawTarget.replace(/^redgits-/, '');
+    const alreadyInMemory = pool.some(
+      c =>
+        c.id === rawTarget ||
+        String(c.memberId || '').replace(/^#/, '').trim() === cleanTarget ||
+        String((c as any).redgitsId || '').trim() === rgTarget
+    );
+    if (alreadyInMemory) return;
+
+    fetchExpiredMembers();
+    let cancelled = false;
+    (async () => {
+      try {
+        // 1. Direct document ID lookup
+        const directSnap = await getDoc(doc(db, 'clients', rawTarget));
+        if (!cancelled && directSnap.exists()) {
+          setFetchedFallbackClient({ id: directSnap.id, ...(directSnap.data() as any) } as Client);
+          return;
+        }
+        // 2. If numeric or prefixed memberId, try redgits-{id} or query by memberId
+        if (/^\d+$/.test(cleanTarget)) {
+          const rgSnap = await getDoc(doc(db, 'clients', `redgits-${cleanTarget}`));
+          if (!cancelled && rgSnap.exists()) {
+            const d = rgSnap.data() as any;
+            if (String(d.memberId || '') === cleanTarget || String(d.redgitsId || '') === cleanTarget) {
+              setFetchedFallbackClient({ id: rgSnap.id, ...d } as Client);
+              return;
+            }
+          }
+        }
+        const qSnap = await getDocs(query(collection(db, 'clients'), where('memberId', '==', cleanTarget), limit(1)));
+        if (!cancelled && !qSnap.empty) {
+          const d = qSnap.docs[0]!;
+          setFetchedFallbackClient({ id: d.id, ...(d.data() as any) } as Client);
+        }
+      } catch (err) {
+        console.error('Fallback activeClient lookup failed:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeClientId, allClients, clients, fetchExpiredMembers]);
   const activeClient = React.useMemo(() => {
     if (!rawActiveClient) return null;
     const mergedIntoId = (rawActiveClient as any).mergedInto;
@@ -1981,18 +2064,29 @@ export default function Clients() {
     const hasAnySearch = Boolean(effectiveGeneralSearch || effectiveIdSearch);
 
     let base: Client[] = [];
-    if (hasAnySearch) {
-      // When searching by name, phone, or ID, search across ALL member statuses (active, hold, nearlyExpired, expired, leads)
-      base = members;
-    } else {
-      switch (deferredActiveTab) {
-        case 'all': base = isInzanTenant ? [...activeMembers, ...onHold, ...nearlyExpired, ...leadAccounts] : [...activeMembers, ...onHold, ...nearlyExpired]; break;
-        case 'leads': base = leadAccounts; break;
-        case 'active': base = [...activeMembers, ...nearlyExpired]; break;
-        case 'hold': base = onHold; break;
-        case 'expired': base = expired; break;
-        default: base = [...activeMembers, ...onHold, ...nearlyExpired]; break;
-      }
+    switch (deferredActiveTab) {
+      case 'all':
+        base = hasAnySearch
+          ? members
+          : isInzanTenant
+          ? [...activeMembers, ...onHold, ...nearlyExpired, ...leadAccounts]
+          : [...activeMembers, ...onHold, ...nearlyExpired];
+        break;
+      case 'leads':
+        base = leadAccounts;
+        break;
+      case 'active':
+        base = [...activeMembers, ...nearlyExpired];
+        break;
+      case 'hold':
+        base = onHold;
+        break;
+      case 'expired':
+        base = expired;
+        break;
+      default:
+        base = [...activeMembers, ...onHold, ...nearlyExpired];
+        break;
     }
 
     let filtered = base;
@@ -2002,7 +2096,8 @@ export default function Clients() {
       if (!cleanId) return 0;
       const compactId = cleanId.replace(/\s|-/g, '');
       const mId = (m.memberId || '').toString().toLowerCase().trim();
-      const lId = ((m as any).leadId || '').toString().toLowerCase().trim();
+      const isLeadDoc = m.status === 'Lead' || !mId;
+      const lId = isLeadDoc ? ((m as any).leadId || '').toString().toLowerCase().trim() : '';
       const bCode = (m.barcode || '').toString().toLowerCase().trim();
       const secBarcodes = Array.isArray(m.secondaryBarcodes) ? m.secondaryBarcodes.map(b => String(b).toLowerCase().trim()) : [];
       const pkgBarcodes = Array.isArray(m.packages) ? m.packages.map(p => String(p.barcode || '').toLowerCase().trim()).filter(Boolean) : [];

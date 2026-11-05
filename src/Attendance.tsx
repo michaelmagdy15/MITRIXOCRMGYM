@@ -115,6 +115,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     branding,
     features,
     clients,
+    allClients,
     payments,
     packages,
     addClient,
@@ -188,12 +189,53 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
   // O(1) lookup maps for clients and users to eliminate O(N*M) linear .find() scans during render
   const clientLookupMap = useMemo(() => {
     const map = new Map<string, typeof clients[0]>();
-    for (const c of clients) {
+    const pool = allClients && allClients.length > 0 ? allClients : clients;
+    for (const c of pool) {
       if (c.id) map.set(c.id, c);
-      if (c.memberId) map.set(String(c.memberId), c);
+      if (c.memberId) {
+        const cleanMid = String(c.memberId).replace(/^#/, '').trim();
+        if (cleanMid) {
+          map.set(cleanMid, c);
+          map.set(`#${cleanMid}`, c);
+        }
+      }
+      if ((c as any).redgitsId) {
+        const rg = String((c as any).redgitsId).trim();
+        if (rg && !map.has(`redgits-${rg}`)) {
+          map.set(`redgits-${rg}`, c);
+        }
+      }
     }
     return map;
-  }, [clients]);
+  }, [allClients, clients]);
+
+  const openMemberProfileFromAttendance = (record: {
+    client?: any;
+    clientId?: string;
+    memberId?: string;
+    name?: string;
+    memberName?: string;
+    clientName?: string;
+  }) => {
+    const pool = allClients && allClients.length > 0 ? allClients : clients;
+    const rawCid = String(record.client?.id || record.clientId || '').trim();
+    const rawMid = String(record.client?.memberId || record.memberId || '').replace(/^#/, '').trim();
+    const rawName = String(record.client?.name || record.name || record.memberName || record.clientName || '').trim().toLowerCase();
+
+    const matched =
+      record.client ||
+      (rawCid ? clientLookupMap.get(rawCid) : undefined) ||
+      (rawMid && rawMid !== '—' ? clientLookupMap.get(rawMid) : undefined) ||
+      (rawName
+        ? pool.find((c) => String(c.name || '').trim().toLowerCase() === rawName)
+        : undefined);
+
+    const targetId = matched?.id || rawCid || (rawMid && rawMid !== '—' ? rawMid : '');
+    if (targetId) {
+      setActiveClientId(targetId);
+      setActiveTab('clients');
+    }
+  };
 
   const userLookupMap = useMemo(() => {
     const map = new Map<string, typeof users[0]>();
@@ -367,17 +409,21 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
       scopedCheckins.forEach(checkin => {
         const lookupKey = isGlobal ? `${checkin.clientId}_${checkin.date}` : checkin.clientId;
         if (!scheduledClientKeys.has(lookupKey)) {
-          const client = clientLookupMap.get(checkin.clientId);
-          const fallbackName = client?.name || (checkin as any).memberName;
+          const checkinAny = checkin as any;
+          const cleanMid = String(checkinAny.memberId || checkinAny.cardId || '').replace(/^#/, '').trim();
+          const client =
+            clientLookupMap.get(checkin.clientId) ||
+            (cleanMid ? clientLookupMap.get(cleanMid) : undefined);
+          const fallbackName = client?.name || checkinAny.memberName;
           if (client || fallbackName) {
-            const checkinDateOnly = (checkin as any).sessionDate || (checkin.date ? checkin.date.substring(0, 10) : rosterDate);
+            const checkinDateOnly = checkinAny.sessionDate || (checkin.date ? checkin.date.substring(0, 10) : rosterDate);
             const sessionsRemaining = client ? (client.sessionsRemaining ?? (client as any)?.activePackage?.creditsLeft) : undefined;
             const packageType = checkin.packageName || client?.packageType || client?.memberCategory || 'Walk-in Member';
 
             walkins.push({
-              clientId: checkin.clientId,
+              clientId: client?.id || checkin.clientId || cleanMid,
               client,
-              memberId: client?.memberId || (checkin as any).memberId || (checkin as any).cardId || '—',
+              memberId: client?.memberId || checkinAny.memberId || checkinAny.cardId || '—',
               name: fallbackName || 'Member',
               phone: client?.phone || '',
               sessionsRemaining,
@@ -1894,36 +1940,27 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                     const m = lastScannedMember as any;
                     const rawPhoto = String(m.photoURL || m.photoUrl || m.avatar || '').trim();
                     const isBrokenRoot = /\/uploads\/?$/i.test(rawPhoto);
-                    const fallbackRgId =
-                      m.redgitsId ||
-                      (m.id && String(m.id).startsWith('redgits-') ? String(m.id).replace(/^redgits-/, '') : '');
-                    const displayPhoto =
-                      rawPhoto && !isBrokenRoot
-                        ? rawPhoto
-                        : fallbackRgId && /^\d+$/.test(String(fallbackRgId))
-                        ? `https://inzan.redgits.com/uploads/members/${fallbackRgId}-cam.jpg`
-                        : '';
+                    const displayPhoto = rawPhoto && !isBrokenRoot ? rawPhoto : '';
                     return (
                       <button
                         type="button"
                         onClick={() => {
-                          setActiveTab('clients');
                           setActiveClientId(lastScannedMember.id);
+                          setActiveTab('clients');
                         }}
                         title={`Click to open ${lastScannedMember.name}'s full member profile`}
                         className="group relative h-44 w-44 sm:h-52 sm:w-52 rounded-2xl overflow-hidden border-2 border-primary/50 bg-muted flex items-center justify-center shadow-md hover:ring-4 hover:ring-primary/30 transition-all cursor-pointer"
                       >
-                        {displayPhoto ? (
+                        <User className="h-20 w-20 text-muted-foreground/50" />
+                        {displayPhoto && (
                           <img
                             src={displayPhoto}
                             alt={lastScannedMember.name}
-                            className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            className="absolute inset-0 h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
                             onError={(e) => {
                               (e.currentTarget as HTMLImageElement).style.display = 'none';
                             }}
                           />
-                        ) : (
-                          <User className="h-20 w-20 text-muted-foreground/50" />
                         )}
                         <div className="absolute inset-x-0 bottom-0 bg-black/70 text-white py-1.5 px-2 text-[11px] font-bold flex items-center justify-center gap-1 opacity-90 group-hover:opacity-100 transition-opacity">
                           <ExternalLink className="h-3 w-3 shrink-0" />
@@ -2987,9 +3024,11 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
               <CardContent className="p-0">
                 <div className="max-h-[250px] overflow-y-auto">
                   {todaysAttendances.map(a => {
-                      const client = clientLookupMap.get(a.clientId);
-                      const recorder = a.recordedBy ? userLookupMap.get(a.recordedBy) : undefined;
                       const aAny = a as any;
+                      const client =
+                        clientLookupMap.get(a.clientId) ||
+                        (aAny.memberId ? clientLookupMap.get(String(aAny.memberId).replace(/^#/, '').trim()) : undefined);
+                      const recorder = a.recordedBy ? userLookupMap.get(a.recordedBy) : undefined;
                       const displayMemberName = client?.name || aAny.memberName || aAny.clientName;
                       const displayRecorderName =
                         recorder?.name?.split(' ')[0] ||
@@ -2999,29 +3038,20 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                       return (
                         <div key={a.id} className="p-3 border-b last:border-0 flex items-center justify-between hover:bg-muted/30 transition-colors">
                           <div className="space-y-0.5">
-                            {client ? (
+                            {client || displayMemberName ? (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setActiveTab('clients');
-                                  setActiveClientId(client.id);
-                                }}
-                                className="text-primary hover:underline font-bold text-sm text-left block"
+                                onClick={() =>
+                                  openMemberProfileFromAttendance({
+                                    client,
+                                    clientId: a.clientId,
+                                    memberId: aAny.memberId,
+                                    name: displayMemberName,
+                                  })
+                                }
+                                className="text-primary hover:underline font-bold text-sm text-left block cursor-pointer"
                               >
-                                {client.name}
-                              </button>
-                            ) : displayMemberName ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (a.clientId) {
-                                    setActiveTab('clients');
-                                    setActiveClientId(a.clientId);
-                                  }
-                                }}
-                                className="text-primary hover:underline font-bold text-sm text-left block"
-                              >
-                                {displayMemberName}
+                                {client?.name || displayMemberName}
                               </button>
                             ) : (
                               <p className="text-sm font-bold">{t('attendance.unknown')}</p>
@@ -3387,11 +3417,8 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
-                              onClick={() => {
-                                setActiveTab('clients');
-                                setActiveClientId(item.clientId);
-                              }}
-                              className="font-bold text-foreground hover:text-primary hover:underline text-left"
+                              onClick={() => openMemberProfileFromAttendance(item)}
+                              className="font-bold text-foreground hover:text-primary hover:underline text-left cursor-pointer"
                               title="Open member CRM profile"
                             >
                               {item.name}

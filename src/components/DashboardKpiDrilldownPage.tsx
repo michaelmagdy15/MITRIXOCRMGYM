@@ -737,11 +737,24 @@ export default function DashboardKpiDrilldownPage({
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           {client.photoURL || (client as any).photoUrl || (client as any).avatarUrl ? (
-                            <img
-                              src={client.photoURL || (client as any).photoUrl || (client as any).avatarUrl}
-                              alt={client.name}
-                              className="h-10 w-10 rounded-full object-cover border border-border shrink-0"
-                            />
+                            <div className="relative h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0 overflow-hidden">
+                              <span>
+                                {(client.name || '?')
+                                  .split(' ')
+                                  .slice(0, 2)
+                                  .map((w) => w[0])
+                                  .join('')
+                                  .toUpperCase()}
+                              </span>
+                              <img
+                                src={client.photoURL || (client as any).photoUrl || (client as any).avatarUrl}
+                                alt={client.name}
+                                className="absolute inset-0 h-full w-full rounded-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
                           ) : (
                             <div className="h-10 w-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-xs text-primary shrink-0">
                               {(client.name || '?')

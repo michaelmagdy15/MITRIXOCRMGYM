@@ -45,16 +45,10 @@ export const MemberPhotoCapture: React.FC<MemberPhotoCaptureProps> = ({
   ).trim();
 
   // Filter out broken RedGITS directory-only placeholder URLs ("https://inzan.redgits.com/uploads/")
-  // and fall back to the RedGITS member webcam path when redgitsId is available.
   const isBrokenUploadsRoot = /\/uploads\/?$/i.test(rawPhotoCandidate);
-  const fallbackRedgitsId =
-    (client as any).redgitsId ||
-    (client.id && String(client.id).startsWith('redgits-') ? String(client.id).replace(/^redgits-/, '') : '');
   const resolvedPhotoUrl =
     rawPhotoCandidate && !isBrokenUploadsRoot
       ? rawPhotoCandidate
-      : fallbackRedgitsId && /^\d+$/.test(String(fallbackRedgitsId))
-      ? `https://inzan.redgits.com/uploads/members/${fallbackRedgitsId}-cam.jpg`
       : '';
 
   const currentPhoto = imgLoadFailed ? '' : resolvedPhotoUrl;

@@ -212,9 +212,26 @@ export function InzanMemberShow({
   const [transferTargetQuery, setTransferTargetQuery] = useState('');
   const [isTransferringPkg, setIsTransferringPkg] = useState(false);
 
+  const cleanFrontDeskNoteString = (raw: any): string => {
+    const str = String(raw || '');
+    if (!str.trim()) return '';
+    return str
+      .split('\n')
+      .map(line => line.trim())
+      .filter(
+        line =>
+          line &&
+          !/^Freezes\s*\(\d+\):/i.test(line) &&
+          !/^Call Center\s*\(\d+\):/i.test(line) &&
+          !/package transfer/i.test(line)
+      )
+      .join('\n')
+      .trim();
+  };
+
   // Instant Member Feedback state (editable by any staff member on Overview)
   const [quickFeedbackText, setQuickFeedbackText] = useState<string>(
-    (client as any).frontDeskNote || client.legacyNotes || ''
+    cleanFrontDeskNoteString((client as any).frontDeskNote || client.legacyNotes || '')
   );
   const [newFeedbackEntry, setNewFeedbackEntry] = useState('');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
@@ -356,7 +373,7 @@ export function InzanMemberShow({
   };
 
   React.useEffect(() => {
-    setQuickFeedbackText((client as any).frontDeskNote || client.legacyNotes || '');
+    setQuickFeedbackText(cleanFrontDeskNoteString((client as any).frontDeskNote || client.legacyNotes || ''));
   }, [client.id, (client as any).frontDeskNote, client.legacyNotes]);
 
   const isSecondaryPackageItem = (pkg: any): boolean => {
@@ -1279,11 +1296,17 @@ export function InzanMemberShow({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-border pb-5">
           <div className="flex items-center gap-4 text-left">
             {client.photoURL ? (
-              <img 
-                src={client.photoURL} 
-                alt={client.name} 
-                className="h-14 w-14 rounded-full border-2 border-primary object-cover shrink-0"
-              />
+              <div className="relative h-14 w-14 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground shrink-0 overflow-hidden">
+                <UserIcon className="h-7 w-7" />
+                <img
+                  src={client.photoURL}
+                  alt={client.name}
+                  className="absolute inset-0 h-full w-full rounded-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
             ) : (
               <div className="h-14 w-14 rounded-full bg-muted border border-border flex items-center justify-center text-muted-foreground shrink-0">
                 <UserIcon className="h-7 w-7" />
@@ -1530,11 +1553,17 @@ export function InzanMemberShow({
                 <div className="border border-border rounded-xl p-4 bg-muted/10 flex flex-col items-center justify-center text-center">
                   <div className="relative group cursor-pointer mb-3">
                     {client.photoURL ? (
-                      <img 
-                        src={client.photoURL} 
-                        alt={client.name} 
-                        className="h-28 w-28 rounded-full border-2 border-primary object-cover"
-                      />
+                      <div className="relative h-28 w-28 rounded-full bg-muted border-2 border-primary flex items-center justify-center text-muted-foreground overflow-hidden">
+                        <UserIcon className="h-12 w-12" />
+                        <img
+                          src={client.photoURL}
+                          alt={client.name}
+                          className="absolute inset-0 h-full w-full rounded-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
                     ) : (
                       <div className="h-28 w-28 rounded-full bg-muted border flex items-center justify-center text-muted-foreground">
                         <UserIcon className="h-12 w-12" />
@@ -2224,6 +2253,53 @@ export function InzanMemberShow({
                   </span>
                 )}
               </div>
+              {(() => {
+                const fCount = Array.isArray((client as any).freezeHistory)
+                  ? (client as any).freezeHistory.length
+                  : Array.isArray((client as any).freezeLogs)
+                  ? (client as any).freezeLogs.length
+                  : 0;
+                const cCount = Array.isArray(client.comments) ? client.comments.length : 0;
+                const tCount =
+                  (Array.isArray((client as any).packageTransferHistory) ? (client as any).packageTransferHistory.length : 0) +
+                  (Array.isArray((client as any).salesTransferHistory) ? (client as any).salesTransferHistory.length : 0) +
+                  (Array.isArray((client as any).trainerTransferHistory) ? (client as any).trainerTransferHistory.length : 0);
+                if (fCount === 0 && cCount === 0 && tCount === 0) return null;
+                return (
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Synced History:
+                    </span>
+                    {fCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('freezing')}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 transition-colors cursor-pointer"
+                      >
+                        ❄️ {fCount} Freeze Record{fCount === 1 ? '' : 's'} → Freezing Tab
+                      </button>
+                    )}
+                    {cCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('comments')}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-colors cursor-pointer"
+                      >
+                        📞 {cCount} Call Center / Note{cCount === 1 ? '' : 's'} → Comments Log
+                      </button>
+                    )}
+                    {tCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('transfers')}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 transition-colors cursor-pointer"
+                      >
+                        🔄 {tCount} Transfer{tCount === 1 ? '' : 's'} → Transfer History
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-bold uppercase text-muted-foreground">Pinned Profile Feedback / Note</Label>
@@ -3639,11 +3715,25 @@ export function InzanMemberShow({
                 return true;
               });
 
-              // Parse package transfers from legacyNotes if present
+              // Parse package transfers from packageTransferHistory and legacyNotes if present
               const pkgTransfers: Array<{ text: string; date: string; by: string }> = [];
+              const seenPt = new Set<string>();
+              if (Array.isArray(rawClient.packageTransferHistory)) {
+                for (const pt of rawClient.packageTransferHistory) {
+                  const text = String(pt.text || pt.details || '').trim();
+                  if (!text || seenPt.has(text)) continue;
+                  seenPt.add(text);
+                  pkgTransfers.push({
+                    text,
+                    date: String(pt.date || pt.createdAt || ''),
+                    by: String(pt.by || pt.createdByName || pt.createdBy || 'Staff'),
+                  });
+                }
+              }
               const legacyLines = String(client.legacyNotes || '').split('\n').map(l => l.trim()).filter(Boolean);
               for (const line of legacyLines) {
-                if (/package transfer/i.test(line)) {
+                if (/package transfer/i.test(line) && !seenPt.has(line)) {
+                  seenPt.add(line);
                   const dtM = line.match(/on\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/i);
                   const byM = line.match(/By\s+(.+)$/i);
                   pkgTransfers.push({
