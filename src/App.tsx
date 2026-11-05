@@ -111,21 +111,40 @@ const MemberPortal = lazyRetry(() => import('./member/MemberPortal'));
 const GuestPortal = lazyRetry(() => import('./member/GuestPortal'));
 const CorporateAccountManager = lazyRetry(() => import('./components/CorporateAccountManager'));
 
-const ModuleLoadingFallback: React.FC = () => (
-  <div className="flex h-[400px] w-full flex-col items-center justify-center gap-3">
-    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-    <p className="text-xs font-medium text-muted-foreground animate-pulse">Loading module...</p>
-  </div>
-);
-
-const PortalLoadingFallback: React.FC = () => (
-  <div className="flex min-h-screen w-full items-center justify-center bg-background">
-    <div className="flex flex-col items-center gap-3">
-      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase animate-pulse">Loading portal...</p>
+const ModuleLoadingFallback: React.FC = () => {
+  const isInzan = typeof window !== 'undefined' && (
+    window.location.hostname.includes('inzan') ||
+    document.documentElement.dataset.tenantTheme === 'inzanathletics'
+  );
+  return (
+    <div className="flex h-[400px] w-full flex-col items-center justify-center gap-3">
+      <div className={`h-8 w-8 animate-spin rounded-full border-2 border-t-transparent ${isInzan ? 'border-emerald-500' : 'border-rose-600'}`} />
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground animate-pulse">Loading module...</p>
     </div>
-  </div>
-);
+  );
+};
+
+const PortalLoadingFallback: React.FC = () => {
+  const isInzan = typeof window !== 'undefined' && (
+    window.location.hostname.includes('inzan') ||
+    document.documentElement.dataset.tenantTheme === 'inzanathletics'
+  );
+  const logo = isInzan ? '/inzanlogo_white.png' : '/strikelogo_white.png';
+  const label = isInzan ? 'INZAN ATHLETICS' : 'STRIKE BOXING CLUB';
+  const barColor = isInzan ? 'from-emerald-500 via-white to-emerald-500' : 'from-rose-600 via-white to-rose-600';
+
+  return (
+    <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#050507] text-white">
+      <div className="flex flex-col items-center gap-5">
+        <img src={logo} alt={label} className="h-12 w-auto object-contain drop-shadow-md animate-pulse" />
+        <div className="h-1 w-32 overflow-hidden rounded-full bg-white/10 relative">
+          <div className={`absolute inset-0 w-1/2 bg-gradient-to-r ${barColor} animate-pulse`} />
+        </div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-400">{label}</p>
+      </div>
+    </div>
+  );
+};
 
 const QUOTE_GENERATOR_EMAILS = ['magd.gallab@gmail.com', 'michaelmitry13@gmail.com', 'simary@inzan.com'];
 const PLATFORM_ADMIN_EMAILS = ['michaelmitry13@gmail.com', 'magd.gallab@gmail.com'];
