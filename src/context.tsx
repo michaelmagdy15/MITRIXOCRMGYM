@@ -269,9 +269,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const { ptPackageRecords, addPTPackageRecord, updatePTPackageRecord } = usePTSessions(currentUser, clients);
   const { userTargets, updateUserTarget } = useUserTargets(currentUser);
 
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [activeClientId, setActiveClientId] = useState<string | null>(null);
+  const [activeTab, setActiveTabState] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'dashboard';
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get('tab');
+    if (urlTab === 'advanced-reports') return 'reports';
+    return urlTab || 'dashboard';
+  });
+  const [activeClientId, setActiveClientIdState] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('member') || null;
+  });
   const [prefilledLeadData, setPrefilledLeadData] = useState<{ name?: string; phone?: string } | null>(null);
+  const isPopStateNavRef = React.useRef(false);
+
+  const setActiveTab = useCallback((nextTab: string) => {
+    const normalized = nextTab === 'advanced-reports' ? 'reports' : nextTab;
+    setActiveTabState(normalized);
+  }, []);
+
+  const setActiveClientId = useCallback((nextId: string | null) => {
+    setActiveClientIdState(nextId);
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isPopStateNavRef.current) {
+      isPopStateNavRef.current = false;
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const curTab = params.get('tab') || 'dashboard';
+    const curMember = params.get('member') || null;
+    if (curTab === activeTab && curMember === activeClientId) return;
+
+    params.set('tab', activeTab);
+    if (activeClientId) {
+      params.set('member', activeClientId);
+    } else {
+      params.delete('member');
+      params.delete('section');
+    }
+    if (activeTab !== 'dashboard') {
+      params.delete('kpi');
+    }
+    const nextSearch = `?${params.toString()}`;
+    window.history.pushState(
+      { activeTab, activeClientId, kpi: params.get('kpi'), section: params.get('section') },
+      '',
+      `${window.location.pathname}${nextSearch}`
+    );
+  }, [activeTab, activeClientId]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePopState = (e: PopStateEvent) => {
+      isPopStateNavRef.current = true;
+      const params = new URLSearchParams(window.location.search);
+      const nextTabRaw = e.state?.activeTab || params.get('tab') || 'dashboard';
+      const nextTab = nextTabRaw === 'advanced-reports' ? 'reports' : nextTabRaw;
+      const nextMember = e.state?.activeClientId !== undefined ? e.state.activeClientId : (params.get('member') || null);
+      setActiveTabState(nextTab);
+      setActiveClientIdState(nextMember);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Permission Templates & Granular Permissions Engine
   const [permissionTemplates, setPermissionTemplates] = useState<PermissionTemplate[]>([]);

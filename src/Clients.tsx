@@ -7812,24 +7812,58 @@ export default function Clients() {
       {!activeClient && upcomingBirthdays.length > 0 && (
         <Card className="border-pink-200 dark:border-pink-900">
           <CardHeader className="bg-pink-50 dark:bg-pink-900/20 pb-4">
-            <CardTitle className="flex items-center text-pink-600 dark:text-pink-400">
-              <Gift className="mr-2 h-5 w-5" />
-              Upcoming Birthdays (Give Discounts/Points!)
+            <CardTitle className="flex items-center justify-between text-pink-600 dark:text-pink-400">
+              <span className="flex items-center">
+                <Gift className="mr-2 h-5 w-5" />
+                Upcoming Birthdays (Give Discounts/Points!)
+              </span>
+              <Badge variant="outline" className="border-pink-500/40 text-pink-600 dark:text-pink-400 font-bold">
+                {upcomingBirthdays.length} Members
+              </Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {upcomingBirthdays.map(client => (
-                <div key={client.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <p className="font-medium">{client.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'MMMM do', '') : ''}
+                <div
+                  key={client.id}
+                  onClick={() => setActiveClientId((client as any).mergedInto || client.id)}
+                  className="flex items-center justify-between p-3.5 border border-border rounded-xl cursor-pointer hover:border-pink-500/60 hover:bg-pink-500/5 transition-all group"
+                  title="Click to open member profile"
+                >
+                  <div className="min-w-0 pr-2">
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-sm text-foreground group-hover:text-pink-600 dark:group-hover:text-pink-400 group-hover:underline truncate">
+                        {client.name}
+                      </p>
+                      {client.memberId && (
+                        <Badge variant="secondary" className="text-[10px] font-mono px-1.5 py-0 h-4 shrink-0">
+                          #{String(client.memberId).replace(/^#/, '')}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                      <span className="text-pink-600 dark:text-pink-400 font-semibold">
+                        🎂 {client.dateOfBirth ? safeFormatDate(client.dateOfBirth, 'MMMM do', '') : ''}
+                      </span>
+                      {client.phone && (
+                        <span className="font-mono text-[11px] opacity-80">• {client.phone}</span>
+                      )}
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" className="text-pink-600 border-pink-200 hover:bg-pink-50">
-                    Send Offer
-                  </Button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWhatsAppClient(client);
+                      }}
+                      className="h-8 text-xs font-bold text-pink-600 border-pink-200 dark:border-pink-800 hover:bg-pink-50 dark:hover:bg-pink-950/50"
+                    >
+                      Send Offer
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

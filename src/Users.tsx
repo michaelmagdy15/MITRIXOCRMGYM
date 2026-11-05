@@ -91,6 +91,23 @@ export default function Users() {
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [staffRoleFilter, setStaffRoleFilter] = useState<string>('all');
+  const [staffBranchFilter, setStaffBranchFilter] = useState<string>('all');
+  const [staffStatusFilter, setStaffStatusFilter] = useState<'all' | 'working' | 'nonworking'>('all');
+
+  const filteredStaffUsers = React.useMemo(() => {
+    const q = staffSearchQuery.trim().toLowerCase();
+    return users.filter(u => {
+      if (staffRoleFilter !== 'all' && u.role !== staffRoleFilter) return false;
+      if (staffBranchFilter !== 'all' && (u.branch || '') !== staffBranchFilter) return false;
+      if (staffStatusFilter !== 'all' && (u.status || 'working') !== staffStatusFilter) return false;
+      if (!q) return true;
+      const hay = `${u.name || ''} ${u.email || ''} ${u.phone || ''} ${u.role || ''} ${u.department || ''} ${u.jobTitle || ''} ${u.branch || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [users, staffSearchQuery, staffRoleFilter, staffBranchFilter, staffStatusFilter]);
+
   const [performanceUser, setPerformanceUser] = useState<User | null>(null);
 
   const hasUsersPageAccess =
@@ -445,11 +462,13 @@ export default function Users() {
         </TabsList>
 
         <TabsContent value="staff" className="space-y-6 m-0 outline-none">
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">Manage CRM access, phone numbers, and target metrics for gym staff.</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Manage CRM access, phone numbers, and target metrics for gym staff.</p>
+            </div>
             {canInviteUsers && (
               <>
-                <Button onClick={openInviteModal} className="h-10 rounded-xl">
+                <Button onClick={openInviteModal} className="h-10 rounded-xl shrink-0">
                   <Plus className="mr-2 h-4 w-4" /> Invite User
                 </Button>
 
@@ -828,6 +847,72 @@ export default function Users() {
             )}
           </div>
 
+          {/* Staff Search & Filter Bar */}
+          <div className="flex flex-wrap items-center gap-2.5 p-3 rounded-xl border border-border bg-card shadow-xs">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                value={staffSearchQuery}
+                onChange={(e) => setStaffSearchQuery(e.target.value)}
+                placeholder="Search staff by name, email, phone, role, department, or branch..."
+                className="pl-9 h-10 rounded-lg bg-muted/30 border-border/60 text-sm"
+              />
+              {staffSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setStaffSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs font-bold"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <select
+              value={staffRoleFilter}
+              onChange={(e) => setStaffRoleFilter(e.target.value)}
+              className="h-10 rounded-lg border border-border/60 bg-muted/30 px-3 text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-label="Filter by role"
+            >
+              <option value="all">All Roles ({users.length})</option>
+              <option value="rep">Sales / Rep</option>
+              <option value="coach">Coach</option>
+              <option value="fitness_manager">Fitness Manager</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+              <option value="crm_admin">CRM Admin</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+
+            <select
+              value={staffBranchFilter}
+              onChange={(e) => setStaffBranchFilter(e.target.value)}
+              className="h-10 rounded-lg border border-border/60 bg-muted/30 px-3 text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-label="Filter by branch"
+            >
+              <option value="all">All Branches</option>
+              {branches.map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+
+            <select
+              value={staffStatusFilter}
+              onChange={(e) => setStaffStatusFilter(e.target.value as any)}
+              className="h-10 rounded-lg border border-border/60 bg-muted/30 px-3 text-xs sm:text-sm font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+              aria-label="Filter by employment status"
+            >
+              <option value="all">All Statuses</option>
+              <option value="working">Working Only</option>
+              <option value="nonworking">Non-Working</option>
+            </select>
+
+            <Badge variant="secondary" className="text-xs font-semibold px-2.5 py-1 h-8">
+              Showing {filteredStaffUsers.length} of {users.length}
+            </Badge>
+          </div>
+
           <Card className="overflow-hidden">
             <CardContent className="p-0">
               <Table>
@@ -841,7 +926,13 @@ export default function Users() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map(user => (
+                  {filteredStaffUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-sm">
+                        No staff members match your search or filters.
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredStaffUsers.map(user => (
                     <TableRow key={user.id} className="group hover:bg-muted/40 transition-colors">
                       {/* Column 1: Name + Status Badges + Email + Phone */}
                       <TableCell className="pl-4 py-3 align-top font-medium">

@@ -113,7 +113,33 @@ export function InzanMemberShow({
   setRenewStartDate
 }: InzanMemberShowProps) {
   const { createClientAccount, resetClientPortalPassword } = useAppContext();
-  const [activeTab, setActiveTab] = useState<TabType>('member_data');
+  const [activeTab, setActiveTabState] = useState<TabType>(() => {
+    if (typeof window === 'undefined') return 'member_data';
+    const sec = new URLSearchParams(window.location.search).get('section') as TabType | null;
+    return sec || 'member_data';
+  });
+  const setActiveTab = React.useCallback((nextTab: TabType) => {
+    setActiveTabState(nextTab);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('section', nextTab);
+      window.history.pushState(
+        { activeTab: params.get('tab') || 'clients', activeClientId: client.id, section: nextTab },
+        '',
+        `${window.location.pathname}?${params.toString()}`
+      );
+    }
+  }, [client.id]);
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePop = () => {
+      const sec = new URLSearchParams(window.location.search).get('section') as TabType | null;
+      if (sec) setActiveTabState(sec);
+      else setActiveTabState('member_data');
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
   const [isActivatingPortal, setIsActivatingPortal] = useState(false);
   const [isResettingPortalPassword, setIsResettingPortalPassword] = useState(false);
   const memberReferrals: any[] = Array.isArray((client as any).referrals) ? (client as any).referrals : [];
@@ -1731,6 +1757,169 @@ export function InzanMemberShow({
                     </Button>
                   </div>
                 </div>
+
+                {/* Mobile App Style Member Benefits & Progress Bars Widget */}
+                {(() => {
+                  const rawC = client as any;
+                  const allPkgs = Array.isArray(client.packages) ? client.packages : [];
+                  const todayIso = new Date().toISOString().slice(0, 10);
+                  const primaryPkg =
+                    allPkgs.find(p => !isSecondaryPackageItem(p) && p.status === 'Active' && !(p as any).isQueuedRenewal && (!p.startDate || String(p.startDate).slice(0, 10) <= todayIso)) ||
+                    allPkgs.find(p => !isSecondaryPackageItem(p) && (p.status === 'Active' || (p.status as any) === 'Frozen' || p.status === 'Hold')) ||
+                    allPkgs.find(p => !isSecondaryPackageItem(p)) ||
+                    null;
+
+                  const secondaryPkgs = allPkgs.filter(p => isSecondaryPackageItem(p));
+                  const activeSecondaryPkg = secondaryPkgs.find(p => p.status === 'Active') || secondaryPkgs[0] || null;
+
+                  const primaryExpiry = primaryPkg?.endDate || client.membershipExpiry || rawC.expiryDate;
+                  const primaryStart = primaryPkg?.startDate || client.startDate || rawC.joinDate;
+                  const daysLeft = getDaysRemainingToRenew(primaryExpiry, primaryStart, primaryPkg?.packageName);
+                  const startObj = toValidDate(primaryStart);
+                  const endObj = toValidDate(primaryExpiry);
+                  const totalDaysSpan =
+                    startObj && endObj && endObj.getTime() > startObj.getTime()
+                      ? Math.max(1, Math.round((endObj.getTime() - startObj.getTime()) / 86400000))
+                      : Math.max(30, daysLeft || 30);
+                  const daysPct = Math.min(100, Math.max(0, Math.round((daysLeft / totalDaysSpan) * 100)));
+
+                  const b = resolvePackageBenefits(primaryPkg || allPkgs[0] || {});
+
+                  const invTotal = Math.max(Number(rawC.invitationsTotal ?? b.invTotal ?? 0), Number(rawC.invitationsRemaining ?? 0));
+                  const invUsed = Number(rawC.invitationsUsed ?? b.invUsed ?? 0);
+                  const invRem = Number(rawC.invitationsRemaining ?? client.guestInvitesRemaining ?? Math.max(0, invTotal - invUsed));
+                  const invPct = invTotal > 0 ? Math.min(100, Math.max(0, Math.round((invRem / invTotal) * 100))) : 0;
+
+                  const freezeTotal = Math.max(Number(rawC.freezeAllowanceDays ?? b.freezeTotal ?? 0), Number(rawC.freezeDaysRemaining ?? 0));
+                  const freezeUsed = Number(rawC.freezeDaysUsed ?? b.freezeUsed ?? 0);
+                  const freezeRem = Number(rawC.freezeDaysRemaining ?? Math.max(0, freezeTotal - freezeUsed));
+                  const freezePct = freezeTotal > 0 ? Math.min(100, Math.max(0, Math.round((freezeRem / freezeTotal) * 100))) : 0;
+
+                  const freePtTotal = Math.max(Number(rawC.freePtSessionsTotal ?? b.freePtTotal ?? 0), Number(rawC.freePtSessionsRemaining ?? 0));
+                  const freePtUsed = Number(rawC.freePtSessionsUsed ?? b.freePtUsed ?? 0);
+                  const freePtRem = Number(rawC.freePtSessionsRemaining ?? Math.max(0, freePtTotal - freePtUsed));
+                  const freePtPct = freePtTotal > 0 ? Math.min(100, Math.max(0, Math.round((freePtRem / freePtTotal) * 100))) : 0;
+
+                  const paidPtTotal = Number(rawC.paidPtSessionsTotal ?? (activeSecondaryPkg as any)?.totalSessions ?? (activeSecondaryPkg as any)?.sessionsTotal ?? 0);
+                  const paidPtRem = Number(rawC.paidPtSessionsRemaining ?? activeSecondaryPkg?.sessionsRemaining ?? 0);
+                  const paidPtPct = paidPtTotal > 0 ? Math.min(100, Math.max(0, Math.round((paidPtRem / paidPtTotal) * 100))) : 0;
+
+                  return (
+                    <div className="border border-emerald-500/30 rounded-xl p-3.5 bg-zinc-950/90 text-white space-y-3 text-left shadow-md">
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400 flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5 text-emerald-400" />
+                          Member App Benefits
+                        </span>
+                        <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] h-4 px-1.5 font-bold">
+                          Phone View
+                        </Badge>
+                      </div>
+
+                      {/* 1. Membership Days Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-zinc-200 truncate max-w-[140px]">
+                            {primaryPkg?.packageName || client.packageType || 'Membership'}
+                          </span>
+                          <span className="font-mono font-black text-emerald-400">
+                            {daysLeft}d left
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              daysLeft <= 7
+                                ? 'bg-gradient-to-r from-rose-500 to-amber-500'
+                                : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                            }`}
+                            style={{ width: `${daysPct}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[9px] text-zinc-400 font-mono">
+                          <span>{safeFormatDate(primaryStart, 'dd MMM yy', '—')}</span>
+                          <span>Exp: {safeFormatDate(primaryExpiry, 'dd MMM yy', '—')}</span>
+                        </div>
+                      </div>
+
+                      {/* 2. Guest Invitations Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-300 font-medium">Guest Invitations</span>
+                          <span className="font-mono font-bold text-indigo-400">
+                            {invRem} / {invTotal} left
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-sky-400 transition-all duration-500"
+                            style={{ width: `${invPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 3. Freeze Balance Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-300 font-medium">Freeze Allowance</span>
+                          <span className="font-mono font-bold text-cyan-400">
+                            {freezeRem} / {freezeTotal}d left
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-400 transition-all duration-500"
+                            style={{ width: `${freezePct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 4. Free PT Quota Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-zinc-300 font-medium">Free PT Quota</span>
+                          <span className="font-mono font-bold text-amber-400">
+                            {freePtRem} / {freePtTotal} ses
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-500"
+                            style={{ width: `${freePtPct}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* 5. Paid PT / Secondary Package Progress Bar (if active) */}
+                      {(paidPtTotal > 0 || paidPtRem > 0 || activeSecondaryPkg) && (
+                        <div className="space-y-1 pt-1 border-t border-zinc-800/80">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-purple-300 font-semibold truncate max-w-[135px]">
+                              {activeSecondaryPkg?.packageName || 'PT Sessions'}
+                            </span>
+                            <span className="font-mono font-bold text-purple-400">
+                              {paidPtRem} / {paidPtTotal || paidPtRem} ses
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                              style={{ width: `${paidPtPct}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('package_data')}
+                        className="w-full pt-1 text-[10px] font-bold text-emerald-400 hover:text-emerald-300 hover:underline text-center block cursor-pointer"
+                      >
+                        Manage Quotas &amp; Packages →
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Right Column: Key-Value User Details Grid */}

@@ -901,7 +901,7 @@ function AppContent() {
       id: 'reports',
       label: t('nav.reports'),
       icon: BarChart3,
-      show: (features.reports !== false) && can('reports.view_basic')
+      show: (features.reports !== false) && (can('reports.view_basic') || can('reports.view_advanced') || isManagerOrSama)
     },
     {
       id: 'audit',
@@ -946,12 +946,6 @@ function AppContent() {
       show: isManagerOrSama
     },
     // --- Premium Modules (gated by feature flags) ---
-    {
-      id: 'advanced-reports',
-      label: 'Premium Reports',
-      icon: Star,
-      show: features.advancedReports === true && can('reports.view_advanced')
-    },
     {
       id: 'call-center',
       label: 'Call Center',
@@ -1589,7 +1583,7 @@ function AppContent() {
               </TabsContent>
             )}
 
-            {isManagerOrSama && (
+            {(isManagerOrSama || can('reports.view_basic') || can('reports.view_advanced')) && (
               <TabsContent value="reports" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
                 <React.Suspense fallback={<ModuleLoadingFallback />}>
                 <Reports />

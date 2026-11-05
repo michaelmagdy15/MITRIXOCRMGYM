@@ -79,7 +79,9 @@ export default defineConfig(({ mode }) => {
             /^\/manifest\.webmanifest/,
             /^\/manifest\.json/,
             /^\/api/,
-            /^\/contracts\//
+            /^\/contracts\//,
+            /^\/assets\//,
+            /\.(?:js|mjs|css|map|wasm|json|png|jpg|jpeg|svg|ico|woff2?)(?:\?.*)?$/i
           ],
           runtimeCaching: [
             {

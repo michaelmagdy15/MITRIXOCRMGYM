@@ -79,7 +79,40 @@ export default function Payments() {
       return active && (features?.ptPackages !== false || p.type !== 'Private');
     });
   }, [packages, features]);
-  const [isNewPaymentOpen, setIsNewPaymentOpen] = useState(false);
+  const [isNewPaymentOpen, setIsNewPaymentOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).get('action') === 'record-payment';
+  });
+
+  // Sync Record Payment full-screen page with browser URL history (Back / Forward buttons)
+  const isPopStatePaymentRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isPopStatePaymentRef.current) {
+      isPopStatePaymentRef.current = false;
+      return;
+    }
+    const url = new URL(window.location.href);
+    const currentAction = url.searchParams.get('action') || '';
+    const nextAction = isNewPaymentOpen ? 'record-payment' : '';
+    if (currentAction !== nextAction) {
+      if (nextAction) url.searchParams.set('action', nextAction);
+      else url.searchParams.delete('action');
+      window.history.pushState({ tab: 'payments', action: nextAction }, '', url.toString());
+    }
+  }, [isNewPaymentOpen]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const shouldOpen = params.get('action') === 'record-payment';
+      isPopStatePaymentRef.current = true;
+      setIsNewPaymentOpen(shouldOpen);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [isShiftHandoverOpen, setIsShiftHandoverOpen] = useState(false);
   const [bnplMonths, setBnplMonths] = useState<3 | 6 | 9 | 12>(6);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -1594,6 +1627,70 @@ export default function Payments() {
     return totals;
   }, [canViewBranchTotals, filteredPayments, clients]);
 
+  // Memoized client search & CascadingPackageSelector callbacks for instant, lag-free Record Payment page
+  const deferredClientSearch = React.useDeferredValue(clientSearch);
+  const matchedDropdownClients = React.useMemo(() => {
+    if (!isNewPaymentOpen || !clientDropdownOpen || isCreatingNew) return [];
+    const term = deferredClientSearch.toLowerCase().trim();
+    const cleanId = term.replace(/^#/, '');
+    const scored: { client: Client; score: number }[] = [];
+    for (const c of clients) {
+      if (!term) {
+        scored.push({ client: c, score: 100 });
+        if (scored.length >= 40) break;
+      } else {
+        const nameRes = scoreNameMatch(c.name, term);
+        if (nameRes.matched) {
+          scored.push({ client: c, score: nameRes.score });
+        } else if (
+          matchesPhoneSearch(c.phone, term) ||
+          matchesPhoneSearch((c as any).parentPhone, term) ||
+          (c.memberId && c.memberId.toString().includes(cleanId))
+        ) {
+          scored.push({ client: c, score: 100 });
+        }
+      }
+    }
+    return term
+      ? scored.sort((a, b) => b.score - a.score).slice(0, 40).map(s => s.client)
+      : scored.map(s => s.client);
+  }, [isNewPaymentOpen, clientDropdownOpen, isCreatingNew, deferredClientSearch, clients]);
+
+  const handleCascadeCategoryChange = useCallback(
+    (cat: 'Kids Only' | 'Kids Pro' | 'Junior Only' | 'Junior Advanced' | 'Adults') => {
+      if (isCreatingNew) setNewClientCategory(cat);
+    },
+    [isCreatingNew]
+  );
+
+  const handleCascadeBranchChange = useCallback(
+    (b: string) => {
+      if (isCreatingNew) setNewClientBranch(b);
+      if (b && b !== 'All Branches') setPaymentBranch(b);
+    },
+    [isCreatingNew]
+  );
+
+  const handleCascadePackageSelect = useCallback(
+    (pkg: any, isPt: boolean) => {
+      if (!pkg) {
+        setPackageType('Custom');
+        return;
+      }
+      setPackageType(pkg.name);
+      setAmount(pkg.price.toString());
+      setPaymentCategory(isPt ? 'PT' : resolvePaymentCategory(pkg.name));
+      setStartDate((prevStart) => {
+        if (prevStart) {
+          const end = safeAddDays(prevStart, pkg.expiryDays);
+          setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
+        }
+        return prevStart;
+      });
+    },
+    []
+  );
+
   // Inzan pre-payment verification gate: payment stays blocked until member data is complete.
   const inzanGateIssues: string[] = (() => {
     if (!isInzan) return [];
@@ -1609,6 +1706,1094 @@ export default function Payments() {
     if (discountReason === 'Corporate' && !corporateProofUrl) issues.push('Corporate proof document is required to apply corporate pricing');
     return issues;
   })();
+
+  if (isNewPaymentOpen) {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] space-y-6 pb-16 animate-in fade-in duration-150">
+        {/* Sticky Full-Screen Header Bar */}
+        <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border/60 bg-background/95 backdrop-blur-xl px-5 py-4 shadow-lg">
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsNewPaymentOpen(false)}
+              className="gap-2 rounded-xl font-bold border-border/80 hover:bg-muted"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back to Payments
+            </Button>
+            <div>
+              <h2 className="text-xl md:text-2xl font-extrabold tracking-tight flex items-center gap-2.5">
+                <CreditCard className="h-6 w-6 text-primary" />
+                {t('payments.record_payment')}
+              </h2>
+              <p className="text-xs text-muted-foreground hidden sm:block">
+                Full-screen Point of Sale &amp; Membership Entitlement Terminal
+              </p>
+            </div>
+          </div>
+
+          {/* Live Financial Summary Badges */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs">
+              <span className="text-muted-foreground font-semibold mr-1.5">Net Due:</span>
+              <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                {pricingBreakdown.netAmount.toLocaleString()} LE
+              </span>
+            </div>
+            <div className="rounded-xl border border-primary/30 bg-primary/10 px-3.5 py-1.5 text-xs">
+              <span className="text-muted-foreground font-semibold mr-1.5">Paid Now:</span>
+              <span className="font-mono font-extrabold text-primary">
+                {pricingBreakdown.amountPaid.toLocaleString()} LE
+              </span>
+            </div>
+            {pricingBreakdown.remainingBalance > 0 && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-1.5 text-xs">
+                <span className="text-muted-foreground font-semibold mr-1.5">Remaining Debt:</span>
+                <span className="font-mono font-extrabold text-amber-600 dark:text-amber-400">
+                  {pricingBreakdown.remainingBalance.toLocaleString()} LE
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Full-Screen POS Form Card */}
+        <div className="rounded-3xl border border-border/60 bg-card/60 p-5 md:p-8 shadow-xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 md:gap-x-8 gap-y-5 md:gap-y-6">
+            <div className="md:col-span-2 lg:col-span-3 bg-primary/5 border border-primary/20 rounded-2xl p-4 text-xs text-muted-foreground flex items-start gap-3">
+              <Receipt className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-semibold text-foreground text-sm">Payment &amp; Entitlement Transaction Integrity</div>
+                <div>Selecting a package and recording payment executes an atomic transaction that registers the financial receipt, updates the member package status, and creates the exact service entitlement for booking. Partial payments preserve remaining balances, while Inzan members require Egyptian mobile and National ID verification before completion.</div>
+              </div>
+            </div>
+
+            <div className="space-y-3 lg:col-span-2">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.table.client')}</Label>
+              <div className="relative" ref={clientDropdownRef}>
+                <div className="relative">
+                  <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
+                  <Input
+                    className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 pl-14 pr-5 text-lg focus-visible:ring-primary"
+                    placeholder={t('header.search_placeholder')}
+                    value={clientSearch}
+                    onChange={e => { setClientSearch(e.target.value); setClientDropdownOpen(true); if (!e.target.value) setClientId(''); }}
+                    onFocus={() => setClientDropdownOpen(true)}
+                  />
+                </div>
+                {clientDropdownOpen && (
+                  <div className="absolute z-50 mt-1 w-full rounded-2xl border border-white/10 bg-popover shadow-2xl overflow-hidden">
+                    {isCreatingNew ? (
+                      <div className="p-5 space-y-3">
+                        <p className="text-sm font-bold flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary" />{t('members.add_member')}</p>
+                        <Input
+                          placeholder={`${t('leads.table.name')} *`}
+                          className="h-10 rounded-xl text-sm bg-background/60"
+                          value={newClientName}
+                          onChange={e => setNewClientName(e.target.value)}
+                          autoFocus
+                        />
+                        <Input
+                          placeholder={`${t('leads.table.phone')} *`}
+                          className="h-10 rounded-xl text-sm bg-background/60"
+                          value={newClientPhone}
+                          onChange={e => setNewClientPhone(e.target.value)}
+                        />
+                        <select
+                          className="flex h-10 w-full rounded-xl border border-input bg-background/60 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          value={newClientBranch}
+                          onChange={e => setNewClientBranch(e.target.value)}
+                        >
+                          <option value="">{t('leads.branch')}</option>
+                          {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                        </select>
+                        <select
+                          className="flex h-10 w-full rounded-xl border border-input bg-background/60 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          value={newClientGender}
+                          onChange={e => setNewClientGender(e.target.value as any)}
+                        >
+                          <option value="Male">Male</option>
+                          <option value="Female">Female</option>
+                          <option value="Other">Other</option>
+                          <option value="Prefer not to say">Prefer not to say</option>
+                        </select>
+                        <select
+                          className="flex h-10 w-full rounded-xl border border-input bg-background/60 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          value={newClientCategory}
+                          onChange={e => setNewClientCategory(e.target.value as any)}
+                        >
+                          <option value="Adults">Adults</option>
+                          <option value="Kids Only">Kids Only</option>
+                          <option value="Kids Pro">Kids Pro</option>
+                          <option value="Junior Only">Junior Only</option>
+                          <option value="Junior Advanced">Junior Advanced</option>
+                        </select>
+                        {isInzan && (
+                          <Input
+                            placeholder="National ID (14 digits) or Passport *"
+                            className="h-10 rounded-xl text-sm bg-background/60"
+                            value={newClientNationalId}
+                            onChange={e => setNewClientNationalId(e.target.value)}
+                          />
+                        )}
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
+                          <Checkbox checked={newClientLinked} onCheckedChange={c => setNewClientLinked(!!c)} />
+                          {t('members.linked_family_account')}
+                        </label>
+                        <div className="flex gap-2 pt-1">
+                          <Button size="sm" variant="outline" className="flex-1 rounded-xl" onMouseDown={() => { setIsCreatingNew(false); }}>{t('common.cancel')}</Button>
+                          <Button size="sm" className="flex-1 rounded-xl font-bold" onMouseDown={handleCreateNewClient} disabled={!newClientName.trim() || !newClientPhone.trim()}>
+                            {t('common.create_and_select')}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="w-full text-left px-5 py-3 hover:bg-primary/10 transition-colors flex items-center gap-3 border-b border-white/10"
+                          onMouseDown={() => { setIsCreatingNew(true); }}
+                        >
+                          <UserPlus className="h-4 w-4 text-primary shrink-0" />
+                          <span className="text-sm font-semibold text-primary">{t('members.add_member')} — {t('common.create_and_select')}</span>
+                        </button>
+                        {clientSearch.trim().length > 0 && (
+                          <button
+                            type="button"
+                            className="w-full text-left px-5 py-3 hover:bg-emerald-500/10 transition-colors flex items-center gap-3 border-b border-white/10"
+                            onMouseDown={() => {
+                              setClientId('WALK-IN-GUEST');
+                              setGuestClientName(clientSearch.trim());
+                              setIsWalkInGuest(true);
+                              setClientSearch(clientSearch.trim());
+                              if (!paymentBranch) setPaymentBranch(currentUser?.branch || (branches.length > 0 ? branches[0] : '') || '');
+                              setClientDropdownOpen(false);
+                            }}
+                          >
+                            <User className="h-4 w-4 text-emerald-500 shrink-0" />
+                            <span className="text-sm font-semibold text-emerald-500">
+                              {(t('payments.record_as_guest') || 'Record as Walk-in / Drop Session Guest')}: "{clientSearch.trim()}"
+                            </span>
+                          </button>
+                        )}
+                        <div className="max-h-[280px] overflow-y-auto custom-scrollbar">
+                          {matchedDropdownClients.length === 0 ? (
+                            <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('members.no_members')}</div>
+                          ) : (
+                            matchedDropdownClients.map(client => (
+                              <button
+                                key={client.id}
+                                type="button"
+                                className="w-full text-left px-5 py-3 hover:bg-muted/60 transition-colors flex items-center gap-3"
+                                onMouseDown={() => {
+                                  setClientId(client.id);
+                                  setClientSearch(`${client.name}${client.phone ? ` (${client.phone})` : ''}`);
+                                  if (client.branch) setPaymentBranch(client.branch);
+                                  const repName = client.salesRep || resolveUserDisplay(client.assignedTo, users, '') || (currentUser?.role === 'rep' ? currentUser.name : '');
+                                  if (repName) setSalesName(repName);
+                                  setInlineNationalId(client.nationalId || (client as any).nationalIdOrPassport || (client as any).passport || '');
+                                  setClientDropdownOpen(false);
+                                }}
+                              >
+                                <div>
+                                  <div className="font-medium text-sm">{client.name}</div>
+                                  <div className="text-xs text-muted-foreground">{[client.phone, client.memberId ? `#${client.memberId}` : null, client.branch].filter(Boolean).join(' · ')}</div>
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                {isInzan && clientId && clientId !== 'WALK-IN-GUEST' && (() => {
+                  const curClient = clients.find(c => c.id === clientId);
+                  const hasValidId = isValidNationalIdOrPassport(curClient?.nationalId || inlineNationalId);
+                  if (hasValidId) return null;
+                  return (
+                    <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-500 text-xs space-y-2 mt-2">
+                      <div className="flex items-center gap-2 font-bold">
+                        <ShieldAlert className="h-4 w-4 shrink-0" />
+                        <span>Pre-Payment Verification Gate: National ID Required</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Inzan policy requires entering the National ID (14 digits) or Passport before payment can proceed.
+                      </p>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Egyptian National ID (14 digits) or Passport..."
+                          value={inlineNationalId}
+                          onChange={e => setInlineNationalId(e.target.value)}
+                          className="h-9 text-xs bg-background text-foreground"
+                        />
+                        <Button
+                          size="sm"
+                          type="button"
+                          disabled={!isValidNationalIdOrPassport(inlineNationalId) || isSavingNationalId}
+                          onClick={async () => {
+                            if (clientId && isValidNationalIdOrPassport(inlineNationalId)) {
+                              setIsSavingNationalId(true);
+                              try {
+                                await updateClient(clientId, { nationalId: inlineNationalId.trim() });
+                                setAlertTitle('Verified');
+                                setAlertDescription('National ID verified and saved to member profile.');
+                                setAlertOpen(true);
+                              } finally {
+                                setIsSavingNationalId(false);
+                              }
+                            }
+                          }}
+                          className="h-9 text-xs font-bold shrink-0"
+                        >
+                          {isSavingNationalId ? 'Saving...' : 'Save & Verify'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_date')}</Label>
+              <Input
+                type="date"
+                className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
+                value={paymentDate}
+                max={format(new Date(), 'yyyy-MM-dd')}
+                onChange={(e) => setPaymentDate(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.start_date')}</Label>
+              <Input
+                type="date"
+                className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  const pkg = packages.find(p => p.name === packageType);
+                  if (pkg && e.target.value) {
+                    const end = safeAddDays(e.target.value, pkg.expiryDays);
+                    setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
+                  }
+                }}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.end_date')}</Label>
+              <Input
+                type="date"
+                className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.amount')}</Label>
+              <div className="relative">
+                <Input 
+                  type="number" 
+                  placeholder="0.00" 
+                  className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all pl-12 pr-5 text-lg font-bold text-green-600"
+                  value={amount} 
+                  onChange={(e) => setAmount(e.target.value)} 
+                />
+                <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.discount')}</Label>
+              <div className="flex gap-2">
+                <Select value={discountType || 'none'} disabled={!canApplyDiscount} onValueChange={(v) => {
+                  if (v === 'none') {
+                    setDiscountType('');
+                    setDiscountValue('');
+                    setDiscountedAmount('');
+                    setAmountPaid('');
+                    setDiscountReasonText('');
+                    setDiscountReason('Standard');
+                  } else {
+                    setDiscountType(v as 'percentage' | 'amount');
+                  }
+                }}>
+                  <SelectTrigger className="h-12 md:h-14 w-[120px] md:w-[140px] rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-4 text-sm font-medium">
+                    <SelectValue placeholder="No Discount" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl border-none shadow-2xl">
+                    <SelectItem value="none" className="rounded-xl py-3 px-4 italic">No Discount</SelectItem>
+                    <SelectItem value="percentage" className="rounded-xl py-3 px-4">Percent (%)</SelectItem>
+                    <SelectItem value="amount" className="rounded-xl py-3 px-4">Fixed (LE)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {discountType && (
+                  <div className="relative flex-1">
+                    <Input 
+                      type="number" 
+                      placeholder={discountType === 'percentage' ? "e.g. 15" : "e.g. 500"} 
+                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-bold text-amber-500"
+                      value={discountValue} 
+                      disabled={!canApplyDiscount}
+                      onChange={(e) => setDiscountValue(e.target.value)} 
+                    />
+                  </div>
+                )}
+              </div>
+              {discountedAmount && (
+                <div className="text-xs space-y-1 ml-1">
+                  <p className="font-semibold text-emerald-500">Net Due: {discountedAmount} LE</p>
+                  {pricingBreakdown.discountAmount > 0 && (
+                    <p className="text-rose-500">Discount: {pricingBreakdown.discountAmount.toLocaleString()} LE</p>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Amount Paid Now (LE)</Label>
+                <Input
+                  type="number"
+                  placeholder={pricingBreakdown.netAmount.toFixed(2)}
+                  className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-bold font-mono"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value)}
+                />
+                {amountPaid && pricingBreakdown.remainingBalance > 0 && (
+                  <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 space-y-2 mt-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
+                      <span>Remaining Debt (Installment Schedule)</span>
+                      <span>{formatCurrencyAmount(pricingBreakdown.remainingBalance)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">Split Installments</Label>
+                        <select
+                          value={installmentCount}
+                          onChange={(e) => setInstallmentCount(Number(e.target.value))}
+                          className="w-full h-8 rounded-lg bg-background border px-2 text-xs font-bold"
+                        >
+                          <option value={1}>1 Installment</option>
+                          <option value={2}>2 Even Installments</option>
+                          <option value={3}>3 Even Installments</option>
+                          <option value={4}>4 Even Installments</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="text-[10px] font-bold uppercase text-muted-foreground">1st Due Date</Label>
+                        <Input
+                          type="date"
+                          value={firstInstallmentDueDate}
+                          onChange={(e) => setFirstInstallmentDueDate(e.target.value)}
+                          className="h-8 text-xs bg-background px-2"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1 pt-1 border-t border-amber-500/20 text-[11px] font-mono">
+                      {splitInstallmentsEvenly(
+                        pricingBreakdown.remainingBalance,
+                        installmentCount,
+                        firstInstallmentDueDate || format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+                        30
+                      ).map((inst, idx) => (
+                        <div key={inst.index} className="flex justify-between">
+                          <span>Installment #{idx + 1} ({inst.dueDate}):</span>
+                          <span className="font-bold">{inst.amount.toLocaleString()} LE</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {discountType && (
+                <div className="space-y-3 pt-2 border-t border-border/30">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Discount Category</Label>
+                    <Select value={discountReason} onValueChange={(v: any) => setDiscountReason(v)}>
+                      <SelectTrigger className="h-10 rounded-xl bg-background/50 border-white/10 text-xs font-medium">
+                        <SelectValue placeholder="Discount Category" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-none shadow-2xl">
+                        <SelectItem value="Standard">Standard / Manager Discretion</SelectItem>
+                        {showCorporateDiscounts && (
+                          <SelectItem value="Corporate">Corporate Partner (Proof Required)</SelectItem>
+                        )}
+                        <SelectItem value="Referral">Member Referral</SelectItem>
+                        <SelectItem value="Promotional">Seasonal / Promotional Campaign</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {Number(discountValue) > 0 && (
+                    <div className="space-y-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="payment-discount-reason-text" className="text-xs font-semibold flex items-center gap-1.5">
+                          <span>Discount Reason / Justification</span>
+                          <span className="text-rose-500 font-bold text-xs">* Required</span>
+                        </Label>
+                        {discountReasonText.trim().length >= 3 ? (
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            ✓ Validated
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-rose-500 font-semibold">
+                            Reason Required
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block">Quick Select:</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {QUICK_DISCOUNT_REASONS.map((chip) => {
+                            const text = discountReasonText.trim();
+                            const isSelected = text === chip || text.startsWith(`${chip} - `) || text.startsWith(`${chip}: `);
+                            return (
+                              <button
+                                key={chip}
+                                type="button"
+                                onClick={() => handleDiscountChipClick(chip)}
+                                className={`text-[11px] px-2.5 py-1 rounded-full border transition-all font-medium cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-amber-500 text-white border-amber-600 shadow-sm font-semibold'
+                                    : 'bg-background/90 hover:bg-muted border-border/70 text-foreground/80 hover:text-foreground'
+                                }`}
+                              >
+                                {chip}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Input
+                          id="payment-discount-reason-text"
+                          type="text"
+                          placeholder="e.g. Approved by GM for CIB employee"
+                          className={`h-10 rounded-xl bg-background/90 text-xs ${
+                            !discountReasonText || discountReasonText.trim().length < 3
+                              ? 'border-rose-500/70 ring-1 ring-rose-500/30'
+                              : 'border-emerald-500/50'
+                          }`}
+                          value={discountReasonText}
+                          onChange={(e) => setDiscountReasonText(e.target.value)}
+                        />
+                        {(!discountReasonText || discountReasonText.trim().length < 3) && (
+                          <p className="text-[11px] font-medium text-rose-500">
+                            * Discount reason is mandatory when applying a discount (minimum 3 characters).
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {discountReason === 'Corporate' && (
+                    <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-primary flex items-center gap-1.5">
+                          <Paperclip className="h-3.5 w-3.5" />
+                          Corporate Verification Document *
+                        </span>
+                        {corporateProofUrl && (
+                          <Badge className="bg-emerald-500 text-white text-[10px]">Proof Attached</Badge>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Upload National ID or Corporate Work Badge (Image / PDF). Required to authorize corporate pricing.
+                      </p>
+                      <Input
+                        type="file"
+                        accept=".png,.jpg,.jpeg,.pdf"
+                        disabled={isUploadingCorporateProof}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const okType = /^image\/(png|jpe?g)$/.test(file.type) || file.type === 'application/pdf';
+                          if (!okType || file.size > 5 * 1024 * 1024) {
+                            setAlertTitle('Invalid Document');
+                            setAlertDescription('Upload a PNG, JPG or PDF file up to 5MB.');
+                            setAlertOpen(true);
+                            e.target.value = '';
+                            return;
+                          }
+                          setIsUploadingCorporateProof(true);
+                          try {
+                            const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '');
+                            const path = `corporate_proofs/${clientId || 'guest'}_${Date.now()}_${cleanName}`;
+                            const r = storageRef(storage, path);
+                            await uploadBytes(r, file);
+                            const url = await getDownloadURL(r);
+                            setCorporateProofUrl(url);
+                            setCorporateProofFileName(file.name);
+                          } catch (err: any) {
+                            console.error('Upload proof failed:', err);
+                            setAlertTitle('Upload Failed');
+                            setAlertDescription(err?.message || 'Failed to upload document.');
+                            setAlertOpen(true);
+                          } finally {
+                            setIsUploadingCorporateProof(false);
+                          }
+                        }}
+                        className="h-9 text-xs bg-background"
+                      />
+                      {corporateProofFileName && (
+                        <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+                          Attached: {corporateProofFileName}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_method')}</Label>
+                {showSplitTender && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !useSplitTender;
+                      setUseSplitTender(next);
+                      if (next && !primaryTenderAmount) {
+                        setPrimaryTenderAmount(String(Math.round(pricingBreakdown.amountPaid / 2)));
+                      }
+                    }}
+                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
+                      useSplitTender
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-muted/50 text-muted-foreground border-border hover:border-primary/40'
+                    }`}
+                  >
+                    {useSplitTender ? '✓ Split Tender (2 Methods)' : '+ Split Tender (Cash + Instapay / Visa)'}
+                  </button>
+                )}
+              </div>
+              <Select value={method} onValueChange={(v) => v && setMethod(v as Payment['method'])}>
+                <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                  <SelectValue placeholder={t('payments.payment_method')} />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl border-none shadow-2xl">
+                  <SelectItem value="Cash" className="rounded-xl py-3 px-4">{t('dashboard.cash')}</SelectItem>
+                  <SelectItem value="Credit Card" className="rounded-xl py-3 px-4">{t('dashboard.visa')}</SelectItem>
+                  <SelectItem value="Instapay" className="rounded-xl py-3 px-4">{t('dashboard.instapay')}</SelectItem>
+                  <SelectItem value="Wallet Balance" className="rounded-xl py-3 px-4">💳 Wallet Cash Balance</SelectItem>
+                  <SelectItem value="ValU" className="rounded-xl py-3 px-4">ValU (BNPL Installments)</SelectItem>
+                  <SelectItem value="Sympl" className="rounded-xl py-3 px-4">Sympl (Pay Later)</SelectItem>
+                  <SelectItem value="Souhoola" className="rounded-xl py-3 px-4">Souhoola (BNPL)</SelectItem>
+                  <SelectItem value="Fawry" className="rounded-xl py-3 px-4">Fawry Reference Code</SelectItem>
+                  <SelectItem value="Bank Transfer" className="rounded-xl py-3 px-4">Bank Transfer</SelectItem>
+                  <SelectItem value="Other" className="rounded-xl py-3 px-4">{t('leads.tabs.other')}</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {clientId && !isWalkInGuest && (() => {
+                const selClient = clients.find(c => c.id === clientId);
+                const wBal = Number((selClient as any)?.walletBalance || 0);
+                if (wBal <= 0 && method !== 'Wallet Balance' && (!useSplitTender || secondaryMethod !== 'Wallet Balance')) return null;
+                return (
+                  <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs">
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                      💳 Member Wallet Cash Balance: <span className="font-mono font-black">{wBal.toLocaleString()} LE</span>
+                    </span>
+                    {wBal > 0 && wBal < pricingBreakdown.amountPaid && !useSplitTender && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMethod('Wallet Balance');
+                          setUseSplitTender(true);
+                          setPrimaryTenderAmount(String(wBal));
+                          setSecondaryMethod('Cash');
+                        }}
+                        className="text-[11px] font-bold underline text-emerald-600 dark:text-emerald-400 hover:opacity-80"
+                      >
+                        Apply {wBal.toLocaleString()} LE + Split Remainder
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {useSplitTender && (
+                <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 space-y-2.5">
+                  <div className="text-[11px] font-bold uppercase text-primary">
+                    Dual-Tender Split (Pay Type 1 + Pay Type 2)
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">
+                        {method} Amount (LE)
+                      </Label>
+                      <Input
+                        type="number"
+                        value={primaryTenderAmount}
+                        onChange={(e) => setPrimaryTenderAmount(e.target.value)}
+                        placeholder="0"
+                        className="h-9 bg-background font-mono text-xs font-bold"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] font-bold uppercase text-muted-foreground">
+                        Pay Type 2 Method
+                      </Label>
+                      <select
+                        value={secondaryMethod}
+                        onChange={(e) => setSecondaryMethod(e.target.value as Payment['method'])}
+                        className="w-full h-9 rounded-md bg-background border px-2 text-xs font-bold"
+                      >
+                        <option value="Credit Card">Visa / Credit Card</option>
+                        <option value="Instapay">Instapay</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Wallet Balance">Wallet Cash Balance</option>
+                        <option value="ValU">ValU</option>
+                        <option value="Sympl">Sympl</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-primary/15">
+                    <span className="text-muted-foreground">Auto-calculated {secondaryMethod}:</span>
+                    <span className="font-mono font-bold text-primary">
+                      {calculateSplitTenderRemaining(
+                        pricingBreakdown.amountPaid,
+                        parseFloat(primaryTenderAmount) || 0
+                      ).remainingDebt.toLocaleString()}{' '}
+                      LE
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {(method === 'Instapay' || (useSplitTender && secondaryMethod === 'Instapay')) && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">
+                    {t('payments.instapay_ref')} / Paste SMS
+                  </Label>
+                  {(() => {
+                    const selClient = clients.find((c) => c.id === clientId);
+                    const waLink = buildWhatsAppPaymentLinkUrl({
+                      clientName: selClient?.name || guestClientName || 'Member',
+                      clientPhone: selClient?.phone || newClientPhone,
+                      clubName: branding?.companyName || 'Mitrixo Gym',
+                      packageName: packageType || 'Membership',
+                      amount: pricingBreakdown.amountPaid || Number(amount) || 0,
+                      method: 'Instapay',
+                    });
+                    return waLink ? (
+                      <a
+                        href={waLink}
+                        target="whatsapp_crm"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          openWhatsAppUrl(waLink);
+                        }}
+                        className="text-[11px] font-bold text-emerald-600 hover:underline flex items-center gap-1"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        Send IPA via WhatsApp
+                      </a>
+                    ) : null;
+                  })()}
+                </div>
+                <Input 
+                  placeholder="Paste InstaPay SMS or 12-digit IPN Ref..." 
+                  className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-base font-mono"
+                  value={instapayRef} 
+                  onChange={(e) => {
+                    const rawVal = e.target.value;
+                    const parsed = validateOrExtractInstapayRef(rawVal);
+                    setInstapayRef(parsed.valid ? parsed.normalizedRef : rawVal.replace(/\D/g, '').slice(0, 16));
+                  }} 
+                />
+              </div>
+            )}
+
+            {(['ValU', 'Sympl', 'Souhoola'] as const).includes(method as any) && (
+              <div className="p-3.5 rounded-2xl border border-purple-500/30 bg-purple-500/5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase text-purple-600 dark:text-purple-400">
+                    {method} BNPL Plan
+                  </span>
+                  <div className="flex gap-1">
+                    {([3, 6, 9, 12] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setBnplMonths(m)}
+                        className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                          bnplMonths === m
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : 'bg-background text-muted-foreground border-border'
+                        }`}
+                      >
+                        {m}M
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {(() => {
+                  const plan = calculateBnplSchedule(
+                    pricingBreakdown.amountPaid || Number(amount) || 0,
+                    method as 'ValU' | 'Sympl' | 'Souhoola',
+                    bnplMonths
+                  );
+                  const selClient = clients.find((c) => c.id === clientId);
+                  const waBnplUrl = buildWhatsAppPaymentLinkUrl({
+                    clientName: selClient?.name || guestClientName || 'Member',
+                    clientPhone: selClient?.phone || newClientPhone,
+                    clubName: branding?.companyName || 'Mitrixo Gym',
+                    packageName: packageType || 'Membership',
+                    amount: pricingBreakdown.amountPaid || Number(amount) || 0,
+                    method: method as 'ValU' | 'Sympl' | 'Souhoola',
+                    bnplMonths,
+                  });
+                  return (
+                    <div className="text-xs space-y-1">
+                      <div className="flex justify-between font-mono">
+                        <span className="text-muted-foreground">Est. Monthly Installment:</span>
+                        <span className="font-bold text-purple-600 dark:text-purple-400">
+                          {plan.monthlyInstallment.toLocaleString()} EGP / mo ({plan.months} mos)
+                        </span>
+                      </div>
+                      {waBnplUrl && (
+                        <a
+                          href={waBnplUrl}
+                          target="whatsapp_crm"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            openWhatsAppUrl(waBnplUrl);
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline pt-1"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          Send {method} Checkout Link via WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.receipt_no')}</Label>
+              <div className="relative">
+                <Receipt className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input 
+                  placeholder="Optional receipt / invoice number" 
+                  className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all pl-14 pr-5 text-lg"
+                  value={receiptNumber} 
+                  onChange={(e) => setReceiptNumber(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.branch') || 'Branch'}</Label>
+              <Select 
+                value={paymentBranch || (branches.length > 0 ? branches[0] : '')} 
+                onValueChange={(v) => v && setPaymentBranch(v)}
+              >
+                <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                  <SelectValue placeholder={t('leads.branch') || 'Select Branch'} />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl border-none shadow-2xl">
+                  {branches.map(b => (
+                    <SelectItem key={b} value={b} className="rounded-xl py-3 px-4">{b}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-full space-y-3">
+              {isInzan && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">
+                  Filter Packages by Category
+                </Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['All', 'Membership', 'PT', 'Classes', 'SGF', 'Nutrition'] as const).map((pill) => {
+                    const isSelected = packageCategoryFilter === pill;
+                    return (
+                      <button
+                        key={pill}
+                        type="button"
+                        onClick={() => {
+                          setPackageCategoryFilter(pill);
+                          if (pill === 'PT') setPaymentCategory('PT');
+                          else if (pill === 'Classes' || pill === 'SGF') setPaymentCategory('Classes');
+                          else if (pill === 'Membership') setPaymentCategory('Memberships');
+                        }}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                            : 'bg-background/60 text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground'
+                        }`}
+                      >
+                        {pill}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
+              {(() => {
+                const currentSelectedClient = clientId ? clients.find(c => c.id === clientId) : null;
+                return (
+                  <>
+                    <CascadingPackageSelector
+                      packages={modalFilteredPackages}
+                      selectedPackageName={packageType}
+                      initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
+                      initialBranch={paymentBranch || currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
+                      branches={branches}
+                      onCategoryChange={handleCascadeCategoryChange}
+                      onBranchChange={handleCascadeBranchChange}
+                      onPackageSelect={handleCascadePackageSelect}
+                    />
+                    {(() => {
+                      if (!isInzan) return null;
+                      const currentPkg = packages.find(p => p.name === packageType);
+                      const eligibility = (!isWalkInGuest && currentSelectedClient && currentPkg)
+                        ? validateMembershipEligibility(currentSelectedClient, currentPkg)
+                        : { allowed: true, reason: '' };
+                      if (eligibility.allowed) return null;
+                      return (
+                        <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-2xl text-xs flex items-center gap-2">
+                          <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
+                          <span><strong>Primary Membership Required:</strong> {eligibility.reason}</span>
+                        </div>
+                      );
+                    })()}
+                  </>
+                );
+              })()}
+            </div>
+
+            {packageType === 'Custom' && (
+              <div className="space-y-3">
+                <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.custom_package_name')}</Label>
+                <Input 
+                  placeholder="e.g., 5 S GT Adults" 
+                  className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
+                  value={customPackage} 
+                  onChange={(e) => setCustomPackage(e.target.value)} 
+                />
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Category</Label>
+              <Select value={paymentCategory} onValueChange={(v) => v && setPaymentCategory(v as PaymentCategory)}>
+                <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl border-none shadow-2xl">
+                  {PAYMENT_CATEGORIES.map(cat => (
+                    <SelectItem key={cat} value={cat} className="rounded-xl py-3 px-4">{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {paymentCategory === 'PT' && (
+              <div className="space-y-3">
+                <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.coach')}</Label>
+                <Select value={coachName} onValueChange={(v) => { if(!v) return; setCoachName(v); if (v !== '__custom__') setCustomCoachName(''); }}>
+                  <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                    <SelectValue placeholder={t('payments.coach')} />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-2xl border-none shadow-2xl">
+                    {coaches.filter(c => c.active).map(coach => (
+                      <SelectItem key={coach.id} value={coach.name} className="rounded-xl py-3 px-4">{coach.name}</SelectItem>
+                    ))}
+                    <SelectItem value="__custom__" className="rounded-xl py-3 px-4">Manual Entry...</SelectItem>
+                  </SelectContent>
+                </Select>
+                {coachName === '__custom__' && (
+                  <Input
+                    placeholder="Enter coach name"
+                    className="h-12 rounded-xl bg-background/50 mt-2 px-4 shadow-inner"
+                    value={customCoachName}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomCoachName(e.target.value)}
+                  />
+                )}
+              </div>
+            )}
+
+            {(() => {
+              const selectedClientForForm = (!isWalkInGuest && clientId) ? clients.find(c => c.id === clientId) : null;
+              const isRepLockedForForm = isInzan && Boolean(selectedClientForForm?.assignedTo || selectedClientForForm?.salesRep);
+              const isRepFieldDisabled = isRepLockedForForm && !isSalesManager;
+
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.sales_person')}</Label>
+                    {isInzan && isRepLockedForForm && !isSalesManager ? (
+                      <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+                        🔒 Locked to Assigned Rep
+                      </Badge>
+                    ) : isInzan && isSalesManager && isRepLockedForForm ? (
+                      <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">
+                        Sales Manager Authority
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <Select
+                    value={salesName}
+                    disabled={isRepFieldDisabled}
+                    onValueChange={(v) => {
+                      if (!v) return;
+                      if (isInzan && isSalesManager && salesName && salesName !== v) {
+                        setPendingSalesName(v);
+                        setReassignPaymentTarget({ isEdit: false, oldName: salesName, newName: v });
+                        setSalesReassignConfirmOpen(true);
+                      } else {
+                        setSalesName(v);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg disabled:opacity-60 disabled:cursor-not-allowed">
+                      <SelectValue placeholder="For commission" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none shadow-2xl">
+                      {uniqueSalesNames.map((name: string) => (
+                        <SelectItem key={name} value={name} className="rounded-xl py-3 px-4">{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {isInzan && isRepLockedForForm && !isSalesManager && (
+                    <p className="text-[10px] text-muted-foreground ml-1">
+                      Member is permanently locked to their assigned sales representative. Only the Sales Manager can reassign this member.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="space-y-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.recorded_by')}</Label>
+              <Select value={recordedById} onValueChange={v => v && setRecordedById(v)}>
+                <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
+                  <SelectValue placeholder="Staff member">
+                     {adminUsers.find(u => u.id === recordedById)?.name || undefined}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="rounded-2xl border-none shadow-2xl">
+                  {adminUsers.map(u => (
+                    <SelectItem key={u.id} value={u.id} className="rounded-xl py-3 px-4">{u.name || u.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3 lg:col-span-3">
+              <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.internal_notes')}</Label>
+              <Input
+                placeholder="Add descriptive notes for this transaction..."
+                className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {inzanGateIssues.length > 0 && (
+            <div className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
+              <p className="font-bold flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> Complete member verification before payment:</p>
+              <ul className="mt-1 list-disc pl-6 text-xs space-y-0.5">
+                {inzanGateIssues.map(issue => <li key={issue}>{issue}</li>)}
+              </ul>
+            </div>
+          )}
+
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Button 
+              variant="outline" 
+              className="h-12 md:h-14 px-6 md:px-10 rounded-xl md:rounded-2xl text-sm md:text-base font-bold border-white/10 hover:bg-muted/50 transition-all"
+              onClick={() => setIsNewPaymentOpen(false)}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button 
+              onClick={handleAddPayment} 
+              disabled={inzanGateIssues.length > 0 || isUploadingCorporateProof}
+              className="flex-1 h-12 md:h-14 rounded-xl md:rounded-2xl text-base md:text-lg font-extrabold shadow-xl shadow-primary/30 hover:shadow-primary/50 transition-all"
+            >
+              {t('payments.complete_transaction')}
+            </Button>
+          </div>
+        </div>
+
+        {/* Reassign Sales Attribution Confirmation Dialog */}
+        <Dialog open={salesReassignConfirmOpen} onOpenChange={setSalesReassignConfirmOpen}>
+          <DialogContent className="max-w-md rounded-2xl p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg font-bold flex items-center gap-2 text-amber-600">
+                <ShieldAlert className="h-5 w-5" />
+                Reassign Sales Commission
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-3 text-sm space-y-3">
+              <p>
+                Are you sure you want to reassign sales commission from{' '}
+                <strong className="text-foreground">{reassignPaymentTarget?.oldName || 'Unassigned'}</strong> to{' '}
+                <strong className="text-emerald-600">{reassignPaymentTarget?.newName}</strong>?
+              </p>
+              <p className="text-xs text-muted-foreground bg-muted/40 p-3 rounded-xl border">
+                This action modifies commission attribution and will be recorded in the permanent audit trail.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={() => setSalesReassignConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                onClick={async () => {
+                  if (reassignPaymentTarget) {
+                    if (reassignPaymentTarget.isEdit) {
+                      setEditSalesName(reassignPaymentTarget.newName);
+                    } else {
+                      setSalesName(reassignPaymentTarget.newName);
+                    }
+                    await addAuditLog(
+                      'UPDATE',
+                      'PAYMENT',
+                      reassignPaymentTarget.paymentId || clientId || 'new',
+                      `Reassigned sales commission from ${reassignPaymentTarget.oldName || 'unassigned'} to ${reassignPaymentTarget.newName}`,
+                      currentUser?.name
+                    );
+                  }
+                  setSalesReassignConfirmOpen(false);
+                }}
+              >
+                Confirm Reassignment
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog 
+          isOpen={alertOpen}
+          onOpenChange={setAlertOpen}
+          title={alertTitle}
+          description={alertDescription}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -1654,1039 +2839,13 @@ export default function Payments() {
             <Receipt className="h-4 w-4 text-primary" />
             Shift Z-Report (80mm)
           </Button>
-          <Dialog open={isNewPaymentOpen} onOpenChange={setIsNewPaymentOpen}>
-            <DialogTrigger render={<Button />}>
-              <Plus className="mr-2 h-4 w-4" /> {t('payments.record_payment')}
-            </DialogTrigger>
-            <DialogContent className="w-full max-w-full md:max-w-[1400px] h-[100dvh] md:h-auto md:max-h-[90vh] overflow-hidden flex flex-col p-0 border-none shadow-2xl rounded-none md:rounded-3xl bg-background/95 backdrop-blur-xl">
-            <DialogHeader className="p-5 md:p-10 pb-4 md:pb-6 pt-12 md:pt-10 bg-muted/30 border-b">
-              <DialogTitle className="text-xl md:text-3xl font-extrabold tracking-tight flex items-center gap-2 md:gap-3">
-                <CreditCard className="h-6 w-6 md:h-8 md:w-8 text-primary" />
-                {t('payments.record_payment')}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="flex-1 overflow-y-auto p-5 md:p-10 pt-6 md:pt-8 pb-10 custom-scrollbar">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 md:gap-x-10 gap-y-4 md:gap-y-8">
-                
-                <div className="md:col-span-2 lg:col-span-3 bg-primary/5 border border-primary/20 rounded-2xl p-4 text-xs text-muted-foreground flex items-start gap-3">
-                  <Receipt className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <div className="font-semibold text-foreground text-sm">Payment & Entitlement Transaction Integrity</div>
-                    <div>Selecting a package and recording payment executes an atomic transaction that registers the financial receipt, updates the member package status, and creates the exact service entitlement for booking. Partial payments preserve remaining balances, while Inzan members require Egyptian mobile and National ID verification before completion.</div>
-                  </div>
-                </div>
-
-                <div className="space-y-3 lg:col-span-2">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.table.client')}</Label>
-                  <div className="relative" ref={clientDropdownRef}>
-                    <div className="relative">
-                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground pointer-events-none" />
-                      <Input
-                        className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 pl-14 pr-5 text-lg focus-visible:ring-primary"
-                        placeholder={t('header.search_placeholder')}
-                        value={clientSearch}
-                        onChange={e => { setClientSearch(e.target.value); setClientDropdownOpen(true); if (!e.target.value) setClientId(''); }}
-                        onFocus={() => setClientDropdownOpen(true)}
-                      />
-                    </div>
-                    {clientDropdownOpen && (
-                      <div className="absolute z-50 mt-1 w-full rounded-2xl border border-white/10 bg-popover shadow-2xl overflow-hidden">
-                        {isCreatingNew ? (
-                          <div className="p-5 space-y-3">
-                            <p className="text-sm font-bold flex items-center gap-2"><UserPlus className="h-4 w-4 text-primary" />{t('members.add_member')}</p>
-                            <Input
-                              placeholder={`${t('leads.table.name')} *`}
-                              className="h-10 rounded-xl text-sm bg-background/60"
-                              value={newClientName}
-                              onChange={e => setNewClientName(e.target.value)}
-                              autoFocus
-                            />
-                            <Input
-                              placeholder={`${t('leads.table.phone')} *`}
-                              className="h-10 rounded-xl text-sm bg-background/60"
-                              value={newClientPhone}
-                              onChange={e => setNewClientPhone(e.target.value)}
-                            />
-                            <select
-                              className="flex h-10 w-full rounded-xl border border-input bg-background/60 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              value={newClientBranch}
-                              onChange={e => setNewClientBranch(e.target.value)}
-                            >
-                              <option value="">{t('leads.branch')}</option>
-                              {branches.map(b => <option key={b} value={b}>{b}</option>)}
-                            </select>
-                            <select
-                              className="flex h-10 w-full rounded-xl border border-input bg-background/60 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              value={newClientGender}
-                              onChange={e => setNewClientGender(e.target.value as any)}
-                            >
-                              <option value="Male">Male</option>
-                              <option value="Female">Female</option>
-                              <option value="Other">Other</option>
-                              <option value="Prefer not to say">Prefer not to say</option>
-                            </select>
-                            <select
-                              className="flex h-10 w-full rounded-xl border border-input bg-background/60 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              value={newClientCategory}
-                              onChange={e => setNewClientCategory(e.target.value as any)}
-                            >
-                              <option value="Adults">Adults</option>
-                              <option value="Kids Only">Kids Only</option>
-                              <option value="Kids Pro">Kids Pro</option>
-                              <option value="Junior Only">Junior Only</option>
-                              <option value="Junior Advanced">Junior Advanced</option>
-                            </select>
-                            {isInzan && (
-                              <Input
-                                placeholder="National ID (14 digits) or Passport *"
-                                className="h-10 rounded-xl text-sm bg-background/60"
-                                value={newClientNationalId}
-                                onChange={e => setNewClientNationalId(e.target.value)}
-                              />
-                            )}
-                            <label className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground">
-                              <Checkbox checked={newClientLinked} onCheckedChange={c => setNewClientLinked(!!c)} />
-                              {t('members.linked_family_account')}
-                            </label>
-                            <div className="flex gap-2 pt-1">
-                              <Button size="sm" variant="outline" className="flex-1 rounded-xl" onMouseDown={() => { setIsCreatingNew(false); }}>{t('common.cancel')}</Button>
-                              <Button size="sm" className="flex-1 rounded-xl font-bold" onMouseDown={handleCreateNewClient} disabled={!newClientName.trim() || !newClientPhone.trim()}>
-                                {t('common.create_and_select')}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="w-full text-left px-5 py-3 hover:bg-primary/10 transition-colors flex items-center gap-3 border-b border-white/10"
-                              onMouseDown={() => { setIsCreatingNew(true); }}
-                            >
-                              <UserPlus className="h-4 w-4 text-primary shrink-0" />
-                              <span className="text-sm font-semibold text-primary">{t('members.add_member')} — {t('common.create_and_select')}</span>
-                            </button>
-                            {clientSearch.trim().length > 0 && (
-                              <button
-                                type="button"
-                                className="w-full text-left px-5 py-3 hover:bg-emerald-500/10 transition-colors flex items-center gap-3 border-b border-white/10"
-                                onMouseDown={() => {
-                                  setClientId('WALK-IN-GUEST');
-                                  setGuestClientName(clientSearch.trim());
-                                  setIsWalkInGuest(true);
-                                  setClientSearch(clientSearch.trim());
-                                  if (!paymentBranch) setPaymentBranch(currentUser?.branch || (branches.length > 0 ? branches[0] : '') || '');
-                                  setClientDropdownOpen(false);
-                                }}
-                              >
-                                <User className="h-4 w-4 text-emerald-500 shrink-0" />
-                                <span className="text-sm font-semibold text-emerald-500">
-                                  {(t('payments.record_as_guest') || 'Record as Walk-in / Drop Session Guest')}: "{clientSearch.trim()}"
-                                </span>
-                              </button>
-                            )}
-                            <div className="max-h-[240px] overflow-y-auto custom-scrollbar">
-                              {(() => {
-                                const term = clientSearch.toLowerCase().trim();
-                                const cleanId = term.replace(/^#/, '');
-                                const scored: { client: Client; score: number }[] = [];
-                                for (const c of clients) {
-                                  if (!term) {
-                                    scored.push({ client: c, score: 100 });
-                                    if (scored.length >= 50) break;
-                                  } else {
-                                    const nameRes = scoreNameMatch(c.name, term);
-                                    if (nameRes.matched) {
-                                      scored.push({ client: c, score: nameRes.score });
-                                    } else if (
-                                      matchesPhoneSearch(c.phone, term) ||
-                                      matchesPhoneSearch((c as any).parentPhone, term) ||
-                                      (c.memberId && c.memberId.toString().includes(cleanId))
-                                    ) {
-                                      scored.push({ client: c, score: 100 });
-                                    }
-                                  }
-                                }
-                                const matched = term
-                                  ? scored.sort((a, b) => b.score - a.score).slice(0, 50).map(s => s.client)
-                                  : scored.map(s => s.client);
-                                if (matched.length === 0) {
-                                  return (
-                                    <div className="px-5 py-4 text-sm text-muted-foreground text-center">{t('members.no_members')}</div>
-                                  );
-                                }
-                                return matched.map(client => (
-                                  <button
-                                    key={client.id}
-                                    type="button"
-                                    className="w-full text-left px-5 py-3 hover:bg-muted/60 transition-colors flex items-center gap-3"
-                                    onMouseDown={() => {
-                                      setClientId(client.id);
-                                      setClientSearch(`${client.name}${client.phone ? ` (${client.phone})` : ''}`);
-                                      if (client.branch) setPaymentBranch(client.branch);
-                                      const repName = client.salesRep || resolveUserDisplay(client.assignedTo, users, '') || (currentUser?.role === 'rep' ? currentUser.name : '');
-                                      if (repName) setSalesName(repName);
-                                      setInlineNationalId(client.nationalId || (client as any).nationalIdOrPassport || (client as any).passport || '');
-                                      setClientDropdownOpen(false);
-                                    }}
-                                  >
-                                    <div>
-                                      <div className="font-medium text-sm">{client.name}</div>
-                                      <div className="text-xs text-muted-foreground">{[client.phone, client.memberId ? `#${client.memberId}` : null, client.branch].filter(Boolean).join(' · ')}</div>
-                                    </div>
-                                  </button>
-                                ));
-                              })()}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {isInzan && clientId && clientId !== 'WALK-IN-GUEST' && (() => {
-                      const curClient = clients.find(c => c.id === clientId);
-                      const hasValidId = isValidNationalIdOrPassport(curClient?.nationalId || inlineNationalId);
-                      if (hasValidId) return null;
-                      return (
-                        <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-500 text-xs space-y-2 mt-2">
-                          <div className="flex items-center gap-2 font-bold">
-                            <ShieldAlert className="h-4 w-4 shrink-0" />
-                            <span>Pre-Payment Verification Gate: National ID Required</span>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">
-                            Inzan policy requires entering the National ID (14 digits) or Passport before payment can proceed.
-                          </p>
-                          <div className="flex gap-2">
-                            <Input
-                              placeholder="Egyptian National ID (14 digits) or Passport..."
-                              value={inlineNationalId}
-                              onChange={e => setInlineNationalId(e.target.value)}
-                              className="h-9 text-xs bg-background text-foreground"
-                            />
-                            <Button
-                              size="sm"
-                              type="button"
-                              disabled={!isValidNationalIdOrPassport(inlineNationalId) || isSavingNationalId}
-                              onClick={async () => {
-                                if (clientId && isValidNationalIdOrPassport(inlineNationalId)) {
-                                  setIsSavingNationalId(true);
-                                  try {
-                                    await updateClient(clientId, { nationalId: inlineNationalId.trim() });
-                                    setAlertTitle('Verified');
-                                    setAlertDescription('National ID verified and saved to member profile.');
-                                    setAlertOpen(true);
-                                  } finally {
-                                    setIsSavingNationalId(false);
-                                  }
-                                }
-                              }}
-                              className="h-9 text-xs font-bold shrink-0"
-                            >
-                              {isSavingNationalId ? 'Saving...' : 'Save & Verify'}
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_date')}</Label>
-                  <Input
-                    type="date"
-                    className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
-                    value={paymentDate}
-                    max={format(new Date(), 'yyyy-MM-dd')}
-                    onChange={(e) => setPaymentDate(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.start_date')}</Label>
-                  <Input
-                    type="date"
-                    className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
-                    value={startDate}
-                    onChange={(e) => {
-                      setStartDate(e.target.value);
-                      const pkg = packages.find(p => p.name === packageType);
-                      if (pkg && e.target.value) {
-                        const end = safeAddDays(e.target.value, pkg.expiryDays);
-                        setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.end_date')}</Label>
-                  <Input
-                    type="date"
-                    className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.amount')}</Label>
-                  <div className="relative">
-                    <Input 
-                      type="number" 
-                      placeholder="0.00" 
-                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all pl-12 pr-5 text-lg font-bold text-green-600"
-                      value={amount} 
-                      onChange={(e) => setAmount(e.target.value)} 
-                    />
-                    <DollarSign className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.discount')}</Label>
-                  <div className="flex gap-2">
-                    <Select value={discountType || 'none'} disabled={!canApplyDiscount} onValueChange={(v) => {
-                      if (v === 'none') {
-                        setDiscountType('');
-                        setDiscountValue('');
-                        setDiscountedAmount('');
-                        setAmountPaid('');
-                        setDiscountReasonText('');
-                        setDiscountReason('Standard');
-                      } else {
-                        setDiscountType(v as 'percentage' | 'amount');
-                      }
-                    }}>
-                      <SelectTrigger className="h-12 md:h-14 w-[120px] md:w-[140px] rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-4 text-sm font-medium">
-                        <SelectValue placeholder="No Discount" />
-                      </SelectTrigger>
-                      <SelectContent className="rounded-2xl border-none shadow-2xl">
-                        <SelectItem value="none" className="rounded-xl py-3 px-4 italic">No Discount</SelectItem>
-                        <SelectItem value="percentage" className="rounded-xl py-3 px-4">Percent (%)</SelectItem>
-                        <SelectItem value="amount" className="rounded-xl py-3 px-4">Fixed (LE)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {discountType && (
-                      <div className="relative flex-1">
-                        <Input 
-                          type="number" 
-                          placeholder={discountType === 'percentage' ? "e.g. 15" : "e.g. 500"} 
-                          className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-bold text-amber-500"
-                          value={discountValue} 
-                          disabled={!canApplyDiscount}
-                          onChange={(e) => setDiscountValue(e.target.value)} 
-                        />
-                      </div>
-                    )}
-                  </div>
-                  {discountedAmount && (
-                    <div className="text-xs space-y-1 ml-1">
-                      <p className="font-semibold text-emerald-500">Net Due: {discountedAmount} LE</p>
-                      {pricingBreakdown.discountAmount > 0 && (
-                        <p className="text-rose-500">Discount: {pricingBreakdown.discountAmount.toLocaleString()} LE</p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Amount Paid Now (LE)</Label>
-                    <Input
-                      type="number"
-                      placeholder={pricingBreakdown.netAmount.toFixed(2)}
-                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg font-bold font-mono"
-                      value={amountPaid}
-                      onChange={(e) => setAmountPaid(e.target.value)}
-                    />
-                    {amountPaid && pricingBreakdown.remainingBalance > 0 && (
-                      <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 space-y-2 mt-2">
-                        <div className="flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
-                          <span>Remaining Debt (Installment Schedule)</span>
-                          <span>{formatCurrencyAmount(pricingBreakdown.remainingBalance)}</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">Split Installments</Label>
-                            <select
-                              value={installmentCount}
-                              onChange={(e) => setInstallmentCount(Number(e.target.value))}
-                              className="w-full h-8 rounded-lg bg-background border px-2 text-xs font-bold"
-                            >
-                              <option value={1}>1 Installment</option>
-                              <option value={2}>2 Even Installments</option>
-                              <option value={3}>3 Even Installments</option>
-                              <option value={4}>4 Even Installments</option>
-                            </select>
-                          </div>
-                          <div>
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">1st Due Date</Label>
-                            <Input
-                              type="date"
-                              value={firstInstallmentDueDate}
-                              onChange={(e) => setFirstInstallmentDueDate(e.target.value)}
-                              className="h-8 text-xs bg-background px-2"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-1 pt-1 border-t border-amber-500/20 text-[11px] font-mono">
-                          {splitInstallmentsEvenly(
-                            pricingBreakdown.remainingBalance,
-                            installmentCount,
-                            firstInstallmentDueDate || format(addDays(new Date(), 30), 'yyyy-MM-dd'),
-                            30
-                          ).map((inst, idx) => (
-                            <div key={inst.index} className="flex justify-between">
-                              <span>Installment #{idx + 1} ({inst.dueDate}):</span>
-                              <span className="font-bold">{inst.amount.toLocaleString()} LE</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {discountType && (
-                    <div className="space-y-3 pt-2 border-t border-border/30">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Discount Category</Label>
-                        <Select value={discountReason} onValueChange={(v: any) => setDiscountReason(v)}>
-                          <SelectTrigger className="h-10 rounded-xl bg-background/50 border-white/10 text-xs font-medium">
-                            <SelectValue placeholder="Discount Category" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl border-none shadow-2xl">
-                            <SelectItem value="Standard">Standard / Manager Discretion</SelectItem>
-                            {showCorporateDiscounts && (
-                              <SelectItem value="Corporate">Corporate Partner (Proof Required)</SelectItem>
-                            )}
-                            <SelectItem value="Referral">Member Referral</SelectItem>
-                            <SelectItem value="Promotional">Seasonal / Promotional Campaign</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {Number(discountValue) > 0 && (
-                        <div className="space-y-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="payment-discount-reason-text" className="text-xs font-semibold flex items-center gap-1.5">
-                              <span>Discount Reason / Justification</span>
-                              <span className="text-rose-500 font-bold text-xs">* Required</span>
-                            </Label>
-                            {discountReasonText.trim().length >= 3 ? (
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                                ✓ Validated
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-rose-500 font-semibold">
-                                Reason Required
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Quick-select chips/tags */}
-                          <div className="space-y-1">
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground block">Quick Select:</span>
-                            <div className="flex flex-wrap gap-1.5">
-                              {QUICK_DISCOUNT_REASONS.map((chip) => {
-                                const text = discountReasonText.trim();
-                                const isSelected = text === chip || text.startsWith(`${chip} - `) || text.startsWith(`${chip}: `);
-                                return (
-                                  <button
-                                    key={chip}
-                                    type="button"
-                                    onClick={() => handleDiscountChipClick(chip)}
-                                    className={`text-[11px] px-2.5 py-1 rounded-full border transition-all font-medium cursor-pointer ${
-                                      isSelected
-                                        ? 'bg-amber-500 text-white border-amber-600 shadow-sm font-semibold'
-                                        : 'bg-background/90 hover:bg-muted border-border/70 text-foreground/80 hover:text-foreground'
-                                    }`}
-                                  >
-                                    {chip}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {/* Text input / textarea for specific explanation */}
-                          <div className="space-y-1">
-                            <Input
-                              id="payment-discount-reason-text"
-                              type="text"
-                              placeholder="e.g. Approved by GM for CIB employee"
-                              className={`h-10 rounded-xl bg-background/90 text-xs ${
-                                !discountReasonText || discountReasonText.trim().length < 3
-                                  ? 'border-rose-500/70 ring-1 ring-rose-500/30'
-                                  : 'border-emerald-500/50'
-                              }`}
-                              value={discountReasonText}
-                              onChange={(e) => setDiscountReasonText(e.target.value)}
-                            />
-                            {(!discountReasonText || discountReasonText.trim().length < 3) && (
-                              <p className="text-[11px] font-medium text-rose-500">
-                                * Discount reason is mandatory when applying a discount (minimum 3 characters).
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {discountReason === 'Corporate' && (
-                        <div className="p-3 rounded-xl border border-primary/30 bg-primary/5 text-xs space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-primary flex items-center gap-1.5">
-                              <Paperclip className="h-3.5 w-3.5" />
-                              Corporate Verification Document *
-                            </span>
-                            {corporateProofUrl && (
-                              <Badge className="bg-emerald-500 text-white text-[10px]">Proof Attached</Badge>
-                            )}
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">
-                            Upload National ID or Corporate Work Badge (Image / PDF). Required to authorize corporate pricing.
-                          </p>
-                          <Input
-                            type="file"
-                            accept=".png,.jpg,.jpeg,.pdf"
-                            disabled={isUploadingCorporateProof}
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              const okType = /^image\/(png|jpe?g)$/.test(file.type) || file.type === 'application/pdf';
-                              if (!okType || file.size > 5 * 1024 * 1024) {
-                                setAlertTitle('Invalid Document');
-                                setAlertDescription('Upload a PNG, JPG or PDF file up to 5MB.');
-                                setAlertOpen(true);
-                                e.target.value = '';
-                                return;
-                              }
-                              setIsUploadingCorporateProof(true);
-                              try {
-                                const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, '');
-                                const path = `corporate_proofs/${clientId || 'guest'}_${Date.now()}_${cleanName}`;
-                                const r = storageRef(storage, path);
-                                await uploadBytes(r, file);
-                                const url = await getDownloadURL(r);
-                                setCorporateProofUrl(url);
-                                setCorporateProofFileName(file.name);
-                              } catch (err: any) {
-                                console.error('Upload proof failed:', err);
-                                setAlertTitle('Upload Failed');
-                                setAlertDescription(err?.message || 'Failed to upload document.');
-                                setAlertOpen(true);
-                              } finally {
-                                setIsUploadingCorporateProof(false);
-                              }
-                            }}
-                            className="h-9 text-xs bg-background"
-                          />
-                          {corporateProofFileName && (
-                            <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
-                              Attached: {corporateProofFileName}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.payment_method')}</Label>
-                    {showSplitTender && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = !useSplitTender;
-                          setUseSplitTender(next);
-                          if (next && !primaryTenderAmount) {
-                            setPrimaryTenderAmount(String(Math.round(pricingBreakdown.amountPaid / 2)));
-                          }
-                        }}
-                        className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border transition-all ${
-                          useSplitTender
-                            ? 'bg-primary text-primary-foreground border-primary'
-                            : 'bg-muted/50 text-muted-foreground border-border hover:border-primary/40'
-                        }`}
-                      >
-                        {useSplitTender ? '✓ Split Tender (2 Methods)' : '+ Split Tender (Cash + Instapay / Visa)'}
-                      </button>
-                    )}
-                  </div>
-                  <Select value={method} onValueChange={(v) => v && setMethod(v as Payment['method'])}>
-                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder={t('payments.payment_method')} />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      <SelectItem value="Cash" className="rounded-xl py-3 px-4">{t('dashboard.cash')}</SelectItem>
-                      <SelectItem value="Credit Card" className="rounded-xl py-3 px-4">{t('dashboard.visa')}</SelectItem>
-                      <SelectItem value="Instapay" className="rounded-xl py-3 px-4">{t('dashboard.instapay')}</SelectItem>
-                      <SelectItem value="Wallet Balance" className="rounded-xl py-3 px-4">💳 Wallet Cash Balance</SelectItem>
-                      <SelectItem value="ValU" className="rounded-xl py-3 px-4">ValU (BNPL Installments)</SelectItem>
-                      <SelectItem value="Sympl" className="rounded-xl py-3 px-4">Sympl (Pay Later)</SelectItem>
-                      <SelectItem value="Souhoola" className="rounded-xl py-3 px-4">Souhoola (BNPL)</SelectItem>
-                      <SelectItem value="Fawry" className="rounded-xl py-3 px-4">Fawry Reference Code</SelectItem>
-                      <SelectItem value="Bank Transfer" className="rounded-xl py-3 px-4">Bank Transfer</SelectItem>
-                      <SelectItem value="Other" className="rounded-xl py-3 px-4">{t('leads.tabs.other')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {clientId && !isWalkInGuest && (() => {
-                    const selClient = clients.find(c => c.id === clientId);
-                    const wBal = Number((selClient as any)?.walletBalance || 0);
-                    if (wBal <= 0 && method !== 'Wallet Balance' && (!useSplitTender || secondaryMethod !== 'Wallet Balance')) return null;
-                    return (
-                      <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-xs">
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          💳 Member Wallet Cash Balance: <span className="font-mono font-black">{wBal.toLocaleString()} LE</span>
-                        </span>
-                        {wBal > 0 && wBal < pricingBreakdown.amountPaid && !useSplitTender && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMethod('Wallet Balance');
-                              setUseSplitTender(true);
-                              setPrimaryTenderAmount(String(wBal));
-                              setSecondaryMethod('Cash');
-                            }}
-                            className="text-[11px] font-bold underline text-emerald-600 dark:text-emerald-400 hover:opacity-80"
-                          >
-                            Apply {wBal.toLocaleString()} LE + Split Remainder
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {useSplitTender && (
-                    <div className="p-3 rounded-xl border border-primary/25 bg-primary/5 space-y-2.5">
-                      <div className="text-[11px] font-bold uppercase text-primary">
-                        Dual-Tender Split (Pay Type 1 + Pay Type 2)
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">
-                            {method} Amount (LE)
-                          </Label>
-                          <Input
-                            type="number"
-                            value={primaryTenderAmount}
-                            onChange={(e) => setPrimaryTenderAmount(e.target.value)}
-                            placeholder="0"
-                            className="h-9 bg-background font-mono text-xs font-bold"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-[10px] font-bold uppercase text-muted-foreground">
-                            Pay Type 2 Method
-                          </Label>
-                          <select
-                            value={secondaryMethod}
-                            onChange={(e) => setSecondaryMethod(e.target.value as Payment['method'])}
-                            className="w-full h-9 rounded-md bg-background border px-2 text-xs font-bold"
-                          >
-                            <option value="Credit Card">Visa / Credit Card</option>
-                            <option value="Instapay">Instapay</option>
-                            <option value="Cash">Cash</option>
-                            <option value="Wallet Balance">Wallet Cash Balance</option>
-                            <option value="ValU">ValU</option>
-                            <option value="Sympl">Sympl</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between text-xs pt-1 border-t border-primary/15">
-                        <span className="text-muted-foreground">Auto-calculated {secondaryMethod}:</span>
-                        <span className="font-mono font-bold text-primary">
-                          {calculateSplitTenderRemaining(
-                            pricingBreakdown.amountPaid,
-                            parseFloat(primaryTenderAmount) || 0
-                          ).remainingDebt.toLocaleString()}{' '}
-                          LE
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {(method === 'Instapay' || (useSplitTender && secondaryMethod === 'Instapay')) && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">
-                        {t('payments.instapay_ref')} / Paste SMS
-                      </Label>
-                      {(() => {
-                        const selClient = clients.find((c) => c.id === clientId);
-                        const waLink = buildWhatsAppPaymentLinkUrl({
-                          clientName: selClient?.name || guestClientName || 'Member',
-                          clientPhone: selClient?.phone || newClientPhone,
-                          clubName: branding?.companyName || 'Mitrixo Gym',
-                          packageName: packageType || 'Membership',
-                          amount: pricingBreakdown.amountPaid || Number(amount) || 0,
-                          method: 'Instapay',
-                        });
-                        return waLink ? (
-                          <a
-                            href={waLink}
-                            target="whatsapp_crm"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              openWhatsAppUrl(waLink);
-                            }}
-                            className="text-[11px] font-bold text-emerald-600 hover:underline flex items-center gap-1"
-                          >
-                            <MessageCircle className="h-3.5 w-3.5" />
-                            Send IPA via WhatsApp
-                          </a>
-                        ) : null;
-                      })()}
-                    </div>
-                    <Input 
-                      placeholder="Paste InstaPay SMS or 12-digit IPN Ref..." 
-                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-base font-mono"
-                      value={instapayRef} 
-                      onChange={(e) => {
-                        const rawVal = e.target.value;
-                        const parsed = validateOrExtractInstapayRef(rawVal);
-                        setInstapayRef(parsed.valid ? parsed.normalizedRef : rawVal.replace(/\D/g, '').slice(0, 16));
-                      }} 
-                    />
-                  </div>
-                )}
-
-                {(['ValU', 'Sympl', 'Souhoola'] as const).includes(method as any) && (
-                  <div className="p-3.5 rounded-2xl border border-purple-500/30 bg-purple-500/5 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-extrabold uppercase text-purple-600 dark:text-purple-400">
-                        {method} BNPL Plan
-                      </span>
-                      <div className="flex gap-1">
-                        {([3, 6, 9, 12] as const).map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => setBnplMonths(m)}
-                            className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
-                              bnplMonths === m
-                                ? 'bg-purple-600 text-white border-purple-600'
-                                : 'bg-background text-muted-foreground border-border'
-                            }`}
-                          >
-                            {m}M
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {(() => {
-                      const plan = calculateBnplSchedule(
-                        pricingBreakdown.amountPaid || Number(amount) || 0,
-                        method as 'ValU' | 'Sympl' | 'Souhoola',
-                        bnplMonths
-                      );
-                      const selClient = clients.find((c) => c.id === clientId);
-                      const waBnplUrl = buildWhatsAppPaymentLinkUrl({
-                        clientName: selClient?.name || guestClientName || 'Member',
-                        clientPhone: selClient?.phone || newClientPhone,
-                        clubName: branding?.companyName || 'Mitrixo Gym',
-                        packageName: packageType || 'Membership',
-                        amount: pricingBreakdown.amountPaid || Number(amount) || 0,
-                        method: method as 'ValU' | 'Sympl' | 'Souhoola',
-                        bnplMonths,
-                      });
-                      return (
-                        <div className="text-xs space-y-1">
-                          <div className="flex justify-between font-mono">
-                            <span className="text-muted-foreground">Est. Monthly Installment:</span>
-                            <span className="font-bold text-purple-600 dark:text-purple-400">
-                              {plan.monthlyInstallment.toLocaleString()} EGP / mo ({plan.months} mos)
-                            </span>
-                          </div>
-                          {waBnplUrl && (
-                            <a
-                              href={waBnplUrl}
-                              target="whatsapp_crm"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                openWhatsAppUrl(waBnplUrl);
-                              }}
-                              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline pt-1"
-                            >
-                              <MessageCircle className="h-3.5 w-3.5" />
-                              Send {method} Checkout Link via WhatsApp
-                            </a>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.receipt_no')}</Label>
-                  <div className="relative">
-                    <Receipt className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <Input 
-                      placeholder="Optional receipt / invoice number" 
-                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all pl-14 pr-5 text-lg"
-                      value={receiptNumber} 
-                      onChange={(e) => setReceiptNumber(e.target.value)} 
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('leads.branch') || 'Branch'}</Label>
-                  <Select 
-                    value={paymentBranch || (branches.length > 0 ? branches[0] : '')} 
-                    onValueChange={(v) => v && setPaymentBranch(v)}
-                  >
-                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder={t('leads.branch') || 'Select Branch'} />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      {branches.map(b => (
-                        <SelectItem key={b} value={b} className="rounded-xl py-3 px-4">{b}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="col-span-full space-y-3">
-                  {isInzan && (
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">
-                      Filter Packages by Category
-                    </Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {(['All', 'Membership', 'PT', 'Classes', 'SGF', 'Nutrition'] as const).map((pill) => {
-                        const isSelected = packageCategoryFilter === pill;
-                        return (
-                          <button
-                            key={pill}
-                            type="button"
-                            onClick={() => {
-                              setPackageCategoryFilter(pill);
-                              if (pill === 'PT') setPaymentCategory('PT');
-                              else if (pill === 'Classes' || pill === 'SGF') setPaymentCategory('Classes');
-                              else if (pill === 'Membership') setPaymentCategory('Memberships');
-                            }}
-                            className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all ${
-                              isSelected
-                                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                                : 'bg-background/60 text-muted-foreground border-border/60 hover:border-primary/40 hover:text-foreground'
-                            }`}
-                          >
-                            {pill}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  )}
-                  {(() => {
-                    const currentSelectedClient = clientId ? clients.find(c => c.id === clientId) : null;
-                    return (
-                      <>
-                        <CascadingPackageSelector
-                          packages={visiblePackages}
-                          selectedPackageName={packageType}
-                          initialCategory={currentSelectedClient?.memberCategory || currentSelectedClient?.category || (isCreatingNew ? newClientCategory : 'Adults')}
-                          initialBranch={paymentBranch || currentSelectedClient?.branch || (isCreatingNew ? newClientBranch : 'All Branches')}
-                          branches={branches}
-                          onCategoryChange={(cat) => {
-                            if (isCreatingNew) setNewClientCategory(cat);
-                          }}
-                          onBranchChange={(b) => {
-                            if (isCreatingNew) setNewClientBranch(b);
-                            if (b && b !== 'All Branches') setPaymentBranch(b);
-                          }}
-                          onPackageSelect={(pkg, isPt) => {
-                            if (!pkg) {
-                              setPackageType('Custom');
-                              return;
-                            }
-                            setPackageType(pkg.name);
-                            setAmount(pkg.price.toString());
-                            setPaymentCategory(isPt ? 'PT' : resolvePaymentCategory(pkg.name));
-                            if (startDate) {
-                              const end = safeAddDays(startDate, pkg.expiryDays);
-                              setEndDate(safeFormatDate(end, 'yyyy-MM-dd', ''));
-                            }
-                          }}
-                        />
-                        {(() => {
-                          if (!isInzan) return null;
-                          const currentPkg = packages.find(p => p.name === packageType);
-                          const eligibility = (!isWalkInGuest && currentSelectedClient && currentPkg)
-                            ? validateMembershipEligibility(currentSelectedClient, currentPkg)
-                            : { allowed: true, reason: '' };
-                          if (eligibility.allowed) return null;
-                          return (
-                            <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 rounded-2xl text-xs flex items-center gap-2">
-                              <ShieldAlert className="h-4 w-4 shrink-0 text-rose-500" />
-                              <span><strong>Primary Membership Required:</strong> {eligibility.reason}</span>
-                            </div>
-                          );
-                        })()}
-                      </>
-                    );
-                  })()}
-                </div>
-
-                {packageType === 'Custom' && (
-                  <div className="space-y-3">
-                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.custom_package_name')}</Label>
-                    <Input 
-                      placeholder="e.g., 5 S GT Adults" 
-                      className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
-                      value={customPackage} 
-                      onChange={(e) => setCustomPackage(e.target.value)} 
-                    />
-                  </div>
-                )}
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">Category</Label>
-                  <Select value={paymentCategory} onValueChange={(v) => v && setPaymentCategory(v as PaymentCategory)}>
-                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      {PAYMENT_CATEGORIES.map(cat => (
-                        <SelectItem key={cat} value={cat} className="rounded-xl py-3 px-4">{cat}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {paymentCategory === 'PT' && (
-                  <div className="space-y-3">
-                    <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.coach')}</Label>
-                    <Select value={coachName} onValueChange={(v) => { if(!v) return; setCoachName(v); if (v !== '__custom__') setCustomCoachName(''); }}>
-                      <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                        <SelectValue placeholder={t('payments.coach')} />
-                      </SelectTrigger>
-                      <SelectContent className="rounded-2xl border-none shadow-2xl">
-                        {coaches.filter(c => c.active).map(coach => (
-                          <SelectItem key={coach.id} value={coach.name} className="rounded-xl py-3 px-4">{coach.name}</SelectItem>
-                        ))}
-                        <SelectItem value="__custom__" className="rounded-xl py-3 px-4">Manual Entry...</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {coachName === '__custom__' && (
-                      <Input
-                        placeholder="Enter coach name"
-                        className="h-12 rounded-xl bg-background/50 mt-2 px-4 shadow-inner"
-                        value={customCoachName}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomCoachName(e.target.value)}
-                      />
-                    )}
-                  </div>
-                )}
-
-                {(() => {
-                  const selectedClientForForm = (!isWalkInGuest && clientId) ? clients.find(c => c.id === clientId) : null;
-                  const isRepLockedForForm = isInzan && Boolean(selectedClientForForm?.assignedTo || selectedClientForForm?.salesRep);
-                  const isRepFieldDisabled = isRepLockedForForm && !isSalesManager;
-
-                  return (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.sales_person')}</Label>
-                        {isInzan && isRepLockedForForm && !isSalesManager ? (
-                          <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
-                            🔒 Locked to Assigned Rep
-                          </Badge>
-                        ) : isInzan && isSalesManager && isRepLockedForForm ? (
-                          <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">
-                            Sales Manager Authority
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <Select
-                        value={salesName}
-                        disabled={isRepFieldDisabled}
-                        onValueChange={(v) => {
-                          if (!v) return;
-                          if (isInzan && isSalesManager && salesName && salesName !== v) {
-                            setPendingSalesName(v);
-                            setReassignPaymentTarget({ isEdit: false, oldName: salesName, newName: v });
-                            setSalesReassignConfirmOpen(true);
-                          } else {
-                            setSalesName(v);
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg disabled:opacity-60 disabled:cursor-not-allowed">
-                          <SelectValue placeholder="For commission" />
-                        </SelectTrigger>
-                        <SelectContent className="rounded-2xl border-none shadow-2xl">
-                          {uniqueSalesNames.map((name: string) => (
-                            <SelectItem key={name} value={name} className="rounded-xl py-3 px-4">{name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {isInzan && isRepLockedForForm && !isSalesManager && (
-                        <p className="text-[10px] text-muted-foreground ml-1">
-                          Member is permanently locked to their assigned sales representative. Only the Sales Manager can reassign this member.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                <div className="space-y-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.recorded_by')}</Label>
-                  <Select value={recordedById} onValueChange={v => v && setRecordedById(v)}>
-                    <SelectTrigger className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 border-white/10 px-5 text-lg">
-                      <SelectValue placeholder="Staff member">
-                         {adminUsers.find(u => u.id === recordedById)?.name || undefined}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="rounded-2xl border-none shadow-2xl">
-                      {adminUsers.map(u => (
-                        <SelectItem key={u.id} value={u.id} className="rounded-xl py-3 px-4">{u.name || u.email}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-3 lg:col-span-3">
-                  <Label className="text-sm font-bold uppercase tracking-widest text-muted-foreground ml-1">{t('payments.internal_notes')}</Label>
-                  <Input
-                    placeholder="Add descriptive notes for this transaction..."
-                    className="h-12 md:h-14 rounded-xl md:rounded-2xl bg-background/50 focus-visible:ring-primary border-white/10 transition-all px-5 text-lg"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {inzanGateIssues.length > 0 && (
-                <div className="mt-6 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-400">
-                  <p className="font-bold flex items-center gap-2"><ShieldAlert className="h-4 w-4" /> Complete member verification before payment:</p>
-                  <ul className="mt-1 list-disc pl-6 text-xs space-y-0.5">
-                    {inzanGateIssues.map(issue => <li key={issue}>{issue}</li>)}
-                  </ul>
-                </div>
-              )}
-              <div className="mt-6 md:mt-12 flex gap-3 pb-safe">
-                <Button 
-                  variant="outline" 
-                  className="h-12 md:h-16 px-6 md:px-10 rounded-xl md:rounded-2xl text-sm md:text-lg font-bold border-white/10 hover:bg-muted/50 transition-all"
-                  onClick={() => setIsNewPaymentOpen(false)}
-                >
-                  {t('common.cancel')}
-                </Button>
-                <Button 
-                  onClick={handleAddPayment} 
-                  disabled={inzanGateIssues.length > 0 || isUploadingCorporateProof}
-                  className="flex-1 h-12 md:h-16 rounded-xl md:rounded-2xl text-base md:text-xl font-extrabold shadow-2xl shadow-primary/30 hover:shadow-primary/50 transition-all hover:scale-[1.01] active:scale-[0.99]"
-                >
-                  {t('payments.complete_transaction')}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+          <Button
+            type="button"
+            onClick={() => setIsNewPaymentOpen(true)}
+            className="gap-2 font-bold shadow-md shadow-primary/20"
+          >
+            <Plus className="h-4 w-4" /> {t('payments.record_payment')}
+          </Button>
         </div>
       </div>
 

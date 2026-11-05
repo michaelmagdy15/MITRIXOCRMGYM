@@ -45,7 +45,7 @@ function inferPackageClassification(
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1'];
 
-type ReportId =
+export type ReportId =
   | 'expired-members'
   | 'package-members'
   | 'income-by-service'
@@ -71,7 +71,13 @@ interface ReportTab {
   icon: React.ElementType;
 }
 
-export default function AdvancedReports() {
+export default function AdvancedReports({
+  initialReport,
+  embedded = false,
+}: {
+  initialReport?: ReportId;
+  embedded?: boolean;
+} = {}) {
   const {
     clients,
     payments,
@@ -92,7 +98,13 @@ export default function AdvancedReports() {
   const { currentUser } = useAuth();
   const { branding } = useSettings();
 
-  const [activeReport, setActiveReport] = useState<ReportId>('expired-members');
+  const [activeReport, setActiveReport] = useState<ReportId>(initialReport || 'expired-members');
+
+  useEffect(() => {
+    if (initialReport) {
+      setActiveReport(initialReport);
+    }
+  }, [initialReport]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [branchFilter, setBranchFilter] = useState('all');

@@ -23,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary] Uncaught error:', error, errorInfo);
     const msg = error?.message || '';
-    if (/failed to fetch dynamically imported module|importing a module script failed|unable to preload css/i.test(msg)) {
+    if (/failed to fetch dynamically imported module|importing a module script failed|unable to preload css|mime type|expected a javascript-or-wasm module/i.test(msg)) {
       this.recoverFromStaleAsset();
       return;
     }

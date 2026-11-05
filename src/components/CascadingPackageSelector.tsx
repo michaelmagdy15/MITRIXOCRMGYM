@@ -26,7 +26,7 @@ export interface CascadingPackageSelectorProps {
   readOnlyBranch?: boolean;
 }
 
-export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> = ({
+const CascadingPackageSelectorComponent: React.FC<CascadingPackageSelectorProps> = ({
   packages,
   selectedPackageName,
   onPackageSelect,
@@ -935,4 +935,5 @@ export const CascadingPackageSelector: React.FC<CascadingPackageSelectorProps> =
   );
 };
 
+export const CascadingPackageSelector = React.memo(CascadingPackageSelectorComponent);
 export default CascadingPackageSelector;

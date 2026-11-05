@@ -311,7 +311,39 @@ export default function Dashboard() {
   const [pushBody, setPushBody] = useState('');
   const [isSendingPush, setIsSendingPush] = useState(false);
   // Stat-card drill-down: which dedicated KPI page is open (null = main dashboard).
-  const [statDrilldown, setStatDrilldown] = useState<null | DrilldownKpiKey>(null);
+  const [statDrilldown, setStatDrilldownState] = useState<null | DrilldownKpiKey>(() => {
+    if (typeof window === 'undefined') return null;
+    const kpi = new URLSearchParams(window.location.search).get('kpi') as DrilldownKpiKey | null;
+    return kpi || null;
+  });
+
+  const setStatDrilldown = React.useCallback((nextKpi: null | DrilldownKpiKey) => {
+    setStatDrilldownState(nextKpi);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (nextKpi) {
+        params.set('tab', 'dashboard');
+        params.set('kpi', nextKpi);
+      } else {
+        params.delete('kpi');
+      }
+      window.history.pushState(
+        { activeTab: 'dashboard', activeClientId: null, kpi: nextKpi },
+        '',
+        `${window.location.pathname}?${params.toString()}`
+      );
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleKpiPop = () => {
+      const kpi = new URLSearchParams(window.location.search).get('kpi') as DrilldownKpiKey | null;
+      setStatDrilldownState(kpi || null);
+    };
+    window.addEventListener('popstate', handleKpiPop);
+    return () => window.removeEventListener('popstate', handleKpiPop);
+  }, []);
 
   const handleSendAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
