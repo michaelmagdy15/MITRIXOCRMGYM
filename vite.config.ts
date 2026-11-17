@@ -59,15 +59,20 @@ export default defineConfig(({ mode }) => {
         workbox: {
           skipWaiting: true,
           clientsClaim: true,
-          // Raise precache limit to 5 MB so all split chunks are accepted
-          maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-          globIgnores: [
-            '**/ExerciseLibraryHub*',
-            '**/MemberPortal*',
-            '**/CoachPortal*',
-            '**/vendor-export*',
-            '**/vendor-charts*',
+          // Raise precache limit so core shell chunks are accepted
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+          globPatterns: [
+            'index.html',
+            'assets/index-*.{js,css}',
+            'assets/vendor-react-*.js',
+            'assets/firebase-core-*.js',
+            'assets/firebase-auth-*.js',
+            'assets/firebase-firestore-*.js',
+            'favicon.png',
+            'inzan-favicon.png',
+            'inzanlogo.png',
+            'inzanlogo_white.png',
+            'strikelogo_white.png',
           ],
           ignoreURLParametersMatching: [/^cb$/, /^sw_reloaded$/],
           cleanupOutdatedCaches: true,
@@ -83,6 +88,34 @@ export default defineConfig(({ mode }) => {
             /\.(?:js|mjs|css|map|wasm|json|png|jpg|jpeg|svg|ico|woff2?)(?:\?.*)?$/i
           ],
           runtimeCaching: [
+            {
+              urlPattern: /^https?:\/\/[^/]+\/assets\/.*\.(?:js|css|woff2)$/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'gym-hashed-assets',
+                expiration: {
+                  maxEntries: 160,
+                  maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year (content-hashed files)
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /^https?:\/\/[^/]+\/.*\.(?:png|jpg|jpeg|webp|svg|ico)$/i,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'gym-local-images',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
             {
               urlPattern: /^https:\/\/(firebasestorage\.googleapis\.com|lh3\.googleusercontent\.com|images\.unsplash\.com)\/.*/i,
               handler: 'CacheFirst',

@@ -1,12 +1,10 @@
-// Keep the project and named database together. Deployment-wide defaults may
-// belong to Strike and must never be combined with Inzan's database ID.
+// Inzan Athletics standalone Spark project configuration ((default) database)
 export const inzanFirebaseConfig = {
-  projectId: 'faa-test-guide-v2',
-  appId: '1:492280162134:web:1515094f029665cf2d98f7',
-  apiKey: 'AIzaSyAUvzDIKoTvtbMEWaP1pDSyNfqpS3_11wI',
-  authDomain: 'faa-test-guide-v2.firebaseapp.com',
-  storageBucket: 'faa-test-guide-v2.firebasestorage.app',
-  messagingSenderId: '492280162134',
-  firestoreDatabaseId: 'db-inzanathletics',
+  projectId: 'inzan-crm-spark-26',
+  appId: '1:466686493225:web:8ac6a2ec3a8a3544f69238',
+  apiKey: 'AIzaSyDP91b3aJ9GtZoLGmKbMNAnQHC6EANjCbs',
+  authDomain: 'inzan-crm-spark-26.firebaseapp.com',
+  storageBucket: 'inzan-crm-spark-26.firebasestorage.app',
+  messagingSenderId: '466686493225',
   tenantId: 'inzanathletics',
 };

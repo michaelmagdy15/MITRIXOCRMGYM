@@ -71,6 +71,9 @@ export default function Payments() {
     fetchExpiredMembers,
     expiredLoaded,
     loadingExpired,
+    fetchHistoricalPayments,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
     can,
   } = useAppContext();
   const visiblePackages = React.useMemo(() => {
@@ -185,10 +188,10 @@ export default function Payments() {
   const [paymentBranch, setPaymentBranch] = useState('');
 
   useEffect(() => {
-    if (!expiredLoaded && !loadingExpired && fetchExpiredMembers) {
-      fetchExpiredMembers();
+    if (!isNewPaymentOpen && !historicalPaymentsLoaded && !loadingHistoricalPayments && fetchHistoricalPayments) {
+      fetchHistoricalPayments();
     }
-  }, [expiredLoaded, loadingExpired, fetchExpiredMembers]);
+  }, [isNewPaymentOpen, historicalPaymentsLoaded, loadingHistoricalPayments, fetchHistoricalPayments]);
 
   useEffect(() => {
     if (!pendingNewPhone) return;

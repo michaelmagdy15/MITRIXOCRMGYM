@@ -123,6 +123,16 @@
 
     <!-- FIREBASE_CONFIG_PLACEHOLDER -->
 
+    <!-- Non-blocking Google Fonts preconnect + async stylesheet -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+
     <style id="mobile-splash-styles">
       /* Universal Full-Screen Splash & Preloader (Desktop, Tablet & Mobile) */
       #mobile-native-splash {
@@ -143,12 +153,12 @@
         overflow: hidden;
         user-select: none;
         -webkit-user-select: none;
-        transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
       }
       .mobile-splash-bg {
         position: absolute;
         inset: 0;
-        background-image: url('/strike_slide_outdoor.png');
+        background-color: #050507;
         background-position: center center;
         background-size: cover;
         background-repeat: no-repeat;
@@ -308,18 +318,25 @@
         } catch(e) {}
       })();
 
-      // Force cache-busting on mobile WebViews to bypass stale cache
+      // Force cache-busting on mobile WebViews once per session to bypass stale cache
       (function() {
-        var isWebView = /mitrixogymcrmCRM-Mobile|Strike.*Mobile|STRIKE/i.test(navigator.userAgent) || window.ReactNativeWebView;
-        if (isWebView && window.location.search.indexOf('cb=') === -1) {
-          var separator = window.location.search ? '&' : '?';
-          window.location.replace(
-            window.location.origin + 
-            window.location.pathname + 
-            window.location.search + 
-            separator + 
-            'cb=' + Date.now()
-          );
+        var isWebView = /mitrixogymcrmCRM-Mobile|Strike.*Mobile|Inzan.*Mobile/i.test(navigator.userAgent) || window.ReactNativeWebView;
+        if (!isWebView) return;
+        try {
+          if (sessionStorage.getItem('_wv_cb_done')) return;
+          if (window.location.search.indexOf('cb=') === -1) {
+            sessionStorage.setItem('_wv_cb_done', '1');
+            var separator = window.location.search ? '&' : '?';
+            window.location.replace(
+              window.location.origin +
+              window.location.pathname +
+              window.location.search +
+              separator +
+              'cb=' + Date.now()
+            );
+          }
+        } catch (e) {
+          // Ignore storage restrictions
         }
       })();
 
@@ -380,12 +397,12 @@
   <body>
     <!-- Universal Branded Splash & Preloader (Desktop, Tablet & Mobile) -->
     <div id="mobile-native-splash">
-      <div class="mobile-splash-bg"></div>
+      <div id="mobile-splash-bg" class="mobile-splash-bg"></div>
       <div class="mobile-splash-overlay"></div>
       <div class="mobile-splash-content">
         <div class="mobile-splash-logo-wrap">
           <div class="mobile-splash-glow"></div>
-          <img id="mobile-splash-logo" src="/strikelogo_white.png" alt="Gym Logo" class="mobile-splash-logo" />
+          <img id="mobile-splash-logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" alt="Gym Logo" class="mobile-splash-logo" />
         </div>
         <div class="mobile-splash-footer">
           <div class="mobile-splash-bar-track">
@@ -483,23 +500,16 @@
         }
 
         // Global dismiss handler invoked by React once auth and initial render are ready
-        window.__dismissMobileSplash = function(force) {
+        window.__dismissMobileSplash = function() {
           var el = document.getElementById('mobile-native-splash');
           if (!el || el.classList.contains('mobile-splash-dismissing')) return;
-          
-          var elapsed = Date.now() - (window.__splashStartTime || 0);
-          var minDuration = force ? 0 : 600;
-          var remaining = Math.max(0, minDuration - elapsed);
 
+          el.classList.add('mobile-splash-dismissing');
           setTimeout(function() {
-            if (!el || el.classList.contains('mobile-splash-dismissing')) return;
-            el.classList.add('mobile-splash-dismissing');
-            setTimeout(function() {
-              if (el && el.parentNode) {
-                el.parentNode.removeChild(el);
-              }
-            }, 550);
-          }, remaining);
+            if (el && el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
+          }, 180);
         };
 
         // Safety fallback: auto-dismiss after 6.5s so user is never blocked even if network hangs

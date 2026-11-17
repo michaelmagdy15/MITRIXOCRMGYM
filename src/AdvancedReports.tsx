@@ -6,9 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import { useAppContext } from './context';
 import { useAuditLogs } from './hooks/useAuditLogs';
 import { useAuth } from './contexts/AuthContext';
@@ -90,6 +87,9 @@ export default function AdvancedReports({
     fetchExpiredMembers,
     expiredLoaded,
     loadingExpired,
+    fetchHistoricalPayments,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
     setActiveTab: setNavTab,
     setActiveClientId,
     addComment,
@@ -137,12 +137,22 @@ export default function AdvancedReports({
   const [quickNoteFollowUpDate, setQuickNoteFollowUpDate] = useState('');
   const [quickNoteSaving, setQuickNoteSaving] = useState(false);
 
-  // Ensure all expired members are loaded when opening Premium Reports
+  // Ensure all expired members and historical payments are loaded when opening Premium Reports
   useEffect(() => {
     if (!expiredLoaded && !loadingExpired && typeof fetchExpiredMembers === 'function') {
       fetchExpiredMembers();
     }
-  }, [expiredLoaded, loadingExpired, fetchExpiredMembers]);
+    if (!historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
+      fetchHistoricalPayments();
+    }
+  }, [
+    expiredLoaded,
+    loadingExpired,
+    fetchExpiredMembers,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
+    fetchHistoricalPayments,
+  ]);
 
   // Audit logs are fetched on-demand (this page mounts lazily). Pass the report's
   // selected date range so the backend filters server-side instead of loading all logs.
@@ -176,8 +186,12 @@ export default function AdvancedReports({
     downloadFile(blob, `${filename}.csv`);
   };
 
-  const exportToPDF = (data: any[], filename: string) => {
+  const exportToPDF = async (data: any[], filename: string) => {
     if (data.length === 0) return;
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF();
     const headers = Object.keys(data[0]);
     const body = data.map(row => headers.map(h => row[h] == null ? '' : String(row[h])));
@@ -188,8 +202,9 @@ export default function AdvancedReports({
     doc.save(`${filename}.pdf`);
   };
 
-  const exportToXLSX = (data: any[], filename: string) => {
+  const exportToXLSX = async (data: any[], filename: string) => {
     if (data.length === 0) return;
+    const XLSX = await import('xlsx');
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');

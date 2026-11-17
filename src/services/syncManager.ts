@@ -1,4 +1,4 @@
-import { flushOutbox } from './outbox/outboxProcessor';
+import { flushOutbox, onOutboxChange, getPendingOutboxCount } from './outbox/outboxProcessor';
 import {
   getSyncCursor,
   setSyncCursor,
@@ -134,6 +134,43 @@ export function startBackgroundSync(
   getAuthToken?: () => Promise<string | null>,
   intervalMs: number = 60000
 ): () => void {
+  const isWebBrowserTab =
+    typeof document !== 'undefined' &&
+    typeof window !== 'undefined' &&
+    !(window as any).__MITRIXO_DESKTOP__;
+
+  if (isWebBrowserTab) {
+    // Web tabs already stay up to date via Firestore real-time onSnapshot listeners,
+    // so only flush the local outbox when pending offline mutations exist or connectivity returns.
+    const flushPendingOutboxIfAny = async (): Promise<void> => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      try {
+        const pendingCount = await getPendingOutboxCount(tenantId);
+        if (pendingCount <= 0) return;
+        const token = getAuthToken ? (await getAuthToken().catch(() => null)) || undefined : undefined;
+        await flushOutbox(tenantId, token);
+      } catch {
+        // Fail silently without throwing or alerting user
+      }
+    };
+
+    const unsubOutbox = onOutboxChange((count) => {
+      if (count > 0) {
+        void flushPendingOutboxIfAny();
+      }
+    }, tenantId);
+
+    const handleOnline = () => {
+      void flushPendingOutboxIfAny();
+    };
+    window.addEventListener('online', handleOnline);
+
+    return function stopBackgroundSync(): void {
+      unsubOutbox();
+      window.removeEventListener('online', handleOnline);
+    };
+  }
+
   const runSyncOnce = async (): Promise<void> => {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       return;

@@ -161,6 +161,37 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
       } catch {
         data = {};
       }
+      if (res.status === 202 && data?.status === 'running') {
+        // Async gateway execution: poll status until completed or failed
+        const deadline = Date.now() + 290_000;
+        let finalStatus: any = null;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const stRes = await fetch('/api/inzan/redgits-sync/status', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!stRes.ok) continue;
+          const stJson = await stRes.json().catch(() => null);
+          const st = stJson?.status;
+          if (!st) continue;
+          if (st.status === 'failed') {
+            throw new Error(st.error || 'RedGITS async sync failed.');
+          }
+          if (st.status === 'completed' && st.startedAt === data.startedAt) {
+            finalStatus = st;
+            break;
+          }
+          if (st.status === 'completed' && Date.parse(st.completedAt || '') >= Date.parse(data.startedAt || '')) {
+            finalStatus = st;
+            break;
+          }
+        }
+        if (!finalStatus) {
+          throw new Error('RedGITS sync is still running in the background. Reopen this dialog shortly to see the updated sync timestamp.');
+        }
+        data = { ok: true, ...finalStatus };
+      }
+
       if (!res.ok || !data?.ok) {
         if (res.status === 401) {
           throw new Error('Your staff session has expired. Please sign out and sign back in, then retry the sync.');
@@ -282,7 +313,7 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
                     RedGITS v17.12 Live Sync
                     <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                      db-inzanathletics
+                      inzan-spark
                     </span>
                   </h3>
                   <p className="text-xs text-zinc-400">
@@ -430,7 +461,7 @@ export const RedgitsLiveSyncDialog: React.FC<RedgitsLiveSyncDialogProps> = ({
                   <RefreshCw className="w-5 h-5 text-emerald-400 animate-spin shrink-0" />
                   <div className="text-xs">
                     <p className="font-bold text-emerald-300">
-                      Connecting to inzan.redgits.com &amp; syncing to db-inzanathletics...
+                      Connecting to inzan.redgits.com &amp; syncing to Inzan Athletics...
                     </p>
                     <p className="text-zinc-400 mt-0.5">
                       Fetching active members, unmasked phone numbers, packages, subscriptions, leads &amp; staff.

@@ -504,11 +504,37 @@ export function createMessagingBroadcastRouter(
 
       const config = await loadTenantMessagingConfig(ctx.db, ctx.tenantId);
       const branchFilter = req.query.branch ? String(req.query.branch) : undefined;
-      const { counts } = await collectAudienceRecipients(
-        ctx.db,
-        'active_members',
-        branchFilter
-      );
+      const normalizedBranch =
+        branchFilter && branchFilter !== 'ALL' ? branchFilter.trim() : null;
+
+      const baseClients = normalizedBranch
+        ? ctx.db.collection('clients').where('branch', '==', normalizedBranch)
+        : ctx.db.collection('clients');
+
+      const [
+        activeCountSnap,
+        allMembersCountSnap,
+        leadsCountSnap,
+        allContactsCountSnap,
+        droneListDoc,
+      ] = await Promise.all([
+        baseClients.where('status', '==', 'Active').count().get(),
+        baseClients.where('status', '!=', 'Lead').count().get(),
+        baseClients.where('status', '==', 'Lead').count().get(),
+        baseClients.count().get(),
+        ctx.db.collection('secrets_config').doc('drone_shoot_list').get().catch(() => null),
+      ]);
+
+      const droneListRecipients = Array.isArray(droneListDoc?.data()?.recipients)
+        ? droneListDoc!.data()!.recipients
+        : [];
+      const counts = {
+        droneShootList: droneListRecipients.length,
+        activeMembers: activeCountSnap.data().count,
+        allMembers: allMembersCountSnap.data().count,
+        leadsOnly: leadsCountSnap.data().count,
+        allContacts: allContactsCountSnap.data().count,
+      };
 
       return res.json({
         tenantId: ctx.tenantId,

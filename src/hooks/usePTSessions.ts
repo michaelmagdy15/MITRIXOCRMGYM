@@ -13,7 +13,8 @@ export const usePTSessions = (currentUser: User | null, clients: Client[]) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || effectiveRole === 'client') {
+      setPTPackageRecords([]);
       setLoading(false);
       return;
     }

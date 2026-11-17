@@ -2317,7 +2317,7 @@ export default function InzanLockerConsole() {
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Last Synced with Firestore <code className="text-foreground">db-inzanathletics/lockers</code>:{' '}
+                Last Synced with Firestore <code className="text-foreground">inzan/lockers</code>:{' '}
                 <strong>{overview?.syncedAt ? new Date(overview.syncedAt).toLocaleTimeString() : 'Live'}</strong>
               </p>
 

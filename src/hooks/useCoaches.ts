@@ -15,6 +15,10 @@ export const useCoaches = () => {
 
 
   useEffect(() => {
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
     const unsub = onSnapshot(collection(db, 'coaches'), (snapshot) => {
       setCoaches(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Coach)));
       setLoading(false);

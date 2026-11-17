@@ -1,7 +1,13 @@
 import crypto from 'crypto';
 import express, { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
-import { getDbForRequest, getTenantIdForRequest, getTenantInfoForHost, getRequestHostname } from '../utils/tenantDb.js';
+import {
+  getAuthForRequest,
+  getDbForRequest,
+  getTenantIdForRequest,
+  getTenantInfoForHost,
+  getRequestHostname,
+} from '../utils/tenantDb.js';
 
 export const desktopSyncRouter = Router();
 
@@ -88,7 +94,8 @@ async function authenticateStaffUser(
   if (!token) return null;
 
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const tenantAuth = await getAuthForRequest(req);
+    const decoded = await tenantAuth.verifyIdToken(token);
     if (decoded.email === PLATFORM_SUPER_ADMIN_EMAIL) {
       return {
         uid: decoded.uid,

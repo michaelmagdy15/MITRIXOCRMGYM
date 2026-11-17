@@ -76,6 +76,9 @@ export interface AppContextType {
   salesTarget: SalesTarget;
   payments: Payment[];
   loadingPayments: boolean;
+  historicalPaymentsLoaded: boolean;
+  loadingHistoricalPayments: boolean;
+  fetchHistoricalPayments: () => Promise<void>;
   ptPackageRecords: PTPackageRecord[];
   tasks: Task[];
   allTasks: Task[];
@@ -217,7 +220,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const { 
     payments, 
-    loading: loadingPayments, 
+    loading: loadingPayments,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
+    fetchHistoricalPayments,
     addPayment, 
     deletePayment,
     updatePayment
@@ -286,7 +292,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setActiveTab = useCallback((nextTab: string) => {
     const normalized = nextTab === 'advanced-reports' ? 'reports' : nextTab;
-    setActiveTabState(normalized);
+    React.startTransition(() => {
+      setActiveTabState(normalized);
+    });
   }, []);
 
   const setActiveClientId = useCallback((nextId: string | null) => {
@@ -341,7 +349,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [permissionTemplates, setPermissionTemplates] = useState<PermissionTemplate[]>([]);
 
   React.useEffect(() => {
-    if (!isAuthReady || !currentUser) {
+    if (!isAuthReady || !currentUser || currentUser.role === 'client' || effectiveRole === 'client') {
       setPermissionTemplates([]);
       return;
     }
@@ -349,7 +357,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPermissionTemplates(templates);
     });
     return () => unsubscribe();
-  }, [isAuthReady, currentUser?.id, currentUser?.role]);
+  }, [isAuthReady, currentUser?.id, currentUser?.role, effectiveRole]);
 
   const permissionTemplatesMap = useMemo(() => {
     const map: Record<string, PermissionTemplate> = {};
@@ -701,6 +709,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     salesTarget: salesStats,
     payments: visiblePayments,
     loadingPayments,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
+    fetchHistoricalPayments,
     ptPackageRecords,
     tasks: visibleTasks,
     allTasks,
@@ -790,7 +801,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }), [
     currentUser, effectiveRole, users, visibleClients, roleScopedClients, loadingClients,
     loadingExpired, expiredLoaded, fetchExpiredMembers,
-    salesStats, visiblePayments, loadingPayments, ptPackageRecords,
+    salesStats, visiblePayments, loadingPayments, historicalPaymentsLoaded, loadingHistoricalPayments, fetchHistoricalPayments, ptPackageRecords,
     visibleTasks, allTasks, packages, loadingPackages,
     coaches, importBatches, userTargets, searchQuery, activeTab, activeClientId, prefilledLeadData, isAuthReady, branding,
     features, updateFeatures, previewRole, attendances, canDeletePayments, canAccessSettings,

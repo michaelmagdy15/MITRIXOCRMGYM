@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { isRunningInNativeApp } from '../utils/nativeBridge';
 import { SectionHeader } from './components/SectionHeader';
@@ -1348,27 +1347,42 @@ export default function MemberHome({ client, linkedClients, onSelectClient, onSw
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
             </div>
           ) : trafficData.some(d => d.count > 0) ? (
-            <div className="h-28 w-full -ml-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={trafficData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'} vertical={false} />
-                  <XAxis dataKey="label" stroke={theme === 'dark' ? '#71717a' : '#a1a1aa'} fontSize={8} tickLine={false} axisLine={false} />
-                  <YAxis stroke={theme === 'dark' ? '#71717a' : '#a1a1aa'} fontSize={8} tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip 
-                    cursor={{ fill: 'rgba(255, 255, 255, 0.04)' }}
-                    contentStyle={{ 
-                      backgroundColor: theme === 'dark' ? '#18181b' : '#ffffff', 
-                      borderColor: theme === 'dark' ? '#27272a' : '#e4e4e7',
-                      color: theme === 'dark' ? '#ffffff' : '#000000',
-                      borderRadius: '8px',
-                      fontSize: '10px'
-                    }}
-                    formatter={(value: any) => [`${value} check-ins`, 'Volume']}
-                  />
-                  <Bar dataKey="count" fill={theme === 'dark' ? '#e4e4e7' : '#18181b'} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            (() => {
+              const maxCount = Math.max(1, ...trafficData.map((d: any) => Number(d.count) || 0));
+              return (
+                <div className="pt-2">
+                  <div className="h-24 w-full flex items-end gap-1 border-b border-border/50 pb-1">
+                    {trafficData.map((d: any) => {
+                      const count = Number(d.count) || 0;
+                      const pct = count > 0 ? Math.max(8, Math.round((count / maxCount) * 100)) : 3;
+                      return (
+                        <div
+                          key={d.hour ?? d.label}
+                          title={`${d.label}: ${count} check-ins`}
+                          className="flex-1 h-full flex items-end group"
+                        >
+                          <div
+                            style={{ height: `${pct}%` }}
+                            className={`w-full rounded-t-sm transition-opacity group-hover:opacity-80 ${
+                              count === 0
+                                ? 'bg-muted/60'
+                                : theme === 'dark'
+                                ? 'bg-zinc-200'
+                                : 'bg-zinc-900'
+                            }`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between items-center pt-1.5 text-[9px] text-muted-foreground font-medium">
+                    <span>{trafficData[0]?.label || '6am'}</span>
+                    <span>{trafficData[Math.floor(trafficData.length / 2)]?.label || '2pm'}</span>
+                    <span>{trafficData[trafficData.length - 1]?.label || '10pm'}</span>
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <div className="py-4 text-center text-xs text-muted-foreground italic">
               No recent attendance data available.

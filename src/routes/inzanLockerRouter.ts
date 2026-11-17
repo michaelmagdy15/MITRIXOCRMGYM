@@ -1,26 +1,20 @@
 import express, { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
-import { getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
+import { getAdminAppForProject, getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
 
 export const inzanLockerRouter = Router();
 
-const INZAN_PROJECT_ID = 'faa-test-guide-v2';
-const INZAN_DATABASE_ID = 'db-inzanathletics';
+const INZAN_PROJECT_ID = 'inzan-crm-spark-26';
 const DEFAULT_LOCKER_BASE_URL = process.env.INZAN_LOCKER_URL || 'https://inzan.tailaf3d90.ts.net';
 const DEFAULT_LOCKER_USERNAME = process.env.INZAN_LOCKER_USERNAME || 'admin';
 
 export function getInzanApp(): admin.app.App {
-  const defaultApp = admin.apps[0];
-  if (defaultApp && defaultApp.options.projectId === INZAN_PROJECT_ID) {
-    return defaultApp;
-  }
-  const existingNamed = admin.apps.find((a) => a?.name === 'inzan-locker-app');
-  return existingNamed || admin.initializeApp({ projectId: INZAN_PROJECT_ID }, 'inzan-locker-app');
+  return getAdminAppForProject(INZAN_PROJECT_ID);
 }
 
 export function getInzanFirestore() {
-  return getFirestore(getInzanApp(), INZAN_DATABASE_ID);
+  return getFirestore(getInzanApp());
 }
 
 interface LockerServerConfig {
@@ -42,8 +36,36 @@ interface AuthenticatedCaller {
 let cachedConfig: { config: LockerServerConfig; fetchedAt: number } | null = null;
 let cachedJwt: { token: string; baseUrl: string; expiresAt: number } | null = null;
 
-const CONFIG_TTL_MS = 2 * 60 * 1000; // 2 minutes
+const CONFIG_TTL_MS = 30 * 60 * 1000; // 30 minutes (reduces Firestore reads by 15x)
 const JWT_TTL_MS = 45 * 60 * 1000; // 45 minutes
+
+let lastLockerActivityAt = 0;
+const LOCKER_ACTIVITY_WINDOW_MS = 2 * 60 * 1000; // 2 minutes on-demand bridge wake window
+let lastBridgeHeartbeatAt = 0;
+let lastBridgeHostname: string | null = null;
+let inMemoryLeader: { agentId: string; hostname: string | null; expiresAtMs: number } | null = null;
+const inMemoryBridgeCommands = new Map<string, LockerBridgeCommand>();
+let cachedBridgeKeys: { keys: Set<string>; fetchedAt: number } | null = null;
+let hasPendingRedgitsJob = false;
+let lastRedgitsFirestoreCheckAt = 0;
+let cachedFirestoreLockersMap: Map<string, Record<string, any>> | null = null;
+let lastBridgeStateFirestoreWriteAt = 0;
+
+export function markLockerActivity(): void {
+  lastLockerActivityAt = Date.now();
+}
+
+export function notifyRedgitsJobEnqueued(): void {
+  hasPendingRedgitsJob = true;
+}
+
+// Track on-demand activity whenever any staff or member locker route (non-bridge background poll) is hit
+inzanLockerRouter.use((req, _res, next) => {
+  if (!req.path.startsWith('/bridge/') && !req.path.startsWith('/redgits-agent/')) {
+    markLockerActivity();
+  }
+  next();
+});
 
 function stripUndefinedDeep<T>(val: T): T {
   if (Array.isArray(val)) {
@@ -201,10 +223,16 @@ function notifyBridgePollWaiters() {
   bridgePollWaiters.clear();
 }
 
+let latestBridgeSnapshotLoadedFromDb = false;
+
 async function getBridgeSnapshot(): Promise<LockerBridgeSnapshot | null> {
-  if (latestBridgeSnapshot && Date.now() - latestBridgeSnapshot.pushedAt < 45_000) {
+  if (latestBridgeSnapshot) {
     return latestBridgeSnapshot;
   }
+  if (latestBridgeSnapshotLoadedFromDb) {
+    return latestBridgeSnapshot;
+  }
+  latestBridgeSnapshotLoadedFromDb = true;
   try {
     const inzanDb = getInzanFirestore();
     const doc = await inzanDb.collection('settings').doc('inzan_locker_bridge_state').get();
@@ -252,8 +280,10 @@ async function executeViaMacosBridge<T = any>(
   body?: any,
   isPublic?: boolean
 ): Promise<{ data: T; baseUrl: string }> {
+  markLockerActivity();
   const snap = await getBridgeSnapshot();
-  const bridgeOnline = Boolean(snap && Date.now() - snap.pushedAt < 90_000);
+  const bridgeOnline =
+    Date.now() - lastBridgeHeartbeatAt < 90_000 || Boolean(snap && Date.now() - snap.pushedAt < 90_000);
 
   if (method === 'GET' && snap && Date.now() - snap.pushedAt < 90_000 && snap.pushedAt >= lastMutationAt) {
     const cachedVal = getCachedEndpointFromBridgeSnapshot(path, snap);
@@ -281,8 +311,6 @@ async function executeViaMacosBridge<T = any>(
 
   try {
     const commandId = `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const inzanDb = getInzanFirestore();
-    const cmdDocRef = inzanDb.collection('lockerBridgeCommands').doc(commandId);
 
     const cmdPayload: LockerBridgeCommand = stripUndefinedDeep({
       id: commandId,
@@ -294,25 +322,17 @@ async function executeViaMacosBridge<T = any>(
       createdAt: Date.now(),
     });
 
-    await cmdDocRef.set(cmdPayload);
+    inMemoryBridgeCommands.set(commandId, cmdPayload);
     notifyBridgePollWaiters();
 
     const result = await new Promise<{ ok: boolean; status: number; data: any; error?: string }>((resolve, reject) => {
       let settled = false;
-      let unsubFirestore: (() => void) | null = null;
 
       const finish = (resObj?: { ok: boolean; status: number; data: any; error?: string }, err?: Error) => {
         if (settled) return;
         settled = true;
         pendingBridgeResolvers.delete(commandId);
-        if (unsubFirestore) {
-          try {
-            unsubFirestore();
-          } catch {
-            // ignore
-          }
-        }
-        cmdDocRef.delete().catch(() => {});
+        inMemoryBridgeCommands.delete(commandId);
         if (err) reject(err);
         else if (resObj) resolve(resObj);
       };
@@ -328,24 +348,6 @@ async function executeViaMacosBridge<T = any>(
           finish(resObj);
         },
       });
-
-      unsubFirestore = cmdDocRef.onSnapshot(
-        (docSnap) => {
-          const d = docSnap.data();
-          if (d && d.status === 'completed') {
-            clearTimeout(timer);
-            finish({
-              ok: Boolean(d.responseOk),
-              status: Number(d.responseStatus || 200),
-              data: d.responseData,
-              error: d.responseError,
-            });
-          }
-        },
-        () => {
-          // Ignore snapshot listener error; in-memory resolver or timeout handles it
-        }
-      );
     });
 
     if (method !== 'GET') {
@@ -562,7 +564,8 @@ async function lockerApiRequest<T = any>(
 
   // 1. If the macOS Outbound Bridge pushed a fresh snapshot (< 25s old) and no mutation occurred since, serve GET immediately
   const snap = await getBridgeSnapshot();
-  const bridgeOnline = Boolean(snap && Date.now() - snap.pushedAt < 65_000);
+  const bridgeOnline =
+    Date.now() - lastBridgeHeartbeatAt < 90_000 || Boolean(snap && Date.now() - snap.pushedAt < 90_000);
   if (method === 'GET' && snap && Date.now() - snap.pushedAt < 25_000 && snap.pushedAt >= lastMutationAt) {
     const cachedVal = getCachedEndpointFromBridgeSnapshot(normalizedPath, snap);
     if (cachedVal !== undefined) {
@@ -604,6 +607,8 @@ function mapHardwareStatusToCrmStatus(status?: string | null): 'Available' | 'As
   return 'Available';
 }
 
+let lastLockersMapLoadedAt = 0;
+
 export async function syncHardwareLockersToFirestore(params: {
   lockers: any[];
   users: any[];
@@ -613,11 +618,16 @@ export async function syncHardwareLockersToFirestore(params: {
   firestoreMap: Map<string, Record<string, any>>;
 }> {
   const inzanDb = getInzanFirestore();
-  const existingSnap = await inzanDb.collection('lockers').get();
-  const firestoreMap = new Map<string, Record<string, any>>();
-  existingSnap.forEach((doc) => {
-    firestoreMap.set(doc.id, doc.data());
-  });
+  if (!cachedFirestoreLockersMap || lastMutationAt > lastLockersMapLoadedAt) {
+    const existingSnap = await inzanDb.collection('lockers').get();
+    const loadedMap = new Map<string, Record<string, any>>();
+    existingSnap.forEach((doc) => {
+      loadedMap.set(doc.id, doc.data());
+    });
+    cachedFirestoreLockersMap = loadedMap;
+    lastLockersMapLoadedAt = Date.now();
+  }
+  const firestoreMap = cachedFirestoreLockersMap;
 
   const userById = new Map<number, any>();
   const userByLockerId = new Map<number, any>();
@@ -647,7 +657,9 @@ export async function syncHardwareLockersToFirestore(params: {
   for (const locker of params.lockers) {
     const rawName = String(locker.name || locker.locker_id || locker.id || '').trim();
     if (/reader/i.test(rawName) || /reader/i.test(String(locker.locker_id || ''))) {
-      docsToDelete.push(String(locker.id));
+      if (firestoreMap.has(String(locker.id))) {
+        docsToDelete.push(String(locker.id));
+      }
       continue;
     }
 
@@ -750,8 +762,24 @@ export async function syncHardwareLockersToFirestore(params: {
       updatedAt: nowIso,
     };
 
-    docsToUpsert.push({ id: docId, data: firestoreDoc });
-    firestoreMap.set(docId, firestoreDoc);
+    const hasChanged =
+      !existing.id ||
+      existing.status !== firestoreDoc.status ||
+      existing.hardwareStatus !== firestoreDoc.hardwareStatus ||
+      existing.isOnline !== firestoreDoc.isOnline ||
+      existing.relayState !== firestoreDoc.relayState ||
+      existing.hardwareUserId !== firestoreDoc.hardwareUserId ||
+      existing.assignedTo !== firestoreDoc.assignedTo ||
+      existing.assignedToName !== firestoreDoc.assignedToName ||
+      existing.code !== firestoreDoc.code ||
+      existing.expiresAt !== firestoreDoc.expiresAt ||
+      existing.number !== firestoreDoc.number ||
+      existing.groupId !== firestoreDoc.groupId;
+
+    if (hasChanged) {
+      docsToUpsert.push({ id: docId, data: firestoreDoc });
+      firestoreMap.set(docId, firestoreDoc);
+    }
   }
 
   for (const delId of docsToDelete) {
@@ -763,7 +791,7 @@ export async function syncHardwareLockersToFirestore(params: {
     }
   }
 
-  // Commit in batches of 400
+  // Commit in batches of 400 (only changed documents!)
   const BATCH_SIZE = 400;
   for (let i = 0; i < docsToUpsert.length; i += BATCH_SIZE) {
     const chunk = docsToUpsert.slice(i, i + BATCH_SIZE);
@@ -876,12 +904,18 @@ inzanLockerRouter.get('/overview', async (req: Request, res: Response) => {
     });
 
     const bridgeSnap = await getBridgeSnapshot();
-    const bridgeOnline = Boolean(bridgeSnap && Date.now() - bridgeSnap.pushedAt < 65_000);
+    const bridgeOnline =
+      Date.now() - lastBridgeHeartbeatAt < 90_000 || Boolean(bridgeSnap && Date.now() - bridgeSnap.pushedAt < 90_000);
+    const lastSeenIso =
+      lastBridgeHeartbeatAt > (bridgeSnap?.pushedAt || 0)
+        ? new Date(lastBridgeHeartbeatAt).toISOString()
+        : bridgeSnap?.pushedAtIso || null;
     const hostProto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const hostName = req.get('host') || 'admin.inzanathletics.com';
+    const configuredBridgeOrigin = (process.env.INZAN_BRIDGE_CRM_URL || '').trim().replace(/\/+$/, '');
     const crmOrigin = hostName.includes('localhost')
       ? `${hostProto}://${hostName}`
-      : 'https://admin.inzanathletics.com';
+      : (configuredBridgeOrigin || 'https://mitrixo-gateway.onrender.com');
     const installCommand = `curl -fsSL ${crmOrigin}/api/inzan/lockers/macos-bridge.sh | bash`;
 
     res.json({
@@ -899,10 +933,10 @@ inzanLockerRouter.get('/overview', async (req: Request, res: Response) => {
       syncedAt: new Date().toISOString(),
       bridge: {
         online: bridgeOnline,
-        lastSeen: bridgeSnap?.pushedAtIso || null,
+        lastSeen: lastSeenIso,
         localUrl: bridgeSnap?.localUrl || 'http://192.168.10.31:3701',
         tunnelUrl: bridgeSnap?.tunnelUrl || null,
-        hostname: bridgeSnap?.hostname || null,
+        hostname: lastBridgeHostname || bridgeSnap?.hostname || null,
         installCommand,
       },
     });
@@ -929,12 +963,20 @@ async function verifyBridgeKey(req: Request): Promise<boolean> {
   const cfg = await getLockerServerConfig();
   if (cfg.password && headerKey === cfg.password) return true;
 
+  if (cachedBridgeKeys && Date.now() - cachedBridgeKeys.fetchedAt < CONFIG_TTL_MS) {
+    if (cachedBridgeKeys.keys.has(headerKey)) return true;
+  }
+
   try {
     const inzanDb = getInzanFirestore();
     const snap = await inzanDb.collection('settings').doc('inzan_locker_config').get();
     const data = snap.data();
-    if (data?.bridgeKey && headerKey === String(data.bridgeKey).trim()) return true;
-    if (data?.password && headerKey === String(data.password).trim()) return true;
+    const keys = new Set<string>();
+    if (cfg.password) keys.add(cfg.password);
+    if (data?.bridgeKey) keys.add(String(data.bridgeKey).trim());
+    if (data?.password) keys.add(String(data.password).trim());
+    cachedBridgeKeys = { keys, fetchedAt: Date.now() };
+    if (keys.has(headerKey)) return true;
   } catch {
     // ignore
   }
@@ -943,7 +985,8 @@ async function verifyBridgeKey(req: Request): Promise<boolean> {
 
 // ============================================================================
 // 1B2. LEADER LEASE (so multiple macOS bridge agents can run for HA without
-// duplicating locker commands or snapshot pushes — only the lease holder is active).
+// duplicating locker commands or snapshot pushes — only the lease holder is active,
+// and only when Lockers are actively in use or due for a periodic refresh).
 // ============================================================================
 inzanLockerRouter.post('/bridge/lease', async (req: Request, res: Response) => {
   try {
@@ -956,23 +999,35 @@ inzanLockerRouter.post('/bridge/lease', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'agentId is required' });
       return;
     }
-    const inzanDb = getInzanFirestore();
-    const ref = inzanDb.collection('settings').doc('inzan_locker_bridge_leader');
     const now = Date.now();
-    const TTL_MS = 30_000;
-    let isLeader = false;
+    const TTL_MS = 35_000;
+    lastBridgeHeartbeatAt = now;
+    if (hostname) lastBridgeHostname = String(hostname);
+
+    let isLeaderCandidate = false;
     let leaderId: string | null = null;
-    await inzanDb.runTransaction(async (t) => {
-      const snap = await t.get(ref);
-      const d = snap.exists ? (snap.data() as any) : null;
-      if (!d || (typeof d.expiresAtMs === 'number' && d.expiresAtMs < now) || d.agentId === agentId) {
-        t.set(ref, { agentId, hostname: hostname || null, acquiredAtMs: now, expiresAtMs: now + TTL_MS }, { merge: true });
-        isLeader = true;
-      } else {
-        isLeader = false;
-        leaderId = d.agentId || null;
-      }
-    });
+    if (!inMemoryLeader || inMemoryLeader.expiresAtMs < now || inMemoryLeader.agentId === String(agentId)) {
+      inMemoryLeader = {
+        agentId: String(agentId),
+        hostname: hostname ? String(hostname) : null,
+        expiresAtMs: now + TTL_MS,
+      };
+      isLeaderCandidate = true;
+      leaderId = String(agentId);
+    } else {
+      isLeaderCandidate = false;
+      leaderId = inMemoryLeader.agentId;
+    }
+
+    // On-demand wake: only instruct the leader daemon to actively poll/push when Lockers
+    // were accessed in the last 2 minutes, a command is queued, or snapshot is > 30 mins old.
+    const shouldWakeBridge =
+      now - lastLockerActivityAt < LOCKER_ACTIVITY_WINDOW_MS ||
+      inMemoryBridgeCommands.size > 0 ||
+      !latestBridgeSnapshot ||
+      now - latestBridgeSnapshot.pushedAt > 30 * 60 * 1000;
+
+    const isLeader = isLeaderCandidate && shouldWakeBridge;
     res.json({ ok: true, isLeader, leaderId, expiresAtMs: now + TTL_MS });
   } catch (err: any) {
     console.error('[API] [InzanLockers] POST /bridge/lease error:', err);
@@ -982,13 +1037,17 @@ inzanLockerRouter.post('/bridge/lease', async (req: Request, res: Response) => {
 
 /**
  * Exposed for the RedGITS sync router: whether the on-site macOS bridge agent is
- * currently pushing snapshots to the CRM (so RedGITS scrapes can run on the site IP).
+ * currently online (either via heartbeat lease or recent snapshot push).
  */
 export async function isInzanBridgeOnline(): Promise<{ online: boolean; lastSeenIso: string | null }> {
   try {
+    const now = Date.now();
+    if (lastBridgeHeartbeatAt > 0 && now - lastBridgeHeartbeatAt < 90_000) {
+      return { online: true, lastSeenIso: new Date(lastBridgeHeartbeatAt).toISOString() };
+    }
     const snap = await getBridgeSnapshot();
     if (!snap) return { online: false, lastSeenIso: null };
-    const online = Date.now() - snap.pushedAt < 90_000;
+    const online = now - snap.pushedAt < 90_000;
     return { online, lastSeenIso: (snap as any).pushedAtIso || null };
   } catch {
     return { online: false, lastSeenIso: null };
@@ -996,7 +1055,7 @@ export async function isInzanBridgeOnline(): Promise<{ online: boolean; lastSeen
 }
 
 // ============================================================================
-// 1C. REDGITS ON-SITE AGENT ENDPOINTS (in used by the macOS bridge agent)
+// 1C. REDGITS ON-SITE AGENT ENDPOINTS (used by the macOS bridge agent)
 // RedGITS rejects/stalls Google datacenter IPs, so the scrape is executed on the
 // gym's site IP by agent.py; results are posted back and applied by
 // src/routes/redgitsSync.ts which enqueues jobs into `redgitsAgentJobs`.
@@ -1007,29 +1066,47 @@ inzanLockerRouter.get('/redgits-agent/next', async (req: Request, res: Response)
       res.status(401).json({ error: 'Unauthorized bridge key' });
       return;
     }
-    const inzanDb = getInzanFirestore();
     const now = Date.now();
-    const job = await inzanDb.runTransaction(async (t) => {
-      const q = inzanDb
-        .collection('redgitsAgentJobs')
-        .where('status', '==', 'pending');
-      const snap = await t.get(q);
-      if (snap.empty) return null;
-      // Sort in memory to avoid requiring a Firestore composite index.
-      const docs = snap.docs
-        .map((d) => d)
-        .sort((a, b) => Number((a.data() as any)?.requestedAtMs || 0) - Number((b.data() as any)?.requestedAtMs || 0));
-      const doc = docs[0];
-      if (!doc) return null;
-      const d = doc.data() as any;
-      if (!d || !d.requestedAtMs || now - d.requestedAtMs < 3000) return null;
-      t.update(doc.ref, { status: 'claimed', claimedAtMs: now });
-      return d;
-    });
-    if (!job) {
+    lastBridgeHeartbeatAt = now;
+
+    // Fast path: skip Firestore query unless a RedGITS job was enqueued or 5 minutes have elapsed.
+    if (!hasPendingRedgitsJob && now - lastRedgitsFirestoreCheckAt < 5 * 60 * 1000) {
       res.json({ ok: true, job: null });
       return;
     }
+
+    lastRedgitsFirestoreCheckAt = now;
+    const inzanDb = getInzanFirestore();
+    const pendingSnap = await inzanDb
+      .collection('redgitsAgentJobs')
+      .where('status', '==', 'pending')
+      .limit(5)
+      .get();
+
+    if (pendingSnap.empty) {
+      hasPendingRedgitsJob = false;
+      res.json({ ok: true, job: null });
+      return;
+    }
+
+    const job = await inzanDb.runTransaction(async (t) => {
+      const docs = pendingSnap.docs
+        .slice()
+        .sort((a, b) => Number((a.data() as any)?.requestedAtMs || 0) - Number((b.data() as any)?.requestedAtMs || 0));
+      const targetDoc = docs[0];
+      if (!targetDoc) return null;
+      const freshDoc = await t.get(targetDoc.ref);
+      const d = freshDoc.data() as any;
+      if (!d || d.status !== 'pending' || !d.requestedAtMs || now - d.requestedAtMs < 1000) return null;
+      t.update(targetDoc.ref, { status: 'claimed', claimedAtMs: now });
+      return d;
+    });
+    if (!job) {
+      hasPendingRedgitsJob = pendingSnap.docs.length > 1;
+      res.json({ ok: true, job: null });
+      return;
+    }
+    hasPendingRedgitsJob = pendingSnap.docs.length > 1;
     res.json({
       ok: true,
       job: {
@@ -1099,6 +1176,7 @@ inzanLockerRouter.post('/bridge/push', async (req: Request, res: Response) => {
 
     const body = req.body || {};
     const now = Date.now();
+    lastBridgeHeartbeatAt = now;
     const nowIso = new Date(now).toISOString();
     const localUrl = String(body.localUrl || 'http://192.168.10.31:3701').trim();
     const tunnelUrl = body.tunnelUrl ? String(body.tunnelUrl).trim().replace(/\/+$/, '') : null;
@@ -1123,9 +1201,13 @@ inzanLockerRouter.post('/bridge/push', async (req: Request, res: Response) => {
     });
 
     latestBridgeSnapshot = snap;
+    if (snap.hostname) lastBridgeHostname = snap.hostname;
 
     const inzanDb = getInzanFirestore();
-    await inzanDb.collection('settings').doc('inzan_locker_bridge_state').set(snap, { merge: true });
+    if (Boolean(body.forceSync) || now - lastBridgeStateFirestoreWriteAt > 10 * 60 * 1000) {
+      lastBridgeStateFirestoreWriteAt = now;
+      await inzanDb.collection('settings').doc('inzan_locker_bridge_state').set(snap, { merge: true });
+    }
 
     // If the macOS agent provides a live verified tunnel URL (e.g. Cloudflare Tunnel or Tailscale), auto-update baseUrl
     if (tunnelUrl && /^https:\/\//i.test(tunnelUrl)) {
@@ -1151,7 +1233,7 @@ inzanLockerRouter.post('/bridge/push', async (req: Request, res: Response) => {
     if (
       Array.isArray(snap.lockers) &&
       snap.lockers.length > 0 &&
-      (Boolean(body.forceSync) || !prevSnap || now - prevSnap.pushedAt > 45_000)
+      (Boolean(body.forceSync) || !prevSnap || now - prevSnap.pushedAt > 60_000)
     ) {
       await syncHardwareLockersToFirestore({
         lockers: snap.lockers,
@@ -1179,35 +1261,32 @@ inzanLockerRouter.get('/bridge/poll', async (req: Request, res: Response) => {
       return;
     }
 
-    const inzanDb = getInzanFirestore();
-    const fetchPending = async (): Promise<LockerBridgeCommand[]> => {
-      const snap = await inzanDb
-        .collection('lockerBridgeCommands')
-        .where('status', '==', 'pending')
-        .limit(10)
-        .get();
-      if (snap.empty) return [];
+    lastBridgeHeartbeatAt = Date.now();
+    const fetchPendingFromMemory = (): LockerBridgeCommand[] => {
       const list: LockerBridgeCommand[] = [];
-      const cutoff = Date.now() - 30_000;
-      for (const doc of snap.docs) {
-        const d = doc.data() as LockerBridgeCommand;
-        if (d.createdAt < cutoff) {
-          doc.ref.delete().catch(() => {});
+      const now = Date.now();
+      const cutoff = now - 30_000;
+      for (const [id, cmd] of inMemoryBridgeCommands.entries()) {
+        if (cmd.createdAt < cutoff) {
+          inMemoryBridgeCommands.delete(id);
           continue;
         }
-        await doc.ref.set({ status: 'claimed', claimedAt: Date.now() }, { merge: true });
-        list.push(d);
+        if (cmd.status === 'pending') {
+          cmd.status = 'claimed';
+          list.push(cmd);
+          if (list.length >= 10) break;
+        }
       }
       return list;
     };
 
-    let commands = await fetchPending();
-    if (commands.length === 0) {
+    let commands = fetchPendingFromMemory();
+    if (commands.length === 0 && Date.now() - lastLockerActivityAt < LOCKER_ACTIVITY_WINDOW_MS) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
           bridgePollWaiters.delete(wake);
           resolve();
-        }, 7000);
+        }, 800);
         const wake = () => {
           clearTimeout(timer);
           bridgePollWaiters.delete(wake);
@@ -1215,7 +1294,7 @@ inzanLockerRouter.get('/bridge/poll', async (req: Request, res: Response) => {
         };
         bridgePollWaiters.add(wake);
       });
-      commands = await fetchPending();
+      commands = fetchPendingFromMemory();
     }
 
     res.json({ ok: true, commands });
@@ -1238,6 +1317,7 @@ inzanLockerRouter.post('/bridge/respond', async (req: Request, res: Response) =>
       return;
     }
 
+    inMemoryBridgeCommands.delete(String(commandId));
     const resolver = pendingBridgeResolvers.get(String(commandId));
     if (resolver) {
       resolver.resolve({
@@ -1247,22 +1327,6 @@ inzanLockerRouter.post('/bridge/respond', async (req: Request, res: Response) =>
         error: error ? String(error) : undefined,
       });
     }
-
-    const inzanDb = getInzanFirestore();
-    await inzanDb
-      .collection('lockerBridgeCommands')
-      .doc(String(commandId))
-      .set(
-        stripUndefinedDeep({
-          status: 'completed',
-          responseOk: Boolean(ok),
-          responseStatus: Number(status || (ok ? 200 : 500)),
-          responseData: data ?? null,
-          responseError: error ? String(error) : null,
-          completedAt: Date.now(),
-        }),
-        { merge: true }
-      );
 
     res.json({ ok: true });
   } catch (err: any) {
@@ -1282,21 +1346,27 @@ inzanLockerRouter.get('/bridge/status', async (req: Request, res: Response) => {
 
     const snap = await getBridgeSnapshot();
     const cfg = await getLockerServerConfig();
-    const online = Boolean(snap && Date.now() - snap.pushedAt < 65_000);
+    const online =
+      Date.now() - lastBridgeHeartbeatAt < 90_000 || Boolean(snap && Date.now() - snap.pushedAt < 90_000);
+    const lastSeenIso =
+      lastBridgeHeartbeatAt > (snap?.pushedAt || 0)
+        ? new Date(lastBridgeHeartbeatAt).toISOString()
+        : snap?.pushedAtIso || null;
     const hostProto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const hostName = req.get('host') || 'admin.inzanathletics.com';
+    const configuredBridgeOrigin = (process.env.INZAN_BRIDGE_CRM_URL || '').trim().replace(/\/+$/, '');
     const crmOrigin = hostName.includes('localhost')
       ? `${hostProto}://${hostName}`
-      : 'https://admin.inzanathletics.com';
+      : (configuredBridgeOrigin || 'https://mitrixo-gateway.onrender.com');
 
     res.json({
       ok: true,
       online,
-      lastSeen: snap?.pushedAtIso || null,
+      lastSeen: lastSeenIso,
       localUrl: snap?.localUrl || 'http://192.168.10.31:3701',
       tunnelUrl: snap?.tunnelUrl || null,
       activeBaseUrl: cfg.baseUrl,
-      hostname: snap?.hostname || null,
+      hostname: lastBridgeHostname || snap?.hostname || null,
       installCommand: `curl -fsSL ${crmOrigin}/api/inzan/lockers/macos-bridge.sh | bash`,
     });
   } catch (err: any) {
@@ -1315,13 +1385,15 @@ inzanLockerRouter.get('/macos-bridge.sh', async (req: Request, res: Response) =>
     if (!bridgeKey) {
       bridgeKey = lockerPass || `inzan_bridge_${Date.now().toString(36)}`;
       await inzanDb.collection('settings').doc('inzan_locker_config').set({ bridgeKey }, { merge: true });
+      cachedBridgeKeys = null;
     }
 
     const hostProto = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const hostName = req.get('host') || 'admin.inzanathletics.com';
+    const configuredBridgeUrl = (process.env.INZAN_BRIDGE_CRM_URL || '').trim().replace(/\/+$/, '');
     const crmUrl = hostName.includes('localhost')
       ? `${hostProto}://${hostName}`
-      : 'https://admin.inzanathletics.com';
+      : (configuredBridgeUrl || 'https://mitrixo-gateway.onrender.com');
     const localUrl = String(req.query.localUrl || cfgData.localUrl || 'http://192.168.10.31:3701').trim();
 
     const script = `#!/usr/bin/env bash
@@ -1573,7 +1645,7 @@ def lease_loop():
             log(f"[Lease] Warning: {e}")
             with LEADER_LOCK:
                 IS_LEADER["value"] = False
-        time.sleep(10)
+        time.sleep(20)
 
 
 def collect_and_push_snapshot():
@@ -1621,7 +1693,7 @@ def snapshot_loop():
     while True:
         if is_leader():
             collect_and_push_snapshot()
-        PUSH_NOW_EVENT.wait(timeout=5.0)
+        PUSH_NOW_EVENT.wait(timeout=30.0)
         PUSH_NOW_EVENT.clear()
 
 
@@ -1665,6 +1737,8 @@ def command_poll_loop():
                         timeout=8,
                     )
                 PUSH_NOW_EVENT.set()
+            if not commands:
+                time.sleep(2)
         except Exception as e:
             log(f"[CommandPoller] Reconnecting after error: {e}")
             time.sleep(2)
@@ -1826,7 +1900,7 @@ def redgits_agent_loop():
                         pass
         except Exception as e:
             log(f"[RedGITS Agent] Warning: {e}")
-        time.sleep(4)
+        time.sleep(20)
 
 
 def tunnel_watchdog_loop():

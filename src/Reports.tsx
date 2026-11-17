@@ -3,9 +3,6 @@ import { downloadFile } from './utils/download';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
 import {
@@ -172,7 +169,29 @@ export default function Reports() {
     branches,
     setActiveTab,
     setActiveClientId,
+    fetchExpiredMembers,
+    expiredLoaded,
+    loadingExpired,
+    fetchHistoricalPayments,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
   } = useAppContext();
+
+  useEffect(() => {
+    if (!expiredLoaded && !loadingExpired && typeof fetchExpiredMembers === 'function') {
+      fetchExpiredMembers();
+    }
+    if (!historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
+      fetchHistoricalPayments();
+    }
+  }, [
+    expiredLoaded,
+    loadingExpired,
+    fetchExpiredMembers,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
+    fetchHistoricalPayments,
+  ]);
   const isInzan = getTenantId() === 'inzanathletics';
   const revenueScope = useMemo(() => getRevenueScopeForUser(currentUser), [currentUser]);
 
@@ -252,8 +271,12 @@ export default function Reports() {
     downloadFile(blob, `${filename}.csv`);
   };
 
-  const exportToPDF = (data: any[], filename: string) => {
+  const exportToPDF = async (data: any[], filename: string) => {
     if (data.length === 0) return;
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]);
     const doc = new jsPDF();
     const headers = Object.keys(data[0]);
     const body = data.map(row => headers.map(h => row[h] == null ? '' : String(row[h])));
@@ -264,8 +287,9 @@ export default function Reports() {
     doc.save(`${filename}.pdf`);
   };
 
-  const exportToXLSX = (data: any[], filename: string) => {
+  const exportToXLSX = async (data: any[], filename: string) => {
     if (data.length === 0) return;
+    const XLSX = await import('xlsx');
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');

@@ -3,6 +3,12 @@ import 'dotenv/config';
 import express from "express";
 import path from "path";
 import fs from "fs";
+import zlib from "node:zlib";
+
+// Short-lived per-tenant auth membership cache (keyed strictly by `${tenantId}:${uid}`)
+const tenantAuthCache = new Map<string, { role: string; expiresAt: number }>();
+const TENANT_AUTH_CACHE_TTL_MS = 60_000;
+const TENANT_AUTH_CACHE_MAX_ENTRIES = 2000;
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import { provisionNewGym } from "./provisioning";
@@ -43,6 +49,10 @@ import {
   getTenantInfoForHost,
   getRequestHostname,
   getDbForRequest,
+  getDbForTenant,
+  getAuthForRequest,
+  getAuthForTenant,
+  getAdminAppForProject,
   getTenantIdForRequest,
 } from './src/utils/tenantDb.js';
 
@@ -56,27 +66,12 @@ declare global {
   }
 }
 
-// Initialize Firebase Admin SDK
+// Default Firebase Admin initialization (shared fallback; tenant routes use tenantDb multi-app registry)
 if (admin.apps.length === 0) {
-  const adminOptions: admin.AppOptions = {};
-  const saEnvPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (saEnvPath && fs.existsSync(saEnvPath)) {
-    try {
-      const saKey = JSON.parse(fs.readFileSync(saEnvPath, 'utf8'));
-      adminOptions.credential = admin.credential.cert(saKey);
-    } catch (e) {
-      console.error('Failed to parse service account key in server.ts:', e);
-    }
-  }
-  if (isStandaloneMode()) {
-    adminOptions.projectId = 'strike-production-f5242';
-  } else {
-    // Cloud Run's GOOGLE_CLOUD_PROJECT is the hosting project (currently
-    // bengarab), not the Firebase Auth project that issues tenant ID tokens.
-    // Inzan and the shared tenants use the central Firebase project.
-    adminOptions.projectId = process.env.FIREBASE_PROJECT_ID || 'faa-test-guide-v2';
-  }
-  admin.initializeApp(adminOptions);
+  const initialProjectId = isStandaloneMode()
+    ? 'strike-production-f5242'
+    : process.env.FIREBASE_PROJECT_ID || 'inzan-crm-spark-26';
+  getAdminAppForProject(initialProjectId);
 }
 
 // ===============================================================
@@ -126,12 +121,17 @@ async function requirePlatformAdmin(req: express.Request, res: express.Response,
   }
   try {
     const token = authHeader.split('Bearer ')[1];
-    const decodedToken = await admin.auth().verifyIdToken(token!);
+    const authClient = await getAuthForRequest(req);
+    const decodedToken = await authClient.verifyIdToken(token!);
 
     // God mode: platform owner always passes
     if (decodedToken.email === PLATFORM_SUPER_ADMIN_EMAIL) {
       (req as any).platformUser = decodedToken;
       return next();
+    }
+
+    if (process.env.DISABLE_REGISTRY_DB === 'true') {
+      return res.status(403).json({ error: 'Forbidden: Platform admin registry is disabled in gateway mode.' });
     }
 
     // For other users, check db-registry-2 for platform_admin or super_admin role
@@ -149,22 +149,6 @@ async function requirePlatformAdmin(req: express.Request, res: express.Response,
   }
 }
 
-interface ClientCacheEntry {
-  clients: any[];
-  timestamp: number;
-}
-const DATA_CACHE_TTL_MS = 30 * 1000; // 30 seconds cache TTL for clients/payments to prevent cache drift on Cloud Run
-const clientsCache = new Map<string, ClientCacheEntry>();
-const clientsFetchPromises = new Map<string, Promise<any[]>>();
-
-interface PaymentCacheEntry {
-  payments: any[];
-  timestamp: number;
-}
-const paymentsCache = new Map<string, PaymentCacheEntry>();
-const paymentsFetchPromises = new Map<string, Promise<any[]>>();
-
-
 async function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
@@ -173,22 +157,16 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
   }
   try {
     const token = authHeader.split('Bearer ')[1];
-    const decodedToken = await admin.auth().verifyIdToken(token!);
-    (req as any).user = decodedToken;
-
-    // Cross-tenant protection: the tenant database is selected from the request
-    // hostname (getRequestHostname may trust x-forwarded-host / x-original-host),
-    // so after authentication we MUST verify the user is actually a member of the
-    // tenant resolved for this request. Otherwise any authenticated user could
-    // spoof another tenant's host header and read/write that tenant's data.
     const hostname = getRequestHostname(req);
     const { config: tenantConfig, status: tenantStatus } = await getTenantInfoForHost(hostname);
-    
-    // Deny requests for unresolvable hosts to prevent cross-tenant auth bypass (C-4)
     if (tenantStatus === 'not_found') {
       res.status(403).json({ error: 'Forbidden: Unknown tenant host' });
       return;
     }
+
+    const authClient = await getAuthForRequest(req);
+    const decodedToken = await authClient.verifyIdToken(token!);
+    (req as any).user = decodedToken;
 
     const resolvedTenantId = tenantConfig?.tenantId;
 
@@ -197,34 +175,60 @@ async function requireAuth(req: express.Request, res: express.Response, next: ex
     if (resolvedTenantId) {
       let memberDb;
       try {
-        memberDb = tenantConfig.firestoreDatabaseId
-          ? getFirestore(tenantConfig.firestoreDatabaseId)
-          : getFirestore();
+        memberDb = await getDbForRequest(req);
       } catch (dbErr) {
         console.error('[Auth] Error resolving tenant database:', dbErr);
         res.status(500).json({ error: 'Internal error resolving tenant' });
         return;
       }
-      const userDoc = await memberDb.collection('users').doc(decodedToken.uid).get();
-      if (!userDoc.exists) {
-        const isMemberOnboardingPath = req.path.startsWith('/api/member/create-profile') || 
-                                       req.path.startsWith('/api/member/link-profile') ||
-                                       req.path.startsWith('/api/member/search-profile');
-        if (!isMemberOnboardingPath) {
-          console.warn(
-            `[Auth] User ${decodedToken.uid} is not a member of tenant "${resolvedTenantId}" (host: ${hostname}) — denying access`
-          );
-          res.status(403).json({ error: 'Forbidden: User is not a member of this tenant' });
-          return;
+      const authCacheKey = `${resolvedTenantId}:${decodedToken.uid}`;
+      const cachedAuth = tenantAuthCache.get(authCacheKey);
+      const now = Date.now();
+      let memberExists = false;
+      let tenantRole = '';
+
+      if (cachedAuth && cachedAuth.expiresAt > now) {
+        memberExists = true;
+        tenantRole = cachedAuth.role;
+      } else {
+        const userDoc = await memberDb.collection('users').doc(decodedToken.uid).get();
+        if (!userDoc.exists) {
+          const isMemberOnboardingPath = req.path.startsWith('/api/member/create-profile') || 
+                                         req.path.startsWith('/api/member/link-profile') ||
+                                         req.path.startsWith('/api/member/search-profile');
+          if (!isMemberOnboardingPath) {
+            console.warn(
+              `[Auth] User ${decodedToken.uid} is not a member of tenant "${resolvedTenantId}" (host: ${hostname}) — denying access`
+            );
+            res.status(403).json({ error: 'Forbidden: User is not a member of this tenant' });
+            return;
+          }
+        } else {
+          memberExists = true;
+          tenantRole = String(userDoc.data()?.role || '');
+          if (tenantAuthCache.size >= TENANT_AUTH_CACHE_MAX_ENTRIES) {
+            // Evict expired entries first; if still full, drop oldest insertion
+            for (const [k, v] of tenantAuthCache) {
+              if (v.expiresAt <= now) tenantAuthCache.delete(k);
+            }
+            if (tenantAuthCache.size >= TENANT_AUTH_CACHE_MAX_ENTRIES) {
+              const oldestKey = tenantAuthCache.keys().next().value;
+              if (oldestKey) tenantAuthCache.delete(oldestKey);
+            }
+          }
+          tenantAuthCache.delete(authCacheKey);
+          tenantAuthCache.set(authCacheKey, {
+            role: tenantRole,
+            expiresAt: now + TENANT_AUTH_CACHE_TTL_MS,
+          });
         }
       }
 
-      if (userDoc.exists) {
-        const tenantRole = String(userDoc.data()?.role || '');
+      if (memberExists) {
         if (tenantRole && (decodedToken.role !== tenantRole || decodedToken.tenantId !== resolvedTenantId)) {
           try {
-            const existing = (await admin.auth().getUser(decodedToken.uid)).customClaims || {};
-            await admin.auth().setCustomUserClaims(decodedToken.uid, { ...existing, role: tenantRole, tenantId: resolvedTenantId });
+            const existing = (await authClient.getUser(decodedToken.uid)).customClaims || {};
+            await authClient.setCustomUserClaims(decodedToken.uid, { ...existing, role: tenantRole, tenantId: resolvedTenantId });
             (req as any).claimsUpdated = true;
           } catch (claimErr) {
             console.error('[Auth] Failed to sync custom claims:', claimErr);
@@ -447,11 +451,25 @@ async function injectFirebaseConfig(html: string, hostname: string): Promise<str
   updatedHtml = updatedHtml.replace(/content="Official Member Portal & Gym Management Platform"/g, `content="${tenantDesc}"`);
   updatedHtml = updatedHtml.replace(/https:\/\/strike-egy\.com\/pwa-icon\.png/g, ogImage);
 
+  const splashPlaceholderDataUri =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
   // Update initial static splash screen assets in HTML for non-JS / crawler requests
   if (isTenantInzan) {
+    updatedHtml = updatedHtml.replace(splashPlaceholderDataUri, splashLogo);
     updatedHtml = updatedHtml.replace(/\/strikelogo_white\.png/g, splashLogo);
     updatedHtml = updatedHtml.replace(/STRIKE BOXING CLUB/g, 'INZAN ATHLETICS');
+    updatedHtml = updatedHtml.replace(
+      /<div[^>]*id=["']?mobile-splash-bg["']?[^>]*><\/div>/i,
+      '<div id="mobile-splash-bg" class="mobile-splash-bg" style="background-color: #08080a; background-image: none;"></div>'
+    );
     updatedHtml = updatedHtml.replace(/\/strike_slide_outdoor\.png/g, '/mitrixogymcrm_sessions_slide.png');
+  } else {
+    updatedHtml = updatedHtml.replace(splashPlaceholderDataUri, '/strikelogo_white.png');
+    updatedHtml = updatedHtml.replace(
+      /<div[^>]*id=["']?mobile-splash-bg["']?[^>]*><\/div>/i,
+      '<div id="mobile-splash-bg" class="mobile-splash-bg" style="background-image: url(\'/strike_slide_outdoor.png\');"></div>'
+    );
   }
 
   return updatedHtml;
@@ -487,8 +505,62 @@ async function startServer() {
   app.set('trust proxy', 1);
   const PORT = Number(process.env.PORT) || 8080;
 
-  // Support JSON body parsing
-  app.use(express.json({ limit: '32mb' }));
+  // Lightweight zero-dependency gzip compression for JSON API & HTML responses (> 1 KB)
+  app.use((req, res, next) => {
+    if (req.method === 'HEAD' || req.path === '/api/health') {
+      return next();
+    }
+    const acceptEncoding = String(req.headers['accept-encoding'] || '');
+    if (!/\bgzip\b/i.test(acceptEncoding)) {
+      return next();
+    }
+    const origSend = res.send.bind(res);
+    res.send = function compressedSend(body?: any): express.Response {
+      if (res.headersSent || res.getHeader('Content-Encoding') || res.getHeader('Content-Range')) {
+        return origSend(body);
+      }
+      // Objects passed to res.send() are delegated to res.json() by Express, which re-enters with a string
+      if (typeof body !== 'string' && !Buffer.isBuffer(body)) {
+        return origSend(body);
+      }
+      const existingCt = String(res.getHeader('Content-Type') || '');
+      if (
+        existingCt &&
+        /^(image|video|audio|font)\//i.test(existingCt) ||
+        /application\/(pdf|zip|gzip|x-gzip|x-brotli|octet-stream)/i.test(existingCt) ||
+        /text\/event-stream/i.test(existingCt)
+      ) {
+        return origSend(body);
+      }
+      if (Buffer.isBuffer(body) && !existingCt) {
+        return origSend(body);
+      }
+      const rawBuf = Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8');
+      if (rawBuf.length <= 1024) {
+        return origSend(body);
+      }
+      try {
+        const gz = zlib.gzipSync(rawBuf, { level: 6 });
+        if (gz.length >= rawBuf.length) {
+          return origSend(body);
+        }
+        if (!existingCt && typeof body === 'string') {
+          res.type('html');
+        }
+        res.removeHeader('Content-Length');
+        res.setHeader('Content-Encoding', 'gzip');
+        res.vary('Accept-Encoding');
+        return origSend(gz);
+      } catch {
+        return origSend(body);
+      }
+    };
+    next();
+  });
+
+  // Allow 32mb JSON strictly on the on-site RedGITS agent upload route; cap default bodies at 2mb for 512MB RAM safety
+  app.use('/api/inzan/lockers/redgits-agent/submit', express.json({ limit: '32mb' }));
+  app.use(express.json({ limit: '2mb' }));
 
   // Desktop sync router for Windows Offline Desktop apps (Strike & Inzan Athletics)
   app.use('/api/desktop', desktopSyncRouter);
@@ -498,7 +570,7 @@ async function startServer() {
   app.use('/api/inzan/lockers', inzanLockerRouter);
   app.use('/api/messaging', createMessagingBroadcastRouter(requireAuth));
 
-  // Dedicated Cloud Run health check probe
+  // Dedicated Cloud Run / Render health check probe
   app.get("/api/health", async (req, res) => {
     try {
       const mode = isStandaloneMode() ? "standalone" : "multi-tenant";
@@ -530,7 +602,8 @@ async function startServer() {
       const snap = await db.collection("clients").limit(1).get();
       trace.firestoreOk = true;
       trace.sampleDoc = snap.docs.length > 0 ? snap.docs[0]!.id : 'none';
-      const authList = await admin.auth().listUsers(1);
+      const authClient = await getAuthForRequest(req);
+      const authList = await authClient.listUsers(1);
       trace.authOk = true;
       trace.sampleUser = authList.users.length > 0 ? authList.users[0]!.email : 'none';
       res.json({ success: true, trace });
@@ -541,15 +614,20 @@ async function startServer() {
     }
   });
 
-  // Authenticated Cloud Scheduler cron trigger for Membership Expiration
+  // Authenticated Cron trigger for Membership Expiration (fails closed in production if CRON_SECRET is missing)
   app.post("/api/cron/membership-expiration", async (req, res) => {
     try {
       const cronSecret = process.env.CRON_SECRET;
+      if (process.env.NODE_ENV === 'production' && !cronSecret) {
+        res.status(401).json({ error: "CRON_SECRET not configured" });
+        return;
+      }
       if (cronSecret && req.headers['x-cron-secret'] !== cronSecret) {
         res.status(401).json({ error: "Unauthorized cron trigger" });
         return;
       }
-      const results = await runAllTenantsExpirationScan();
+      const force = req.query.force === 'true' || req.body?.force === true;
+      const results = await runAllTenantsExpirationScan({ force });
       res.json({ status: "success", results });
     } catch (err: any) {
       console.error("[Cron API] Error running membership expiration:", err);
@@ -557,10 +635,14 @@ async function startServer() {
     }
   });
 
-  // Authenticated Cloud Scheduler cron trigger for No-Show processing
+  // Authenticated Cron trigger for No-Show processing
   app.post("/api/cron/no-show-check", async (req, res) => {
     try {
       const cronSecret = process.env.CRON_SECRET;
+      if (process.env.NODE_ENV === 'production' && !cronSecret) {
+        res.status(401).json({ error: "CRON_SECRET not configured" });
+        return;
+      }
       if (cronSecret && req.headers['x-cron-secret'] !== cronSecret) {
         res.status(401).json({ error: "Unauthorized cron trigger" });
         return;
@@ -570,136 +652,6 @@ async function startServer() {
     } catch (err: any) {
       console.error("[Cron API] Error running no-show scan:", err);
       res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Fetch all clients (members) via memory cache
-  app.get("/api/clients", requireAuth, async (req, res) => {
-    try {
-      const hostname = getRequestHostname(req);
-      const { config } = await getTenantInfoForHost(hostname);
-      const tenantId = config?.tenantId;
-      const dbId = config?.firestoreDatabaseId || '(default)';
-      const cacheKey = `${tenantId || 'default'}:${dbId}`;
-      
-      const now = Date.now();
-      const cached = clientsCache.get(cacheKey);
-      if (cached && now - cached.timestamp < DATA_CACHE_TTL_MS) {
-        const freshStatusClients = cached.clients.map((c: any) => ({
-          ...c,
-          status: getEffectiveClientStatus(c)
-        }));
-        return res.json({ clients: freshStatusClients, cached: true });
-      }
-
-      // Check if there is an in-flight promise for this database
-      let fetchPromise = clientsFetchPromises.get(cacheKey);
-      if (!fetchPromise) {
-        fetchPromise = (async () => {
-          console.log(`[Cache] Fetching clients from Firestore (${dbId})...`);
-          const db = await getDbForRequest(req);
-          const snap = await db.collection('clients').where('status', '!=', 'Lead').get();
-          return snap.docs.map(doc => {
-            const data = doc.data();
-            // Exclude large subcollections to keep memory consumption minimal
-            delete data.comments;
-            delete data.interactions;
-            const clientObj = { ...data, id: doc.id } as any;
-            clientObj.status = getEffectiveClientStatus(clientObj);
-            return clientObj;
-          });
-        })();
-        clientsFetchPromises.set(cacheKey, fetchPromise);
-      }
-
-      try {
-        const clients = await fetchPromise;
-        clientsCache.set(cacheKey, { clients, timestamp: Date.now() });
-        return res.json({ clients, cached: false });
-      } finally {
-        clientsFetchPromises.delete(cacheKey);
-      }
-    } catch (error) {
-      console.error('[API] Error fetching clients:', error);
-      return res.status(500).json({ error: (error as Error).message });
-    }
-  });
-
-  // Invalidate clients cache
-  app.post("/api/clients/invalidate", requireAuth, async (req, res) => {
-    try {
-      const hostname = getRequestHostname(req);
-      const { config } = await getTenantInfoForHost(hostname);
-      const tenantId = config?.tenantId;
-      const dbId = config?.firestoreDatabaseId || '(default)';
-      const cacheKey = `${tenantId || 'default'}:${dbId}`;
-      
-      clientsCache.delete(cacheKey);
-      console.log(`[Cache] Invalidated cache for: ${cacheKey}`);
-      return res.json({ success: true });
-    } catch (error) {
-      console.error('[API] Error invalidating cache:', error);
-      return res.status(500).json({ error: (error as Error).message });
-    }
-  });
-
-  // Fetch all payments via memory cache
-  app.get("/api/payments", requireAuth, async (req, res) => {
-    try {
-      const hostname = getRequestHostname(req);
-      const { config } = await getTenantInfoForHost(hostname);
-      const tenantId = config?.tenantId;
-      const dbId = config?.firestoreDatabaseId || '(default)';
-      const cacheKey = `${tenantId || 'default'}:${dbId}`;
-      
-      const now = Date.now();
-      const cached = paymentsCache.get(cacheKey);
-      if (cached && now - cached.timestamp < DATA_CACHE_TTL_MS) {
-        return res.json({ payments: cached.payments, cached: true });
-      }
-
-      // Check if there is an in-flight promise for this database
-      let fetchPromise = paymentsFetchPromises.get(cacheKey);
-      if (!fetchPromise) {
-        fetchPromise = (async () => {
-          console.log(`[Cache] Fetching payments from Firestore (${dbId})...`);
-          const db = await getDbForRequest(req);
-          const snap = await db.collection('payments').get();
-          return snap.docs
-            .map(doc => ({ ...doc.data(), id: doc.id } as any))
-            .filter((p: any) => !p.deleted_at);
-        })();
-        paymentsFetchPromises.set(cacheKey, fetchPromise);
-      }
-
-      try {
-        const payments = await fetchPromise;
-        paymentsCache.set(cacheKey, { payments, timestamp: Date.now() });
-        return res.json({ payments, cached: false });
-      } finally {
-        paymentsFetchPromises.delete(cacheKey);
-      }
-    } catch (error) {
-      console.error('[API] Error fetching payments:', error);
-      return res.status(500).json({ error: (error as Error).message });
-    }
-  });
-
-  // Invalidate payments cache
-  app.post("/api/payments/invalidate", requireAuth, async (req, res) => {
-    try {
-      const hostname = getRequestHostname(req);
-      const { config } = await getTenantInfoForHost(hostname);
-      const tenantId = config?.tenantId;
-      const dbId = config?.firestoreDatabaseId || '(default)';
-      const cacheKey = `${tenantId || 'default'}:${dbId}`;
-      
-      paymentsCache.delete(cacheKey);
-      console.log(`[Cache] Invalidated payments cache for: ${cacheKey}`);
-      return res.json({ success: true });
-    } catch (error) {
-      console.error('[API] Error invalidating payments cache:', error);
-      return res.status(500).json({ error: (error as Error).message });
     }
   });
 
@@ -756,6 +708,10 @@ async function startServer() {
       return res.status(400).json({ error: "This subdomain is reserved and cannot be used." });
     }
 
+    if (process.env.DISABLE_REGISTRY_DB === 'true') {
+      return res.status(503).json({ error: 'Self-serve multi-tenant registration is disabled in standalone gateway mode.' });
+    }
+
     try {
       const centralDb = getFirestore('db-registry-2');
       
@@ -800,6 +756,10 @@ async function startServer() {
     const { requestId } = req.body;
     if (!requestId) {
       return res.status(400).json({ error: "Missing required field: requestId" });
+    }
+
+    if (process.env.DISABLE_REGISTRY_DB === 'true') {
+      return res.status(503).json({ error: 'Self-serve multi-tenant registration is disabled in standalone gateway mode.' });
     }
 
     try {
@@ -862,12 +822,13 @@ async function startServer() {
     }
 
     try {
+      const authClient = await getAuthForRequest(req);
       let targetUid = uid;
       
       // If only email was provided, look up the UID
       if (!targetUid && email) {
         try {
-          const userRecord = await admin.auth().getUserByEmail(email);
+          const userRecord = await authClient.getUserByEmail(email);
           targetUid = userRecord.uid;
         } catch (lookupErr: any) {
           return res.status(404).json({ error: `No Firebase Auth user found for email: ${email}` });
@@ -875,7 +836,7 @@ async function startServer() {
       }
       
       // Reset the password using Admin SDK
-      await admin.auth().updateUser(targetUid, { password: DEFAULT_PASSWORD });
+      await authClient.updateUser(targetUid, { password: DEFAULT_PASSWORD });
       
       console.log(`[Server] Password reset to default for user.`);
       return res.json({ success: true, message: 'Password has been reset to the default temporary password.' });
@@ -898,6 +859,7 @@ async function startServer() {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const db = await getDbForRequest(req);
+      const authClient = await getAuthForRequest(req);
       
       const callerUid = (req as any).user.uid;
       const callerEmail = String((req as any).user.email || "").toLowerCase();
@@ -984,7 +946,7 @@ async function startServer() {
           throw { code: "auth/user-not-found" };
         }
         // Reset the password in Firebase Auth using Admin SDK (and keep email/displayName synced if present)
-        await admin.auth().updateUser(resolvedTargetUserId, {
+        await authClient.updateUser(resolvedTargetUserId, {
           password: DEFAULT_PASSWORD,
           ...(targetEmail ? { email: targetEmail } : {}),
           ...(targetName ? { displayName: targetName } : {}),
@@ -1003,15 +965,15 @@ async function startServer() {
         }
 
         try {
-          const existingByEmail = await admin.auth().getUserByEmail(targetEmail);
+          const existingByEmail = await authClient.getUserByEmail(targetEmail);
           effectiveUid = existingByEmail.uid;
-          await admin.auth().updateUser(effectiveUid, {
+          await authClient.updateUser(effectiveUid, {
             password: DEFAULT_PASSWORD,
             displayName: targetName,
           });
         } catch (emailErr: any) {
           if (emailErr?.code === "auth/user-not-found") {
-            const createdRecord = await admin.auth().createUser({
+            const createdRecord = await authClient.createUser({
               ...(resolvedTargetUserId ? { uid: resolvedTargetUserId } : {}),
               email: targetEmail,
               password: DEFAULT_PASSWORD,
@@ -1100,6 +1062,7 @@ async function startServer() {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const db = await getDbForRequest(req);
+      const authClient = await getAuthForRequest(req);
       
       const callerUid = (req as any).user.uid;
       const callerDoc = await db.collection("users").doc(callerUid).get();
@@ -1125,7 +1088,7 @@ async function startServer() {
       // Check if user already exists first to prevent duplicate accounts
       let userRecord;
       try {
-        userRecord = await admin.auth().getUserByEmail(email);
+        userRecord = await authClient.getUserByEmail(email);
         
         // Prevent cross-tenant overlap (H-6)
         const existingUserDoc = await db.collection('users').doc(userRecord.uid).get();
@@ -1137,7 +1100,7 @@ async function startServer() {
       } catch (err: any) {
         if (err.code === 'auth/user-not-found') {
           // Create Firebase Auth user using Admin SDK
-          userRecord = await admin.auth().createUser({
+          userRecord = await authClient.createUser({
             email,
             password
           });
@@ -1163,6 +1126,7 @@ async function startServer() {
 
     try {
       const db = await getDbForRequest(req);
+      const authClient = await getAuthForRequest(req);
       const cleanTerm = term.trim();
       const lowerTerm = cleanTerm.toLowerCase();
 
@@ -1319,7 +1283,7 @@ async function startServer() {
       // 8. If cleanTerm is already an email format, check Firebase Auth directly
       if (!resolvedEmail && lowerTerm.includes('@')) {
         try {
-          const userRec = await admin.auth().getUserByEmail(lowerTerm);
+          const userRec = await authClient.getUserByEmail(lowerTerm);
           resolvedEmail = userRec.email!;
           resolvedUid = userRec.uid;
           resolvedName = userRec.displayName || 'Coach';
@@ -1332,7 +1296,7 @@ async function startServer() {
 
       // Ensure the coach's users/{uid} document exists and has the right role/name/coachId
       try {
-        const targetUid = resolvedUid || (await admin.auth().getUserByEmail(resolvedEmail)).uid;
+        const targetUid = resolvedUid || (await authClient.getUserByEmail(resolvedEmail)).uid;
         if (targetUid) {
           const existingUserSnap = await db.collection("users").doc(targetUid).get();
           const existingUser = existingUserSnap.exists ? existingUserSnap.data() : null;
@@ -1382,8 +1346,8 @@ async function startServer() {
       const candidatePass = req.body && req.body.password;
       if (candidatePass && (candidatePass === '12345678' || candidatePass === 'InzanCoach123!')) {
         try {
-          const targetUid = resolvedUid || (await admin.auth().getUserByEmail(resolvedEmail)).uid;
-          await admin.auth().updateUser(targetUid, { password: candidatePass });
+          const targetUid = resolvedUid || (await authClient.getUserByEmail(resolvedEmail)).uid;
+          await authClient.updateUser(targetUid, { password: candidatePass });
         } catch {}
       }
 
@@ -1410,6 +1374,7 @@ async function startServer() {
 
     try {
       const db = await getDbForRequest(req);
+      const authClient = await getAuthForRequest(req);
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const tenantId = config?.tenantId || (config?.firestoreDatabaseId ? config.firestoreDatabaseId.replace(/^db-/, '') : 'default');
@@ -1547,7 +1512,7 @@ async function startServer() {
       let authUser: any = null;
       if (clientData.portalUserId) {
         try {
-          authUser = await admin.auth().getUser(clientData.portalUserId);
+          authUser = await authClient.getUser(clientData.portalUserId);
         } catch {}
       }
 
@@ -1564,7 +1529,7 @@ async function startServer() {
 
         for (const candidate of candidateEmails) {
           try {
-            authUser = await admin.auth().getUserByEmail(candidate);
+            authUser = await authClient.getUserByEmail(candidate);
             if (authUser) break;
           } catch {}
         }
@@ -1573,7 +1538,7 @@ async function startServer() {
       if (!authUser) {
         const emailToCreate = clientData.authEmail || clientData.email || syntheticEmail;
         console.log(`[Auth] Auto-provisioning auth user for member ${effectiveMemberId}: ${emailToCreate}`);
-        authUser = await admin.auth().createUser({
+        authUser = await authClient.createUser({
           email: emailToCreate,
           password: (req.body && req.body.password) || '12345678',
           displayName: clientData.name || `Member ${effectiveMemberId}`
@@ -1586,7 +1551,7 @@ async function startServer() {
       const candidatePass = req.body && req.body.password;
       if (authUser && candidatePass && (candidatePass === '12345678' || candidatePass === 'Inzan1234!')) {
         try {
-          await admin.auth().updateUser(authUser.uid, { password: candidatePass });
+          await authClient.updateUser(authUser.uid, { password: candidatePass });
         } catch {}
       }
 
@@ -2352,6 +2317,7 @@ async function startServer() {
       const hostname = getRequestHostname(req);
       const { config } = await getTenantInfoForHost(hostname);
       const db = await getDbForRequest(req);
+      const authClient = await getAuthForRequest(req);
       
       const callerUid = (req as any).user.uid;
       const callerDoc = await db.collection("users").doc(callerUid).get();
@@ -2369,25 +2335,25 @@ async function startServer() {
       // Check if user already exists in Firebase Auth (by UID first, then by email)
       let uid = "";
       try {
-        const byUid = await admin.auth().getUser(pendingDocId);
+        const byUid = await authClient.getUser(pendingDocId);
         uid = byUid.uid;
-        await admin.auth().updateUser(uid, {
+        await authClient.updateUser(uid, {
           email: cleanEmail,
           password: DEFAULT_PASSWORD,
           displayName: name,
         });
       } catch (uidErr: any) {
         try {
-          const userRecord = await admin.auth().getUserByEmail(cleanEmail);
+          const userRecord = await authClient.getUserByEmail(cleanEmail);
           uid = userRecord.uid;
-          await admin.auth().updateUser(uid, {
+          await authClient.updateUser(uid, {
             password: DEFAULT_PASSWORD,
             displayName: name,
           });
         } catch (authErr: any) {
           if (authErr?.code === 'auth/user-not-found') {
             // Create new user in Firebase Auth preserving pendingDocId as UID so linked clients/payments remain intact
-            const userRecord = await admin.auth().createUser({
+            const userRecord = await authClient.createUser({
               uid: pendingDocId,
               email: cleanEmail,
               password: DEFAULT_PASSWORD,
@@ -3357,6 +3323,7 @@ app.post('/api/auth/sync-claims', requireAuth, (req, res) => {
       }
 
       const db = await getDbForRequest(req);
+      const authClient = await getAuthForRequest(req);
       const tenantId = await getTenantIdForRequest(req);
       const crypto = await import('crypto');
       const tokenHash = crypto.createHash('sha256').update(mobileToken.trim()).digest('hex');
@@ -3388,7 +3355,7 @@ app.post('/api/auth/sync-claims', requireAuth, (req, res) => {
       }
 
       const role = String(userDoc.data()?.role || 'client');
-      const customToken = await admin.auth().createCustomToken(uid, {
+      const customToken = await authClient.createCustomToken(uid, {
         role,
         tenantId,
       });
@@ -4887,17 +4854,91 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
 
       const db = await getDbForRequest(req);
       const rawTerm = searchTerm.toLowerCase();
+      const strippedMemberId = rawTerm.replace(/^mem-/, "");
       const cleanDigits = rawTerm.replace(/\D/g, "");
       const clean9 = cleanDigits.slice(-9);
       const normalizedPhone = normalizeEgyptPhone(searchTerm);
       const phoneVariants = getEgyptPhoneVariants(searchTerm);
 
-      const snap = await db.collection("clients").get();
+      const docLookups: Promise<any>[] = [];
+      const queryLookups: Promise<any>[] = [];
+
+      if (!rawTerm.includes("/")) {
+        docLookups.push(db.collection("clients").doc(searchTerm).get());
+        if (rawTerm !== searchTerm) {
+          docLookups.push(db.collection("clients").doc(rawTerm).get());
+        }
+      }
+
+      const memberIdVariants = Array.from(
+        new Set(
+          [
+            searchTerm,
+            rawTerm,
+            rawTerm.toUpperCase(),
+            strippedMemberId,
+            strippedMemberId ? `mem-${strippedMemberId}` : "",
+          ].filter(Boolean)
+        )
+      ).slice(0, 10);
+
+      if (memberIdVariants.length > 0) {
+        queryLookups.push(
+          db.collection("clients").where("memberId", "in", memberIdVariants).limit(10).get()
+        );
+      }
+      if (/^\d+$/.test(strippedMemberId)) {
+        queryLookups.push(
+          db.collection("clients").where("memberId", "==", Number(strippedMemberId)).limit(5).get()
+        );
+      }
+      if (normalizedPhone) {
+        queryLookups.push(
+          db.collection("clients").where("normalized_phone", "==", normalizedPhone).limit(10).get()
+        );
+      }
+      const uniquePhoneVariants = Array.from(new Set(phoneVariants)).filter(Boolean).slice(0, 10);
+      if (uniquePhoneVariants.length > 0) {
+        queryLookups.push(
+          db.collection("clients").where("phone", "in", uniquePhoneVariants).limit(10).get()
+        );
+      }
+      if (rawTerm.includes("@")) {
+        queryLookups.push(
+          db.collection("clients").where("email", "==", rawTerm).limit(5).get()
+        );
+      }
+      if (cleanDigits.length >= 10) {
+        queryLookups.push(
+          db.collection("clients").where("nationalId", "==", searchTerm).limit(5).get()
+        );
+      }
+
+      const [docResults, queryResults] = await Promise.all([
+        Promise.all(docLookups),
+        Promise.all(queryLookups),
+      ]);
+
+      const candidateMap = new Map<string, any>();
+      for (const d of docResults) {
+        if (d && d.exists) {
+          candidateMap.set(d.id, d);
+        }
+      }
+      for (const qSnap of queryResults) {
+        if (qSnap && Array.isArray(qSnap.docs)) {
+          for (const d of qSnap.docs) {
+            candidateMap.set(d.id, d);
+          }
+        }
+      }
+      const candidateDocs = Array.from(candidateMap.values());
+
       const callerUid = req.user?.uid;
       let matchedDoc: any = null;
       let isAlreadyLinkedToOther = false;
 
-      for (const doc of snap.docs) {
+      for (const doc of candidateDocs) {
         const data = doc.data();
         const memberId = (data.memberId || doc.id || "").toString().toLowerCase();
         const cleanMemberId = memberId.replace(/^mem-/, "");
@@ -5024,10 +5065,6 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         updatedAt: nowIso
       }, { merge: true });
 
-      // Invalidate cache
-      clientsCache.delete(tenantId);
-      clientsFetchPromises.delete(tenantId);
-
       return res.json({
         success: true,
         client: {
@@ -5117,10 +5154,6 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         tenantId,
         updatedAt: nowIso,
       }, { merge: true });
-
-      // Invalidate cache
-      clientsCache.delete(tenantId);
-      clientsFetchPromises.delete(tenantId);
 
       console.log(`[API /api/member/create-profile] Created member pass ${newMemberId} (${clientDocRef.id}) for user ${callerUid} on tenant ${tenantId}`);
 
@@ -6002,9 +6035,20 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
   });
 
   // --- Public Website Assessment & Catalog API (CORS-enabled for inzanathletics.com) ---
+  const PUBLIC_INZAN_ORIGINS = new Set([
+    "https://inzanathletics.com",
+    "https://www.inzanathletics.com",
+    "https://admin.inzanathletics.com",
+    "https://inzan-landing.pages.dev",
+    "https://inzan-crm.pages.dev",
+  ]);
   const setPublicInzanCors = (req: express.Request, res: express.Response) => {
-    const origin = req.headers.origin || "*";
-    res.setHeader("Access-Control-Allow-Origin", origin);
+    const reqOrigin = String(req.headers.origin || "");
+    const isAllowed =
+      PUBLIC_INZAN_ORIGINS.has(reqOrigin) ||
+      /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(reqOrigin);
+    res.setHeader("Access-Control-Allow-Origin", isAllowed ? reqOrigin : "https://inzanathletics.com");
+    res.vary("Origin");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, x-tenant-id");
   };
@@ -6017,7 +6061,7 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
   app.post("/api/public/assessment", async (req: any, res: any) => {
     setPublicInzanCors(req, res);
     try {
-      const db = getFirestore("db-inzanathletics");
+      const db = getDbForTenant("inzanathletics");
       const {
         fullName,
         clientName: rawClientName,
@@ -6124,6 +6168,9 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
     }
   });
 
+  const INZAN_CATALOG_TTL_MS = 5 * 60 * 1000;
+  let inzanCatalogCache: { payload: any; expiresAt: number } | null = null;
+
   app.options("/api/public/inzan-catalog", (req, res) => {
     setPublicInzanCors(req, res);
     return res.status(204).end();
@@ -6132,7 +6179,11 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
   app.get("/api/public/inzan-catalog", async (req: any, res: any) => {
     setPublicInzanCors(req, res);
     try {
-      const db = getFirestore("db-inzanathletics");
+      if (req.query?.refresh !== '1' && inzanCatalogCache && Date.now() < inzanCatalogCache.expiresAt) {
+        return res.json(inzanCatalogCache.payload);
+      }
+
+      const db = getDbForTenant("inzanathletics");
       const [pkgSnap, coachSnap, schedSnap] = await Promise.all([
         db.collection("packages").get(),
         db.collection("coaches").get(),
@@ -6151,7 +6202,9 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         .map((d) => ({ id: d.id, ...d.data() } as any))
         .filter((s) => s.status !== "cancelled");
 
-      return res.json({ packages, coaches, classSchedules });
+      const payload = { packages, coaches, classSchedules };
+      inzanCatalogCache = { payload, expiresAt: Date.now() + INZAN_CATALOG_TTL_MS };
+      return res.json(payload);
     } catch (err: any) {
       console.error("[Public Inzan Catalog API] Error:", err);
       return res.status(500).json({ error: err.message || "Failed to load catalog." });
@@ -6424,8 +6477,94 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
       console.error("[Server] Failed to pre-load production index.html:", err);
     }
     
+    const normalizedDistRoot = path.resolve(distPath);
+    const compressedAssetIndex = new Set<string>();
+    const scanDistCompressed = (dir: string) => {
+      try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            scanDistCompressed(full);
+          } else if (entry.isFile() && (entry.name.endsWith('.br') || entry.name.endsWith('.gz'))) {
+            compressedAssetIndex.add(full);
+          }
+        }
+      } catch {
+        // Ignore missing/unreadable dist directory at startup
+      }
+    };
+    scanDistCompressed(normalizedDistRoot);
+
+    const applyStaticCacheHeaders = (res: express.Response, filePath: string) => {
+      const normalizedFile = path.resolve(filePath);
+      const rel = path.relative(normalizedDistRoot, normalizedFile).replace(/\\/g, '/');
+      if (
+        rel === 'sw.js' ||
+        rel === 'manifest.webmanifest' ||
+        /^workbox-[^/]+\.js$/i.test(rel) ||
+        rel === 'index.html'
+      ) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      } else if (rel.startsWith('assets/')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else if (/\.(png|jpe?g|webp|svg|ico|woff2?)$/i.test(rel)) {
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+      }
+    };
+
+    // Serve pre-compressed .br / .gz sidecars generated at build time ($0 runtime CPU)
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+      if (req.path === '/' || req.path === '/index.html' || req.path.endsWith('/')) return next();
+
+      let decodedPath = '';
+      try {
+        decodedPath = decodeURIComponent(req.path);
+      } catch {
+        return next();
+      }
+      if (decodedPath.includes('\0')) return next();
+
+      const candidate = path.resolve(normalizedDistRoot, '.' + decodedPath);
+      if (!candidate.startsWith(normalizedDistRoot + path.sep)) return next();
+
+      const ext = path.extname(candidate).toLowerCase();
+      if (!ext || ext === '.html') return next();
+
+      const acceptEnc = String(req.headers['accept-encoding'] || '');
+      let encoding: 'br' | 'gzip' | null = null;
+      let sidecarPath = '';
+      if (/\bbr\b/i.test(acceptEnc) && compressedAssetIndex.has(`${candidate}.br`)) {
+        encoding = 'br';
+        sidecarPath = `${candidate}.br`;
+      } else if (/\bgzip\b/i.test(acceptEnc) && compressedAssetIndex.has(`${candidate}.gz`)) {
+        encoding = 'gzip';
+        sidecarPath = `${candidate}.gz`;
+      }
+      if (!encoding || !sidecarPath) return next();
+
+      if (ext === '.webmanifest') {
+        res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+      } else {
+        res.type(ext);
+      }
+      res.setHeader('Content-Encoding', encoding);
+      res.vary('Accept-Encoding');
+      applyStaticCacheHeaders(res, candidate);
+      return res.sendFile(sidecarPath);
+    });
+
     // Serve static assets, but do not serve index.html statically (index: false)
-    app.use(express.static(distPath, { index: false }));
+    app.use(
+      express.static(distPath, {
+        index: false,
+        setHeaders: (res, filePath) => {
+          applyStaticCacheHeaders(res, filePath);
+        },
+      })
+    );
 
     // Never return index.html for missing JS/CSS/static assets (prevents MIME type script execution crash)
     app.all(["/assets/*", "/*.js", "/*.css", "/*.map", "/*.wasm", "/*.json", "/*.png", "/*.jpg", "/*.jpeg", "/*.svg", "/*.ico"], (req, res) => {
@@ -6459,13 +6598,22 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
         // Use cached template if available, fallback to reading from disk
         let template = productionTemplate;
         if (!template) {
+          if (!fs.existsSync(templatePath)) {
+            return res.status(200).json({ status: "ok", service: "mitrixo-gateway", mode: "api-only" });
+          }
           template = fs.readFileSync(templatePath, "utf-8");
         }
         
         // Inject dynamic config into production index.html
         const html = await injectFirebaseConfig(template, hostname);
-        
-        return res.status(200).set({ "Content-Type": "text/html" }).end(html);
+
+        return res
+          .status(200)
+          .set({
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+          })
+          .send(html);
       } catch (error) {
         console.error("Error serving index.html:", error);
         return res.status(500).send("Internal Server Error");
@@ -6476,9 +6624,11 @@ app.get('/api/call-center/logs', requireAuth, async (req, res) => {
   app.listen(PORT, "0.0.0.0", async () => {
     console.log(`Server running on http://localhost:${PORT}`);
     
-    // Start background jobs
-    startNoShowJob();
-    startMembershipExpirationJob();
+    // Start background jobs (disabled on API-only gateway where Cloudflare Worker crons drive jobs)
+    if (process.env.DISABLE_INPROCESS_CRONS !== 'true') {
+      startNoShowJob();
+      startMembershipExpirationJob();
+    }
   });
 }
 

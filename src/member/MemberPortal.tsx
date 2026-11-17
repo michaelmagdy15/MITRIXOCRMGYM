@@ -14,26 +14,27 @@ import { Client } from '../types';
 import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 
 import MemberHome from './MemberHome';
-import MemberSessions from './MemberSessions';
-import MemberPackages from './MemberPackages';
-import MemberAttendance from './MemberAttendance';
-import MemberProfile from './MemberProfile';
-import MemberClasses from './MemberClasses';
-import MemberSubscription from './MemberSubscription';
-import MemberProgress from './MemberProgress';
-import MemberLocker from './MemberLocker';
-import MemberJuiceBar from './MemberJuiceBar';
-import MemberInvites from './MemberInvites';
-import MemberNutrition from './MemberNutrition';
-import GuestPortal from './GuestPortal';
-import CartDrawer from './CartDrawer';
 import MemberNotificationBell from './MemberNotificationBell';
-import MemberWallet from './MemberWallet';
-import MemberBadges from './MemberBadges';
-import MemberRewards from './MemberRewards';
-import MemberBodyTracker from './MemberBodyTracker';
-import ExerciseLibraryHub from '../components/ExerciseLibraryHub';
 import { MemberScreenSkeleton } from './components/Skeleton';
+
+const MemberSessions = React.lazy(() => import('./MemberSessions'));
+const MemberPackages = React.lazy(() => import('./MemberPackages'));
+const MemberAttendance = React.lazy(() => import('./MemberAttendance'));
+const MemberProfile = React.lazy(() => import('./MemberProfile'));
+const MemberClasses = React.lazy(() => import('./MemberClasses'));
+const MemberSubscription = React.lazy(() => import('./MemberSubscription'));
+const MemberProgress = React.lazy(() => import('./MemberProgress'));
+const MemberLocker = React.lazy(() => import('./MemberLocker'));
+const MemberJuiceBar = React.lazy(() => import('./MemberJuiceBar'));
+const MemberInvites = React.lazy(() => import('./MemberInvites'));
+const MemberNutrition = React.lazy(() => import('./MemberNutrition'));
+const GuestPortal = React.lazy(() => import('./GuestPortal'));
+const CartDrawer = React.lazy(() => import('./CartDrawer'));
+const MemberWallet = React.lazy(() => import('./MemberWallet'));
+const MemberBadges = React.lazy(() => import('./MemberBadges'));
+const MemberRewards = React.lazy(() => import('./MemberRewards'));
+const MemberBodyTracker = React.lazy(() => import('./MemberBodyTracker'));
+const ExerciseLibraryHub = React.lazy(() => import('../components/ExerciseLibraryHub'));
 
 
 type MemberTab = 'home' | 'booking' | 'workouts' | 'juicebar' | 'wallet' | 'locker' | 'invites' | 'nutrition' | 'profile';
@@ -659,7 +660,11 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
   }, [isPendingOnboarding, activeTab]);
 
   if (isGuest) {
-    return <GuestPortal onSwitchToCRM={onSwitchToCRM || (() => {})} />;
+    return (
+      <React.Suspense fallback={<MemberScreenSkeleton />}>
+        <GuestPortal onSwitchToCRM={onSwitchToCRM || (() => {})} />
+      </React.Suspense>
+    );
   }
 
   if (loading) {
@@ -675,11 +680,13 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
   if (primaryClient?.status === 'Lead') {
     return (
-      <GuestPortal 
-        onSwitchToCRM={onSwitchToCRM || logout} 
-        isLeadPending={true} 
-        client={primaryClient} 
-      />
+      <React.Suspense fallback={<MemberScreenSkeleton />}>
+        <GuestPortal 
+          onSwitchToCRM={onSwitchToCRM || logout} 
+          isLeadPending={true} 
+          client={primaryClient} 
+        />
+      </React.Suspense>
     );
   }
 
@@ -689,7 +696,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
         <div className="flex items-center gap-3">
           <div 
             className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition-opacity"
-            onClick={() => setActiveTab('home')}
+            onClick={() => React.startTransition(() => setActiveTab('home'))}
           >
             {branding.logoUrl ? (
               <img src={branding.logoUrl} alt={branding.companyName} className="h-7 w-auto object-contain dark:brightness-0 dark:invert" referrerPolicy="no-referrer" />
@@ -750,7 +757,9 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
 
           <MemberNotificationBell clientId={activeClient?.id} onNavigate={handleNavigate} />
 
-          <CartDrawer />
+          <React.Suspense fallback={null}>
+            <CartDrawer />
+          </React.Suspense>
 
           <Button variant="ghost" size="icon" onClick={toggleTheme} disabled={themeLocked} className="h-8 w-8 text-muted-foreground hover:text-foreground">
             {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -835,93 +844,97 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
           />
         )}
         
-        {activeTab === 'booking' && (
-          <div className="space-y-4">
-            {features.ptPackages !== false && (
-              <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border border-border/60 gap-1">
-                <button 
-                  onClick={() => setBookingSubTab('group')} 
-                  className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                    bookingSubTab === 'group' 
-                      ? 'bg-background text-foreground shadow-xs' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Dumbbell className="h-3.5 w-3.5" />
-                  Group Classes
-                </button>
-                <button 
-                  onClick={() => setBookingSubTab('pt')} 
-                  className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-                    bookingSubTab === 'pt' 
-                      ? 'bg-background text-foreground shadow-xs' 
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <User className="h-3.5 w-3.5" />
-                  1-on-1 PT Sessions
-                </button>
+        {activeTab !== 'home' && (
+          <React.Suspense fallback={<MemberScreenSkeleton />}>
+            {activeTab === 'booking' && (
+              <div className="space-y-4">
+                {features.ptPackages !== false && (
+                  <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border border-border/60 gap-1">
+                    <button 
+                      onClick={() => setBookingSubTab('group')} 
+                      className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                        bookingSubTab === 'group' 
+                          ? 'bg-background text-foreground shadow-xs' 
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Dumbbell className="h-3.5 w-3.5" />
+                      Group Classes
+                    </button>
+                    <button 
+                      onClick={() => setBookingSubTab('pt')} 
+                      className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                        bookingSubTab === 'pt' 
+                          ? 'bg-background text-foreground shadow-xs' 
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <User className="h-3.5 w-3.5" />
+                      1-on-1 PT Sessions
+                    </button>
+                  </div>
+                )}
+                {bookingSubTab === 'pt' && features.ptPackages !== false ? (
+                  <MemberSessions client={activeClient} onSwitchToStore={onSwitchToStore} />
+                ) : (
+                  <MemberClasses client={activeClient} onSwitchToStore={onSwitchToStore} />
+                )}
               </div>
             )}
-            {bookingSubTab === 'pt' && features.ptPackages !== false ? (
-              <MemberSessions client={activeClient} onSwitchToStore={onSwitchToStore} />
-            ) : (
-              <MemberClasses client={activeClient} onSwitchToStore={onSwitchToStore} />
-            )}
-          </div>
-        )}
 
-        {activeTab === 'workouts' && <ExerciseLibraryHub mode="member" memberClient={activeClient} />}
-        {activeTab === 'juicebar' && <MemberJuiceBar client={activeClient} />}
-        {activeTab === 'wallet' && <MemberWallet client={activeClient} />}
-        {activeTab === 'locker' && <MemberLocker client={activeClient} />}
-        {activeTab === 'invites' && <MemberInvites client={activeClient} />}
-        {activeTab === 'nutrition' && <MemberNutrition client={activeClient} />}
-        
-        {activeTab === 'profile' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-3 p-1 bg-muted/60 rounded-xl border border-border/60 gap-1">
-              {profileSubTabsList.map((tab) => (
-                <button 
-                  key={tab.id}
-                  onClick={() => setProfileSubTab(tab.id as any)}
-                  className={`py-1.5 text-[11px] font-semibold rounded-lg transition-colors truncate ${profileSubTab === tab.id ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            {activeTab === 'workouts' && <ExerciseLibraryHub mode="member" memberClient={activeClient} />}
+            {activeTab === 'juicebar' && <MemberJuiceBar client={activeClient} />}
+            {activeTab === 'wallet' && <MemberWallet client={activeClient} />}
+            {activeTab === 'locker' && <MemberLocker client={activeClient} />}
+            {activeTab === 'invites' && <MemberInvites client={activeClient} />}
+            {activeTab === 'nutrition' && <MemberNutrition client={activeClient} />}
+            
+            {activeTab === 'profile' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 p-1 bg-muted/60 rounded-xl border border-border/60 gap-1">
+                  {profileSubTabsList.map((tab) => (
+                    <button 
+                      key={tab.id}
+                      onClick={() => React.startTransition(() => setProfileSubTab(tab.id as any))}
+                      className={`py-1.5 text-[11px] font-semibold rounded-lg transition-colors truncate ${profileSubTab === tab.id ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
 
-            {profileSubTab === 'settings' && <MemberProfile client={activeClient} onNavigate={handleNavigate} />}
-            {profileSubTab === 'progress' && (
-              <div className="space-y-6">
-                <MemberProgress client={activeClient} />
-                <MemberBodyTracker client={activeClient} />
+                {profileSubTab === 'settings' && <MemberProfile client={activeClient} onNavigate={handleNavigate} />}
+                {profileSubTab === 'progress' && (
+                  <div className="space-y-6">
+                    <MemberProgress client={activeClient} />
+                    <MemberBodyTracker client={activeClient} />
+                  </div>
+                )}
+                {profileSubTab === 'membership' && (
+                  <div className="space-y-6 animate-in fade-in">
+                    <MemberPackages 
+                      client={activeClient} 
+                      onSwitchToStore={onSwitchToStore} 
+                      onBookSession={(pkg) => {
+                        const isPt = pkg?.type === 'pt' || 
+                          (pkg?.name || '').toLowerCase().includes('pt') || 
+                          (pkg?.packageName || '').toLowerCase().includes('pt') ||
+                          (pkg?.name || '').toLowerCase().includes('private') || 
+                          (pkg?.packageName || '').toLowerCase().includes('private');
+                        setBookingSubTab(isPt ? 'pt' : 'group');
+                        React.startTransition(() => setActiveTab('booking'));
+                      }}
+                    />
+                    <MemberSubscription client={activeClient} />
+                  </div>
+                )}
+                {profileSubTab === 'attendance' && <MemberAttendance client={activeClient} />}
+                {profileSubTab === 'badges' && <MemberBadges client={activeClient} />}
+                {profileSubTab === 'rewards' && <MemberRewards client={activeClient} />}
+
               </div>
             )}
-            {profileSubTab === 'membership' && (
-              <div className="space-y-6 animate-in fade-in">
-                <MemberPackages 
-                  client={activeClient} 
-                  onSwitchToStore={onSwitchToStore} 
-                  onBookSession={(pkg) => {
-                    const isPt = pkg?.type === 'pt' || 
-                      (pkg?.name || '').toLowerCase().includes('pt') || 
-                      (pkg?.packageName || '').toLowerCase().includes('pt') ||
-                      (pkg?.name || '').toLowerCase().includes('private') || 
-                      (pkg?.packageName || '').toLowerCase().includes('private');
-                    setBookingSubTab(isPt ? 'pt' : 'group');
-                    setActiveTab('booking');
-                  }}
-                />
-                <MemberSubscription client={activeClient} />
-              </div>
-            )}
-            {profileSubTab === 'attendance' && <MemberAttendance client={activeClient} />}
-            {profileSubTab === 'badges' && <MemberBadges client={activeClient} />}
-            {profileSubTab === 'rewards' && <MemberRewards client={activeClient} />}
-
-          </div>
+          </React.Suspense>
         )}
       </main>
 
@@ -962,7 +975,7 @@ export default function MemberPortal({ isGuest = false, onSwitchToCRM, onSwitchT
             return (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => React.startTransition(() => setActiveTab(tab))}
                 aria-current={isActive ? 'page' : undefined}
                 className={`relative flex flex-col items-center justify-center gap-1 flex-1 px-2 pt-1 transition-colors duration-150 ${
                   isActive ? 'text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'

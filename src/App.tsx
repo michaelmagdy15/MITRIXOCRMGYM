@@ -19,10 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import Dashboard from './Dashboard';
-import Attendance from './Attendance';
 import Login from './Login';
-import MemberCheckin from './MemberCheckin';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Activity, Users, UserPlus, CreditCard, LogOut, Calendar as CalendarIcon, Shield, ShieldAlert, Settings as SettingsIcon, Eye, EyeOff, CheckSquare, Package, Search, Scan, History, BarChart3, LayoutDashboard, MoreHorizontal, X, Sun, Moon, Smartphone, FileText, Coffee, Menu, ChevronLeft, ChevronRight, AlertCircle, Clock, ShoppingCart, Phone, MessageSquare, Star, Target, ClipboardList, Bell, Dumbbell, Building2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -31,20 +28,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { NotificationCenter, NotificationsProvider, NotificationsPage } from './components/NotificationCenter';
 import BuildVersionFooter from './components/BuildVersionFooter';
-import { ForcePasswordChangeDialog } from './components/ForcePasswordChangeDialog';
-import { QRCodePage } from './components/QRCodePage';
 import { CartProvider, useCart } from './member/CartContext';
 import { OfflineBanner } from './components/OfflineBanner';
-import Checkout from './member/Checkout';
-import CommandPalette from './components/CommandPalette';
-import OnboardingWizard from './OnboardingWizard';
-import { RedgitsLiveSyncDialog } from './components/RedgitsLiveSyncDialog';
-import SubscriptionCheckout from './member/SubscriptionCheckout';
 import { TenantInitScreen } from './components/TenantInitScreen';
-import { ClickToCallModal } from './components/ClickToCallModal';
 import { NotificationEnforcementGate } from './components/NotificationEnforcementGate';
 import { SmartPWAInstallGate } from './components/SmartPWAInstallGate';
-import KitchenKioskView from './components/KitchenKioskView';
 import { isKitchenUser, isNutritionistUser, isFitnessManagerUser, isSalesManagerUser, isSgfAcademyOwnerUser, isGeneralManagerOrCEO } from './utils/permissions';
 
 
@@ -79,6 +67,18 @@ function lazyRetry<T extends React.ComponentType<any>>(
 }
 
 // Route & Tab Level Code-Splitting (Lazy-loaded modules with auto stale-chunk recovery)
+const Dashboard = lazyRetry(() => import('./Dashboard'));
+const Attendance = lazyRetry(() => import('./Attendance'));
+const MemberCheckin = lazyRetry(() => import('./MemberCheckin'));
+const KitchenKioskView = lazyRetry(() => import('./components/KitchenKioskView'));
+const OnboardingWizard = lazyRetry(() => import('./OnboardingWizard'));
+const SubscriptionCheckout = lazyRetry(() => import('./member/SubscriptionCheckout'));
+const Checkout = lazyRetry(() => import('./member/Checkout'));
+const CommandPalette = lazyRetry(() => import('./components/CommandPalette'));
+const RedgitsLiveSyncDialog = lazyRetry(() => import('./components/RedgitsLiveSyncDialog').then(m => ({ default: m.RedgitsLiveSyncDialog })));
+const QRCodePage = lazyRetry(() => import('./components/QRCodePage').then(m => ({ default: m.QRCodePage })));
+const ForcePasswordChangeDialog = lazyRetry(() => import('./components/ForcePasswordChangeDialog').then(m => ({ default: m.ForcePasswordChangeDialog })));
+const ClickToCallModal = lazyRetry(() => import('./components/ClickToCallModal').then(m => ({ default: m.ClickToCallModal })));
 const Clients = lazyRetry(() => import('./Clients'));
 const Payments = lazyRetry(() => import('./Payments'));
 const Calendar = lazyRetry(() => import('./Calendar'));
@@ -195,6 +195,25 @@ function AppContent() {
   const [notificationTabCounts, setNotificationTabCounts] = React.useState<Record<string, number>>({});
   const { isCheckoutOpen, setIsCheckoutOpen } = useCart();
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false);
+  const [localSearchInput, setLocalSearchInput] = React.useState(searchQuery);
+  const isLocalSearchDirtyRef = React.useRef(false);
+
+  // Sync external searchQuery resets (e.g. clicking Clear or Notifications) into header input
+  React.useEffect(() => {
+    if (!isLocalSearchDirtyRef.current && searchQuery !== localSearchInput) {
+      setLocalSearchInput(searchQuery);
+    }
+  }, [searchQuery]);
+
+  // Debounce pushing localSearchInput into global searchQuery so typing stays at 60fps
+  React.useEffect(() => {
+    if (!isLocalSearchDirtyRef.current) return;
+    const timer = window.setTimeout(() => {
+      isLocalSearchDirtyRef.current = false;
+      setSearchQuery(localSearchInput);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [localSearchInput, setSearchQuery]);
 
   // If user logs in while checkout is open, keep them in the store view so they can complete the checkout!
   React.useEffect(() => {
@@ -252,9 +271,14 @@ function AppContent() {
     });
   };
 
-  const handleSearchSubmit = () => {
-    if (!searchQuery.trim()) return;
-    const q = searchQuery.toLowerCase().trim();
+  const handleSearchSubmit = (overrideQuery?: string) => {
+    const activeQ = overrideQuery !== undefined ? overrideQuery : searchQuery;
+    if (overrideQuery !== undefined && overrideQuery !== searchQuery) {
+      isLocalSearchDirtyRef.current = false;
+      setSearchQuery(overrideQuery);
+    }
+    if (!activeQ.trim()) return;
+    const q = activeQ.toLowerCase().trim();
     const cleanId = q.replace(/^#/, '');
 
     // Check for exact Member ID / Lead ID / Barcode / Package Barcode match first
@@ -379,10 +403,10 @@ function AppContent() {
   // 4. Dismiss mobile native splash screen smoothly when auth is ready
   React.useEffect(() => {
     if (!isAuthReady) return;
-    const timer = setTimeout(() => {
+    const rafId = requestAnimationFrame(() => {
       (window as any).__dismissMobileSplash?.();
-    }, 150);
-    return () => clearTimeout(timer);
+    });
+    return () => cancelAnimationFrame(rafId);
   }, [isAuthReady]);
 
   const handlePinSubmit = (e: React.FormEvent) => {
@@ -399,7 +423,11 @@ function AppContent() {
   };
 
   if (isSubscribeMode) {
-    return <SubscriptionCheckout />;
+    return (
+      <React.Suspense fallback={<PortalLoadingFallback />}>
+        <SubscriptionCheckout />
+      </React.Suspense>
+    );
   }
 
   const isSuperAdminMode = window.location.hostname.startsWith('superadmin.') || 
@@ -462,7 +490,11 @@ function AppContent() {
                            window.location.pathname === '/onboarding';
 
   if (isOnboardingMode) {
-    return <OnboardingWizard />;
+    return (
+      <React.Suspense fallback={<PortalLoadingFallback />}>
+        <OnboardingWizard />
+      </React.Suspense>
+    );
   }
 
   if (isHelpMode) {
@@ -524,12 +556,14 @@ function AppContent() {
       );
     }
     return (
-      <KitchenKioskView
-        onLogout={() => {
-          setKioskAuthenticated(false);
-          if (currentUser) logout();
-        }}
-      />
+      <React.Suspense fallback={<PortalLoadingFallback />}>
+        <KitchenKioskView
+          onLogout={() => {
+            setKioskAuthenticated(false);
+            if (currentUser) logout();
+          }}
+        />
+      </React.Suspense>
     );
   }
 
@@ -620,14 +654,20 @@ function AppContent() {
           </Button>
         </header>
         <main className="flex-1 overflow-auto p-4 md:p-8">
-           <Attendance isKiosk={true} />
+          <React.Suspense fallback={<ModuleLoadingFallback />}>
+            <Attendance isKiosk={true} />
+          </React.Suspense>
         </main>
       </div>
     );
   }
 
   if (isCheckinMode) {
-    return <MemberCheckin />;
+    return (
+      <React.Suspense fallback={<PortalLoadingFallback />}>
+        <MemberCheckin />
+      </React.Suspense>
+    );
   }
 
   if (!isAuthReady) {
@@ -825,12 +865,20 @@ function AppContent() {
 
   // Block the app until user sets a real password
   if (currentUser.mustChangePassword) {
-    return <ForcePasswordChangeDialog />;
+    return (
+      <React.Suspense fallback={<PortalLoadingFallback />}>
+        <ForcePasswordChangeDialog />
+      </React.Suspense>
+    );
   }
 
   // Kitchen Role ONLY sees the Earth's Kitchen Kiosk view (Member ID, Photo, Name, Phone, Items)
   if (isKitchenUser(currentUser)) {
-    return <KitchenKioskView onLogout={logout} />;
+    return (
+      <React.Suspense fallback={<PortalLoadingFallback />}>
+        <KitchenKioskView onLogout={logout} />
+      </React.Suspense>
+    );
   }
 
   if (currentUser.role === 'coach' || currentUser.role === 'fitness_manager' || currentUser.isFitnessManager) {
@@ -1382,9 +1430,17 @@ function AppContent() {
                   type="search"
                   placeholder={t('header.search_placeholder')}
                   className="w-full ps-9 bg-muted/50 border-none"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchSubmit(); } }}
+                  value={localSearchInput}
+                  onChange={(e) => {
+                    isLocalSearchDirtyRef.current = true;
+                    setLocalSearchInput(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSearchSubmit(localSearchInput);
+                    }
+                  }}
                 />
               </div>
 
@@ -1416,7 +1472,9 @@ function AppContent() {
 
             <div className="flex items-center space-x-2 sm:space-x-3 ms-auto">
               {isInzan && ['manager', 'admin', 'super_admin', 'crm_admin'].includes(currentUser.role) && (
-                <RedgitsLiveSyncDialog variant="header" />
+                <React.Suspense fallback={null}>
+                  <RedgitsLiveSyncDialog variant="header" />
+                </React.Suspense>
               )}
 
               {/* Search trigger on mobile */}
@@ -1496,9 +1554,17 @@ function AppContent() {
                 type="search"
                 placeholder={t('header.search_placeholder')}
                 className="w-full ps-9 bg-muted/50 border-none"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSearchSubmit(); }}
+                value={localSearchInput}
+                onChange={(e) => {
+                  isLocalSearchDirtyRef.current = true;
+                  setLocalSearchInput(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSearchSubmit(localSearchInput);
+                  }
+                }}
               />
             </div>
           </div>
@@ -1511,7 +1577,9 @@ function AppContent() {
             </TabsContent>
 
             <TabsContent value="dashboard" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <Dashboard />
+              <React.Suspense fallback={<ModuleLoadingFallback />}>
+                <Dashboard />
+              </React.Suspense>
             </TabsContent>
 
             {(currentUser.role === 'manager' || currentUser.role === 'rep' || currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'crm_admin') && (
@@ -1605,7 +1673,9 @@ function AppContent() {
             )}
 
             <TabsContent value="attendance" className="m-0 animate-in fade-in-50 duration-300 focus-visible:outline-none">
-              <Attendance />
+              <React.Suspense fallback={<ModuleLoadingFallback />}>
+                <Attendance />
+              </React.Suspense>
             </TabsContent>
 
             {features.debtors === true && (
@@ -1654,7 +1724,9 @@ function AppContent() {
                 </TabsContent>
                 {!/mitrixogymcrmCRM-Mobile/i.test(navigator.userAgent) && (
                   <TabsContent value="qrcode" className="m-0 animate-in fade-in-50 duration-300 p-4 focus-visible:outline-none">
-                    <QRCodePage />
+                    <React.Suspense fallback={<ModuleLoadingFallback />}>
+                      <QRCodePage />
+                    </React.Suspense>
                   </TabsContent>
                 )}
               </>
@@ -1758,9 +1830,30 @@ function AppContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Checkout open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen} />
-      <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+      {isCheckoutOpen && (
+        <React.Suspense fallback={null}>
+          <Checkout open={isCheckoutOpen} onOpenChange={setIsCheckoutOpen} />
+        </React.Suspense>
+      )}
+      {isCommandPaletteOpen && (
+        <React.Suspense fallback={null}>
+          <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+        </React.Suspense>
+      )}
     </div>
+  );
+}
+
+/** Only mounts ClickToCallModal for signed-in staff so members/login never download its chunk */
+function StaffClickToCallGate() {
+  const { currentUser, isAuthReady } = useAuth();
+  if (!isAuthReady || !currentUser || currentUser.role === 'client') {
+    return null;
+  }
+  return (
+    <React.Suspense fallback={null}>
+      <ClickToCallModal />
+    </React.Suspense>
   );
 }
 
@@ -1807,7 +1900,7 @@ export default function App() {
                       <NotificationsProvider>
                         <AppContent />
                       </NotificationsProvider>
-                      <ClickToCallModal />
+                      <StaffClickToCallGate />
                       <BuildVersionFooter />
                       <Toaster richColors position="top-right" />
                     </TenantInitWrapper>

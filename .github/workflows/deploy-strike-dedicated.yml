@@ -66,7 +66,7 @@ jobs:
             --project $PROJECT_ID \
             --allow-unauthenticated \
             --set-env-vars NODE_ENV=production,STANDALONE_MODE=true,STANDALONE_TENANT_ID=strike,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCLOUD_PROJECT=$PROJECT_ID \
-            --service-account=firebase-adminsdk-fbsvc@$PROJECT_ID.iam.gserviceaccount.com
+            --service-account=firebase-adminsdk-fbsvc@$PROJECT_ID.iam.gserviceaccount.com --min-instances=0 --max-instances=4 --cpu=1 --memory=512Mi --cpu-throttling
 
 
 

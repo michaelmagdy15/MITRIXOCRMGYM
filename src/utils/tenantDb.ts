@@ -8,25 +8,76 @@ import { isStandaloneMode, getStandaloneTenantId } from '../config/environment.j
 import { strikeDedicatedFirebaseConfig } from '../config/strikeDedicatedConfig.js';
 import { inzanFirebaseConfig } from '../config/inzanFirebaseConfig.js';
 
-// Initialize Firebase Admin SDK if not already initialized
-if (admin.apps.length === 0) {
-  const adminOptions: admin.AppOptions = {};
+function parseServiceAccountFromEnv(raw?: string): admin.ServiceAccount | undefined {
+  if (!raw || !raw.trim()) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('[tenantDb] Failed to parse service account env JSON:', e);
+    return undefined;
+  }
+}
+
+function getCredentialForProject(projectId: string): admin.credential.Credential | undefined {
+  if (projectId === 'inzan-crm-spark-26' || projectId === inzanFirebaseConfig.projectId) {
+    const sa = parseServiceAccountFromEnv(process.env.FIREBASE_SA_INZAN_JSON);
+    if (sa) return admin.credential.cert(sa);
+  }
+  if (projectId === 'vbt-camp-spark-26') {
+    const sa = parseServiceAccountFromEnv(process.env.FIREBASE_SA_VBT_JSON);
+    if (sa) return admin.credential.cert(sa);
+  }
   const saEnvPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (saEnvPath && fs.existsSync(saEnvPath)) {
     try {
       const saKey = JSON.parse(fs.readFileSync(saEnvPath, 'utf8'));
-      adminOptions.credential = admin.credential.cert(saKey);
+      if (!saKey.project_id || saKey.project_id === projectId) {
+        return admin.credential.cert(saKey);
+      }
     } catch (e) {
       console.error('Failed to parse service account key in tenantDb.ts:', e);
     }
   }
-  if (isStandaloneMode()) {
-    adminOptions.projectId = 'strike-production-f5242';
-  } else {
-    // Cloud Run's hosting project is not the Firebase Auth project.
-    adminOptions.projectId = process.env.FIREBASE_PROJECT_ID || 'faa-test-guide-v2';
-  }
+  return undefined;
+}
+
+// Initialize Firebase Admin SDK if not already initialized
+if (admin.apps.length === 0) {
+  const initialProjectId = isStandaloneMode()
+    ? 'strike-production-f5242'
+    : process.env.FIREBASE_PROJECT_ID || inzanFirebaseConfig.projectId || 'faa-test-guide-v2';
+  const adminOptions: admin.AppOptions = { projectId: initialProjectId };
+  const cred = getCredentialForProject(initialProjectId);
+  if (cred) adminOptions.credential = cred;
   admin.initializeApp(adminOptions);
+}
+
+const projectAdminApps = new Map<string, admin.app.App>();
+
+export function getAdminAppForProject(projectId: string): admin.app.App {
+  const targetProjectId = (projectId || defaultFirebaseConfig.projectId || 'inzan-crm-spark-26').trim();
+  const cached = projectAdminApps.get(targetProjectId);
+  if (cached) return cached;
+
+  const defaultApp = admin.apps[0];
+  if (defaultApp && defaultApp.options.projectId === targetProjectId) {
+    projectAdminApps.set(targetProjectId, defaultApp);
+    return defaultApp;
+  }
+
+  const appName = `project-${targetProjectId}`;
+  const existingNamed = admin.apps.find((a) => a?.name === appName);
+  if (existingNamed) {
+    projectAdminApps.set(targetProjectId, existingNamed);
+    return existingNamed;
+  }
+
+  const opts: admin.AppOptions = { projectId: targetProjectId };
+  const cred = getCredentialForProject(targetProjectId);
+  if (cred) opts.credential = cred;
+  const created = admin.initializeApp(opts, appName);
+  projectAdminApps.set(targetProjectId, created);
+  return created;
 }
 
 // Load the default credentials to use as a fallback / local config
@@ -42,6 +93,11 @@ export const strikeCrmConfig = {
 delete (strikeCrmConfig as any).firestoreDatabaseId;
 
 export const inzanConfig = inzanFirebaseConfig;
+
+export const vbtConfig = {
+  projectId: 'vbt-camp-spark-26',
+  tenantId: 'vbt',
+};
 
 export const tenantConfigs: Record<string, any> = {
   'localhost': defaultFirebaseConfig, // has firestoreDatabaseId: "db-test"
@@ -62,6 +118,9 @@ export const tenantConfigs: Record<string, any> = {
   'inzanathletics.localhost': inzanConfig,
   'inzan.localhost': inzanConfig,
   'inzanathletics.local': inzanConfig,
+  'vbt.mitrixo.com': vbtConfig,
+  'vbt-camp.pages.dev': vbtConfig,
+  'vbt.localhost': vbtConfig,
   'mitrixogymcrm-boxing.local': {
     ...defaultFirebaseConfig,
     projectId: 'mitrixogymcrm-boxing-tenant-1',
@@ -128,6 +187,9 @@ export async function getTenantInfoForHost(hostname: string): Promise<{ config: 
   if (normalizedHost.includes('strike-egy') || normalizedHost.includes('strikeboxing') || normalizedHost.startsWith('strike.')) {
     return { config: strikeCrmConfig, status: 'active' };
   }
+  if (normalizedHost.startsWith('vbt.') || normalizedHost.includes('vbt-camp')) {
+    return { config: vbtConfig, status: 'active' };
+  }
 
   // 3. Check in-memory Cache
   const cached = cache[normalizedHost];
@@ -138,6 +200,11 @@ export async function getTenantInfoForHost(hostname: string): Promise<{ config: 
   // 4. Fallbacks for localhost & static configs
   if (tenantConfigs[normalizedHost]) {
     return { config: tenantConfigs[normalizedHost], status: 'active' };
+  }
+
+  if (process.env.DISABLE_REGISTRY_DB === 'true') {
+    cache[normalizedHost] = { config: defaultFirebaseConfig, status: 'not_found', expiresAt: Date.now() + CACHE_TTL_MS };
+    return { config: defaultFirebaseConfig, status: 'not_found' };
   }
 
   try {
@@ -212,30 +279,49 @@ export async function getTenantInfoForHost(hostname: string): Promise<{ config: 
 }
 
 export function getRequestHostname(req: Request): string {
-  // 1. Explicit query parameter (e.g. ?tenant=inzan)
-  if (req.query?.tenant) {
-    const t = String(req.query.tenant).toLowerCase();
-    if (t === 'inzan' || t === 'inzanathletics') return 'admin.inzanathletics.com';
-    if (t === 'strike' || t === 'strikeboxing') return 'strike.mitrixo.com';
+  const reqPath = String(req.originalUrl || req.path || '');
+  // On-site Mac bridge, RedGITS agent, and /api/inzan/* gateway calls belong strictly to Inzan Athletics.
+  if (reqPath.startsWith('/api/inzan/')) {
+    return 'admin.inzanathletics.com';
   }
 
-  // 2. Explicit tenant header or body (e.g. x-tenant-id: inzanathletics)
-  const headerOrBodyTenant = (
-    (req.headers['x-tenant-id'] as string) ||
-    (req.body && typeof req.body === 'object' && req.body.tenantId) ||
-    ''
-  ).toLowerCase();
-  if (headerOrBodyTenant === 'inzan' || headerOrBodyTenant === 'inzanathletics') return 'admin.inzanathletics.com';
-  if (headerOrBodyTenant === 'strike' || headerOrBodyTenant === 'strikeboxing') return 'strike.mitrixo.com';
+  const enforceProxySecret =
+    process.env.NODE_ENV === 'production' &&
+    !isStandaloneMode() &&
+    Boolean(process.env.PROXY_SHARED_SECRET);
+  const hasTrustedProxyHeader =
+    !enforceProxySecret ||
+    req.headers['x-proxy-secret'] === process.env.PROXY_SHARED_SECRET;
 
-  // 3. Referer header (when called from local dev browser like http://localhost:3000/?tenant=inzan)
+  if (hasTrustedProxyHeader) {
+    // 1. Explicit query parameter (e.g. ?tenant=inzan)
+    if (req.query?.tenant) {
+      const t = String(req.query.tenant).toLowerCase();
+      if (t === 'inzan' || t === 'inzanathletics') return 'admin.inzanathletics.com';
+      if (t === 'strike' || t === 'strikeboxing') return 'strike.mitrixo.com';
+      if (t === 'vbt') return 'vbt.mitrixo.com';
+    }
+
+    // 2. Explicit tenant header or body (e.g. x-tenant-id: inzanathletics)
+    const headerOrBodyTenant = (
+      (req.headers['x-tenant-id'] as string) ||
+      (req.body && typeof req.body === 'object' && req.body.tenantId) ||
+      ''
+    ).toLowerCase();
+    if (headerOrBodyTenant === 'inzan' || headerOrBodyTenant === 'inzanathletics') return 'admin.inzanathletics.com';
+    if (headerOrBodyTenant === 'strike' || headerOrBodyTenant === 'strikeboxing') return 'strike.mitrixo.com';
+    if (headerOrBodyTenant === 'vbt') return 'vbt.mitrixo.com';
+  }
+
+  // 3. Referer header (only on localhost or when proxied with trusted secret)
   const referer = req.headers.referer;
-  if (referer) {
+  if (referer && (hasTrustedProxyHeader || req.hostname === 'localhost')) {
     try {
       const refUrl = new URL(referer);
       const refTenant = refUrl.searchParams.get('tenant')?.toLowerCase();
       if (refTenant === 'inzan' || refTenant === 'inzanathletics') return 'admin.inzanathletics.com';
       if (refTenant === 'strike' || refTenant === 'strikeboxing') return 'strike.mitrixo.com';
+      if (refTenant === 'vbt' || refUrl.hostname?.startsWith('vbt.') || refUrl.hostname?.includes('vbt-camp')) return 'vbt.mitrixo.com';
       if (refUrl.hostname && (refUrl.hostname.includes('inzanathletics') || refUrl.hostname.includes('inzan'))) {
         return refUrl.hostname.toLowerCase();
       }
@@ -243,29 +329,69 @@ export function getRequestHostname(req: Request): string {
     } catch {}
   }
 
-  // 4. Cloudflare / Reverse proxy headers (X-Forwarded-Host)
-  const rawForwarded = typeof req.headers?.['x-forwarded-host'] === 'string'
-    ? req.headers['x-forwarded-host']
-    : (Array.isArray(req.headers?.['x-forwarded-host']) ? (req.headers['x-forwarded-host'][0] || '') : '');
-  const forwardedHost = ((rawForwarded.split(',')[0] || '').trim().split(':')[0] || '').toLowerCase();
-  if (forwardedHost && forwardedHost !== 'localhost') {
-    return forwardedHost;
+  // 4. Reverse proxy X-Forwarded-Host (trusted when proxy secret matches or outside hardened gateway)
+  if (hasTrustedProxyHeader) {
+    const rawForwarded = typeof req.headers?.['x-forwarded-host'] === 'string'
+      ? req.headers['x-forwarded-host']
+      : (Array.isArray(req.headers?.['x-forwarded-host']) ? (req.headers['x-forwarded-host'][0] || '') : '');
+    const forwardedHost = ((rawForwarded.split(',')[0] || '').trim().split(':')[0] || '').toLowerCase();
+    if (forwardedHost && forwardedHost !== 'localhost') {
+      return forwardedHost;
+    }
   }
 
-  // 5. Hostname
+  // 5. Direct Host header
   if (req.hostname && req.hostname !== 'localhost') {
     return req.hostname.toLowerCase();
   }
   return ((req.get('host') || 'localhost').split(':')[0] as string).toLowerCase();
 }
 
+export function getDbForTenant(tenantId: string): Firestore {
+  const normalized = (tenantId || '').toLowerCase();
+  if (isStandaloneMode() || normalized === 'strike' || normalized === 'strikeboxing') {
+    const app = getAdminAppForProject(strikeDedicatedFirebaseConfig.projectId);
+    return getFirestore(app);
+  }
+  if (normalized === 'vbt') {
+    return getFirestore(getAdminAppForProject('vbt-camp-spark-26'));
+  }
+  if (normalized === 'inzan' || normalized === 'inzanathletics') {
+    const app = getAdminAppForProject(inzanFirebaseConfig.projectId);
+    return getFirestore(app);
+  }
+  return getFirestore();
+}
+
+export function getAuthForTenant(tenantId: string): admin.auth.Auth {
+  const normalized = (tenantId || '').toLowerCase();
+  if (isStandaloneMode() || normalized === 'strike' || normalized === 'strikeboxing') {
+    return admin.auth(getAdminAppForProject(strikeDedicatedFirebaseConfig.projectId));
+  }
+  if (normalized === 'vbt') {
+    return admin.auth(getAdminAppForProject('vbt-camp-spark-26'));
+  }
+  if (normalized === 'inzan' || normalized === 'inzanathletics') {
+    return admin.auth(getAdminAppForProject(inzanFirebaseConfig.projectId));
+  }
+  return admin.auth();
+}
+
+export async function getAuthForRequest(req: Request): Promise<admin.auth.Auth> {
+  const hostname = getRequestHostname(req);
+  const { config } = await getTenantInfoForHost(hostname);
+  const app = getAdminAppForProject(config?.projectId || defaultFirebaseConfig.projectId);
+  return admin.auth(app);
+}
+
 export async function getDbForRequest(req: Request): Promise<Firestore> {
   const hostname = getRequestHostname(req);
   const { config } = await getTenantInfoForHost(hostname);
+  const app = getAdminAppForProject(config?.projectId || defaultFirebaseConfig.projectId);
   if (config && config.firestoreDatabaseId) {
-    return getFirestore(config.firestoreDatabaseId);
+    return getFirestore(app, config.firestoreDatabaseId);
   }
-  return getFirestore();
+  return getFirestore(app);
 }
 
 export async function getTenantIdForRequest(req: Request): Promise<string> {

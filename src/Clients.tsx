@@ -39,7 +39,6 @@ import ResyncPayments from './components/ResyncPayments';
 import { writeBatch, doc, collection, addDoc, getDoc, getDocs, query, where, limit } from 'firebase/firestore';
 import { db, getTenantId } from './firebase';
 import { cleanData } from './utils';
-import { generateClientContract } from './utils/pdfGenerator';
 import { downloadFile } from './utils/download';
 import { resolvePaymentCategory } from './utils/paymentCategories';
 import { matchesPhoneSearch } from './utils/phoneUtils';
@@ -304,7 +303,9 @@ export default function Clients() {
     const latestPayment = clientPayments.length > 0
       ? [...clientPayments].sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))[0]
       : null;
-    void generateClientContract(activeClient, { payment: latestPayment || undefined, printedBy: currentUser?.name });
+    void import('./utils/pdfGenerator').then(({ generateClientContract }) =>
+      generateClientContract(activeClient, { payment: latestPayment || undefined, printedBy: currentUser?.name })
+    );
   };
 
   const handleUpdateSessionsRemaining = async (change: number) => {
@@ -2038,10 +2039,11 @@ export default function Clients() {
     let female = 0;
     let otherGender = 0;
 
-    for (const c of clients) {
+    const clientPool = allClients && allClients.length > 0 ? allClients : clients;
+    for (const c of clientPool) {
       const s = (c.status || '').toLowerCase().trim();
       if (s === 'merged' || (c as any).mergedInto) continue;
-      const lifecycle = computeMemberGlobalStatus(c);
+      const lifecycle = (c as any)._lifecycle || computeMemberGlobalStatus(c);
       const isLead = lifecycle.globalStatus === 'GUEST' || s === 'lead';
       if (isLead && !lifecycle.hasActiveOrUpcomingPackage && lifecycle.globalStatus !== 'EXPIRED') {
         if (isInzanTenant) {
@@ -2087,7 +2089,13 @@ export default function Clients() {
       upcomingBirthdays: bdayArr,
       birthdayClientIds: bdayIds,
     };
-  }, [clients, isInzanTenant]);
+  }, [allClients, clients, isInzanTenant]);
+
+  React.useEffect(() => {
+    if (activeTab === 'expired' && !expiredLoaded && !loadingExpired && fetchExpiredMembers) {
+      fetchExpiredMembers();
+    }
+  }, [activeTab, expiredLoaded, loadingExpired, fetchExpiredMembers]);
 
   const totalPaidByClientId = React.useMemo(() => {
     const map = new Map<string, number>();
@@ -3002,7 +3010,9 @@ export default function Clients() {
                     const latestPayment = clientPayments.length > 0
                       ? clientPayments.sort((a, b) => (toValidDate(b.date)?.getTime() || 0) - (toValidDate(a.date)?.getTime() || 0))[0]
                       : null;
-                    void generateClientContract(client, { payment: latestPayment || undefined, printedBy: currentUser?.name });
+                    void import('./utils/pdfGenerator').then(({ generateClientContract }) =>
+                      generateClientContract(client, { payment: latestPayment || undefined, printedBy: currentUser?.name })
+                    );
                   }}>
                     <FileText className="h-4 w-4" />
                   </Button>

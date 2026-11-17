@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { downloadFile } from './utils/download';
 import { useAppContext } from './context';
 import { useLanguage } from './contexts/LanguageContext';
@@ -109,7 +109,13 @@ const LOCALES = {
 
 export default function Debtors() {
   const { language, isRtl } = useLanguage();
-  const { payments, clients, users, attendances, updatePayment, branches, setActiveTab, setActiveClientId } = useAppContext();
+  const { payments, clients, users, attendances, updatePayment, branches, setActiveTab, setActiveClientId, fetchHistoricalPayments, historicalPaymentsLoaded, loadingHistoricalPayments } = useAppContext();
+
+  useEffect(() => {
+    if (!historicalPaymentsLoaded && !loadingHistoricalPayments && typeof fetchHistoricalPayments === 'function') {
+      fetchHistoricalPayments();
+    }
+  }, [historicalPaymentsLoaded, loadingHistoricalPayments, fetchHistoricalPayments]);
 
   const currentLoc = LOCALES[language as 'en' | 'ar'] || LOCALES.en;
 

@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
-import { collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, setDoc } from 'firebase/firestore';
-import { db, auth, getTenantId } from '../firebase';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { collection, doc, updateDoc, onSnapshot, setDoc, query, where, getDocs } from 'firebase/firestore';
+import { db, getTenantId } from '../firebase';
 import { Payment, Client, User } from '../types';
 import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
@@ -17,20 +17,38 @@ interface UsePaymentsOptions {
 }
 
 export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaymentsOptions) => {
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
+  const [historicalPayments, setHistoricalPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [historicalPaymentsLoaded, setHistoricalPaymentsLoaded] = useState(false);
+  const [loadingHistoricalPayments, setLoadingHistoricalPayments] = useState(false);
+  const historicalLoadPromiseRef = useRef<Promise<void> | null>(null);
   const { effectiveRole } = useAuth();
+
+  const ninetyDaysAgoIso = useMemo(
+    () => new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    []
+  );
 
   useEffect(() => {
     if (!currentUser || effectiveRole === 'coach' || effectiveRole === 'client') {
-      setPayments([]);
+      setRecentPayments([]);
+      setHistoricalPayments([]);
+      setHistoricalPaymentsLoaded(false);
       setLoading(false);
       return;
     }
 
-    const unsub = onSnapshot(collection(db, 'payments'), (snapshot) => {
+    // Scope real-time listener to the last 90 days to save memory and Firestore read quota;
+    // older payments are loaded on-demand via fetchHistoricalPayments().
+    const recentPaymentsQuery = query(
+      collection(db, 'payments'),
+      where('date', '>=', ninetyDaysAgoIso)
+    );
+
+    const unsub = onSnapshot(recentPaymentsQuery, (snapshot) => {
       // Filter out soft-deleted payments (where deleted_at is not null), unless status is refunded
-      setPayments(snapshot.docs
+      setRecentPayments(snapshot.docs
         .map(d => ({ ...d.data(), id: d.id } as Payment))
         .filter(p => !p.deleted_at || p.status === 'refunded')
       );
@@ -40,7 +58,58 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
       setLoading(false);
     });
     return () => unsub();
-  }, [currentUser?.id, currentUser?.role, effectiveRole]);
+  }, [currentUser?.id, currentUser?.role, effectiveRole, ninetyDaysAgoIso]);
+
+  const fetchHistoricalPayments = useCallback(async () => {
+    if (!currentUser || effectiveRole === 'coach' || effectiveRole === 'client') return;
+    if (historicalPaymentsLoaded) return;
+    if (historicalLoadPromiseRef.current) return historicalLoadPromiseRef.current;
+
+    setLoadingHistoricalPayments(true);
+    const loadPromise = (async () => {
+      try {
+        const olderQuery = query(
+          collection(db, 'payments'),
+          where('date', '<', ninetyDaysAgoIso)
+        );
+        const snap = await getDocs(olderQuery);
+        let docsList = snap.docs
+          .map(d => ({ ...d.data(), id: d.id } as Payment))
+          .filter(p => !p.deleted_at || p.status === 'refunded');
+
+        // Fallback check for legacy docs missing a `date` field
+        if (docsList.length === 0 && recentPayments.length === 0) {
+          const allSnap = await getDocs(collection(db, 'payments'));
+          docsList = allSnap.docs
+            .map(d => ({ ...d.data(), id: d.id } as Payment))
+            .filter(p => !p.deleted_at || p.status === 'refunded');
+        }
+
+        setHistoricalPayments(docsList);
+        setHistoricalPaymentsLoaded(true);
+      } catch (error) {
+        console.error('[usePayments] Failed to fetch historical payments:', error);
+      } finally {
+        setLoadingHistoricalPayments(false);
+        historicalLoadPromiseRef.current = null;
+      }
+    })();
+
+    historicalLoadPromiseRef.current = loadPromise;
+    return loadPromise;
+  }, [currentUser, effectiveRole, historicalPaymentsLoaded, ninetyDaysAgoIso, recentPayments.length]);
+
+  const payments = useMemo(() => {
+    if (historicalPayments.length === 0) return recentPayments;
+    const byId = new Map<string, Payment>();
+    for (const p of historicalPayments) {
+      if (p?.id) byId.set(p.id, p);
+    }
+    for (const p of recentPayments) {
+      if (p?.id) byId.set(p.id, p);
+    }
+    return Array.from(byId.values());
+  }, [recentPayments, historicalPayments]);
 
 
 
@@ -110,5 +179,14 @@ export const usePayments = ({ currentUser, clients, canDeletePayments }: UsePaym
     }
   };
 
-  return { payments, loading, addPayment, deletePayment, updatePayment };
+  return {
+    payments,
+    loading,
+    historicalPaymentsLoaded,
+    loadingHistoricalPayments,
+    fetchHistoricalPayments,
+    addPayment,
+    deletePayment,
+    updatePayment
+  };
 };

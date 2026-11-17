@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BrandingSettings, SalesTarget, Branch, FeatureFlags, StorefrontConfig } from '../types';
 import { BookingWindowConfig, DEFAULT_BOOKING_WINDOW_CONFIG } from '../utils/bookingCutoff';
 import { PayoutConfig } from '../types/payout';
 import { auth, db, getTenantId } from '../firebase';
 import { addAuditLog } from '../services/auditService';
-import { collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, query, where, documentId } from 'firebase/firestore';
 
 export const TENANT_BRANDING_DEFAULTS: Record<'inzanathletics' | 'strike', BrandingSettings> = {
   inzanathletics: {
@@ -199,6 +199,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
   };
   const [bookingWindow, setBookingWindow] = useState<BookingWindowConfig>(DEFAULT_BOOKING_WINDOW_CONFIG);
   const [storefrontConfig, setStorefrontConfig] = useState<StorefrontConfig>(DEFAULT_STOREFRONT);
+  const settingsSigRef = useRef<Record<string, string>>({});
 
   // Helper to preload image before setting loaded state
   // Apply branding immediately without artificial delay
@@ -278,7 +279,30 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       }
     }, 1500);
 
-    const unsubscribe = onSnapshot(collection(db, 'settings'), (snap) => {
+    const UI_SETTINGS_DOC_IDS = [
+      'branding',
+      'features',
+      'storefront',
+      'bookingWindow',
+      'booking-window',
+      'branches',
+      'commission',
+      'defaultPayoutRates',
+      'sales-target',
+    ];
+    const settingsQuery = query(collection(db, 'settings'), where(documentId(), 'in', UI_SETTINGS_DOC_IDS));
+    const hasChanged = (key: string, val: unknown): boolean => {
+      try {
+        const sig = JSON.stringify(val);
+        if (settingsSigRef.current[key] === sig) return false;
+        settingsSigRef.current[key] = sig;
+        return true;
+      } catch {
+        return true;
+      }
+    };
+
+    const unsubscribe = onSnapshot(settingsQuery, (snap) => {
       clearTimeout(safetyTimeout);
       const settings: any = {};
       snap.forEach(d => {
@@ -286,14 +310,20 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
       });
 
       if (settings.branding) {
-        applyBrandAccent(settings.branding.brandAccentColor);
-        applyBrandingData(settings.branding as BrandingSettings);
+        if (hasChanged('branding', settings.branding)) {
+          applyBrandAccent(settings.branding.brandAccentColor);
+          applyBrandingData(settings.branding as BrandingSettings);
+        } else {
+          setIsBrandingLoaded(true);
+        }
       } else {
         setIsBrandingLoaded(true);
       }
 
-      if (settings.features) setFeatures(prev => ({ ...prev, ...settings.features }));
-      if (settings.storefront) {
+      if (settings.features && hasChanged('features', settings.features)) {
+        setFeatures(prev => ({ ...prev, ...settings.features }));
+      }
+      if (settings.storefront && hasChanged('storefront', settings.storefront)) {
         setStorefrontConfig(prev => ({ ...prev, ...settings.storefront }));
         const remoteCacheVer = settings.storefront.forceCacheResetVersion;
         if (remoteCacheVer && typeof window !== 'undefined') {
@@ -327,19 +357,19 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; isAuthentic
           } catch (_) {}
         }
       }
-      if (settings.bookingWindow) {
+      if (settings.bookingWindow && hasChanged('bookingWindow', settings.bookingWindow)) {
         setBookingWindow(prev => ({ ...prev, ...settings.bookingWindow }));
-      } else if (settings['booking-window']) {
+      } else if (settings['booking-window'] && hasChanged('booking-window', settings['booking-window'])) {
         setBookingWindow(prev => ({ ...prev, ...settings['booking-window'] }));
       }
-      if (settings.branches?.branches && Array.isArray(settings.branches.branches)) {
+      if (settings.branches?.branches && Array.isArray(settings.branches.branches) && hasChanged('branches', settings.branches.branches)) {
         setBranches(settings.branches.branches);
       }
       
       if (isAuthenticated && role !== 'client' && role !== 'coach') {
-        if (settings.commission) setCommissionRates(settings.commission);
-        if (settings.defaultPayoutRates) setDefaultPayoutRates(prev => ({ ...prev, ...settings.defaultPayoutRates }));
-        if (settings['sales-target']) {
+        if (settings.commission && hasChanged('commission', settings.commission)) setCommissionRates(settings.commission);
+        if (settings.defaultPayoutRates && hasChanged('defaultPayoutRates', settings.defaultPayoutRates)) setDefaultPayoutRates(prev => ({ ...prev, ...settings.defaultPayoutRates }));
+        if (settings['sales-target'] && hasChanged('sales-target', settings['sales-target'])) {
           setSalesTarget(prev => ({ ...prev, ...settings['sales-target'] }));
         }
       }

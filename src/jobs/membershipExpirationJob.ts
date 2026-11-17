@@ -1,5 +1,6 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { isStandaloneMode } from '../config/environment.js';
+import { getDbForTenant } from '../utils/tenantDb.js';
 import { dispatchNotificationEvent } from '../services/notificationEventService.js';
 
 export interface MembershipExpirationScanOptions {
@@ -144,7 +145,7 @@ export async function getClientPushToken(db: FirebaseFirestore.Firestore, client
  * Guarantees that any client whose membership expiry is in the past
  * is never treated as 'Active' even if the database record has not yet updated.
  */
-export function getEffectiveClientStatus(client: any): 'Active' | 'Expired' | 'Frozen' | 'Inactive' | 'Pending' | 'Suspended' {
+export function getEffectiveClientStatus(client: any, refDate?: Date): 'Active' | 'Expired' | 'Frozen' | 'Inactive' | 'Pending' | 'Suspended' {
   if (!client) return 'Inactive';
 
   const rawStatus = (client.status || '').toString().trim();
@@ -155,7 +156,7 @@ export function getEffectiveClientStatus(client: any): 'Active' | 'Expired' | 'F
   if (normalized === 'inactive') return 'Inactive';
   if (normalized === 'pending') return 'Pending';
 
-  const now = new Date();
+  const now = refDate || new Date();
   const todayMs = now.getTime();
 
   // Check client-level membershipExpiry
@@ -304,7 +305,7 @@ export async function runMembershipExpirationScan(
 
   for (const doc of docsToInspect) {
     const client = doc.data();
-    const effective = getEffectiveClientStatus(client);
+    const effective = getEffectiveClientStatus(client, today);
 
     if (effective === 'Expired') {
       const previousStatus = client.status || 'Active';
@@ -590,41 +591,83 @@ export async function runMembershipExpirationWorker(
   return runMembershipExpirationScan(db);
 }
 
+const lastScanDateByDb = new Map<string, string>();
+
+function getTodayCairoDateStr(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Cairo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().slice(0, 10);
+  }
+}
+
 /**
- * Runs the expiration scan across all active tenant databases (Strike and Inzan).
+ * Runs the expiration scan across all active tenant databases (Strike and Inzan),
+ * deduplicated to at most once per calendar day per database unless `force` is true.
  */
-export async function runAllTenantsExpirationScan() {
+export async function runAllTenantsExpirationScan(options?: { force?: boolean }) {
+  const force = options?.force === true;
+  const todayDateStr = getTodayCairoDateStr();
   const results = [];
   const databases = isStandaloneMode()
     ? [getFirestore()]
-    : [
-        getFirestore(),                   // Default DB (Strike)
-        getFirestore('db-inzanathletics') // Inzan DB
-      ];
+    : [getDbForTenant('inzanathletics')];
 
   for (const db of databases) {
+    const dbKey = String((db as any)?.databaseId || 'default');
     try {
+      if (!force) {
+        if (lastScanDateByDb.get(dbKey) === todayDateStr) {
+          continue;
+        }
+        const stateRef = db.collection('settings').doc('membership_expiration_job_state');
+        const stateSnap = await stateRef.get();
+        if (stateSnap.exists && stateSnap.data()?.lastScanDate === todayDateStr) {
+          lastScanDateByDb.set(dbKey, todayDateStr);
+          continue;
+        }
+      }
+
       const res = await runMembershipExpirationScan(db);
+      lastScanDateByDb.set(dbKey, todayDateStr);
+      await db
+        .collection('settings')
+        .doc('membership_expiration_job_state')
+        .set(
+          {
+            lastScanDate: todayDateStr,
+            updatedAt: new Date().toISOString(),
+            scannedClients: res.scannedClients,
+            expiredClients: res.expiredClients,
+          },
+          { merge: true }
+        );
       results.push(res);
     } catch (err) {
-      console.error(`[ExpirationJob] Error running expiration scan on DB:`, err);
+      console.error(`[ExpirationJob] Error running expiration scan on DB (${dbKey}):`, err);
     }
   }
   return results;
 }
 
 /**
- * Starts the scheduled background job running every hour.
+ * Starts the scheduled background job running once per day (checked every 12 hours
+ * and guarded by persistent per-tenant `lastScanDate` state).
  */
 export function startMembershipExpirationJob() {
-  console.log('[ExpirationJob] Initializing Membership Expiration Worker...');
-  // Initial scan after 10 seconds of boot
+  console.log('[ExpirationJob] Initializing Daily Membership Expiration Worker...');
+  // Initial check after 15 seconds of boot (skips if already scanned today)
   setTimeout(() => {
     runAllTenantsExpirationScan().catch(err => console.error('[ExpirationJob] Initial scan error:', err));
-  }, 10000);
+  }, 15000);
 
-  // Hourly recurring scan
+  // Check every 12 hours; `lastScanDate` ensures only 1 full scan per calendar day
   setInterval(() => {
     runAllTenantsExpirationScan().catch(err => console.error('[ExpirationJob] Scheduled scan error:', err));
-  }, 60 * 60 * 1000);
+  }, 12 * 60 * 60 * 1000);
 }

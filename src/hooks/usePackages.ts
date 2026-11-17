@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
+import { db, auth, getTenantId } from '../firebase';
 import { collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { Package, PackageVersion } from '../types';
 import { cleanData } from '../utils';
@@ -15,6 +15,11 @@ export const usePackages = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Only Inzan lacks a public storefront — skip subscribing to `packages` on logged-out screens.
+    if (!currentUser && getTenantId().toLowerCase().includes('inzan')) {
+      setLoading(false);
+      return;
+    }
     const unsub = onSnapshot(collection(db, 'packages'), (snapshot) => {
       setPackages(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Package)));
       setLoading(false);
@@ -26,7 +31,7 @@ export const usePackages = () => {
       setLoading(false);
     });
     return () => unsub();
-  }, []);
+  }, [currentUser?.id]);
 
   const addPackage = async (pkg: Omit<Package, 'id'>) => {
     try {

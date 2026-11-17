@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import type { Html5Qrcode } from 'html5-qrcode';
 import { useAppContext } from './context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1472,6 +1472,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     let isComponentMounted = true;
     let scannerStarted = false; // only true after .start() resolves — guards cleanup
     let scanner: Html5Qrcode | null = null;
+    let Html5QrcodeRuntime: typeof Html5Qrcode | null = null;
 
     const config = {
       fps: 12,
@@ -1492,7 +1493,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
     };
 
     const createScannerInstance = () =>
-      new Html5Qrcode('qr-reader', {
+      new Html5QrcodeRuntime!('qr-reader', {
         verbose: false,
         // Disable WebKit's experimental BarcodeDetector on iOS 17/18 Safari which fails silently on canvas frames
         experimentalFeatures: { useBarCodeDetectorIfSupported: false },
@@ -1510,6 +1511,10 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
         if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
           throw new Error('HTTPS_REQUIRED');
         }
+
+        const mod = await import('html5-qrcode');
+        Html5QrcodeRuntime = mod.Html5Qrcode;
+        if (!isComponentMounted) return;
 
         scanner = createScannerInstance();
         scannerRef.current = scanner;
@@ -1530,7 +1535,7 @@ export default function Attendance({ isKiosk = false }: { isKiosk?: boolean }) {
 
           let startedWithDevice = false;
           try {
-            const cameras = await Html5Qrcode.getCameras();
+            const cameras = await Html5QrcodeRuntime.getCameras();
             if (cameras && cameras.length > 0) {
               const rearCam =
                 cameras.find((c) => /back|rear|environment|wide|خلف/i.test(c.label || '')) ||

@@ -1,15 +1,13 @@
 import { Router, Request, Response } from 'express';
 import admin from 'firebase-admin';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
 import { randomUUID } from 'node:crypto';
 import zlib from 'node:zlib';
-import { chromium } from 'playwright';
 import { getRequestHostname, getTenantInfoForHost } from '../utils/tenantDb.js';
-import { isInzanBridgeOnline } from './inzanLockerRouter.js';
+import { getInzanApp, getInzanFirestore, isInzanBridgeOnline, notifyRedgitsJobEnqueued } from './inzanLockerRouter.js';
 
 export const redgitsSyncRouter = Router();
 
-const INZAN_DATABASE_ID = 'db-inzanathletics';
 const REDGITS_ORIGIN = 'https://inzan.redgits.com';
 const DEFAULT_REDGITS_USER = process.env.REDGITS_USERNAME || 'mi5a';
 const DEFAULT_REDGITS_PASS = process.env.REDGITS_PASSWORD || 'Miko0019_!';
@@ -94,6 +92,7 @@ async function authenticateRedgitsWithBrowser(
   accounts: Array<{ username: string; password: string }>,
   cookieJar: Map<string, string>
 ): Promise<string> {
+  const { chromium } = await import('playwright');
   const browser = await chromium.launch({
     headless: true,
     executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium',
@@ -314,9 +313,9 @@ async function authenticateCallerForInzan(
   if (!token) return null;
 
   try {
-    const decoded = await admin.auth().verifyIdToken(token);
+    const decoded = await admin.auth(getInzanApp()).verifyIdToken(token);
     const email = (decoded.email || '').toLowerCase();
-    const inzanDb = getFirestore(INZAN_DATABASE_ID);
+    const inzanDb = getInzanFirestore();
     const userSnap = await inzanDb.collection('users').doc(decoded.uid).get();
     let userData: FirebaseFirestore.DocumentData | null = userSnap.exists ? userSnap.data() || null : null;
     // Fallback: some staff docs were created with a non-UID document ID — resolve by email instead.
@@ -396,7 +395,7 @@ async function commitDocsInBatches(
 
 /**
  * GET /api/inzan/redgits-sync/status
- * Returns the latest RedGITS live sync metadata from `db-inzanathletics`.
+ * Returns the latest RedGITS live sync metadata from `inzan-crm-spark-26`.
  */
 redgitsSyncRouter.get('/status', async (req: Request, res: Response) => {
   try {
@@ -405,7 +404,7 @@ redgitsSyncRouter.get('/status', async (req: Request, res: Response) => {
       res.status(403).json({ error: 'Forbidden: Manager or Admin access required for RedGITS sync.' });
       return;
     }
-    const inzanDb = getFirestore(INZAN_DATABASE_ID);
+    const inzanDb = getInzanFirestore();
     const snap = await inzanDb.collection('settings').doc('redgits_sync_status').get();
     res.json({
       ok: true,
@@ -417,15 +416,28 @@ redgitsSyncRouter.get('/status', async (req: Request, res: Response) => {
   }
 });
 
+class RedgitsHttpError extends Error {
+  statusCode: number;
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.statusCode = statusCode;
+  }
+}
+
 /**
  * POST /api/inzan/redgits-sync
- * Authenticates directly against https://inzan.redgits.com, extracts live Active Members,
- * Packages, Subscriptions/Payments, National IDs, Staff/Sales Reps, Leads, Invitations
- * (and Expired Members when mode === 'full'), and upserts into `db-inzanathletics`.
+ * Authenticates directly against https://inzan.redgits.com (or dispatches to the on-site Mac bridge),
+ * and upserts into `inzan-crm-spark-26`. Supports async `202 Accepted` execution when
+ * `async=1` / `REDGITS_DEFAULT_ASYNC=true`.
  */
 redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
   const startTimeMs = Date.now();
   const startedAt = new Date().toISOString();
+  const isAsync =
+    req.query.async === '1' ||
+    req.query.async === 'true' ||
+    req.body?.async === true ||
+    process.env.REDGITS_DEFAULT_ASYNC === 'true';
 
   try {
     // 1. Verify Tenant Isolation & Auth
@@ -444,7 +456,42 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     }
 
     const mode: 'fast' | 'full' = req.body?.mode === 'full' ? 'full' : 'fast';
-    const inzanDb = getFirestore(INZAN_DATABASE_ID);
+    const inzanDb = getInzanFirestore();
+
+    // Concurrency guard: prevent duplicate simultaneous runs in 512 MB gateway
+    const statusRef = inzanDb.collection('settings').doc('redgits_sync_status');
+    const currentStatusSnap = await statusRef.get();
+    const currentStatus = currentStatusSnap.exists ? currentStatusSnap.data() : null;
+    if (
+      currentStatus?.status === 'running' &&
+      currentStatus?.startedAt &&
+      Date.now() - Date.parse(String(currentStatus.startedAt)) < 320_000
+    ) {
+      if (isAsync) {
+        res.status(202).json({
+          ok: true,
+          status: 'running',
+          mode: currentStatus.mode || mode,
+          startedAt: currentStatus.startedAt,
+        });
+        return;
+      }
+      res.status(409).json({ error: 'A RedGITS sync is already running. Please wait for it to complete.' });
+      return;
+    }
+
+    await statusRef.set(
+      {
+        status: 'running',
+        mode,
+        startedAt,
+        lastSyncBy: caller.name || caller.email,
+        error: null,
+      },
+      { merge: true }
+    );
+
+    const runSyncWork = async (): Promise<SyncStats> => {
     let storedUser = '';
     let storedPass = '';
     let storedFallbackUser = '';
@@ -611,7 +658,7 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           requestedAt: startedAt,
           requestedBy: caller.email,
         });
-        console.log(`[RedGITS Sync] On-site agent online (lastSeen=${bridgeState.lastSeenIso}); enqueued job ${syncId}.`);
+        notifyRedgitsJobEnqueued(); console.log(`[RedGITS Sync] On-site agent online (lastSeen=${bridgeState.lastSeenIso}); enqueued job ${syncId}.`);
       } catch (jobErr: any) {
         console.error('[RedGITS Sync] Failed to enqueue on-site agent job:', jobErr?.message || jobErr);
       }
@@ -651,11 +698,11 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
           } else if (jobStatus === 'failed') {
             const failMsg = String((jobSnap.data() as any)?.lastError || 'On-site agent scrape failed.');
             console.error(`[RedGITS Sync] On-site agent job ${syncId} failed: ${failMsg}`);
-            res.status(502).json({ error: `RedGITS on-site scrape failed: ${failMsg}` });
             void inzanDb.collection('redgitsAgentJobs').doc(syncId).delete().catch(() => {});
-            return;
+            throw new RedgitsHttpError(502, `RedGITS on-site scrape failed: ${failMsg}`);
           }
         } catch (pollErr: any) {
+          if (pollErr instanceof RedgitsHttpError) throw pollErr;
           console.warn('[RedGITS Sync] Job poll error:', pollErr?.message || pollErr);
         }
       }
@@ -665,8 +712,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       } else {
         console.error(`[RedGITS Sync] On-site agent did not deliver job ${syncId} in time.`);
         void inzanDb.collection('redgitsAgentJobs').doc(syncId).delete().catch(() => {});
-        res.status(504).json({ error: 'On-site RedGITS agent (reception Mac) did not respond in time. Verify the Mac bridge agent was re-installed after this release.' });
-        return;
+        throw new RedgitsHttpError(
+          504,
+          'On-site RedGITS agent (reception Mac) did not respond in time. Verify the Mac bridge agent was re-installed after this release.'
+        );
       }
     }
 
@@ -751,10 +800,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     const redgitsPassword = authenticatedPassword || primaryPassword;
 
     if (!authenticatedAccount) {
-      res.status(401).json({
-        error: 'Failed to authenticate with inzan.redgits.com. Please verify RedGITS username and password.',
-      });
-      return;
+      throw new RedgitsHttpError(
+        401,
+        'Failed to authenticate with inzan.redgits.com. Please verify RedGITS username and password.'
+      );
     }
 
     // Helper to fetch DataTables JSON endpoint (sequential-safe with live cookie rotation)
@@ -1033,11 +1082,10 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
     }
 
     if (activeRows.length === 0 && pkgCatalogRows.length === 0) {
-      res.status(502).json({
-        error:
-          'RedGITS returned 0 records during live scrape (session may have been challenged by BlockIntel or credentials expired). Existing database records were preserved untouched.',
-      });
-      return;
+      throw new RedgitsHttpError(
+        502,
+        'RedGITS returned 0 records during live scrape (session may have been challenged by BlockIntel or credentials expired). Existing database records were preserved untouched.'
+      );
     }
 
     // 4. Persist updated credentials only if explicitly supplied AND those exact credentials authenticated
@@ -2104,12 +2152,56 @@ redgitsSyncRouter.post('/', async (req: Request, res: Response) => {
       await inzanDb.collection('redgitsAgentJobs').doc(agentSyncId).set({ status: 'applied', appliedAtMs: Date.now() }, { merge: true });
     }
 
-    res.json({
-      ok: true,
-      ...syncStats,
-    });
+    return syncStats;
+    };
+
+    const recordSyncFailure = async (err: any) => {
+      try {
+        await statusRef.set(
+          {
+            status: 'failed',
+            mode,
+            startedAt,
+            completedAt: new Date().toISOString(),
+            error: err?.message || 'Failed to sync live data from RedGITS',
+          },
+          { merge: true }
+        );
+      } catch (statusErr) {
+        console.error('[RedGITS Sync] Failed to persist failure status:', statusErr);
+      }
+    };
+
+    if (isAsync) {
+      void runSyncWork().catch(async (err: any) => {
+        console.error('[RedGITS Sync] Background sync error:', err);
+        await recordSyncFailure(err);
+      });
+      res.status(202).json({
+        ok: true,
+        status: 'running',
+        mode,
+        startedAt,
+      });
+      return;
+    }
+
+    try {
+      const syncStats = await runSyncWork();
+      res.json({
+        ok: true,
+        ...syncStats,
+      });
+    } catch (err: any) {
+      await recordSyncFailure(err);
+      throw err;
+    }
   } catch (err: any) {
     console.error('[RedGITS Sync] Fatal error:', err);
+    if (err instanceof RedgitsHttpError) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
     res.status(500).json({
       error: err.message || 'Failed to sync live data from RedGITS',
     });

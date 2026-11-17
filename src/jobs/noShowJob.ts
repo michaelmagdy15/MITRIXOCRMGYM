@@ -1,5 +1,6 @@
 import { getFirestore } from 'firebase-admin/firestore';
 import { isStandaloneMode } from '../config/environment.js';
+import { getDbForTenant } from '../utils/tenantDb.js';
 
 export async function runNoShowScan() {
   try {
@@ -7,10 +8,7 @@ export async function runNoShowScan() {
     
     const databases = isStandaloneMode()
       ? [getFirestore()]
-      : [
-          getFirestore(), // Default DB (Strike)
-          getFirestore('db-inzanathletics') // Inzan DB
-        ];
+      : [getDbForTenant('inzanathletics')];
 
     for (const db of databases) {
       try {
@@ -156,9 +154,24 @@ export async function runNoShowScan() {
   }
 }
 
-// Runs every 15 minutes to flag no-shows for classes that have started/finished
+// Runs every 30 minutes during operating hours to flag no-shows for classes that have started/finished
 export function startNoShowJob() {
   setInterval(async () => {
+    try {
+      const cairoHour = Number(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Africa/Cairo',
+          hour: 'numeric',
+          hour12: false,
+        }).format(new Date())
+      );
+      // Skip overnight quiet hours (1:00 AM - 6:00 AM Cairo time) when no classes run
+      if (cairoHour >= 1 && cairoHour < 6) {
+        return;
+      }
+    } catch {
+      // proceed if Intl timezone formatting fails
+    }
     await runNoShowScan();
-  }, 15 * 60 * 1000); // 15 minutes
+  }, 30 * 60 * 1000); // 30 minutes
 }

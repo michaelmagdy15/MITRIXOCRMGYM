@@ -24,6 +24,7 @@ import { handleFirestoreError, OperationType } from '../utils/errorHandler';
 import { cleanData } from '../utils';
 import { normalizeEgyptPhone, getEgyptPhoneVariants } from '../utils/phoneUtils';
 import { addAuditLog } from '../services/auditService';
+import { computeMemberGlobalStatus } from '../utils/memberLifecycle';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getLocalDb,
@@ -166,15 +167,19 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
     return combined
       .filter(c => !c.isDeleted)
-      .map(c => ({
-        ...c,
-        name: c.name != null ? String(c.name) : '',
-        phone: c.phone != null ? String(c.phone) : '',
-        memberId: c.memberId != null && c.memberId !== '' ? String(c.memberId) : undefined,
-        leadId: c.leadId != null && c.leadId !== '' ? String(c.leadId) : undefined,
-        comments: Array.isArray((c as any).comments) ? (c as any).comments : [],
-        interactions: Array.isArray((c as any).interactions) ? (c as any).interactions : [],
-      })) as Client[];
+      .map(c => {
+        const normalized = {
+          ...c,
+          name: c.name != null ? String(c.name) : '',
+          phone: c.phone != null ? String(c.phone) : '',
+          memberId: c.memberId != null && c.memberId !== '' ? String(c.memberId) : undefined,
+          leadId: c.leadId != null && c.leadId !== '' ? String(c.leadId) : undefined,
+          comments: Array.isArray((c as any).comments) ? (c as any).comments : [],
+          interactions: Array.isArray((c as any).interactions) ? (c as any).interactions : [],
+        };
+        (normalized as any)._lifecycle = computeMemberGlobalStatus(normalized as Partial<Client>);
+        return normalized;
+      }) as Client[];
   }, [membersList, expiredMembersList, leadsList, searchResults]);
 
   const baseClients = clients;
@@ -275,26 +280,10 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
     }
   }, [expiredLoaded, loadingExpired]);
 
-  // Defer background fetch of expired members slightly after initial render so initial page load is instant
-  useEffect(() => {
-    if (!currentUser?.id || effectiveRole === 'client') return undefined;
-    if (!loading && !expiredLoaded && !loadingExpired) {
-      const timer = setTimeout(() => {
-        fetchExpiredMembers();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [currentUser?.id, effectiveRole, loading, expiredLoaded, loadingExpired, fetchExpiredMembers]);
+  // Expired members are fetched on-demand when opening the Expired tab, member profile, or Reports
+  // (explicit ID/phone search queries Firestore indexed fields directly below without loading all 4,800+ expired docs).
 
-  // Trigger expired fetch immediately if a search query is entered (so search results find expired members)
-  useEffect(() => {
-    if (searchTerm && searchTerm.trim().length >= 1 && !expiredLoaded && !loadingExpired) {
-      fetchExpiredMembers();
-    }
-  }, [searchTerm, expiredLoaded, loadingExpired, fetchExpiredMembers]);
-
-  // 2. Active Leads Snapshot Listener (New, Trial, Follow Up) - status == 'Lead' & stage in ['New', 'Trial', 'Follow Up']
+  // 2. Active Leads Snapshot Listener (capped to 250 recent leads to stay inside Spark daily read quotas)
   useEffect(() => {
     if (!currentUser?.id) return;
     if (effectiveRole === 'client' || effectiveRole === 'coach') return;
@@ -302,7 +291,8 @@ export const useClients = (currentUser: User | null, searchTerm: string = '') =>
 
     const q = query(
       collection(db, 'clients'),
-      where('status', '==', 'Lead')
+      where('status', '==', 'Lead'),
+      limit(250)
     );
     const unsubLeads = onSnapshot(
       q,
