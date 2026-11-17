@@ -41,6 +41,8 @@ function getCredentialForProject(projectId: string): admin.credential.Credential
   return undefined;
 }
 
+const projectAdminApps = new Map<string, admin.app.App>();
+
 // Initialize Firebase Admin SDK if not already initialized
 if (admin.apps.length === 0) {
   const initialProjectId = isStandaloneMode()
@@ -49,18 +51,20 @@ if (admin.apps.length === 0) {
   const adminOptions: admin.AppOptions = { projectId: initialProjectId };
   const cred = getCredentialForProject(initialProjectId);
   if (cred) adminOptions.credential = cred;
-  admin.initializeApp(adminOptions);
+  const createdDefault = admin.initializeApp(adminOptions);
+  if (cred || isStandaloneMode()) {
+    projectAdminApps.set(initialProjectId, createdDefault);
+  }
 }
-
-const projectAdminApps = new Map<string, admin.app.App>();
 
 export function getAdminAppForProject(projectId: string): admin.app.App {
   const targetProjectId = (projectId || defaultFirebaseConfig.projectId || 'inzan-crm-spark-26').trim();
   const cached = projectAdminApps.get(targetProjectId);
   if (cached) return cached;
 
+  const cred = getCredentialForProject(targetProjectId);
   const defaultApp = admin.apps[0];
-  if (defaultApp && defaultApp.options.projectId === targetProjectId) {
+  if (!cred && defaultApp && defaultApp.options.projectId === targetProjectId) {
     projectAdminApps.set(targetProjectId, defaultApp);
     return defaultApp;
   }
@@ -73,7 +77,6 @@ export function getAdminAppForProject(projectId: string): admin.app.App {
   }
 
   const opts: admin.AppOptions = { projectId: targetProjectId };
-  const cred = getCredentialForProject(targetProjectId);
   if (cred) opts.credential = cred;
   const created = admin.initializeApp(opts, appName);
   projectAdminApps.set(targetProjectId, created);

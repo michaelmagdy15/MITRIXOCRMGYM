@@ -11,6 +11,20 @@ const TENANT_AUTH_CACHE_TTL_MS = 60_000;
 const TENANT_AUTH_CACHE_MAX_ENTRIES = 2000;
 import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
+import {
+  defaultFirebaseConfig,
+  strikeCrmConfig,
+  inzanConfig,
+  tenantConfigs,
+  getTenantInfoForHost,
+  getRequestHostname,
+  getDbForRequest,
+  getDbForTenant,
+  getAuthForRequest,
+  getAuthForTenant,
+  getAdminAppForProject,
+  getTenantIdForRequest,
+} from './src/utils/tenantDb.js';
 import { provisionNewGym } from "./provisioning";
 import { startNoShowJob, runNoShowScan } from './src/jobs/noShowJob.js';
 import { startMembershipExpirationJob, runAllTenantsExpirationScan, runMembershipExpirationWorker, getEffectiveClientStatus, getEffectiveStatus, toEndOfDayMs } from './src/jobs/membershipExpirationJob.js';
@@ -41,20 +55,6 @@ import { inzanLockerRouter } from './src/routes/inzanLockerRouter.js';
 import { createMessagingBroadcastRouter } from './src/routes/messagingBroadcast.js';
 import { generateSlotBucketKeys, validateNutritionSlotRules } from './src/utils/nutritionBooking.js';
 import { parseSessionStartMs } from './src/utils/ptAttendance.js';
-import {
-  defaultFirebaseConfig,
-  strikeCrmConfig,
-  inzanConfig,
-  tenantConfigs,
-  getTenantInfoForHost,
-  getRequestHostname,
-  getDbForRequest,
-  getDbForTenant,
-  getAuthForRequest,
-  getAuthForTenant,
-  getAdminAppForProject,
-  getTenantIdForRequest,
-} from './src/utils/tenantDb.js';
 
 export { getDbForRequest, getRequestHostname, getTenantInfoForHost, getTenantIdForRequest };
 

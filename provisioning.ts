@@ -5,6 +5,7 @@ import admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import nodemailer from 'nodemailer';
 import { isStandaloneMode } from './src/config/environment.js';
+import { getAdminAppForProject } from './src/utils/tenantDb.js';
 
 // ===============================================================
 // Reserved tenant IDs — these can NEVER be provisioned
@@ -85,12 +86,10 @@ if (admin.apps.length === 0) {
       });
     } catch (e) {
       console.error('Failed to parse service account key in provisioning:', e);
-      admin.initializeApp({ projectId: effectiveProjectId });
+      getAdminAppForProject(effectiveProjectId);
     }
   } else {
-    admin.initializeApp({
-      projectId: effectiveProjectId,
-    });
+    getAdminAppForProject(effectiveProjectId);
   }
 }
 
