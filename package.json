@@ -8,6 +8,7 @@
     "dev-server": "tsx server.ts",
     "build": "vite build && node scripts/precompress-dist.mjs && esbuild server.ts --bundle --platform=node --outfile=dist-server/server.cjs --format=cjs --external:vite --external:playwright",
     "build:web": "vite build && node scripts/precompress-dist.mjs",
+    "build:inzan-pages": "npm run build:web && node scripts/prepare-inzan-pages.mjs",
     "build:server": "esbuild server.ts --bundle --platform=node --outfile=dist-server/server.cjs --format=cjs --external:vite --external:playwright",
     "start": "node dist-server/server.cjs",
     "clean": "rm -rf dist",
